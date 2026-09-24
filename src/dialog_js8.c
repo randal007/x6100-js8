@@ -494,6 +494,8 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_border_color(table, lv_color_white(), LV_PART_MAIN);
     lv_obj_set_style_border_opa(table, 128, LV_PART_MAIN);
     lv_obj_set_style_text_color(table, lv_color_hex(0xC0C0C0), LV_PART_ITEMS);
+    /* JS8 messages are long; the dialog's 36 px font fits only two rows. */
+    lv_obj_set_style_text_font(table, &sony_24, LV_PART_ITEMS);
     lv_obj_set_style_pad_top(table, 3, LV_PART_ITEMS);
     lv_obj_set_style_pad_bottom(table, 3, LV_PART_ITEMS);
     lv_obj_set_style_pad_left(table, 5, LV_PART_ITEMS);
