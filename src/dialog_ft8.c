@@ -457,7 +457,7 @@ static void construct_cb(lv_obj_t *parent) {
 
     lv_waterfall_set_palette(waterfall, (lv_color_t*)wf_palette, 256);
     lv_waterfall_set_size(waterfall, WIDTH, 325);
-    lv_waterfall_set_min(waterfall, -60);
+    lv_waterfall_set_min(waterfall, -27);
 
     lv_obj_set_pos(waterfall, 13, 13);
 

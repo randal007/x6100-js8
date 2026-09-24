@@ -24,6 +24,8 @@ static T loop_items(std::vector<T> items, T cur, bool next);
 static std::map<cfg_ctrl_t, std::string> control_name_voice{
     {CTRL_VOL, "Audio level"},
     {CTRL_RFG, "RF gain"},
+    {CTRL_WEFAX_ALIGN, "WEFAX align"},
+    {CTRL_WEFAX_TILT, "WEFAX tilt"},
     {CTRL_SQL, "Squelch level"},
     {CTRL_FILTER_LOW, "Low filter limit"},
     {CTRL_FILTER_HIGH, "High filter limit"},
@@ -208,6 +210,16 @@ void controls_encoder_update(cfg_ctrl_t ctrl, int32_t diff, std::string &msg) {
             if (diff) {
                 voice_say_int("RF gain", i);
             }
+            break;
+
+        case CTRL_WEFAX_ALIGN:
+            i = update_param(cfg_sm.p_wefax_align, diff);
+            snprintf(msg.data(), msg.capacity(), "WEFAX Align: %i", i);
+            break;
+
+        case CTRL_WEFAX_TILT:
+            i = update_param(cfg_sm.p_wefax_tilt, diff);
+            snprintf(msg.data(), msg.capacity(), "WEFAX Tilt: %i", i);
             break;
 
         case CTRL_SQL:

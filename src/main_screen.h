@@ -37,3 +37,6 @@ void main_screen_set_freq(uint64_t f);
 
 void mem_load(uint16_t id);
 void mem_save(uint16_t id);
+
+/* Proprietary temporary status/channel overlay. */
+void channel_overlay_show(const char *name);

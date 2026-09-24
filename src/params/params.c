@@ -31,12 +31,12 @@
 #define BAND_NOT_LOADED -10
 
 params_t params = {
-    .brightness_normal      = 9,
-    .brightness_idle        = 1,
-    .brightness_timeout     = 10,
+    .brightness_normal      = 5,
+    .brightness_idle        = 4,
+    .brightness_timeout     = 30,
     .brightness_buttons     = BUTTONS_TEMPORARILY,
 
-    .spectrum_beta          = { .x = 70, .min = 0, .max = 90, .name = "spectrum_beta"},
+    .spectrum_beta          = { .x = 85, .min = 0, .max = 90, .name = "spectrum_beta"},
     .spectrum_filled        = { .x = true,  .name = "spectrum_filled"},
     .spectrum_peak          = { .x = true,  .name = "spectrum_peak"},
     .spectrum_peak_hold     = { .x = 5,  .min=1, .max=10, .name = "spectrum_peak_hold"},
@@ -44,7 +44,7 @@ params_t params = {
     .waterfall_smooth_scroll= { .x = false,  .name = "waterfall_smooth_scroll",  .voice = "Waterfall smooth scroll"},
     .waterfall_center_line  = { .x = true,  .name = "waterfall_center_line",    .voice = "Waterfall center line"},
     .waterfall_zoom         = { .x = true,  .name = "waterfall_zoom",           .voice = "Waterfall zoom"},
-    .mag_freq               = { .x = true,  .name = "mag_freq",                 .voice = "Magnification of frequency" },
+    .mag_freq               = { .x = false,  .name = "mag_freq",                 .voice = "Magnification of frequency" },
     .mag_info               = { .x = true,  .name = "mag_info",                 .voice = "Magnification of info" },
     .mag_alc                = { .x = true,  .name = "mag_alc",                  .voice = "Magnification of A L C" },
     .clock_view             = CLOCK_TIME_POWER,
@@ -64,9 +64,9 @@ params_t params = {
     .voice_msg_period       = 10,
 
     .rtty_center            = 800,
-    .rtty_shift             = 170,
-    .rtty_rate              = 4545,
-    .rtty_reverse           = false,
+    .rtty_shift             = 450,
+    .rtty_rate              = 5000,
+    .rtty_reverse           = true,
     .rtty_bits              = 5,
     .rtty_snr               = 3.0f,
 

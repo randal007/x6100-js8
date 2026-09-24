@@ -46,6 +46,8 @@ extern "C" {
 extern ParamInt         *cfg_volume;            // p_volume
 extern ParamInt         *cfg_squelch;           // p_squelch
 extern ParamInt         *cfg_rfgain;            // p_rfgain
+extern ParamInt         *cfg_wefax_align;       // p_wefax_align
+extern ParamInt         *cfg_wefax_tilt;        // p_wefax_tilt
 extern ParamInt         *cfg_rit;               // p_rit
 extern ParamInt         *cfg_xit;               // p_xit
 extern ParamFloat       *cfg_pwr;               // p_pwr

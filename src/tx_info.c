@@ -205,6 +205,24 @@ static void rx_cb(lv_event_t *e) {
     lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
 }
 
+
+static void update_tx_info(void *arg) {
+    if (lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) {
+        return;
+    }
+
+    lv_label_set_text_fmt(vswr_label, "SWR: %.2f  ALC: %.1f", vswr, alc);
+    lv_label_set_text_fmt(pwr_label, "%.2fW", pwr);
+
+    lv_obj_invalidate(obj);
+
+    lv_obj_add_flag(alc_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_clear_flag(vswr_label, LV_OBJ_FLAG_HIDDEN);
+}
+
+
+
+/*
 static void update_tx_info(void *arg) {
     if (lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) {
         return;
@@ -212,13 +230,15 @@ static void update_tx_info(void *arg) {
     lv_label_set_text_fmt(alc_label, "ALC: %1.1f", alc);
     lv_label_set_text_fmt(vswr_label, "%.2f", vswr);
     lv_label_set_text_fmt(pwr_label, "%.2f", pwr);
-    /* PWR / SWR bars are drawn in obj's DRAW_MAIN_END handler. The labels
+    
+     * PWR / SWR bars are drawn in obj's DRAW_MAIN_END handler. The labels
      * only invalidate their own (small) bounding boxes, which does not cover
      * the bar area. Explicitly invalidate the container so the bars repaint
      * on every update -- previously we relied on the main_screen spectrum
      * widget (which fully overlaps tx_info) being invalidated periodically
      * by spectrum_data(), but FT8 dialog turns the spectrum/waterfall DSP
-     * off, removing that side effect. */
+     * off, removing that side effect. *
+
     lv_obj_invalidate(obj);
     if (params.mag_alc.x) {
         lv_obj_add_flag(alc_label, LV_OBJ_FLAG_HIDDEN);
@@ -232,6 +252,10 @@ static void update_tx_info(void *arg) {
         lv_obj_clear_flag(vswr_label, LV_OBJ_FLAG_HIDDEN);
     }
 }
+*/
+
+
+
 
 lv_obj_t *tx_info_init(lv_obj_t *parent) {
     obj = lv_obj_create(parent);

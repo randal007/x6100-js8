@@ -224,7 +224,7 @@ void styles_init(themes_t theme) {
     /* Panel */
     lv_style_init(&panel_style);
     lv_style_set_text_color(&panel_style, lv_color_white());
-    lv_style_set_text_font(&panel_style, &sony_38);
+    lv_style_set_text_font(&panel_style, &sony_24);
     lv_style_set_width(&panel_style, 795);
     lv_style_set_height(&panel_style, 182);
     lv_style_set_x(&panel_style, 800 / 2 - (795 / 2));

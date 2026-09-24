@@ -9,6 +9,8 @@
 #include "spectrum.h"
 
 #include "dsp.h"
+#include "dialog_navtex.h"
+#include "dialog_wefax.h"
 #include "events.h"
 #include "meter.h"
 #include "params/params.h"
@@ -234,6 +236,58 @@ static void spectrum_draw_cb(lv_event_t *e) {
 
         from = sign_from * (params.rtty_center - params.rtty_shift / 2);
         to   = sign_to * (params.rtty_center + params.rtty_shift / 2);
+
+        f1 = (int64_t)(w * from) / w_hz;
+        f2 = (int64_t)(w * to) / w_hz;
+
+        main_a.x = x1 + markers_offset + w / 2 + f1;
+        main_a.y = y1;
+        main_b.x = main_a.x;
+        main_b.y = y1 + h;
+        lv_draw_line(draw_ctx, &main_line_dsc, &main_a, &main_b);
+
+        main_a.x = x1 + markers_offset + w / 2 + f2;
+        main_b.x = main_a.x;
+        lv_draw_line(draw_ctx, &main_line_dsc, &main_a, &main_b);
+    }
+
+    /*
+     * NAVTEX tuning markers.
+     * Decoder center = 1000 Hz, shift = 170 Hz -> 915 / 1085 Hz.
+     * Use the exact same Hz-to-pixel mapping and line style as RTTY.
+     */
+    if (dialog_navtex_is_active()) {
+        int32_t from, to;
+
+        from = sign_from * 915;
+        to   = sign_to * 1085;
+
+        f1 = (int64_t)(w * from) / w_hz;
+        f2 = (int64_t)(w * to) / w_hz;
+
+        main_a.x = x1 + markers_offset + w / 2 + f1;
+        main_a.y = y1;
+        main_b.x = main_a.x;
+        main_b.y = y1 + h;
+        lv_draw_line(draw_ctx, &main_line_dsc, &main_a, &main_b);
+
+        main_a.x = x1 + markers_offset + w / 2 + f2;
+        main_b.x = main_a.x;
+        lv_draw_line(draw_ctx, &main_line_dsc, &main_a, &main_b);
+    }
+
+    /*
+     * WEFAX tuning markers.
+     * Decoder center = 1500 Hz, shift = 850 Hz -> 1075 / 1925 Hz.
+     * Use the exact same Hz-to-pixel mapping and line style as RTTY/NAVTEX.
+     * dialog_wefax_is_active() follows dialog.run, so the markers disappear
+     * regardless of how the WEFAX dialog is closed.
+     */
+    if (dialog_wefax_is_active()) {
+        int32_t from, to;
+
+        from = sign_from * 1075;
+        to   = sign_to * 1925;
 
         f1 = (int64_t)(w * from) / w_hz;
         f2 = (int64_t)(w * to) / w_hz;

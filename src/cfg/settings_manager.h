@@ -77,6 +77,10 @@ class SettingsManager {
         StorageType::GLOBAL, pending_writes_, &global_params_};
     Parameter<int32_t> p_rfgain{"rfgain", 63, 0, 100,
         StorageType::GLOBAL, pending_writes_, &global_params_};
+    Parameter<int32_t> p_wefax_align{"wefax_align", 0, -1300, 1300,
+        StorageType::GLOBAL, pending_writes_, &global_params_};
+    Parameter<int32_t> p_wefax_tilt{"wefax_tilt", 0, -400, 400,
+        StorageType::GLOBAL, pending_writes_, &global_params_};
 
     Parameter<int32_t> p_rit{"rit", 0, -1500, 1500,
         StorageType::GLOBAL, pending_writes_, &global_params_};

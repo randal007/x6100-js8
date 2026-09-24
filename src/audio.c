@@ -251,6 +251,8 @@ void audio_set_play_mode(audio_play_mode_t mode) {
     }
 }
 
+
+
 float audio_set_play_vol(float db) {
     snd_mixer_t *handle;
     snd_mixer_selem_id_t *sid;
@@ -273,6 +275,8 @@ float audio_set_play_vol(float db) {
     snd_mixer_close(handle);
     return (float)db_long / 100.0f;
 }
+
+
 
 float audio_set_rec_vol(float db) {
     snd_mixer_t *handle;

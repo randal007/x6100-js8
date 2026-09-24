@@ -42,6 +42,8 @@
 #include "dialog_recorder.h"
 #include "dialog_callsign.h"
 #include "dialog_wifi.h"
+#include "dialog_wefax.h"
+#include "dialog_navtex.h"
 #include "backlight.h"
 #include "buttons.h"
 #include "recorder.h"
@@ -50,6 +52,9 @@
 #include "cfg/cfg_api.h"
 #include "cfg/memory.h"
 #include "knobs.h"
+#include "dialog_channels.h"
+#include "channels.h"
+#include "broadcast_db.h"
 
 #include <unistd.h>
 #include <stdint.h>
@@ -73,6 +78,22 @@ static lv_obj_t     *meter;
 static lv_obj_t     *tx_info;
 static lv_obj_t     *knobs;
 
+/* Temporary Channel Memory overlay used by microphone FIL/GENE. */
+static lv_obj_t     *channel_overlay = NULL;
+static lv_obj_t     *channel_overlay_label = NULL;
+static lv_timer_t   *channel_overlay_timer = NULL;
+
+/* Temporary SW Broadcast Info overlay used by microphone GENE. */
+static lv_obj_t     *broadcast_overlay = NULL;
+static lv_obj_t     *broadcast_overlay_label = NULL;
+static lv_obj_t     *broadcast_overlay_counter = NULL;
+static lv_obj_t     *broadcast_overlay_name = NULL;
+static lv_timer_t   *broadcast_overlay_timer = NULL;
+static broadcast_match_t broadcast_matches[BROADCAST_MAX_MATCHES];
+static size_t        broadcast_match_count = 0;
+static size_t        broadcast_match_index = 0;
+static int32_t       broadcast_search_frequency = 0;
+
 // power off on low battery
 static lv_timer_t *low_power_timer;
 
@@ -81,6 +102,387 @@ static void low_power_timer_cb(lv_timer_t * timer);
 static void freq_shift(int16_t diff);
 static void next_freq_step(bool up);
 static void toggle_atu_enabled();
+void channel_overlay_show(const char *name);
+static void channel_overlay_timer_cb(lv_timer_t *timer);
+static void broadcast_overlay_show(void);
+static void broadcast_overlay_timer_cb(lv_timer_t *timer);
+
+
+static void channel_overlay_timer_cb(lv_timer_t *timer) {
+
+    if (channel_overlay) {
+        lv_obj_del(channel_overlay);
+        channel_overlay = NULL;
+        channel_overlay_label = NULL;
+    }
+
+    channel_overlay_timer = NULL;
+}
+
+
+void channel_overlay_show(const char *name) {
+
+    /*
+     * Reuse the existing overlay when FIL/GENE are pressed rapidly.
+     * Only the text changes and the one-second timeout starts again.
+     */
+    if (!channel_overlay) {
+
+        channel_overlay = lv_obj_create(obj);
+
+        lv_obj_set_size(channel_overlay, 700, 70);
+        lv_obj_align(channel_overlay, LV_ALIGN_TOP_MID, 0, 75);
+
+        lv_obj_set_style_bg_color(
+            channel_overlay,
+            lv_color_hex(0x27313A),
+            LV_PART_MAIN
+        );
+
+        lv_obj_set_style_bg_opa(
+            channel_overlay,
+            LV_OPA_COVER,
+            LV_PART_MAIN
+        );
+
+        lv_obj_set_style_border_width(
+            channel_overlay,
+            2,
+            LV_PART_MAIN
+        );
+
+        lv_obj_set_style_border_color(
+            channel_overlay,
+            lv_color_hex(0x808080),
+            LV_PART_MAIN
+        );
+
+        lv_obj_set_style_radius(
+            channel_overlay,
+            8,
+            LV_PART_MAIN
+        );
+
+        lv_obj_set_style_pad_all(
+            channel_overlay,
+            0,
+            LV_PART_MAIN
+        );
+
+        lv_obj_clear_flag(
+            channel_overlay,
+            LV_OBJ_FLAG_SCROLLABLE
+        );
+
+        channel_overlay_label =
+            lv_label_create(channel_overlay);
+
+        lv_obj_set_width(
+            channel_overlay_label,
+            510
+        );
+
+        lv_label_set_long_mode(
+            channel_overlay_label,
+            LV_LABEL_LONG_DOT
+        );
+
+        lv_obj_set_style_text_align(
+            channel_overlay_label,
+            LV_TEXT_ALIGN_CENTER,
+            0
+        );
+
+        lv_obj_set_style_text_color(
+            channel_overlay_label,
+            lv_color_hex(0xFFFFFF),
+            0
+        );
+
+        lv_obj_set_style_text_font(
+            channel_overlay_label,
+            &sony_38,
+            0
+        );
+
+        lv_obj_center(channel_overlay_label);
+    }
+
+
+    if (name && name[0] != '\0') {
+
+        lv_label_set_text(
+            channel_overlay_label,
+            name
+        );
+
+    } else {
+
+        lv_label_set_text(
+            channel_overlay_label,
+            "CHANNEL"
+        );
+    }
+
+
+    lv_obj_move_foreground(channel_overlay);
+
+
+    if (channel_overlay_timer) {
+
+        /*
+         * A new FIL/GENE press restarts the full one-second timeout.
+         */
+        lv_timer_reset(channel_overlay_timer);
+
+    } else {
+
+        channel_overlay_timer =
+            lv_timer_create(
+                channel_overlay_timer_cb,
+                1000,
+                NULL
+            );
+
+        lv_timer_set_repeat_count(
+            channel_overlay_timer,
+            1
+        );
+    }
+}
+
+
+static void broadcast_overlay_timer_cb(lv_timer_t *timer) {
+
+    if (broadcast_overlay) {
+        lv_obj_del(broadcast_overlay);
+        broadcast_overlay = NULL;
+        broadcast_overlay_label = NULL;
+        broadcast_overlay_counter = NULL;
+        broadcast_overlay_name = NULL;
+    }
+
+    broadcast_overlay_timer = NULL;
+    broadcast_match_count = 0;
+    broadcast_match_index = 0;
+}
+
+
+static void broadcast_overlay_render(void) {
+
+    if (!broadcast_overlay) {
+        /*
+         * Build the Broadcast Info panel exactly like the common
+         * RTTY/NAVTEX panel: a label using panel_style.
+         */
+        broadcast_overlay = lv_label_create(obj);
+        lv_label_set_text(broadcast_overlay, "");
+        lv_obj_add_style(broadcast_overlay, &panel_style, 0);
+        lv_obj_add_flag(broadcast_overlay, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+        lv_obj_clear_flag(broadcast_overlay, LV_OBJ_FLAG_SCROLLABLE);
+
+        /* Result counter, only shown when more than one match exists. */
+        broadcast_overlay_counter = lv_label_create(broadcast_overlay);
+        lv_obj_set_pos(broadcast_overlay_counter, 8, 2);
+        lv_obj_set_style_text_color(broadcast_overlay_counter, lv_color_white(), 0);
+        lv_obj_set_style_text_font(broadcast_overlay_counter, &sony_24, 0);
+
+        /* Station name. */
+        broadcast_overlay_name = lv_label_create(broadcast_overlay);
+        lv_obj_set_width(broadcast_overlay_name, 735);
+        lv_obj_set_pos(broadcast_overlay_name, 20, 4);
+        lv_label_set_long_mode(broadcast_overlay_name, LV_LABEL_LONG_DOT);
+        lv_obj_set_style_text_align(broadcast_overlay_name, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(broadcast_overlay_name, lv_color_white(), 0);
+        lv_obj_set_style_text_font(broadcast_overlay_name, &sony_32, 0);
+
+        /* Broadcast details, fitted inside the standard 795 x 182 panel. */
+        broadcast_overlay_label = lv_label_create(broadcast_overlay);
+        lv_obj_set_width(broadcast_overlay_label, 755);
+        lv_obj_set_pos(broadcast_overlay_label, 10, 48);
+        lv_label_set_long_mode(broadcast_overlay_label, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_text_align(broadcast_overlay_label, LV_TEXT_ALIGN_CENTER, 0);
+        lv_obj_set_style_text_color(broadcast_overlay_label, lv_color_white(), 0);
+        lv_obj_set_style_text_font(broadcast_overlay_label, &sony_24, 0);
+    }
+
+    if (broadcast_match_count > 0) {
+        broadcast_match_t *m = &broadcast_matches[broadcast_match_index];
+        int sh = m->start_minute / 60;
+        int sm = m->start_minute % 60;
+        int eh = m->stop_minute / 60;
+        int em = m->stop_minute % 60;
+        char lang[64];
+        char target[80];
+
+        snprintf(lang, sizeof(lang), "%s", m->language[0] ? m->language : "-");
+        snprintf(target, sizeof(target), "%s", m->target[0] ? m->target : "-");
+
+        if (broadcast_match_count > 1) {
+            lv_label_set_text_fmt(
+                broadcast_overlay_counter,
+                "%u/%u",
+                (unsigned)(broadcast_match_index + 1),
+                (unsigned)broadcast_match_count
+            );
+        } else {
+            lv_label_set_text(broadcast_overlay_counter, "");
+        }
+
+        lv_label_set_text(broadcast_overlay_name, m->station);
+
+        lv_label_set_text_fmt(
+            broadcast_overlay_label,
+            "%.3f kHz     %02d:%02d-%02d:%02d UTC\n"
+            "Language: %s     Target: %s\n"
+            "ITU: %s     Days: %s",
+            m->freq_khz, sh, sm, eh, em,
+            lang, target,
+            m->itu[0] ? m->itu : "-",
+            m->days[0] ? m->days : "Daily"
+        );
+    } else {
+        lv_label_set_text(broadcast_overlay_counter, "");
+        lv_label_set_text(broadcast_overlay_name, "NO STATION SCHEDULED");
+        lv_label_set_text_fmt(
+            broadcast_overlay_label,
+            "\n%.3f kHz",
+            (double)broadcast_search_frequency / 1000.0
+        );
+    }
+
+    lv_obj_move_foreground(broadcast_overlay);
+}
+
+static void broadcast_overlay_show(void) {
+
+    /* If the panel is already visible, GENE means NEXT.  Do not repeat
+     * the search: cycle the result set captured by the first press. */
+    if (broadcast_overlay) {
+        if (broadcast_match_count > 1) {
+            broadcast_match_index = (broadcast_match_index + 1) % broadcast_match_count;
+            broadcast_overlay_render();
+        }
+    } else {
+        broadcast_search_frequency = cparam_i_get(cfg_fg_freq);
+        broadcast_match_count = broadcast_db_find_matches(
+            broadcast_search_frequency,
+            2000,
+            broadcast_matches,
+            BROADCAST_MAX_MATCHES
+        );
+        broadcast_match_index = 0;
+        broadcast_overlay_render();
+    }
+
+    if (broadcast_overlay_timer) {
+        lv_timer_reset(broadcast_overlay_timer);
+    } else {
+        broadcast_overlay_timer = lv_timer_create(broadcast_overlay_timer_cb, 3000, NULL);
+        lv_timer_set_repeat_count(broadcast_overlay_timer, 1);
+    }
+}
+
+
+static void broadcast_overlay_save_channel(void) {
+
+    broadcast_match_t match;
+    bool have_match = false;
+
+    /* If Broadcast Info is visible, save the station currently selected
+     * in the panel.  Otherwise perform a fresh lookup at the current VFO
+     * frequency and use the first matching station. */
+    if (broadcast_overlay && broadcast_match_count > 0) {
+        match = broadcast_matches[broadcast_match_index];
+        have_match = true;
+    } else if (!broadcast_overlay) {
+        broadcast_match_t matches[BROADCAST_MAX_MATCHES];
+        size_t count = broadcast_db_find_matches(
+            cparam_i_get(cfg_fg_freq),
+            2000,
+            matches,
+            BROADCAST_MAX_MATCHES
+        );
+
+        if (count > 0) {
+            match = matches[0];
+            have_match = true;
+        }
+    }
+
+    /* Always reload the persistent channel database before modifying it.
+     * After boot the in-memory channel list may still be empty if the
+     * Channels dialog has never been opened. */
+    if (!channels_load()) {
+        if (broadcast_overlay) {
+            lv_label_set_text(broadcast_overlay_counter, "");
+            lv_label_set_text(broadcast_overlay_name, "SAVE ERROR");
+            lv_label_set_text(broadcast_overlay_label, "Unable to load channels");
+        } else {
+            channel_overlay_show("Channel save error");
+        }
+        return;
+    }
+
+    if (!channels_add_current()) {
+        if (broadcast_overlay) {
+            lv_label_set_text(broadcast_overlay_counter, "");
+            lv_label_set_text(broadcast_overlay_name, "SAVE ERROR");
+            lv_label_set_text(broadcast_overlay_label, "Unable to add channel");
+        } else {
+            channel_overlay_show("Channel save error");
+        }
+        return;
+    }
+
+    uint16_t count = channels_count();
+
+    if (have_match && count > 0) {
+        if (!channels_set_name(count - 1, match.station)) {
+            /* channels_add_current() has already saved the new record with
+             * an empty name. Remove it again if assigning the station name
+             * fails, so we don't leave a bogus channel behind. */
+            channels_delete(count - 1);
+
+            if (broadcast_overlay) {
+                lv_label_set_text(broadcast_overlay_counter, "");
+                lv_label_set_text(broadcast_overlay_name, "SAVE ERROR");
+                lv_label_set_text(broadcast_overlay_label, "Unable to set channel name");
+            } else {
+                channel_overlay_show("Channel save error");
+            }
+            return;
+        }
+    }
+
+    if (broadcast_overlay) {
+        lv_label_set_text(broadcast_overlay_counter, "");
+        lv_label_set_text(broadcast_overlay_name, "CHANNEL SAVED");
+        lv_label_set_text(
+            broadcast_overlay_label,
+            have_match ? match.station : ""
+        );
+
+        if (broadcast_overlay_timer) {
+            lv_timer_reset(broadcast_overlay_timer);
+        } else {
+            broadcast_overlay_timer = lv_timer_create(broadcast_overlay_timer_cb, 1000, NULL);
+            lv_timer_set_repeat_count(broadcast_overlay_timer, 1);
+        }
+
+        lv_obj_move_foreground(broadcast_overlay);
+    } else {
+        char message[96];
+
+        if (have_match && match.station[0]) {
+            snprintf(message, sizeof(message), "Saved channel %s", match.station);
+        } else {
+            snprintf(message, sizeof(message), "Saved channel");
+        }
+
+        channel_overlay_show(message);
+    }
+}
 
 // Observers functions
 
@@ -172,6 +574,16 @@ void main_screen_start_app(press_action_t app_action) {
             voice_say_text_fmt("Wi-Fi window");
             break;
 
+        case ACTION_APP_WEFAX:
+            dialog_construct(dialog_wefax, obj);
+            voice_say_text_fmt("WeFax window");
+            break;
+
+        case ACTION_APP_NAVTEX:
+            dialog_construct(dialog_navtex, obj);
+            voice_say_text_fmt("NAVTEX window");
+            break;
+
         default:
             break;
     }
@@ -238,6 +650,8 @@ void main_screen_action(press_action_t action) {
         case ACTION_APP_SETTINGS:
         case ACTION_APP_RECORDER:
         case ACTION_APP_WIFI:
+        case ACTION_APP_WEFAX:
+        case ACTION_APP_NAVTEX:
             main_screen_start_app(action);
             break;
 
@@ -735,6 +1149,8 @@ static void main_screen_hkey_cb(lv_event_t * e) {
             }
             break;
 
+
+        /*
         case HKEY_UP:
             if (hkey->state == HKEY_RELEASE) {
                 if (!subject_i_get(freq_lock)) {
@@ -748,6 +1164,8 @@ static void main_screen_hkey_cb(lv_event_t * e) {
             }
             break;
 
+
+        
         case HKEY_DOWN:
             if (hkey->state == HKEY_RELEASE) {
                 if (!subject_i_get(freq_lock)) {
@@ -759,7 +1177,98 @@ static void main_screen_hkey_cb(lv_event_t * e) {
                 }
                 dialog_send(EVENT_BAND_DOWN, NULL);
             }
+            break; */
+
+        case HKEY_UP:
+    if (hkey->state == HKEY_RELEASE) {
+        if (dialog_channels_recall_relative(-1)) {
+            channel_overlay_show(
+                dialog_channels_last_recalled_name()
+            );
+        }
+    } else if (hkey->state == HKEY_LONG) {
+        if (!band_lock) {
+            cfg_band_load_next(true);
+        }
+        dialog_send(EVENT_BAND_UP, NULL);
+    }
+    break;
+
+
+        case HKEY_DOWN:
+    if (hkey->state == HKEY_RELEASE) {
+        if (dialog_channels_recall_relative(+1)) {
+            channel_overlay_show(
+                dialog_channels_last_recalled_name()
+            );
+        }
+    } else if (hkey->state == HKEY_LONG) {
+        if (!band_lock) {
+            cfg_band_load_next(false);
+        }
+        dialog_send(EVENT_BAND_DOWN, NULL);
+    }
+    break;
+
+
+case HKEY_VM:
+    if (dialog_wefax->run || dialog_navtex->run) {
+        break;
+    }
+
+    if (hkey->state == HKEY_RELEASE) {
+        dialog_construct(dialog_channels, obj);
+    }
+    break;
+
+
+
+/*
+        case HKEY_VM:
+            if (hkey->state == HKEY_RELEASE) {
+                dialog_construct(dialog_channels, obj);
+            } else if (hkey->state == HKEY_LONG) {
+                dialog_channels_add_on_open();
+                dialog_construct(dialog_channels, obj);
+            }
             break;
+*/
+
+
+/*
+        case HKEY_FIL:
+            if (hkey->state == HKEY_RELEASE) {
+                if (dialog_channels_recall_relative(-1)) {
+                    channel_overlay_show(
+                        dialog_channels_last_recalled_name()
+                    );
+                }
+            }
+            break;
+
+        case HKEY_GENE:
+            if (hkey->state == HKEY_RELEASE) {
+                if (dialog_channels_recall_relative(+1)) {
+                    channel_overlay_show(
+                        dialog_channels_last_recalled_name()
+                    );
+                }
+            }
+            break;
+*/
+
+        case HKEY_GENE:
+            if (hkey->state == HKEY_RELEASE) {
+                broadcast_overlay_show();
+            }
+            break;
+
+        case HKEY_NW:
+            if (hkey->state == HKEY_RELEASE) {
+                broadcast_overlay_save_channel();
+            }
+            break;
+
 
         case HKEY_F1:
             if (hkey->state == HKEY_RELEASE) {
@@ -1020,6 +1529,7 @@ void main_screen_set_freq(uint64_t freq) {
 }
 
 lv_obj_t * main_screen() {
+    broadcast_db_init();
     uint16_t y = 0;
 
     freq_lock = subject_i_create(false);

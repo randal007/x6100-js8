@@ -1,0 +1,3921 @@
+/*
+ * DWD WeFax receiver
+ */
+
+#include "main_screen.h"
+#include "dialog_wefax.h"
+#include "wefax/decoder.h"
+#include "mfk.h"
+#include "keyboard.h"
+#include "cfg/cfg_api.h"
+#include "styles.h"
+#include "radio.h"
+#include "events.h"
+
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <pthread.h>
+#include <stdlib.h>
+#include <time.h>
+#include <sys/stat.h>
+#include <errno.h>
+#include <dirent.h>
+#include <png.h>
+
+
+/*
+ * LCD preview dimensions.
+ */
+#define PREVIEW_WIDTH       750
+#define PREVIEW_HEIGHT      320
+
+/*
+ * LVGL refresh period.
+ */
+#define PREVIEW_TIMER_MS     30
+
+/*
+ * Full-resolution fax history kept for Save.
+ * 1809 * 1500 bytes = ~2.59 MiB. (only horizontal fax)
+ * 1809 * 1900 bytes = ~3.28 MiB. (including vertical fax)
+ */
+#define FAX_BUFFER_ROWS     2400
+#define FAX_SAVE_DIR        "/mnt/wefax"
+
+
+/*
+ * WAV test.
+ */
+#define TEST_WAV_PATH        "/mnt/wefax/test.wav"
+#define TEST_TIMER_MS        20
+#define TEST_SAMPLES         221
+
+
+/*
+ * Monotonic counter incremented by the decoder for every accepted
+ * provisional APT START.  Kept local here to avoid changing decoder.h.
+ */
+uint32_t wefax_decoder_auto_start_generation(
+    const wefax_decoder_t *decoder
+);
+
+/* True only after the provisional START has been confirmed by the black band. */
+bool wefax_decoder_auto_fax_confirmed(
+    const wefax_decoder_t *decoder
+);
+
+
+static void construct_cb(lv_obj_t *parent);
+static void destruct_cb(void);
+static void key_cb(lv_event_t *e);
+
+static void fax_page_1_cb(button_data_t *data);
+static void fax_page_2_cb(button_data_t *data);
+static void fax_page_3_cb(button_data_t *data);
+
+static void fax_browser_cb(button_data_t *data);
+static void fix_align_cb(button_data_t *data);
+static void fix_tilt_cb(button_data_t *data);
+static void save_fax_cb(button_data_t *data);
+static void save_fax_delayed_cb(lv_timer_t *timer);
+
+static void fax_browser_build(void);
+static void fax_browser_close(void);
+static void fax_browser_pressed_cb(lv_event_t *e);
+static void fax_browser_refresh(void);
+static bool fax_browser_open_png(const char *filename);
+static void fax_browser_free_image(void);
+static void fax_browser_render_image(void);
+static bool fax_browser_save_edited_png(void);
+static void fax_browser_return_to_list(void);
+static void fax_browser_set_editor_buttons(bool enabled);
+static void fax_browser_update_modified_state(void);
+static void fax_browser_update_list(void);
+static void fax_browser_delete_selected(void);
+
+static void close_cb(button_data_t *data);
+static void cont_cb(button_data_t *data);
+static void auto_cb(button_data_t *data);
+static void zoom_cb(button_data_t *data);
+static void clear_cb(button_data_t *data);
+
+static const char *align_label_getter(void);
+static const char *tilt_label_getter(void);
+static void align_cb(button_data_t *data);
+static void tilt_cb(button_data_t *data);
+static void save_cb(button_data_t *data);
+static void test_cb(button_data_t *data);
+
+static void audio_cb(
+    unsigned int n,
+    float *samples
+);
+
+static void row_cb(
+    const uint8_t *row,
+    unsigned int width,
+    unsigned int row_number,
+    void *user_data
+);
+
+static void update_preview_cb(
+    lv_timer_t *timer
+);
+
+static void test_wav_timer_cb(
+    lv_timer_t *timer
+);
+
+static void clear_preview(void);
+static void clear_fax_buffer(void);
+static bool ensure_fax_buffer(void);
+static void store_fax_row(const uint8_t *row);
+static bool save_fax_png_async(void);
+static void *save_fax_worker(void *arg);
+static void check_async_save_completion(void);
+static bool auto_save_previous_for_new_start(void);
+static void stop_wav_test(void);
+static void auto_finish_fax(void);
+
+static bool open_test_wav(void);
+
+
+/*
+ * Decoder.
+ */
+static wefax_decoder_t *decoder = NULL;
+
+/* Last provisional APT START already handled by the GUI thread. */
+static uint32_t auto_start_generation_seen = 0;
+
+/* GUI-side latch: provisional AUTO rows stay hidden until confirmation. */
+static bool auto_fax_confirmed_seen = false;
+
+
+/*
+ * LVGL objects.
+ */
+static lv_obj_t *fax_canvas = NULL;
+static lv_obj_t *fax_viewport = NULL;
+static lv_obj_t *small_top_mask = NULL;
+static lv_obj_t *fax_frame = NULL;
+
+/* Saved-fax browser (FAX 3:4). */
+#define FAX_BROWSER_MAX_FILES 128
+static lv_obj_t *fax_browser_table = NULL;
+static char *fax_browser_files[FAX_BROWSER_MAX_FILES];
+static unsigned int fax_browser_file_count = 0;
+static bool fax_browser_open = false;
+static bool fax_browser_editing = false;
+static bool fax_browser_align_active = false;
+static bool fax_browser_tilt_active = false;
+static int fax_browser_align = 0;
+static int fax_browser_tilt = 0;
+static bool fax_browser_modified = false;
+static uint8_t *fax_browser_image = NULL;
+static unsigned int fax_browser_image_width = 0;
+static unsigned int fax_browser_image_height = 0;
+static char fax_browser_image_path[256];
+static bool align_mfk_active = false;
+static bool tilt_mfk_active = false;
+
+/*
+ * Original (unaligned) source rows corresponding to the LCD rows
+ * currently visible.  275 * 1809 = ~486 KiB.
+ */
+static uint8_t preview_source_rows[PREVIEW_HEIGHT][WEFAX_WIDTH];
+static unsigned int preview_source_count = 0;
+static unsigned int preview_source_head = 0;
+
+/*
+ * Full-resolution grayscale ring buffer.
+ *
+ * Rows are stored unmodified (before Align/Tilt), so Save can apply the
+ * current correction settings to the complete retained fax.
+ */
+static uint8_t *fax_buffer = NULL;
+static unsigned int fax_buffer_count = 0;
+static unsigned int fax_buffer_head = 0;
+
+/*
+ * Asynchronous full-fax PNG saving.
+ *
+ * The LVGL thread only copies the retained fax into an independent
+ * snapshot.  libpng compression and filesystem I/O are performed by a
+ * detached worker thread, so the GUI/event queue never stalls while a
+ * large fax is being written.
+ */
+typedef struct {
+    uint8_t *image;
+    unsigned int rows;
+    int align;
+    int tilt;
+    char path[128];
+} wefax_save_job_t;
+
+static pthread_mutex_t save_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bool async_save_running = false;
+static bool async_save_completed = false;
+static bool async_save_success = false;
+
+typedef enum {
+    WEFAX_ZOOM_SMALL = 0,
+    WEFAX_ZOOM_BIG,
+    WEFAX_ZOOM_FULL
+} wefax_zoom_t;
+
+static wefax_zoom_t zoom_mode = WEFAX_ZOOM_SMALL;
+
+static void render_zoomed_fax(void);
+static void rerender_preview(void);
+static void apply_zoom_geometry(void);
+static lv_timer_t *preview_timer = NULL;
+static lv_timer_t *test_timer = NULL;
+static lv_timer_t *save_fax_timer = NULL;
+
+
+/*
+ * WAV test state.
+ */
+static FILE *test_wav = NULL;
+
+static uint32_t test_data_remaining = 0;
+
+static bool test_running = false;
+
+
+/*
+ * Canvas framebuffer.
+ */
+static lv_color_t preview_buffer[
+    PREVIEW_WIDTH * PREVIEW_HEIGHT
+];
+
+
+/*
+ * Communication between audio thread and
+ * LVGL thread.
+ */
+static uint8_t pending_row[WEFAX_WIDTH];
+
+static bool pending_row_valid = false;
+
+static pthread_mutex_t row_mutex =
+    PTHREAD_MUTEX_INITIALIZER;
+
+
+/*
+ * Vertical preview scaling accumulator.
+ *
+ * Horizontal scale:
+ *
+ *     710 / 1809
+ *
+ * We use exactly the same ratio vertically.
+ *
+ * For every received WEFAX row we add 710.
+ * When the accumulator reaches 1809 we emit
+ * one LCD row and subtract 1809.
+ *
+ * This gives exactly:
+ *
+ *     710 / 1809 = 0.39248...
+ *
+ * LCD rows per WEFAX row.
+ */
+static unsigned int vertical_accumulator = 0;
+
+
+/*
+ * WEFAX button pages.
+ *
+ * F1 cycles locally:
+ *
+ *     FAX 1:3 -> FAX 2:3 -> FAX 3:3 -> FAX 1:3
+ *
+ * This deliberately does not modify the global button page groups
+ * in buttons.cpp.
+ */
+
+/*
+ * FAX 1:3 - Reception
+ */
+static button_data_t btn_fax_page_1 = {
+    .type = BTN_TEXT,
+    .label = "(FAX 1:3)",
+    .press = fax_page_2_cb
+};
+
+static button_data_t btn_close = {
+    .type = BTN_TEXT,
+    .label = "Close",
+    .press = close_cb
+};
+
+static button_data_t btn_cont = {
+    .type = BTN_TEXT,
+    .label = "Cont",
+    .press = cont_cb
+};
+
+static button_data_t btn_auto = {
+    .type = BTN_TEXT,
+    .label = "Auto",
+    .press = auto_cb
+};
+
+static button_data_t btn_clear = {
+    .type = BTN_TEXT,
+    .label = "Clear",
+    .press = clear_cb
+};
+
+
+/*
+ * FAX 2:3 - Live fax adjustment
+ */
+static button_data_t btn_fax_page_2 = {
+    .type = BTN_TEXT,
+    .label = "(FAX 2:3)",
+    .press = fax_page_3_cb
+};
+
+static button_data_t btn_align = {
+    .type = BTN_TEXT_FN,
+    .label_fn = align_label_getter,
+    .press = align_cb,
+    .ctrl = CTRL_WEFAX_ALIGN,
+    .encoder_allowed = true
+};
+
+static button_data_t btn_tilt = {
+    .type = BTN_TEXT_FN,
+    .label_fn = tilt_label_getter,
+    .press = tilt_cb,
+    .ctrl = CTRL_WEFAX_TILT,
+    .encoder_allowed = true
+};
+
+static button_data_t btn_zoom = {
+    .type = BTN_TEXT,
+    .label = "View\nSmall",
+    .press = zoom_cb
+};
+
+static button_data_t btn_save = {
+    .type = BTN_TEXT,
+    .label = "Save",
+    .press = save_cb
+};
+
+
+/*
+ * FAX 3:3 - Saved fax browser/editor
+ */
+static button_data_t btn_fax_page_3 = {
+    .type = BTN_TEXT,
+    .label = "(FAX 3:3)",
+    .press = fax_page_1_cb
+};
+
+static button_data_t btn_fax_browser = {
+    .type = BTN_TEXT,
+    .label = "Fax\nBrowser",
+    .press = fax_browser_cb
+};
+
+static button_data_t btn_fix_align = {
+    .type = BTN_TEXT,
+    .label = "Fix\nAlign",
+    .press = fix_align_cb,
+    .disabled = true
+};
+
+static button_data_t btn_fix_tilt = {
+    .type = BTN_TEXT,
+    .label = "Fix\nTilt",
+    .press = fix_tilt_cb,
+    .disabled = true
+};
+
+static button_data_t btn_save_fax = {
+    .type = BTN_TEXT,
+    .label = "Done",
+    .press = save_fax_cb,
+    .disabled = true
+};
+
+
+static buttons_page_t btn_page_1 = {
+    .items = {
+        &btn_fax_page_1,
+        &btn_cont,
+        &btn_auto,
+        &btn_clear,
+        &btn_close
+    }
+};
+
+static buttons_page_t btn_page_2 = {
+    .items = {
+        &btn_fax_page_2,
+        &btn_align,
+        &btn_tilt,
+        &btn_zoom,
+        &btn_save
+    }
+};
+
+static buttons_page_t btn_page_3 = {
+    .items = {
+        &btn_fax_page_3,
+        &btn_fax_browser,
+        &btn_fix_align,
+        &btn_fix_tilt,
+        &btn_save_fax
+    }
+};
+
+
+static dialog_t dialog = {
+    .run = false,
+    .construct_cb = construct_cb,
+    .destruct_cb = destruct_cb,
+    .audio_cb = audio_cb,
+    .key_cb = key_cb,
+    .btn_page = &btn_page_1
+};
+
+
+dialog_t *dialog_wefax = &dialog;
+
+bool dialog_wefax_is_active(void)
+{
+    return dialog.run;
+}
+
+
+/*
+ * Little-endian helpers.
+ */
+static uint16_t read_le16(
+    const uint8_t *p)
+{
+    return
+        (uint16_t)p[0] |
+        (
+            (uint16_t)p[1] << 8
+        );
+}
+
+
+static uint32_t read_le32(
+    const uint8_t *p)
+{
+    return
+        (uint32_t)p[0] |
+        (
+            (uint32_t)p[1] << 8
+        ) |
+        (
+            (uint32_t)p[2] << 16
+        ) |
+        (
+            (uint32_t)p[3] << 24
+        );
+}
+
+
+/*
+ * Clear LCD preview framebuffer.
+ */
+static void clear_preview(void)
+{
+    const lv_color_t white =
+        lv_color_make(255, 255, 255);
+
+
+    for (
+        unsigned int i = 0;
+        i < PREVIEW_WIDTH * PREVIEW_HEIGHT;
+        i++
+    ) {
+        preview_buffer[i] = white;
+    }
+
+
+    /*
+     * Restart vertical scaling from a clean
+     * boundary.
+     */
+    vertical_accumulator = 0;
+
+    preview_source_count = 0;
+    preview_source_head = 0;
+
+
+    if (fax_canvas) {
+        lv_obj_invalidate(fax_canvas);
+    }
+
+
+    pthread_mutex_lock(&row_mutex);
+
+    pending_row_valid = false;
+
+    pthread_mutex_unlock(&row_mutex);
+    /*
+     * Clear the complete retained fax as well.
+     */
+    clear_fax_buffer();
+}
+
+
+
+/*
+ * Stop WAV test and release the file.
+ */
+static void stop_wav_test(void)
+{
+    if (test_timer) {
+
+        lv_timer_del(test_timer);
+
+        test_timer = NULL;
+    }
+
+
+    if (test_wav) {
+
+        fclose(test_wav);
+
+        test_wav = NULL;
+    }
+
+
+    test_data_remaining = 0;
+    test_running = false;
+}
+
+
+/*
+ * Open and validate the test WAV.
+ *
+ * Required:
+ *
+ *   RIFF/WAVE
+ *   IEEE float
+ *   mono
+ *   11025 Hz
+ *   32 bits
+ *
+ * We scan RIFF chunks instead of assuming
+ * a fixed 44-byte WAV header.
+ */
+static bool open_test_wav(void)
+{
+    uint8_t header[12];
+
+
+    test_wav =
+        fopen(
+            TEST_WAV_PATH,
+            "rb"
+        );
+
+
+    if (!test_wav) {
+
+        printf(
+            "WEFAX TEST: unable to open %s\n",
+            TEST_WAV_PATH
+        );
+
+        return false;
+    }
+
+
+    if (
+        fread(
+            header,
+            1,
+            sizeof(header),
+            test_wav
+        ) != sizeof(header)
+    ) {
+
+        printf(
+            "WEFAX TEST: invalid WAV header\n"
+        );
+
+        stop_wav_test();
+
+        return false;
+    }
+
+
+    if (
+        memcmp(
+            header,
+            "RIFF",
+            4
+        ) != 0 ||
+        memcmp(
+            header + 8,
+            "WAVE",
+            4
+        ) != 0
+    ) {
+
+        printf(
+            "WEFAX TEST: not a RIFF/WAVE file\n"
+        );
+
+        stop_wav_test();
+
+        return false;
+    }
+
+
+    bool format_found = false;
+    bool data_found = false;
+
+
+    uint16_t audio_format = 0;
+    uint16_t channels = 0;
+    uint32_t sample_rate = 0;
+    uint16_t bits_per_sample = 0;
+
+
+    while (!data_found) {
+
+        uint8_t chunk_header[8];
+
+
+        if (
+            fread(
+                chunk_header,
+                1,
+                sizeof(chunk_header),
+                test_wav
+            ) != sizeof(chunk_header)
+        ) {
+
+            break;
+        }
+
+
+        const uint32_t chunk_size =
+            read_le32(
+                chunk_header + 4
+            );
+
+
+        if (
+            memcmp(
+                chunk_header,
+                "fmt ",
+                4
+            ) == 0
+        ) {
+
+            if (chunk_size < 16) {
+
+                printf(
+                    "WEFAX TEST: invalid fmt chunk\n"
+                );
+
+                stop_wav_test();
+
+                return false;
+            }
+
+
+            uint8_t fmt[16];
+
+
+            if (
+                fread(
+                    fmt,
+                    1,
+                    sizeof(fmt),
+                    test_wav
+                ) != sizeof(fmt)
+            ) {
+
+                printf(
+                    "WEFAX TEST: unable to read fmt chunk\n"
+                );
+
+                stop_wav_test();
+
+                return false;
+            }
+
+
+            audio_format =
+                read_le16(
+                    fmt
+                );
+
+            channels =
+                read_le16(
+                    fmt + 2
+                );
+
+            sample_rate =
+                read_le32(
+                    fmt + 4
+                );
+
+            bits_per_sample =
+                read_le16(
+                    fmt + 14
+                );
+
+
+            format_found = true;
+
+
+            /*
+             * Skip any extended fmt data.
+             */
+            if (chunk_size > 16) {
+
+                if (
+                    fseek(
+                        test_wav,
+                        (long)(
+                            chunk_size - 16
+                        ),
+                        SEEK_CUR
+                    ) != 0
+                ) {
+
+                    printf(
+                        "WEFAX TEST: unable to skip fmt extension\n"
+                    );
+
+                    stop_wav_test();
+
+                    return false;
+                }
+            }
+        }
+        else if (
+            memcmp(
+                chunk_header,
+                "data",
+                4
+            ) == 0
+        ) {
+
+            test_data_remaining =
+                chunk_size;
+
+            data_found = true;
+
+            break;
+        }
+        else {
+
+            /*
+             * Unknown RIFF chunk.
+             */
+            if (
+                fseek(
+                    test_wav,
+                    (long)chunk_size,
+                    SEEK_CUR
+                ) != 0
+            ) {
+
+                break;
+            }
+        }
+
+
+        /*
+         * RIFF chunks are padded to an even
+         * number of bytes.
+         */
+        if (
+            chunk_size & 1
+        ) {
+
+            if (
+                fseek(
+                    test_wav,
+                    1,
+                    SEEK_CUR
+                ) != 0
+            ) {
+
+                break;
+            }
+        }
+    }
+
+
+    if (
+        !format_found ||
+        !data_found
+    ) {
+
+        printf(
+            "WEFAX TEST: fmt/data chunk not found\n"
+        );
+
+        stop_wav_test();
+
+        return false;
+    }
+
+
+    /*
+     * WAV format 3 = IEEE floating point.
+     */
+    if (audio_format != 3) {
+
+        printf(
+            "WEFAX TEST: unsupported WAV format %u "
+            "(expected IEEE float = 3)\n",
+            (unsigned int)audio_format
+        );
+
+        stop_wav_test();
+
+        return false;
+    }
+
+
+    if (channels != 1) {
+
+        printf(
+            "WEFAX TEST: WAV must be mono "
+            "(channels=%u)\n",
+            (unsigned int)channels
+        );
+
+        stop_wav_test();
+
+        return false;
+    }
+
+
+    if (
+        sample_rate !=
+        WEFAX_SAMPLE_RATE
+    ) {
+
+        printf(
+            "WEFAX TEST: wrong sample rate %u "
+            "(expected %u)\n",
+
+            (unsigned int)sample_rate,
+            (unsigned int)WEFAX_SAMPLE_RATE
+        );
+
+        stop_wav_test();
+
+        return false;
+    }
+
+
+    if (bits_per_sample != 32) {
+
+        printf(
+            "WEFAX TEST: wrong sample size %u bits "
+            "(expected 32)\n",
+            (unsigned int)bits_per_sample
+        );
+
+        stop_wav_test();
+
+        return false;
+    }
+
+
+    printf(
+        "WEFAX TEST: WAV OK - "
+        "%u Hz mono float32, %u data bytes\n",
+
+        (unsigned int)sample_rate,
+        (unsigned int)test_data_remaining
+    );
+
+
+    return true;
+}
+
+
+/*
+ * Dialog construction.
+ */
+static void construct_cb(lv_obj_t *parent)
+{
+    zoom_mode = WEFAX_ZOOM_SMALL;
+    btn_zoom.label = "View\nSmall";
+
+    align_mfk_active = false;
+
+    decoder = wefax_decoder_create();
+    auto_start_generation_seen = 0;
+    auto_fax_confirmed_seen = false;
+
+    if (!decoder) {
+
+        fprintf(
+            stderr,
+            "WEFAX: unable to create decoder\n"
+        );
+    }
+    else {
+
+        wefax_decoder_set_row_callback(
+            decoder,
+            row_cb,
+            NULL
+        );
+    }
+
+
+    dialog.obj = dialog_init(parent);
+
+
+    lv_obj_set_size(
+        dialog.obj,
+        795,
+        350
+    );
+
+    lv_obj_center(dialog.obj);
+
+    /*
+     * dialog_init() supplies the normal dialog background image, whose
+     * built-in top/bottom white edges would otherwise remain visible under
+     * our WEFAX frame in BIG/FULL.  WEFAX now owns its frame completely.
+     */
+    lv_obj_set_style_bg_img_src(dialog.obj, NULL, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(dialog.obj, LV_OPA_TRANSP, LV_PART_MAIN);
+    lv_obj_set_style_border_width(dialog.obj, 0, LV_PART_MAIN);
+
+
+    /*
+     * Fax viewport.
+     *
+     * This is deliberately transparent: in SMALL it clips the 710x320
+     * canvas to the reduced visible area, so the real dialog background
+     * remains visible as the top/bottom margin.  No fake solid-colour
+     * mask is needed.
+     */
+    fax_viewport = lv_obj_create(dialog.obj);
+    lv_obj_remove_style_all(fax_viewport);
+    lv_obj_set_size(fax_viewport, 795, 350);
+    lv_obj_center(fax_viewport);
+    lv_obj_clear_flag(fax_viewport, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(fax_viewport, LV_OBJ_FLAG_CLICKABLE);
+
+    /*
+     * Fax canvas.
+     */
+    fax_canvas =
+        lv_canvas_create(fax_viewport);
+
+
+    lv_canvas_set_buffer(
+        fax_canvas,
+        preview_buffer,
+        PREVIEW_WIDTH,
+        PREVIEW_HEIGHT,
+        LV_IMG_CF_TRUE_COLOR
+    );
+
+
+    lv_obj_set_size(
+        fax_canvas,
+        PREVIEW_WIDTH,
+        PREVIEW_HEIGHT
+    );
+
+
+    lv_obj_align(
+        fax_canvas,
+        LV_ALIGN_CENTER,
+        0,
+        0
+    );
+
+
+    /*
+     * SMALL no longer uses a colour mask.  The transparent fax_viewport
+     * performs the clipping and exposes the dialog's real background.
+     */
+    small_top_mask = NULL;
+
+    /*
+     * Persistent WEFAX frame.
+     *
+     * Keep one real four-sided frame for SMALL, BIG and FULL instead of
+     * synthesising only the SMALL top/bottom edges.  apply_zoom_geometry()
+     * resizes this object together with the dialog, so the left, right and
+     * bottom edges remain pixel-identical while switching view modes.
+     */
+    fax_frame = lv_obj_create(dialog.obj);
+    lv_obj_remove_style_all(fax_frame);
+
+    /*
+     * Start from the very same style used by the RTTY/NAVTEX/Broadcast
+     * panels.  Then override only the geometry and the border, because
+     * WEFAX has its own SMALL/BIG/FULL heights.
+     *
+     * The panel background image is deliberately disabled here: it already
+     * contains the standard panel outline and would reintroduce the doubled
+     * top/bottom white edges in BIG/FULL.  The background colour itself is
+     * inherited from panel_style, so WEFAX follows the active panel theme.
+     */
+    lv_obj_add_style(fax_frame, &panel_style, 0);
+    lv_obj_set_style_bg_img_src(fax_frame, NULL, LV_PART_MAIN);
+
+    lv_obj_set_size(fax_frame, 795, 350);
+    lv_obj_center(fax_frame);
+
+    /*
+     * panel_style gets most of its visible dark appearance from panel.bin.
+     * Since that image is intentionally disabled above (to avoid its built-in
+     * duplicate outline), provide the closest flat equivalent explicitly.
+     */
+    lv_obj_set_style_bg_color(fax_frame, lv_color_hex(0x182028), LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(fax_frame, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_border_width(fax_frame, 1, LV_PART_MAIN);
+    lv_obj_set_style_border_color(fax_frame, lv_color_white(), LV_PART_MAIN);
+    lv_obj_set_style_border_opa(fax_frame, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_radius(fax_frame, 8, LV_PART_MAIN);
+
+    lv_obj_clear_flag(fax_frame, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(fax_frame, LV_OBJ_FLAG_CLICKABLE);
+
+
+    /*
+     * Give the WEFAX dialog an LVGL key target for MFK events.
+     */
+    lv_group_add_obj(
+        keyboard_group,
+        fax_canvas
+    );
+
+    lv_obj_add_event_cb(
+        fax_canvas,
+        key_cb,
+        LV_EVENT_KEY,
+        NULL
+    );
+
+    lv_group_focus_obj(
+        fax_canvas
+    );
+
+    lv_group_set_editing(
+        keyboard_group,
+        true
+    );
+
+
+    clear_preview();
+    apply_zoom_geometry();
+
+
+    /*
+     * LVGL-side refresh timer.
+     */
+    preview_timer =
+        lv_timer_create(
+            update_preview_cb,
+            PREVIEW_TIMER_MS,
+            NULL
+        );
+}
+
+
+/*
+ * Dialog destruction.
+ */
+static void destruct_cb(void)
+{
+    stop_wav_test();
+
+
+    if (preview_timer) {
+
+        lv_timer_del(preview_timer);
+
+        preview_timer = NULL;
+    }
+
+
+    if (save_fax_timer) {
+
+        lv_timer_del(save_fax_timer);
+
+        save_fax_timer = NULL;
+    }
+
+
+    align_mfk_active = false;
+    tilt_mfk_active = false;
+    fax_browser_close();
+    fax_canvas = NULL;
+    fax_viewport = NULL;
+    small_top_mask = NULL;
+    fax_frame = NULL;
+
+
+    if (decoder) {
+
+        wefax_decoder_destroy(decoder);
+
+        decoder = NULL;
+    }
+
+
+    pthread_mutex_lock(&row_mutex);
+
+    pending_row_valid = false;
+
+    pthread_mutex_unlock(&row_mutex);
+
+
+    vertical_accumulator = 0;
+
+    clear_fax_buffer();
+
+    if (fax_buffer) {
+        free(fax_buffer);
+        fax_buffer = NULL;
+    }
+}
+
+
+/*
+ * MFK handling while the WEFAX dialog is open.
+ *
+ * dialog_construct() disables the normal main-screen key target,
+ * therefore the dialog handles MFK left/right itself.
+ */
+/*
+ * Apply only the viewport geometry for the selected zoom mode.
+ *
+ * DEFAULT/FULL keep the original full-screen WEFAX dialog untouched.
+ * SMALL is exactly the DEFAULT viewport cropped only from the top.
+ * Its left, right and bottom edges remain pixel-identical to DEFAULT.
+ * The canvas remains 750x320 and is bottom-aligned inside the shorter
+ * dialog, preserving the DEFAULT horizontal scale and newest rows.
+ */
+static void apply_zoom_geometry(void)
+{
+    if (!dialog.obj || !fax_canvas || !fax_viewport) {
+        return;
+    }
+
+    if (zoom_mode == WEFAX_ZOOM_SMALL) {
+        /*
+         * SMALL keeps the exact outer dialog geometry established earlier,
+         * but the visible fax area is a real clipped viewport: 15 px of
+         * the dialog's own background remain visible above and below it.
+         * The 750x320 canvas stays bottom-aligned, so rendering/scaling is
+         * exactly the same as BIG and only the older rows are clipped.
+         */
+        lv_obj_set_size(dialog.obj, 795, 182);
+        lv_obj_align(dialog.obj, LV_ALIGN_CENTER, 0, 84);
+
+        lv_obj_set_size(fax_viewport, PREVIEW_WIDTH, 152);
+        lv_obj_align(fax_viewport, LV_ALIGN_CENTER, 0, 0);
+        lv_obj_clear_flag(fax_viewport, LV_OBJ_FLAG_HIDDEN);
+
+        lv_obj_set_size(fax_canvas, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+        lv_obj_align(fax_canvas, LV_ALIGN_BOTTOM_MID, 0, 0);
+
+        if (fax_frame) {
+            lv_obj_set_size(fax_frame, 795, 182);
+            lv_obj_center(fax_frame);
+            lv_obj_clear_flag(fax_frame, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_background(fax_frame);
+        }
+    } else {
+        lv_obj_set_size(dialog.obj, 795, 350);
+        lv_obj_center(dialog.obj);
+
+        lv_obj_set_size(fax_viewport, 795, 350);
+        lv_obj_center(fax_viewport);
+        lv_obj_clear_flag(fax_viewport, LV_OBJ_FLAG_HIDDEN);
+
+        lv_obj_set_size(fax_canvas, PREVIEW_WIDTH, PREVIEW_HEIGHT);
+        lv_obj_align(fax_canvas, LV_ALIGN_CENTER, 0, 0);
+
+        if (fax_frame) {
+            lv_obj_set_size(fax_frame, 795, 350);
+            lv_obj_center(fax_frame);
+            lv_obj_clear_flag(fax_frame, LV_OBJ_FLAG_HIDDEN);
+            lv_obj_move_background(fax_frame);
+        }
+    }
+}
+
+
+
+/*
+ * Rebuild the complete currently visible fax from the saved original
+ * 1809-pixel rows.  Called only while the user turns Align.
+ */
+static void rerender_preview(void)
+{
+    if (zoom_mode == WEFAX_ZOOM_FULL) {
+        render_zoomed_fax();
+        return;
+    }
+
+    const lv_color_t white =
+        lv_color_make(255, 255, 255);
+
+    for (unsigned int i = 0;
+         i < PREVIEW_WIDTH * PREVIEW_HEIGHT;
+         i++) {
+        preview_buffer[i] = white;
+    }
+
+    int align =
+        (int)param_i_get(cfg_wefax_align);
+
+    /*
+     * Tilt unit = 1/1000 native WEFAX pixel per displayed/source row.
+     * The newest visible row is the anchor (zero extra shift), while
+     * older rows receive the accumulated opposite correction.
+     */
+    int tilt =
+        (int)param_i_get(cfg_wefax_tilt);
+
+    unsigned int first =
+        (preview_source_head + PREVIEW_HEIGHT - preview_source_count)
+        % PREVIEW_HEIGHT;
+
+    unsigned int dst_y =
+        PREVIEW_HEIGHT - preview_source_count;
+
+    for (unsigned int r = 0;
+         r < preview_source_count;
+         r++) {
+
+        const uint8_t *src =
+            preview_source_rows[
+                (first + r) % PREVIEW_HEIGHT
+            ];
+
+        lv_color_t *dst =
+            &preview_buffer[
+                (dst_y + r) * PREVIEW_WIDTH
+            ];
+
+        for (unsigned int x = 0;
+             x < PREVIEW_WIDTH;
+             x++) {
+
+            unsigned int src_begin =
+                (x * WEFAX_WIDTH)
+                / PREVIEW_WIDTH;
+
+            unsigned int src_end =
+                ((x + 1) * WEFAX_WIDTH)
+                / PREVIEW_WIDTH;
+
+            if (src_end <= src_begin) {
+                src_end = src_begin + 1;
+            }
+
+            unsigned int sum = 0;
+            unsigned int count = 0;
+
+            for (unsigned int sx = src_begin;
+                 sx < src_end;
+                 sx++) {
+
+                int row_from_newest =
+                    (int)r - (int)(preview_source_count - 1);
+
+                int tilt_shift =
+                    (row_from_newest * tilt) / 1000;
+
+                int source_x =
+                    (int)sx - align - tilt_shift;
+
+                while (source_x < 0) {
+                    source_x += WEFAX_WIDTH;
+                }
+
+                while (source_x >= WEFAX_WIDTH) {
+                    source_x -= WEFAX_WIDTH;
+                }
+
+                sum += src[source_x];
+                count++;
+            }
+
+            uint8_t gray =
+                (uint8_t)(sum / count);
+
+            dst[x] =
+                lv_color_make(
+                    gray,
+                    gray,
+                    gray
+                );
+        }
+    }
+
+    if (fax_canvas) {
+        lv_obj_invalidate(fax_canvas);
+    }
+}
+
+
+/*
+ * Empty the logical full-fax history.  The allocated memory is retained
+ * and reused so repeated Clear/Cont operations do not fragment the heap.
+ */
+static void clear_fax_buffer(void)
+{
+    fax_buffer_count = 0;
+    fax_buffer_head = 0;
+}
+
+
+/*
+ * Allocate the 1500-row full-resolution buffer on first use.
+ */
+static bool ensure_fax_buffer(void)
+{
+    if (fax_buffer) {
+        return true;
+    }
+
+    fax_buffer =
+        (uint8_t *)malloc(
+            (size_t)FAX_BUFFER_ROWS *
+            (size_t)WEFAX_WIDTH
+        );
+
+    if (!fax_buffer) {
+        printf(
+            "WEFAX SAVE: cannot allocate %u bytes\n",
+            (unsigned int)(
+                FAX_BUFFER_ROWS * WEFAX_WIDTH
+            )
+        );
+        return false;
+    }
+
+    clear_fax_buffer();
+
+    return true;
+}
+
+
+/*
+ * Append one original 1809-pixel decoder row to the ring buffer.
+ * Once full, each new row replaces exactly the oldest row.
+ */
+static void store_fax_row(const uint8_t *row)
+{
+    if (!row) {
+        return;
+    }
+
+    if (!ensure_fax_buffer()) {
+        return;
+    }
+
+    memcpy(
+        fax_buffer +
+            ((size_t)fax_buffer_head * WEFAX_WIDTH),
+        row,
+        WEFAX_WIDTH
+    );
+
+    fax_buffer_head =
+        (fax_buffer_head + 1) % FAX_BUFFER_ROWS;
+
+    if (fax_buffer_count < FAX_BUFFER_ROWS) {
+        fax_buffer_count++;
+    }
+}
+
+
+/*
+ * Save the retained full-resolution fax as an 8-bit grayscale PNG.
+ *
+ * The ring buffer contains original decoder rows.  Align and Tilt are
+ * applied while writing, so the PNG always reflects the CURRENT controls.
+ *
+ * Tilt is scaled to source-row spacing so that its visual slope matches
+ * the 750-pixel preview, whose vertical scale is PREVIEW_WIDTH/WEFAX_WIDTH.
+ */
+
+/*
+ * Render the retained fax into the fixed 710x320 white preview canvas.
+ *
+ * DEFAULT keeps the existing live renderer untouched.
+ * MID shows approximately twice as much vertical history.
+ * FULL fits the complete retained buffer into the canvas.
+ *
+ * Only the drawn fax is scaled; the white canvas always remains 710x320.
+ */
+static void render_zoomed_fax(void)
+{
+    if (!fax_canvas) {
+        return;
+    }
+
+    for (unsigned int i = 0;
+         i < PREVIEW_WIDTH * PREVIEW_HEIGHT;
+         i++) {
+        preview_buffer[i] = lv_color_white();
+    }
+
+    if (!fax_buffer || fax_buffer_count == 0) {
+        lv_obj_invalidate(fax_canvas);
+        return;
+    }
+
+    const unsigned int first =
+        (
+            fax_buffer_head +
+            FAX_BUFFER_ROWS -
+            fax_buffer_count
+        ) % FAX_BUFFER_ROWS;
+
+    const int align =
+        (int)param_i_get(cfg_wefax_align);
+
+    const int tilt =
+        (int)param_i_get(cfg_wefax_tilt);
+
+    /*
+     * DEFAULT is handled by rerender_preview(); this function is used
+     * only for MID/FULL.
+     *
+     * MID: fixed 50% of the normal 710-pixel fax width.
+     * FULL: scale all retained rows to fit vertically, but never enlarge
+     * beyond the normal 710-pixel width.
+     */
+    unsigned int out_h;
+    unsigned int out_w;
+
+    out_h = PREVIEW_HEIGHT;
+
+    out_w =
+        (
+            (uint64_t)WEFAX_WIDTH *
+            out_h
+        ) / fax_buffer_count;
+
+    if (out_w > PREVIEW_WIDTH) {
+        out_w = PREVIEW_WIDTH;
+        out_h =
+            (
+                (uint64_t)fax_buffer_count *
+                out_w
+            ) / WEFAX_WIDTH;
+    }
+
+    if (out_w == 0 || out_h == 0) {
+        lv_obj_invalidate(fax_canvas);
+        return;
+    }
+
+    const unsigned int x0 =
+        (PREVIEW_WIDTH - out_w) / 2;
+
+    /*
+     * Keep the newest part at the bottom.  FULL normally occupies the
+     * complete height; shorter images sit against the bottom just like
+     * the normal live preview.
+     */
+    const unsigned int y0 =
+        PREVIEW_HEIGHT - out_h;
+
+    /*
+     * MID may need only the newest subset of retained source rows.
+     * FULL always starts from the oldest retained row.
+     */
+    unsigned int src_rows_needed =
+        (
+            (uint64_t)out_h *
+            WEFAX_WIDTH +
+            out_w - 1
+        ) / out_w;
+
+    if (src_rows_needed > fax_buffer_count) {
+        src_rows_needed = fax_buffer_count;
+    }
+
+    const unsigned int src_start =
+        fax_buffer_count - src_rows_needed;
+
+    for (unsigned int oy = 0; oy < out_h; oy++) {
+        unsigned int rel_row =
+            src_start +
+            (
+                (uint64_t)oy *
+                src_rows_needed
+            ) / out_h;
+
+        if (rel_row >= fax_buffer_count) {
+            rel_row = fax_buffer_count - 1;
+        }
+
+        const uint8_t *src =
+            fax_buffer +
+            (
+                (size_t)(
+                    (first + rel_row) %
+                    FAX_BUFFER_ROWS
+                ) *
+                WEFAX_WIDTH
+            );
+
+        const int64_t row_from_newest =
+            (int64_t)rel_row -
+            (int64_t)(fax_buffer_count - 1);
+
+        const int tilt_shift =
+            (int)(
+                (
+                    row_from_newest *
+                    (int64_t)tilt *
+                    (int64_t)PREVIEW_WIDTH
+                ) /
+                (
+                    1000LL *
+                    (int64_t)WEFAX_WIDTH
+                )
+            );
+
+        for (unsigned int ox = 0; ox < out_w; ox++) {
+            int sx =
+                (int)(
+                    (
+                        (uint64_t)ox *
+                        WEFAX_WIDTH
+                    ) / out_w
+                ) -
+                align -
+                tilt_shift;
+
+            while (sx < 0) {
+                sx += WEFAX_WIDTH;
+            }
+
+            while (sx >= WEFAX_WIDTH) {
+                sx -= WEFAX_WIDTH;
+            }
+
+            uint8_t gray = src[sx];
+
+            preview_buffer[
+                (y0 + oy) * PREVIEW_WIDTH +
+                x0 + ox
+            ] =
+                lv_color_make(
+                    gray,
+                    gray,
+                    gray
+                );
+        }
+    }
+
+    lv_obj_invalidate(fax_canvas);
+}
+
+
+static void *save_fax_worker(void *arg)
+{
+    wefax_save_job_t *job = (wefax_save_job_t *)arg;
+    bool success = false;
+    FILE *fp = NULL;
+    png_structp png_ptr = NULL;
+    png_infop info_ptr = NULL;
+    uint8_t *out_row = NULL;
+
+    if (!job) {
+        goto done;
+    }
+
+    if (mkdir(FAX_SAVE_DIR, 0775) != 0 && errno != EEXIST) {
+        printf("WEFAX SAVE: mkdir failed: %s\n", strerror(errno));
+        goto done;
+    }
+
+    fp = fopen(job->path, "wb");
+    if (!fp) {
+        printf("WEFAX SAVE: fopen failed: %s\n", strerror(errno));
+        goto done;
+    }
+
+    png_ptr = png_create_write_struct(
+        PNG_LIBPNG_VER_STRING,
+        NULL,
+        NULL,
+        NULL
+    );
+
+    if (!png_ptr) {
+        printf("WEFAX SAVE: png_create_write_struct failed\n");
+        goto done;
+    }
+
+    info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        printf("WEFAX SAVE: png_create_info_struct failed\n");
+        goto done;
+    }
+
+    out_row = (uint8_t *)malloc(WEFAX_WIDTH);
+    if (!out_row) {
+        printf("WEFAX SAVE: row allocation failed\n");
+        goto done;
+    }
+
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        printf("WEFAX SAVE: libpng write error\n");
+        goto done;
+    }
+
+    png_init_io(png_ptr, fp);
+
+    png_set_IHDR(
+        png_ptr,
+        info_ptr,
+        WEFAX_WIDTH,
+        job->rows,
+        8,
+        PNG_COLOR_TYPE_GRAY,
+        PNG_INTERLACE_NONE,
+        PNG_COMPRESSION_TYPE_DEFAULT,
+        PNG_FILTER_TYPE_DEFAULT
+    );
+
+    png_write_info(png_ptr, info_ptr);
+
+    for (unsigned int r = 0; r < job->rows; r++) {
+        const uint8_t *src =
+            job->image + ((size_t)r * WEFAX_WIDTH);
+
+        const int64_t row_from_newest =
+            (int64_t)r - (int64_t)(job->rows - 1);
+
+        const int tilt_shift =
+            (int)(
+                (
+                    row_from_newest *
+                    (int64_t)job->tilt *
+                    (int64_t)PREVIEW_WIDTH
+                ) /
+                (
+                    1000LL *
+                    (int64_t)WEFAX_WIDTH
+                )
+            );
+
+        for (unsigned int x = 0; x < WEFAX_WIDTH; x++) {
+            int sx =
+                (int)x -
+                job->align -
+                tilt_shift;
+
+            while (sx < 0) {
+                sx += WEFAX_WIDTH;
+            }
+
+            while (sx >= WEFAX_WIDTH) {
+                sx -= WEFAX_WIDTH;
+            }
+
+            out_row[x] = src[sx];
+        }
+
+        png_write_row(png_ptr, (png_bytep)out_row);
+    }
+
+    png_write_end(png_ptr, NULL);
+
+    free(out_row);
+    out_row = NULL;
+
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+    png_ptr = NULL;
+    info_ptr = NULL;
+
+    if (fclose(fp) != 0) {
+        fp = NULL;
+        remove(job->path);
+        printf("WEFAX SAVE: fclose failed\n");
+        goto done;
+    }
+    fp = NULL;
+
+    printf(
+        "WEFAX SAVE: saved %s (%u x %u)\n",
+        job->path,
+        (unsigned int)WEFAX_WIDTH,
+        job->rows
+    );
+
+    success = true;
+
+ done:
+    if (out_row) {
+        free(out_row);
+    }
+
+    if (png_ptr) {
+        png_destroy_write_struct(
+            &png_ptr,
+            info_ptr ? &info_ptr : NULL
+        );
+    }
+
+    if (fp) {
+        fclose(fp);
+        if (job) {
+            remove(job->path);
+        }
+    }
+
+    if (job) {
+        free(job->image);
+        free(job);
+    }
+
+    pthread_mutex_lock(&save_mutex);
+    async_save_running = false;
+    async_save_success = success;
+    async_save_completed = true;
+    pthread_mutex_unlock(&save_mutex);
+
+    return NULL;
+}
+
+
+/*
+ * Take a fast RAM snapshot of the retained fax and hand it to a detached
+ * worker thread.  The expensive libpng compression/write never runs in
+ * the LVGL thread.
+ *
+ * The snapshot contains rows in chronological order (oldest -> newest),
+ * so the live ring buffer can be cleared/reused immediately after this
+ * function returns successfully.
+ */
+static bool save_fax_png_async(void)
+{
+    if (!fax_buffer || fax_buffer_count == 0) {
+        printf("WEFAX SAVE: buffer is empty\n");
+        return false;
+    }
+
+    pthread_mutex_lock(&save_mutex);
+    const bool busy = async_save_running;
+    pthread_mutex_unlock(&save_mutex);
+
+    if (busy) {
+        printf("WEFAX SAVE: previous asynchronous save still running\n");
+        return false;
+    }
+
+    wefax_save_job_t *job =
+        (wefax_save_job_t *)calloc(1, sizeof(*job));
+
+    if (!job) {
+        printf("WEFAX SAVE: job allocation failed\n");
+        return false;
+    }
+
+    job->rows = fax_buffer_count;
+    job->align = (int)param_i_get(cfg_wefax_align);
+    job->tilt = (int)param_i_get(cfg_wefax_tilt);
+
+    const size_t image_size =
+        (size_t)job->rows * (size_t)WEFAX_WIDTH;
+
+    job->image = (uint8_t *)malloc(image_size);
+    if (!job->image) {
+        printf(
+            "WEFAX SAVE: snapshot allocation failed (%u bytes)\n",
+            (unsigned int)image_size
+        );
+        free(job);
+        return false;
+    }
+
+    const unsigned int first =
+        (
+            fax_buffer_head +
+            FAX_BUFFER_ROWS -
+            fax_buffer_count
+        ) % FAX_BUFFER_ROWS;
+
+    for (unsigned int r = 0; r < job->rows; r++) {
+        const uint8_t *src =
+            fax_buffer +
+            (
+                (size_t)(
+                    (first + r) % FAX_BUFFER_ROWS
+                ) *
+                WEFAX_WIDTH
+            );
+
+        memcpy(
+            job->image + ((size_t)r * WEFAX_WIDTH),
+            src,
+            WEFAX_WIDTH
+        );
+    }
+
+    time_t now = time(NULL);
+    struct tm tm_now;
+
+    if (!localtime_r(&now, &tm_now)) {
+        printf("WEFAX SAVE: localtime failed\n");
+        free(job->image);
+        free(job);
+        return false;
+    }
+
+    snprintf(
+        job->path,
+        sizeof(job->path),
+        FAX_SAVE_DIR
+        "/wefax-%04d%02d%02d-%02d%02d%02d.png",
+        tm_now.tm_year + 1900,
+        tm_now.tm_mon + 1,
+        tm_now.tm_mday,
+        tm_now.tm_hour,
+        tm_now.tm_min,
+        tm_now.tm_sec
+    );
+
+    pthread_t thread;
+
+    pthread_mutex_lock(&save_mutex);
+    async_save_running = true;
+    async_save_completed = false;
+    async_save_success = false;
+    pthread_mutex_unlock(&save_mutex);
+
+    const int rc = pthread_create(
+        &thread,
+        NULL,
+        save_fax_worker,
+        job
+    );
+
+    if (rc != 0) {
+        pthread_mutex_lock(&save_mutex);
+        async_save_running = false;
+        pthread_mutex_unlock(&save_mutex);
+
+        printf(
+            "WEFAX SAVE: pthread_create failed: %s\n",
+            strerror(rc)
+        );
+
+        free(job->image);
+        free(job);
+        return false;
+    }
+
+    pthread_detach(thread);
+
+    channel_overlay_show("Saving fax...");
+
+    return true;
+}
+
+
+/*
+ * Worker completion is consumed only from the LVGL thread.  The worker
+ * never calls LVGL directly.
+ */
+static void check_async_save_completion(void)
+{
+    bool completed = false;
+    bool success = false;
+
+    pthread_mutex_lock(&save_mutex);
+
+    if (async_save_completed) {
+        completed = true;
+        success = async_save_success;
+        async_save_completed = false;
+    }
+
+    pthread_mutex_unlock(&save_mutex);
+
+    if (!completed) {
+        return;
+    }
+
+    if (success) {
+        channel_overlay_show("Fax saved");
+    } else {
+        channel_overlay_show("Fax save failed");
+    }
+}
+
+
+/*
+ * AUTO fallback: a new APT START was detected while the previous fax was
+ * already confirmed.  That proves the previous fax has ended even if its
+ * APT STOP was missed.  Save the old GUI/PNG buffer, but DO NOT reset the
+ * decoder: the audio thread has already switched itself to the new
+ * provisional fax and is waiting for its black confirmation band.
+ */
+static bool auto_save_previous_for_new_start(void)
+{
+    if (!save_fax_png_async()) {
+        printf(
+            "WEFAX AUTO: automatic save on new START failed - "
+            "fax retained in memory\n"
+        );
+        return false;
+    }
+
+    clear_preview();
+    auto_fax_confirmed_seen = false;
+
+    printf(
+        "WEFAX AUTO: previous fax saved - new APT START already active\n"
+    );
+
+    return true;
+}
+
+
+/*
+ * AUTO: APT STOP has been received.
+ *
+ * Save the retained full-resolution fax, then reset the receiver and
+ * immediately return to AUTO waiting for the next DWD APT START.
+ * On save failure the image/buffer are deliberately kept intact.
+ */
+static void auto_finish_fax(void)
+{
+    if (!decoder) {
+        return;
+    }
+
+    /*
+    printf("WEFAX AUTO: fax complete - saving PNG\n");
+    */
+
+    /*
+     * The WAV test must stop here as well, otherwise it would continue
+     * feeding samples after the decoder has been reset.
+     */
+    stop_wav_test();
+
+    if (!save_fax_png_async()) {
+        printf(
+            "WEFAX AUTO: automatic save failed - "
+            "fax retained in memory\n"
+        );
+        return;
+    }
+
+    wefax_decoder_reset(decoder);
+    auto_start_generation_seen = 0;
+    auto_fax_confirmed_seen = false;
+    wefax_decoder_set_mode(
+        decoder,
+        WEFAX_MODE_AUTO
+    );
+
+    clear_preview();
+
+    /*
+    printf(
+        "WEFAX AUTO: saved - waiting for next APT START "
+        "(300 +/- 30 Hz)\n"
+    );
+    */
+}
+
+
+static void key_cb(lv_event_t *e)
+{
+    uint32_t key =
+        *((uint32_t *)lv_event_get_param(e));
+
+    /*
+     * The main-screen key handler is disabled while a dialog is open,
+     * so WeFax must handle the dedicated volume encoder itself.
+     * Keep this independent from the MFK Align/Tilt editing modes.
+     */
+    switch (key) {
+        case KEY_VOL_LEFT_EDIT:
+        case KEY_VOL_LEFT_SELECT:
+            radio_change_vol(-1);
+            return;
+
+        case KEY_VOL_RIGHT_EDIT:
+        case KEY_VOL_RIGHT_SELECT:
+            radio_change_vol(1);
+            return;
+
+        default:
+            break;
+    }
+
+    if (!align_mfk_active && !tilt_mfk_active &&
+        !fax_browser_align_active && !fax_browser_tilt_active) {
+        return;
+    }
+
+    switch (key) {
+        case LV_KEY_LEFT:
+            if (fax_browser_align_active && fax_browser_editing) {
+                fax_browser_align -= 8;
+                while (fax_browser_align < -(int)(fax_browser_image_width / 2)) {
+                    fax_browser_align += (int)fax_browser_image_width;
+                }
+                fax_browser_render_image();
+                fax_browser_update_modified_state();
+            } else if (fax_browser_tilt_active && fax_browser_editing) {
+                fax_browser_tilt -= 2;
+                if (fax_browser_tilt < -400) fax_browser_tilt = -400;
+                fax_browser_render_image();
+                fax_browser_update_modified_state();
+            } else if (align_mfk_active) {
+                mfk_update(-8);
+                buttons_refresh(&btn_align);
+                rerender_preview();
+            } else if (tilt_mfk_active) {
+                mfk_update(-2);
+                buttons_refresh(&btn_tilt);
+                rerender_preview();
+            }
+            break;
+
+        case LV_KEY_RIGHT:
+            if (fax_browser_align_active && fax_browser_editing) {
+                fax_browser_align += 8;
+                while (fax_browser_align > (int)(fax_browser_image_width / 2)) {
+                    fax_browser_align -= (int)fax_browser_image_width;
+                }
+                fax_browser_render_image();
+                fax_browser_update_modified_state();
+            } else if (fax_browser_tilt_active && fax_browser_editing) {
+                fax_browser_tilt += 1;
+                if (fax_browser_tilt > 400) fax_browser_tilt = 400;
+                fax_browser_render_image();
+                fax_browser_update_modified_state();
+            } else if (align_mfk_active) {
+                mfk_update(+8);
+                buttons_refresh(&btn_align);
+                rerender_preview();
+            } else if (tilt_mfk_active) {
+                mfk_update(+1);
+                buttons_refresh(&btn_tilt);
+                rerender_preview();
+            }
+            break;
+
+        default:
+            break;
+    }
+}
+
+
+/*
+ * Local WEFAX page switching.
+ */
+static void fax_page_1_cb(button_data_t *data)
+{
+    (void)data;
+
+    fax_browser_close();
+
+    align_mfk_active = false;
+    tilt_mfk_active = false;
+
+    buttons_load_page(
+        &btn_page_1
+    );
+}
+
+
+static void fax_page_2_cb(button_data_t *data)
+{
+    (void)data;
+
+    fax_browser_close();
+
+    buttons_load_page(
+        &btn_page_2
+    );
+}
+
+
+static void fax_page_3_cb(button_data_t *data)
+{
+    (void)data;
+
+    align_mfk_active = false;
+    tilt_mfk_active = false;
+
+    buttons_load_page(
+        &btn_page_3
+    );
+}
+
+
+
+
+/*
+ * FAX 3:3 browser/editor callbacks.
+ *
+ * The UI is installed first.  The browser/editor implementation is added
+ * in the next step without touching the working WEFAX decoder/DSP path.
+ */
+static int fax_browser_name_compare(const void *a, const void *b)
+{
+    const char *const *sa = a;
+    const char *const *sb = b;
+
+    /* Newest timestamped WEFAX filename first. */
+    return strcmp(*sb, *sa);
+}
+
+
+static void fax_browser_free_files(void)
+{
+    for (unsigned int i = 0; i < fax_browser_file_count; i++) {
+        free(fax_browser_files[i]);
+        fax_browser_files[i] = NULL;
+    }
+
+    fax_browser_file_count = 0;
+}
+
+
+static void fax_browser_refresh(void)
+{
+    fax_browser_free_files();
+
+    DIR *dir = opendir(FAX_SAVE_DIR);
+    if (!dir) {
+        return;
+    }
+
+    struct dirent *entry;
+
+    while ((entry = readdir(dir)) != NULL &&
+           fax_browser_file_count < FAX_BROWSER_MAX_FILES) {
+
+        const char *name = entry->d_name;
+        size_t len = strlen(name);
+
+        if (len < 5 || strcmp(name + len - 4, ".png") != 0) {
+            continue;
+        }
+
+        if (strncmp(name, "wefax-", 6) != 0) {
+            continue;
+        }
+
+        fax_browser_files[fax_browser_file_count] = strdup(name);
+
+        if (fax_browser_files[fax_browser_file_count]) {
+            fax_browser_file_count++;
+        }
+    }
+
+    closedir(dir);
+
+    qsort(
+        fax_browser_files,
+        fax_browser_file_count,
+        sizeof(fax_browser_files[0]),
+        fax_browser_name_compare
+    );
+}
+
+
+static void fax_browser_update_modified_state(void)
+{
+    /* The edited fax differs from the opened PNG only if one of the
+     * two local corrections is non-zero. */
+    fax_browser_modified =
+        (fax_browser_align != 0 || fax_browser_tilt != 0);
+
+    btn_save_fax.label = fax_browser_modified ? "Save\nFax" : "Done";
+    if (btn_save_fax.disp_btn) {
+        buttons_refresh(&btn_save_fax);
+    }
+}
+
+
+static void fax_browser_set_editor_buttons(bool enabled)
+{
+    if (enabled) {
+        /* Saved fax preview/editor: preserve the existing Done / Save Fax
+         * behaviour exactly as before. */
+        fax_browser_update_modified_state();
+        buttons_disabled(&btn_fix_align, false);
+        buttons_disabled(&btn_fix_tilt, false);
+        buttons_disabled(&btn_save_fax, false);
+        return;
+    }
+
+    /* File list: F5 becomes Delete Fax. Align/Tilt stay unavailable. */
+    fax_browser_modified = false;
+    btn_save_fax.label = "Delete\nFax";
+
+    buttons_disabled(&btn_fix_align, true);
+    buttons_disabled(&btn_fix_tilt, true);
+    buttons_disabled(&btn_save_fax, fax_browser_file_count == 0);
+
+    if (btn_save_fax.disp_btn) {
+        buttons_refresh(&btn_save_fax);
+    }
+}
+
+
+/* Rebuild the visible browser table from fax_browser_files[]. */
+static void fax_browser_update_list(void)
+{
+    if (!fax_browser_table) {
+        return;
+    }
+
+    if (fax_browser_file_count == 0) {
+        lv_table_set_row_cnt(fax_browser_table, 1);
+        lv_table_set_cell_value(fax_browser_table, 0, 0, "No saved faxes");
+    } else {
+        lv_table_set_row_cnt(fax_browser_table, fax_browser_file_count);
+
+        for (unsigned int i = 0; i < fax_browser_file_count; i++) {
+            lv_table_set_cell_value(fax_browser_table, i, 0, fax_browser_files[i]);
+        }
+    }
+
+    lv_obj_invalidate(fax_browser_table);
+}
+
+
+static void fax_browser_delete_selected(void)
+{
+    if (!fax_browser_open || fax_browser_editing ||
+        !fax_browser_table || fax_browser_file_count == 0) {
+        return;
+    }
+
+    int16_t row = LV_TABLE_CELL_NONE;
+    int16_t col = LV_TABLE_CELL_NONE;
+    lv_table_get_selected_cell(fax_browser_table, &row, &col);
+
+    if (row == LV_TABLE_CELL_NONE || row < 0 ||
+        (unsigned int)row >= fax_browser_file_count) {
+        return;
+    }
+
+    const unsigned int old_row = (unsigned int)row;
+    char path[256];
+    snprintf(path, sizeof(path), "%s/%s",
+             FAX_SAVE_DIR, fax_browser_files[old_row]);
+
+    if (unlink(path) != 0) {
+        printf("WEFAX BROWSER: unable to delete %s: %s\n",
+               path, strerror(errno));
+        return;
+    }
+
+    printf("WEFAX BROWSER: deleted %s\n", path);
+
+    fax_browser_refresh();
+    fax_browser_update_list();
+
+    if (fax_browser_file_count > 0) {
+        /* Select the next fax now occupying the deleted row. If the deleted
+         * fax was last, select the previous fax instead. */
+        unsigned int new_row = old_row;
+        if (new_row >= fax_browser_file_count) {
+            new_row = fax_browser_file_count - 1;
+        }
+        /* LVGL 8 has no public setter for the selected table cell.
+         * Keeping the same table preserves the active row when deleting a
+         * middle item; if the last row was deleted, the next encoder/key
+         * event clamps it to the new last row (the previous fax). */
+        (void)new_row;
+    }
+
+    fax_browser_set_editor_buttons(false);
+    lv_group_focus_obj(fax_browser_table);
+    lv_group_set_editing(keyboard_group, true);
+}
+
+
+static void fax_browser_pressed_cb(lv_event_t *e)
+{
+    (void)e;
+
+    if (!fax_browser_table || fax_browser_file_count == 0) {
+        return;
+    }
+
+    int16_t row = LV_TABLE_CELL_NONE;
+    int16_t col = LV_TABLE_CELL_NONE;
+
+    lv_table_get_selected_cell(
+        fax_browser_table,
+        &row,
+        &col
+    );
+
+    if (row == LV_TABLE_CELL_NONE ||
+        row < 0 ||
+        (unsigned int)row >= fax_browser_file_count) {
+        return;
+    }
+
+    if (fax_browser_open_png(fax_browser_files[row])) {
+        channel_overlay_show("Editing saved fax");
+    }
+}
+
+
+static void fax_browser_free_image(void)
+{
+    if (fax_browser_image) {
+        free(fax_browser_image);
+        fax_browser_image = NULL;
+    }
+
+    fax_browser_image_width = 0;
+    fax_browser_image_height = 0;
+    fax_browser_image_path[0] = '\0';
+    fax_browser_editing = false;
+    fax_browser_align_active = false;
+    fax_browser_tilt_active = false;
+    fax_browser_align = 0;
+    fax_browser_tilt = 0;
+    fax_browser_modified = false;
+}
+
+
+static void fax_browser_render_image(void)
+{
+    if (!fax_browser_image ||
+        fax_browser_image_width == 0 ||
+        fax_browser_image_height == 0) {
+        return;
+    }
+
+    const unsigned int width = fax_browser_image_width;
+    const unsigned int height = fax_browser_image_height;
+
+    unsigned int out_w = PREVIEW_WIDTH;
+    unsigned int out_h = (unsigned int)(
+        ((uint64_t)height * PREVIEW_WIDTH) / width
+    );
+
+    if (out_h > PREVIEW_HEIGHT) {
+        out_h = PREVIEW_HEIGHT;
+        out_w = (unsigned int)(
+            ((uint64_t)width * PREVIEW_HEIGHT) / height
+        );
+    }
+
+    if (out_w < 1) out_w = 1;
+    if (out_h < 1) out_h = 1;
+
+    const unsigned int x0 = (PREVIEW_WIDTH - out_w) / 2;
+    const unsigned int y0 = (PREVIEW_HEIGHT - out_h) / 2;
+    const lv_color_t black = lv_color_make(0, 0, 0);
+
+    for (unsigned int i = 0; i < PREVIEW_WIDTH * PREVIEW_HEIGHT; i++) {
+        preview_buffer[i] = black;
+    }
+
+    for (unsigned int oy = 0; oy < out_h; oy++) {
+        unsigned int sy = (unsigned int)(
+            ((uint64_t)oy * height) / out_h
+        );
+        if (sy >= height) sy = height - 1;
+
+        const int64_t row_from_newest =
+            (int64_t)sy - (int64_t)(height - 1);
+
+        const int tilt_shift =
+            (int)(
+                (
+                    row_from_newest *
+                    (int64_t)fax_browser_tilt *
+                    (int64_t)PREVIEW_WIDTH
+                ) /
+                (1000LL * (int64_t)width)
+            );
+
+        for (unsigned int ox = 0; ox < out_w; ox++) {
+            unsigned int dx = (unsigned int)(
+                ((uint64_t)ox * width) / out_w
+            );
+            if (dx >= width) dx = width - 1;
+
+            int sx =
+                (int)dx -
+                fax_browser_align -
+                tilt_shift;
+            while (sx < 0) {
+                sx += (int)width;
+            }
+            while (sx >= (int)width) {
+                sx -= (int)width;
+            }
+
+            uint8_t gray = fax_browser_image[
+                (size_t)sy * (size_t)width + (unsigned int)sx
+            ];
+
+            preview_buffer[(y0 + oy) * PREVIEW_WIDTH + x0 + ox] =
+                lv_color_make(gray, gray, gray);
+        }
+    }
+
+    if (fax_canvas) {
+        lv_obj_invalidate(fax_canvas);
+    }
+}
+
+
+static bool fax_browser_open_png(const char *filename)
+{
+    if (!filename || !*filename) {
+        return false;
+    }
+
+    char path[256];
+    snprintf(path, sizeof(path), "%s/%s", FAX_SAVE_DIR, filename);
+
+    FILE *fp = fopen(path, "rb");
+    if (!fp) {
+        printf("WEFAX BROWSER: unable to open %s: %s\n", path, strerror(errno));
+        return false;
+    }
+
+    png_structp png_ptr = png_create_read_struct(
+        PNG_LIBPNG_VER_STRING, NULL, NULL, NULL
+    );
+
+    if (!png_ptr) {
+        fclose(fp);
+        return false;
+    }
+
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        png_destroy_read_struct(&png_ptr, NULL, NULL);
+        fclose(fp);
+        return false;
+    }
+
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fclose(fp);
+        fax_browser_free_image();
+        printf("WEFAX BROWSER: libpng read error for %s\n", path);
+        return false;
+    }
+
+    png_init_io(png_ptr, fp);
+    png_read_info(png_ptr, info_ptr);
+
+    png_uint_32 width = png_get_image_width(png_ptr, info_ptr);
+    png_uint_32 height = png_get_image_height(png_ptr, info_ptr);
+    int bit_depth = png_get_bit_depth(png_ptr, info_ptr);
+    int color_type = png_get_color_type(png_ptr, info_ptr);
+
+    if (width == 0 || height == 0 ||
+        width > 10000 || height > 10000) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fclose(fp);
+        printf("WEFAX BROWSER: invalid PNG dimensions\n");
+        return false;
+    }
+
+    if (bit_depth == 16) {
+        png_set_strip_16(png_ptr);
+    }
+
+    if (color_type == PNG_COLOR_TYPE_PALETTE) {
+        png_set_palette_to_rgb(png_ptr);
+    }
+
+    if (color_type == PNG_COLOR_TYPE_GRAY && bit_depth < 8) {
+        png_set_expand_gray_1_2_4_to_8(png_ptr);
+    }
+
+    if (png_get_valid(png_ptr, info_ptr, PNG_INFO_tRNS)) {
+        png_set_tRNS_to_alpha(png_ptr);
+    }
+
+    /* Convert every supported saved PNG to 8-bit RGB/RGBA, then to gray. */
+    color_type = png_get_color_type(png_ptr, info_ptr);
+    if (color_type == PNG_COLOR_TYPE_GRAY ||
+        color_type == PNG_COLOR_TYPE_GRAY_ALPHA) {
+        png_set_gray_to_rgb(png_ptr);
+    }
+
+    png_read_update_info(png_ptr, info_ptr);
+
+    png_size_t rowbytes = png_get_rowbytes(png_ptr, info_ptr);
+    int channels = png_get_channels(png_ptr, info_ptr);
+
+    if (channels < 3 || rowbytes == 0) {
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fclose(fp);
+        printf("WEFAX BROWSER: unsupported PNG format\n");
+        return false;
+    }
+
+    uint8_t *image = (uint8_t *)malloc((size_t)width * (size_t)height);
+    uint8_t *row = (uint8_t *)malloc(rowbytes);
+
+    if (!image || !row) {
+        free(image);
+        free(row);
+        png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+        fclose(fp);
+        printf("WEFAX BROWSER: image allocation failed\n");
+        return false;
+    }
+
+    for (png_uint_32 y = 0; y < height; y++) {
+        png_read_row(png_ptr, row, NULL);
+
+        for (png_uint_32 x = 0; x < width; x++) {
+            const uint8_t *px = row + (size_t)x * (size_t)channels;
+            image[(size_t)y * (size_t)width + x] =
+                (uint8_t)((77U * px[0] + 150U * px[1] + 29U * px[2]) >> 8);
+        }
+    }
+
+    png_read_end(png_ptr, NULL);
+    free(row);
+    png_destroy_read_struct(&png_ptr, &info_ptr, NULL);
+    fclose(fp);
+
+    fax_browser_free_image();
+    fax_browser_image = image;
+    fax_browser_image_width = (unsigned int)width;
+    fax_browser_image_height = (unsigned int)height;
+    snprintf(fax_browser_image_path, sizeof(fax_browser_image_path), "%s", path);
+
+    /* Start every saved fax with a neutral, local alignment. */
+    fax_browser_align = 0;
+    fax_browser_tilt = 0;
+    fax_browser_align_active = false;
+    fax_browser_tilt_active = false;
+    fax_browser_render_image();
+
+    if (fax_browser_table) {
+        lv_group_remove_obj(fax_browser_table);
+        lv_obj_add_flag(fax_browser_table, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    if (fax_canvas) {
+        lv_obj_clear_flag(fax_canvas, LV_OBJ_FLAG_HIDDEN);
+        lv_group_add_obj(keyboard_group, fax_canvas);
+        lv_group_focus_obj(fax_canvas);
+        lv_group_set_editing(keyboard_group, true);
+        apply_zoom_geometry();
+        lv_obj_invalidate(fax_canvas);
+    }
+
+    fax_browser_editing = true;
+    fax_browser_set_editor_buttons(true);
+
+    printf(
+        "WEFAX BROWSER: opened %s (%u x %u)\n",
+        path,
+        fax_browser_image_width,
+        fax_browser_image_height
+    );
+
+    return true;
+}
+
+
+static void fax_browser_build(void)
+{
+    if (fax_browser_open) {
+        return;
+    }
+
+    fax_browser_refresh();
+    fax_browser_set_editor_buttons(false);
+
+    if (fax_canvas) {
+        lv_obj_add_flag(fax_canvas, LV_OBJ_FLAG_HIDDEN);
+        lv_group_remove_obj(fax_canvas);
+    }
+    /* Hide SMALL-only decorations while the browser owns the viewport. */
+    if (small_top_mask) {
+        lv_obj_add_flag(small_top_mask, LV_OBJ_FLAG_HIDDEN);
+    }
+    /*
+     * Keep the common WEFAX frame visible behind the browser as well.
+     * Hiding it here made the frame disappear on every fresh browser open;
+     * entering editor mode only appeared to fix it because
+     * apply_zoom_geometry() made the frame visible again.
+     */
+    if (fax_frame) {
+        lv_obj_clear_flag(fax_frame, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_background(fax_frame);
+    }
+
+    fax_browser_table = lv_table_create(dialog.obj);
+
+    lv_obj_set_style_border_width(
+        fax_browser_table,
+        0,
+        LV_PART_MAIN
+    );
+
+    if (zoom_mode == WEFAX_ZOOM_SMALL) {
+        /* SMALL browser: 20 px top/bottom margins. */
+        lv_obj_set_size(fax_browser_table, PREVIEW_WIDTH, 142);
+        lv_obj_align(fax_browser_table, LV_ALIGN_TOP_MID, 0, 20);
+    } else {
+        /* Preserve the existing BIG/FULL browser geometry exactly. */
+        lv_obj_set_size(fax_browser_table, PREVIEW_WIDTH, 270);
+        lv_obj_align(fax_browser_table, LV_ALIGN_TOP_MID, 0, 40);
+    }
+
+    lv_table_set_col_cnt(fax_browser_table, 1);
+    lv_table_set_col_width(fax_browser_table, 0, PREVIEW_WIDTH - 10);
+
+    lv_obj_set_style_bg_color(
+        fax_browser_table,
+        lv_color_hex(0x27313a),
+        LV_PART_MAIN
+    );
+
+    lv_obj_set_style_bg_opa(
+        fax_browser_table,
+        LV_OPA_COVER,
+        LV_PART_MAIN
+    );
+
+    lv_obj_set_style_border_width(
+        fax_browser_table,
+        0,
+        LV_PART_ITEMS
+    );
+
+    lv_obj_set_style_bg_opa(
+        fax_browser_table,
+        LV_OPA_TRANSP,
+        LV_PART_ITEMS
+    );
+
+    lv_obj_set_style_text_color(
+        fax_browser_table,
+        lv_color_white(),
+        LV_PART_ITEMS
+    );
+
+    lv_obj_set_style_text_font(
+        fax_browser_table,
+        &sony_24,
+        LV_PART_ITEMS
+    );
+
+    lv_obj_set_style_pad_top(
+        fax_browser_table,
+        5,
+        LV_PART_ITEMS
+    );
+
+    lv_obj_set_style_pad_bottom(
+        fax_browser_table,
+        5,
+        LV_PART_ITEMS
+    );
+
+    lv_obj_set_style_pad_left(
+        fax_browser_table,
+        12,
+        LV_PART_ITEMS
+    );
+
+    lv_obj_set_style_text_color(
+        fax_browser_table,
+        lv_color_hex(0x808080),
+        LV_PART_ITEMS | LV_STATE_EDITED
+    );
+
+    lv_obj_set_style_bg_opa(
+        fax_browser_table,
+        LV_OPA_TRANSP,
+        LV_PART_ITEMS | LV_STATE_EDITED
+    );
+
+    fax_browser_update_list();
+
+    lv_obj_add_event_cb(
+        fax_browser_table,
+        fax_browser_pressed_cb,
+        LV_EVENT_PRESSED,
+        NULL
+    );
+
+    lv_group_add_obj(
+        keyboard_group,
+        fax_browser_table
+    );
+
+    lv_group_focus_obj(fax_browser_table);
+    lv_group_set_editing(keyboard_group, true);
+
+    fax_browser_open = true;
+    fax_browser_set_editor_buttons(false);
+    btn_fax_browser.label = "Close\nBrowser";
+    if (btn_fax_browser.disp_btn) {
+        buttons_refresh(&btn_fax_browser);
+    }
+}
+
+
+static void fax_browser_close(void)
+{
+    if (fax_browser_table) {
+        lv_group_remove_obj(fax_browser_table);
+        lv_obj_del(fax_browser_table);
+        fax_browser_table = NULL;
+    }
+
+    fax_browser_free_files();
+    fax_browser_set_editor_buttons(false);
+    fax_browser_free_image();
+    fax_browser_open = false;
+
+    /* Outside the browser preserve the original FAX 3:3 appearance. */
+    btn_save_fax.label = "Done";
+    buttons_disabled(&btn_save_fax, true);
+    if (btn_save_fax.disp_btn) {
+        buttons_refresh(&btn_save_fax);
+    }
+
+    btn_fax_browser.label = "Fax\nBrowser";
+
+    /* Restore the live WEFAX preview overwritten by the saved-fax image. */
+    rerender_preview();
+
+    if (fax_canvas) {
+        lv_obj_clear_flag(fax_canvas, LV_OBJ_FLAG_HIDDEN);
+
+        /*
+         * Re-apply the CURRENT zoom layout after leaving the browser.
+         * This is essential for SMALL: fax_browser_build() deliberately
+         * hides its top mask/fillets, so simply unhiding the canvas would
+         * restore the old zero-top-margin appearance until the next Zoom.
+         */
+        apply_zoom_geometry();
+
+        lv_group_add_obj(keyboard_group, fax_canvas);
+        lv_group_focus_obj(fax_canvas);
+        lv_group_set_editing(keyboard_group, true);
+
+        /* Redraw the complete viewport, including the area previously
+         * occupied by the browser table, so no browser background remains
+         * visible in SMALL's top margin. */
+        lv_obj_invalidate(dialog.obj);
+        lv_obj_invalidate(fax_canvas);
+    }
+}
+
+
+static void fax_browser_cb(button_data_t *data)
+{
+    (void)data;
+
+    if (fax_browser_open) {
+        fax_browser_close();
+        if (btn_fax_browser.disp_btn) {
+            buttons_refresh(&btn_fax_browser);
+        }
+        return;
+    }
+
+    fax_browser_build();
+}
+
+
+static void fix_align_cb(button_data_t *data)
+{
+    (void)data;
+
+    if (!fax_browser_open || !fax_browser_editing || !fax_browser_image) {
+        return;
+    }
+
+    fax_browser_align_active = true;
+    fax_browser_tilt_active = false;
+    align_mfk_active = false;
+    tilt_mfk_active = false;
+
+    if (fax_canvas) {
+        lv_group_focus_obj(fax_canvas);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+
+static void fix_tilt_cb(button_data_t *data)
+{
+    (void)data;
+
+    if (!fax_browser_open || !fax_browser_editing || !fax_browser_image) {
+        return;
+    }
+
+    fax_browser_tilt_active = true;
+    fax_browser_align_active = false;
+    align_mfk_active = false;
+    tilt_mfk_active = false;
+
+    if (fax_canvas) {
+        lv_group_focus_obj(fax_canvas);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+
+/*
+ * Save the edited browser image back to the SAME PNG filename.
+ * A temporary file is written first and atomically renamed only after
+ * libpng and fclose() have both completed successfully.
+ */
+static bool fax_browser_save_edited_png(void)
+{
+    if (!fax_browser_image ||
+        fax_browser_image_width == 0 ||
+        fax_browser_image_height == 0 ||
+        fax_browser_image_path[0] == '\0') {
+        return false;
+    }
+
+    char temp_path[sizeof(fax_browser_image_path) + 8];
+    snprintf(temp_path, sizeof(temp_path), "%s.tmp", fax_browser_image_path);
+
+    FILE *fp = fopen(temp_path, "wb");
+    if (!fp) {
+        printf("WEFAX BROWSER SAVE: fopen failed: %s\n", strerror(errno));
+        return false;
+    }
+
+    png_structp png_ptr = png_create_write_struct(
+        PNG_LIBPNG_VER_STRING, NULL, NULL, NULL
+    );
+    if (!png_ptr) {
+        fclose(fp);
+        remove(temp_path);
+        return false;
+    }
+
+    png_infop info_ptr = png_create_info_struct(png_ptr);
+    if (!info_ptr) {
+        png_destroy_write_struct(&png_ptr, NULL);
+        fclose(fp);
+        remove(temp_path);
+        return false;
+    }
+
+    uint8_t *out_row = (uint8_t *)malloc(fax_browser_image_width);
+    if (!out_row) {
+        png_destroy_write_struct(&png_ptr, &info_ptr);
+        fclose(fp);
+        remove(temp_path);
+        return false;
+    }
+
+    if (setjmp(png_jmpbuf(png_ptr))) {
+        free(out_row);
+        png_destroy_write_struct(&png_ptr, &info_ptr);
+        fclose(fp);
+        remove(temp_path);
+        printf("WEFAX BROWSER SAVE: libpng write error\n");
+        return false;
+    }
+
+    png_init_io(png_ptr, fp);
+    png_set_IHDR(
+        png_ptr,
+        info_ptr,
+        fax_browser_image_width,
+        fax_browser_image_height,
+        8,
+        PNG_COLOR_TYPE_GRAY,
+        PNG_INTERLACE_NONE,
+        PNG_COMPRESSION_TYPE_DEFAULT,
+        PNG_FILTER_TYPE_DEFAULT
+    );
+    png_write_info(png_ptr, info_ptr);
+
+    const unsigned int width = fax_browser_image_width;
+    const unsigned int height = fax_browser_image_height;
+
+    for (unsigned int y = 0; y < height; y++) {
+        const int64_t row_from_newest =
+            (int64_t)y - (int64_t)(height - 1);
+
+        const int tilt_shift =
+            (int)(
+                (
+                    row_from_newest *
+                    (int64_t)fax_browser_tilt *
+                    (int64_t)PREVIEW_WIDTH
+                ) /
+                (1000LL * (int64_t)width)
+            );
+
+        const uint8_t *src =
+            fax_browser_image + (size_t)y * (size_t)width;
+
+        for (unsigned int x = 0; x < width; x++) {
+            int sx = (int)x - fax_browser_align - tilt_shift;
+
+            while (sx < 0) sx += (int)width;
+            while (sx >= (int)width) sx -= (int)width;
+
+            out_row[x] = src[(unsigned int)sx];
+        }
+
+        png_write_row(png_ptr, (png_bytep)out_row);
+    }
+
+    png_write_end(png_ptr, NULL);
+    free(out_row);
+    png_destroy_write_struct(&png_ptr, &info_ptr);
+
+    if (fclose(fp) != 0) {
+        remove(temp_path);
+        printf("WEFAX BROWSER SAVE: fclose failed\n");
+        return false;
+    }
+
+    if (rename(temp_path, fax_browser_image_path) != 0) {
+        remove(temp_path);
+        printf("WEFAX BROWSER SAVE: rename failed: %s\n", strerror(errno));
+        return false;
+    }
+
+    printf(
+        "WEFAX BROWSER SAVE: saved %s (%u x %u), align=%d tilt=%d\n",
+        fax_browser_image_path,
+        width,
+        height,
+        fax_browser_align,
+        fax_browser_tilt
+    );
+
+    return true;
+}
+
+
+static void fax_browser_return_to_list(void)
+{
+    fax_browser_set_editor_buttons(false);
+
+    if (fax_canvas) {
+        lv_group_remove_obj(fax_canvas);
+        lv_obj_add_flag(fax_canvas, LV_OBJ_FLAG_HIDDEN);
+    }
+
+    fax_browser_free_image();
+    fax_browser_refresh();
+
+    if (fax_browser_table) {
+        lv_obj_clear_flag(fax_browser_table, LV_OBJ_FLAG_HIDDEN);
+
+        fax_browser_update_list();
+        fax_browser_set_editor_buttons(false);
+
+        lv_group_add_obj(keyboard_group, fax_browser_table);
+        lv_group_focus_obj(fax_browser_table);
+        lv_group_set_editing(keyboard_group, true);
+        lv_obj_invalidate(fax_browser_table);
+    }
+}
+
+
+static void save_fax_delayed_cb(lv_timer_t *timer)
+{
+    /* One-shot timer: delete it before doing the synchronous PNG write. */
+    lv_timer_del(timer);
+    save_fax_timer = NULL;
+
+    if (!fax_browser_open || !fax_browser_editing || !fax_browser_image) {
+        return;
+    }
+
+    if (!fax_browser_save_edited_png()) {
+        return;
+    }
+
+    fax_browser_return_to_list();
+    channel_overlay_show("Fax saved");
+}
+
+
+static void save_fax_cb(button_data_t *data)
+{
+    (void)data;
+
+    /* In the browser file list F5 is Delete Fax. */
+    if (fax_browser_open && !fax_browser_editing) {
+        fax_browser_delete_selected();
+        return;
+    }
+
+    if (!fax_browser_open || !fax_browser_editing || !fax_browser_image) {
+        return;
+    }
+
+    /* With no effective Align/Tilt correction this button is "Done":
+     * simply leave the preview and return to the file list. */
+    fax_browser_update_modified_state();
+    if (!fax_browser_modified) {
+        fax_browser_return_to_list();
+        return;
+    }
+
+    /* Avoid scheduling the same save twice. */
+    if (save_fax_timer) {
+        return;
+    }
+
+    /*
+     * Show immediate feedback, then let the current LVGL event return.
+     * The actual synchronous PNG write starts on the next timer pass,
+     * giving LVGL a chance to draw the overlay first.
+     */
+    channel_overlay_show("Saving fax...");
+    save_fax_timer = lv_timer_create(save_fax_delayed_cb, 50, NULL);
+}
+
+
+/*
+ * FAX 2:2 placeholders.
+ */
+static const char *align_label_getter(void)
+{
+    static char buf[24];
+
+    snprintf(
+        buf,
+        sizeof(buf),
+        "Align\n%+i",
+        (int)param_i_get(cfg_wefax_align)
+    );
+
+    return buf;
+}
+
+
+static void align_cb(button_data_t *data)
+{
+    (void)data;
+
+    align_mfk_active = true;
+    tilt_mfk_active = false;
+
+    mfk_set_ctrl(
+        CTRL_WEFAX_ALIGN
+    );
+}
+
+
+static const char *tilt_label_getter(void)
+{
+    static char buf[24];
+
+    snprintf(
+        buf,
+        sizeof(buf),
+        "Tilt\n%+i",
+        (int)param_i_get(cfg_wefax_tilt)
+    );
+
+    return buf;
+}
+
+
+static void tilt_cb(button_data_t *data)
+{
+    (void)data;
+
+    align_mfk_active = false;
+    tilt_mfk_active = true;
+
+    mfk_set_ctrl(
+        CTRL_WEFAX_TILT
+    );
+}
+
+
+static void save_cb(button_data_t *data)
+{
+    (void)data;
+
+    if (!decoder) {
+        return;
+    }
+
+    /*
+     * Stop WAV feeding before taking the snapshot.
+     */
+    stop_wav_test();
+
+    /*
+     * Snapshot the fax and start the PNG write in a worker thread.
+     * Only after the snapshot has been handed off successfully do we
+     * reset the decoder and clear the live buffer.
+     */
+    if (save_fax_png_async()) {
+        wefax_decoder_reset(decoder);
+        auto_start_generation_seen = 0;
+        auto_fax_confirmed_seen = false;
+        clear_preview();
+    }
+}
+
+
+/*
+ * F2 on FAX 1:2 - Close.
+ */
+static void close_cb(button_data_t *data)
+{
+    (void)data;
+
+    stop_wav_test();
+
+    dialog_destruct();
+}
+
+
+/*
+ * F3 on FAX 1:2 - Continuous mode.
+ */
+static void cont_cb(button_data_t *data)
+{
+    (void)data;
+
+    if (!decoder) {
+        return;
+    }
+
+    channel_overlay_show("Receiving Fax");
+
+
+    /*
+     * If a WAV test is running, stop it first.
+     */
+    stop_wav_test();
+
+
+    wefax_decoder_set_mode(
+        decoder,
+        WEFAX_MODE_CONT
+    );
+
+
+    clear_preview();
+
+
+    printf(
+        "WEFAX: CONT mode started\n"
+    );
+}
+
+
+/*
+ * F4 on FAX 1:2 - Automatic mode.
+ */
+static void zoom_cb(button_data_t *data)
+{
+    (void)data;
+
+    if (zoom_mode == WEFAX_ZOOM_SMALL) {
+        zoom_mode = WEFAX_ZOOM_BIG;
+        btn_zoom.label = "View\nBig";
+    } else if (zoom_mode == WEFAX_ZOOM_BIG) {
+        zoom_mode = WEFAX_ZOOM_FULL;
+        btn_zoom.label = "View\nFull Size";
+    } else {
+        zoom_mode = WEFAX_ZOOM_SMALL;
+        btn_zoom.label = "View\nSmall";
+    }
+
+    apply_zoom_geometry();
+    buttons_load_page(&btn_page_2);
+    rerender_preview();
+}
+
+static void auto_cb(button_data_t *data)
+{
+    (void)data;
+
+    if (!decoder) {
+        return;
+    }
+
+    channel_overlay_show("Waiting for Fax");
+
+    stop_wav_test();
+
+    wefax_decoder_set_mode(
+        decoder,
+        WEFAX_MODE_AUTO
+    );
+
+    auto_fax_confirmed_seen = false;
+    clear_preview();
+
+    printf(
+        "WEFAX AUTO: waiting for APT START "
+        "(300 +/- 30 Hz)\n"
+    );
+}
+
+
+/*
+ * F5 on FAX 1:2 - Clear.
+ */
+static void clear_cb(button_data_t *data)
+{
+    (void)data;
+
+    if (!decoder) {
+        return;
+    }
+
+
+    printf(
+        "WEFAX: samples=%llu blocks=%llu "
+        "rows=%u gray=%u..%u avg=%.1f\n",
+
+        (unsigned long long)
+            wefax_decoder_sample_count(
+                decoder
+            ),
+
+        (unsigned long long)
+            wefax_decoder_block_count(
+                decoder
+            ),
+
+        (unsigned int)
+            wefax_decoder_row_count(
+                decoder
+            ),
+
+        (unsigned int)
+            wefax_decoder_gray_min(
+                decoder
+            ),
+
+        (unsigned int)
+            wefax_decoder_gray_max(
+                decoder
+            ),
+
+        wefax_decoder_gray_average(
+            decoder
+        )
+    );
+
+
+    stop_wav_test();
+
+    wefax_decoder_reset(decoder);
+    auto_start_generation_seen = 0;
+
+    clear_preview();
+}
+
+
+/*
+ * F5 on FAX 2:2 - Test WAV.
+ */
+static void test_cb(button_data_t *data)
+{
+    (void)data;
+
+
+    if (!decoder) {
+        return;
+    }
+
+
+    /*
+     * Pressing Test again while already
+     * running restarts from the beginning.
+     */
+    stop_wav_test();
+
+
+    /*
+     * AUTO + Test: keep AUTO active and restart its detector
+     * from the beginning of the WAV.
+     * Test alone retains the previous CONT behaviour.
+     */
+    if (
+        wefax_decoder_get_mode(decoder) ==
+        WEFAX_MODE_AUTO
+    ) {
+        wefax_decoder_reset(decoder);
+    auto_start_generation_seen = 0;
+    }
+    else {
+        wefax_decoder_set_mode(
+            decoder,
+            WEFAX_MODE_CONT
+        );
+    }
+
+
+    clear_preview();
+
+
+    if (!open_test_wav()) {
+        return;
+    }
+
+
+    test_running = true;
+
+
+    test_timer =
+        lv_timer_create(
+            test_wav_timer_cb,
+            TEST_TIMER_MS,
+            NULL
+        );
+
+
+    printf(
+        "WEFAX TEST: started\n"
+    );
+}
+
+
+/*
+ * RX audio callback.
+ */
+static void audio_cb(
+    unsigned int n,
+    float *samples)
+{
+    if (!decoder) {
+        return;
+    }
+
+
+    /*
+     * During WAV playback the radio audio must
+     * not be mixed into the test stream.
+     */
+    if (test_running) {
+        return;
+    }
+
+
+    wefax_decoder_process(
+        decoder,
+        samples,
+        n
+    );
+}
+
+
+/*
+ * WAV playback timer.
+ *
+ * 11025 samples/sec * 20 ms = 220.5 samples.
+ *
+ * We feed 221 samples per timer tick, which is
+ * extremely close to real time and is more than
+ * sufficient for this decoder test.
+ */
+static void test_wav_timer_cb(
+    lv_timer_t *timer)
+{
+    (void)timer;
+
+
+    if (
+        !test_running ||
+        !test_wav ||
+        !decoder
+    ) {
+
+        return;
+    }
+
+
+    float samples[TEST_SAMPLES];
+
+
+    uint32_t available_samples =
+        test_data_remaining /
+        sizeof(float);
+
+
+    if (available_samples == 0) {
+
+        printf(
+            "WEFAX TEST: finished - "
+            "samples=%llu rows=%u\n",
+
+            (unsigned long long)
+                wefax_decoder_sample_count(
+                    decoder
+                ),
+
+            (unsigned int)
+                wefax_decoder_row_count(
+                    decoder
+                )
+        );
+
+
+        stop_wav_test();
+
+        return;
+    }
+
+
+    unsigned int wanted =
+        TEST_SAMPLES;
+
+
+    if (
+        available_samples <
+        wanted
+    ) {
+
+        wanted =
+            available_samples;
+    }
+
+
+    const size_t got =
+        fread(
+            samples,
+            sizeof(float),
+            wanted,
+            test_wav
+        );
+
+
+    if (got == 0) {
+
+        printf(
+            "WEFAX TEST: unexpected EOF/read error\n"
+        );
+
+        stop_wav_test();
+
+        return;
+    }
+
+
+    test_data_remaining -=
+        (uint32_t)(
+            got *
+            sizeof(float)
+        );
+
+
+    wefax_decoder_process(
+        decoder,
+        samples,
+        (unsigned int)got
+    );
+
+
+    if (got < wanted) {
+
+        printf(
+            "WEFAX TEST: short read\n"
+        );
+
+        stop_wav_test();
+    }
+}
+
+
+/*
+ * Complete WEFAX row callback.
+ *
+ * Called from audio processing context.
+ * No LVGL calls here.
+ */
+static void row_cb(
+    const uint8_t *row,
+    unsigned int width,
+    unsigned int row_number,
+    void *user_data)
+{
+    (void)row_number;
+    (void)user_data;
+
+
+    if (!row) {
+        return;
+    }
+
+
+    if (width != WEFAX_WIDTH) {
+        return;
+    }
+
+
+    /*
+     * AUTO provisional rows are decoder-internal only.  They are still
+     * generated and analysed for the four-row black-band confirmation,
+     * but are not forwarded to the GUI/PNG buffer until the fax is real.
+     */
+    if (
+        decoder &&
+        wefax_decoder_get_mode(decoder) == WEFAX_MODE_AUTO &&
+        !wefax_decoder_auto_fax_confirmed(decoder)
+    ) {
+        return;
+    }
+
+
+    pthread_mutex_lock(&row_mutex);
+
+
+    memcpy(
+        pending_row,
+        row,
+        WEFAX_WIDTH
+    );
+
+
+    pending_row_valid = true;
+
+
+    pthread_mutex_unlock(&row_mutex);
+}
+
+
+/*
+ * LVGL timer callback.
+ *
+ * Runs in GUI/LVGL context.
+ */
+static void update_preview_cb(
+    lv_timer_t *timer)
+{
+    (void)timer;
+
+    /* Consume asynchronous PNG completion in LVGL context. */
+    check_async_save_completion();
+
+    if (!fax_canvas) {
+        return;
+    }
+
+
+    /*
+     * A provisional APT START is detected in the audio/decoder thread.
+     * Handle its visual/storage reset here, in LVGL context.  The decoder
+     * may detect several STARTs during the real APT sequence; each one
+     * deliberately replaces any previous provisional fax.
+     */
+    if (
+        decoder &&
+        wefax_decoder_get_mode(decoder) == WEFAX_MODE_AUTO
+    ) {
+        const uint32_t generation =
+            wefax_decoder_auto_start_generation(decoder);
+
+        if (generation != auto_start_generation_seen) {
+            /*
+             * If the GUI had already accepted a real fax, this new START
+             * means its END was missed.  Save the old buffer BEFORE clearing
+             * it.  The decoder has already changed to provisional mode for
+             * the new fax, so it must not be reset here.
+             */
+            if (auto_fax_confirmed_seen) {
+                if (!auto_save_previous_for_new_start()) {
+                    return;
+                }
+            }
+            else {
+                auto_fax_confirmed_seen = false;
+                clear_preview();
+            }
+
+            auto_start_generation_seen = generation;
+        }
+    }
+
+
+    /*
+     * Keep AUTO visually silent while START is only provisional.  When
+     * the decoder confirms the real fax from four consecutive black rows,
+     * clear once more and begin accepting/displaying subsequent rows.
+     */
+    if (
+        decoder &&
+        wefax_decoder_get_mode(decoder) == WEFAX_MODE_AUTO &&
+        wefax_decoder_auto_fax_confirmed(decoder) &&
+        !auto_fax_confirmed_seen
+    ) {
+        auto_fax_confirmed_seen = true;
+
+        /*
+        printf(
+            "WEFAX AUTO: GUI enabled after FAX CONFIRMED\n"
+        );
+        */
+
+        clear_preview();
+        channel_overlay_show("Fax Started");
+    }
+
+
+    /*
+     * APT STOP is detected in the decoder/audio path.  Perform file I/O
+     * here in the LVGL thread, never inside the audio callback.
+     */
+    if (
+        decoder &&
+        wefax_decoder_get_mode(decoder) == WEFAX_MODE_AUTO &&
+        wefax_decoder_auto_stop_detected(decoder)
+    ) {
+        auto_finish_fax();
+        return;
+    }
+
+
+    uint8_t row[WEFAX_WIDTH];
+
+
+    pthread_mutex_lock(&row_mutex);
+
+
+    if (!pending_row_valid) {
+
+        pthread_mutex_unlock(&row_mutex);
+
+        return;
+    }
+
+
+    memcpy(
+        row,
+        pending_row,
+        WEFAX_WIDTH
+    );
+
+
+    pending_row_valid = false;
+
+
+    pthread_mutex_unlock(&row_mutex);
+
+
+    /*
+     * Keep every original decoder row for full-resolution Save.
+     * This happens before preview vertical subsampling.
+     */
+    store_fax_row(row);
+
+
+    /*
+     * AUTO safety net: once the full-resolution buffer reaches its maximum
+     * capacity, the fax is certainly beyond the supported page length.
+     * Save now instead of letting the ring buffer overwrite its first rows.
+     */
+    if (
+        decoder &&
+        wefax_decoder_get_mode(decoder) == WEFAX_MODE_AUTO &&
+        auto_fax_confirmed_seen &&
+        fax_buffer_count >= FAX_BUFFER_ROWS
+    ) {
+        printf(
+            "WEFAX AUTO: fax buffer full (%u rows) - forcing save\n",
+            fax_buffer_count
+        );
+        auto_finish_fax();
+        return;
+    }
+
+
+    /*
+     * --------------------------------------------------------
+     * Vertical scaling
+     * --------------------------------------------------------
+     *
+     * Horizontal scale is:
+     *
+     *     PREVIEW_WIDTH / WEFAX_WIDTH
+     *
+     * Apply exactly the same scale vertically.
+     */
+    vertical_accumulator += PREVIEW_WIDTH;
+
+
+    if (vertical_accumulator < WEFAX_WIDTH) {
+
+        /*
+         * This source WEFAX row does not produce
+         * an LCD row.
+         */
+        return;
+    }
+
+
+    vertical_accumulator -= WEFAX_WIDTH;
+
+
+    /*
+     * Save the ORIGINAL unaligned row before applying Align.  Only rows
+     * that actually become LCD rows are stored, so this ring buffer maps
+     * exactly to the visible 275-row preview.
+     */
+    memcpy(
+        preview_source_rows[preview_source_head],
+        row,
+        WEFAX_WIDTH
+    );
+
+    preview_source_head =
+        (preview_source_head + 1) % PREVIEW_HEIGHT;
+
+    if (preview_source_count < PREVIEW_HEIGHT) {
+        preview_source_count++;
+    }
+
+
+    /*
+     * While the Fax Browser is open we must keep the LIVE preview history
+     * up to date, but we must not draw it over the browser/saved-fax image.
+     *
+     * At this point the received row has already been stored in the full
+     * resolution fax buffer, the vertical preview phase has advanced, and
+     * every row that belongs to the 710x320 preview has been copied into
+     * preview_source_rows.  Therefore rerender_preview() can reconstruct the
+     * current live decoder view immediately when the browser is closed.
+     */
+    if (fax_browser_open) {
+        return;
+    }
+
+
+    /*
+     * Apply current Align to the working row used by the normal
+     * progressive renderer.
+     */
+    {
+        uint8_t aligned_row[WEFAX_WIDTH];
+        int align = (int)param_i_get(cfg_wefax_align);
+
+        for (unsigned int x = 0; x < WEFAX_WIDTH; x++) {
+            int sx = (int)x - align;
+
+            if (sx < 0) {
+                sx += WEFAX_WIDTH;
+            } else if (sx >= WEFAX_WIDTH) {
+                sx -= WEFAX_WIDTH;
+            }
+
+            aligned_row[x] = row[sx];
+        }
+
+        memcpy(row, aligned_row, WEFAX_WIDTH);
+    }
+
+    /*
+     * Scroll existing preview one LCD row upward.
+     */
+    memmove(
+        preview_buffer,
+        preview_buffer + PREVIEW_WIDTH,
+        sizeof(lv_color_t) *
+            PREVIEW_WIDTH *
+            (PREVIEW_HEIGHT - 1)
+    );
+
+
+    /*
+     * Render the selected WEFAX row at the bottom.
+     *
+     * 1809 source pixels -> 710 LCD pixels.
+     */
+    lv_color_t *dst =
+        preview_buffer +
+        (
+            (PREVIEW_HEIGHT - 1) *
+            PREVIEW_WIDTH
+        );
+
+
+    for (
+        unsigned int x = 0;
+        x < PREVIEW_WIDTH;
+        x++
+    ) {
+
+        unsigned int source_start =
+            (
+                x *
+                WEFAX_WIDTH
+            ) /
+            PREVIEW_WIDTH;
+
+
+        unsigned int source_end =
+            (
+                (x + 1) *
+                WEFAX_WIDTH
+            ) /
+            PREVIEW_WIDTH;
+
+
+        if (source_end <= source_start) {
+            source_end = source_start + 1;
+        }
+
+
+        if (source_end > WEFAX_WIDTH) {
+            source_end = WEFAX_WIDTH;
+        }
+
+
+        unsigned int sum = 0;
+        unsigned int count = 0;
+
+
+        for (
+            unsigned int sx = source_start;
+            sx < source_end;
+            sx++
+        ) {
+
+            sum += row[sx];
+            count++;
+        }
+
+
+        uint8_t gray = 0;
+
+
+        if (count > 0) {
+
+            gray =
+                (uint8_t)(
+                    sum / count
+                );
+        }
+
+
+        dst[x] =
+            lv_color_make(
+                gray,
+                gray,
+                gray
+            );
+    }
+
+
+    /*
+     * Rebuild from the ORIGINAL source-row history after every accepted
+     * LCD row.  This is essential for Tilt: the correction depends on
+     * each row's vertical position relative to the newest row, therefore
+     * all visible rows must be re-evaluated as the fax grows.
+     *
+     * It also means a persisted Tilt value is effective immediately:
+     * no MFK movement is required to "activate" it.
+     *
+     * rerender_preview() automatically selects Default or Full.
+     */
+    rerender_preview();
+}
+

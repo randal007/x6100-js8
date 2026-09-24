@@ -18,6 +18,8 @@ SettingsManager cfg_sm;
 ParamInt         *cfg_volume              = nullptr;
 ParamInt         *cfg_squelch             = nullptr;
 ParamInt         *cfg_rfgain              = nullptr;
+ParamInt         *cfg_wefax_align         = nullptr;
+ParamInt         *cfg_wefax_tilt          = nullptr;
 ParamInt         *cfg_rit                 = nullptr;
 ParamInt         *cfg_xit                 = nullptr;
 ParamFloat       *cfg_pwr                 = nullptr;
@@ -135,6 +137,8 @@ void cfg_api_init(void (*on_db_error)(const char *)) {
     cfg_volume           = &cfg_sm.p_volume;
     cfg_squelch          = &cfg_sm.p_squelch;
     cfg_rfgain           = &cfg_sm.p_rfgain;
+    cfg_wefax_align      = &cfg_sm.p_wefax_align;
+    cfg_wefax_tilt       = &cfg_sm.p_wefax_tilt;
     cfg_rit              = &cfg_sm.p_rit;
     cfg_xit              = &cfg_sm.p_xit;
     cfg_pwr              = reinterpret_cast<ParamFloat *>(&cfg_sm.p_pwr);
