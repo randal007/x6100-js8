@@ -138,6 +138,7 @@ void Receiver::worker_loop() {
         }
 
         if (!in.empty()) {
+            if (cb_.on_audio) cb_.on_audio(in.data(), in.size());
             out.clear();
             resampler_.process(in.data(), in.size(), out);
             in.clear();

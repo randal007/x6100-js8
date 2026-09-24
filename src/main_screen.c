@@ -44,6 +44,7 @@
 #include "dialog_wifi.h"
 #include "dialog_wefax.h"
 #include "dialog_navtex.h"
+#include "dialog_js8.h"
 #include "backlight.h"
 #include "buttons.h"
 #include "recorder.h"
@@ -584,6 +585,11 @@ void main_screen_start_app(press_action_t app_action) {
             voice_say_text_fmt("NAVTEX window");
             break;
 
+        case ACTION_APP_JS8:
+            dialog_construct(dialog_js8, obj);
+            voice_say_text_fmt("JS8 window");
+            break;
+
         default:
             break;
     }
@@ -652,6 +658,7 @@ void main_screen_action(press_action_t action) {
         case ACTION_APP_WIFI:
         case ACTION_APP_WEFAX:
         case ACTION_APP_NAVTEX:
+        case ACTION_APP_JS8:
             main_screen_start_app(action);
             break;
 

@@ -15,6 +15,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     dialog_channels.c
     dialog_wefax.c
     dialog_navtex.c
+    dialog_js8.c
     wefax/decoder.c
     navtex/decoder.cpp
     navtex/navtex_rx.cpp
@@ -30,6 +31,7 @@ target_sources(${PROJECT_NAME} PUBLIC
 
 add_subdirectory(fonts)
 add_subdirectory(ft8)
+add_subdirectory(js8)
 add_subdirectory(widgets)
 add_subdirectory(params)
 add_subdirectory(qth)
@@ -51,6 +53,7 @@ pkg_check_modules(deps REQUIRED IMPORTED_TARGET
 target_link_libraries(${PROJECT_NAME} PRIVATE
 PkgConfig::deps
 FT8 QTH
+JS8
 cfg
 Threads::Threads
 lvgl lvgl::drivers

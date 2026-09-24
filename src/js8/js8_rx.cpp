@@ -80,6 +80,11 @@ extern "C" js8_rx_t *js8_rx_create(int input_rate, int submodes, const char *my_
     callbacks.on_cycle_done = [rx](std::size_t n) {
         if (rx->cb.on_cycle_done) rx->cb.on_cycle_done((unsigned)n, rx->cb.ctx);
     };
+    if (rx->cb.on_audio) {
+        callbacks.on_audio = [rx](const float *samples, std::size_t n) {
+            rx->cb.on_audio(samples, (unsigned)n, rx->cb.ctx);
+        };
+    }
 
     try {
         rx->receiver = std::make_unique<Receiver>(config, std::move(callbacks));

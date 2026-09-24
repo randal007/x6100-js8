@@ -100,11 +100,46 @@ static int _3_update_spectrum_peak_hold() {
 }
 
 /* Migrations array */
+static int _4_add_js8_presets() {
+    int rc;
+    char *query;
+    /* JS8Call's default dial frequencies (its FrequencyList.cpp), USB-D like
+     * the FT8/FT4 rows. OR IGNORE keeps rows a fresh params.db already has. */
+    rc = asprintf(&query,
+        "INSERT OR IGNORE INTO digital_modes(label, freq, mode, type) "
+        "SELECT column1, column2, 3, %u FROM (VALUES "
+            "('JS8 160m', 1842000),"
+            "('JS8 80m', 3578000),"
+            "('JS8 40m', 7078000),"
+            "('JS8 30m', 10130000),"
+            "('JS8 20m', 14078000),"
+            "('JS8 17m', 18104000),"
+            "('JS8 15m', 21078000),"
+            "('JS8 12m', 24922000),"
+            "('JS8 10m', 28078000),"
+            "('JS8 6m', 50318000)"
+        ")",
+        CFG_DIG_TYPE_JS8
+    );
+    if (rc == -1) {
+        printf("Cannot allocate SQL query\n");
+        return 1;
+    }
+    rc = sqlite3_exec(db, query, NULL, NULL, NULL);
+    free(query);
+    if (rc != SQLITE_OK) {
+        printf("Cannot add JS8 presets: %s\n", sqlite3_errmsg(db));
+        return 1;
+    }
+    return 0;
+}
+
 static int (*migrations[])() = {
     _0_init_migrations,
     _1_create_ftx_table,
     _2_update_atu_freq,
     _3_update_spectrum_peak_hold,
+    _4_add_js8_presets,
 };
 
 int migrations_apply(void) {

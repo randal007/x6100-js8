@@ -58,6 +58,8 @@ public:
         std::function<void(const RxFrame &)> on_message;
         /// A decode pass finished with this many unique decodes.
         std::function<void(std::size_t)> on_cycle_done;
+        /// Input-rate audio as the worker takes it, for a waterfall.
+        std::function<void(const float *, std::size_t)> on_audio;
         /// Engine diagnostics. Very chatty; leave empty in production.
         std::function<void(const std::string &)> on_log;
     };

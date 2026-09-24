@@ -52,6 +52,8 @@ typedef struct {
     void (*on_frame)(const js8_rx_msg_t *msg, void *ctx);   /* every decode */
     void (*on_message)(const js8_rx_msg_t *msg, void *ctx); /* assembled */
     void (*on_cycle_done)(unsigned decodes, void *ctx);
+    /* Input-rate audio off the audio thread, e.g. for a waterfall. */
+    void (*on_audio)(const float *samples, unsigned n, void *ctx);
     void *ctx;
 } js8_rx_cb_t;
 

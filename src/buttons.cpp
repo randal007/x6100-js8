@@ -325,6 +325,7 @@ static button_data_t btn_settings = make_app_btn("Settings", ACTION_APP_SETTINGS
 static button_data_t  btn_wifi   = make_app_btn("WiFi", ACTION_APP_WIFI);
 static button_data_t btn_wefax  = make_app_btn("WeFax", ACTION_APP_WEFAX);
 static button_data_t btn_navtex = make_app_btn("NavTex", ACTION_APP_NAVTEX);
+static button_data_t btn_js8    = make_app_btn("JS8", ACTION_APP_JS8);
 
 /* RTTY */
 static button_data_t btn_rtty_p1 = {
@@ -455,7 +456,7 @@ static buttons_page_t page_app_2 = {
     {&btn_app_p2, &btn_rec, &btn_qth, &btn_callsign, &btn_settings}
 };
 static buttons_page_t page_app_3 = {
-    {&btn_app_p3, &btn_wifi, &btn_wefax, &btn_navtex}
+    {&btn_app_p3, &btn_wifi, &btn_wefax, &btn_navtex, &btn_js8}
     /* {&btn_app_p3, &btn_wifi} */
 };
 
