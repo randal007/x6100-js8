@@ -29,8 +29,8 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | Time Sync *(page 2)* | Snap the clock to the nearest 15 s. JS8 needs the clock within about ±1 s of UTC. |
 | Test WAV *(page 2)* | Decode `/mnt/js8_test.wav` instead of the radio audio: see [test-audio](test-audio). |
 
-Rows show UTC time, SNR, audio offset and the message. Select a row with
-the MFK to mark its offset on the waterfall. Multi-frame messages appear
+Rows show UTC time, SNR, audio offset and the message. The MFK scrolls the
+list; tap a row to mark its offset on the waterfall. Multi-frame messages appear
 once their last frame arrives. Buffered commands such as `MSG` have their
 checksum verified and removed, as in desktop JS8Call.
 
