@@ -68,6 +68,15 @@ void js8_rx_feed(js8_rx_t *rx, const float *samples, unsigned n);
 /* Drop partially received messages, e.g. after a band change. */
 void js8_rx_clear(js8_rx_t *rx);
 
+/* Test mode: play a 16-bit PCM WAV (any rate; resampled as needed) into the
+ * decoder in real time, starting at the next 15 s slot boundary, so a file
+ * whose first sample is a slot start decodes like live audio. Live audio from
+ * js8_rx_feed() is ignored while it plays. Returns the seconds until playback
+ * starts, or -1 with a message in err. */
+float js8_rx_play_wav(js8_rx_t *rx, const char *path, char *err, unsigned err_len);
+void  js8_rx_stop_wav(js8_rx_t *rx);
+bool  js8_rx_wav_active(js8_rx_t *rx);
+
 /* Stops threads; no callbacks fire after this returns. NULL is ignored. */
 void js8_rx_destroy(js8_rx_t *rx);
 

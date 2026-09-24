@@ -381,3 +381,77 @@ TEST_CASE("receiver re-snaps to the clock when audio and wall time disagree", "[
     for (int i = 0; i < 40 && rx.realign_count() == 0; ++i) std::this_thread::sleep_for(std::chrono::milliseconds(50));
     CHECK(rx.realign_count() == 1);
 }
+
+/* ---- WAV files and test mode ------------------------------------------ */
+
+#include "js8_rx.h"
+#include "testsignal.hpp"
+#include "wav.hpp"
+
+#include <cstdio>
+#include <filesystem>
+
+TEST_CASE("WAV files round-trip", "[js8][wav]") {
+    auto path = (std::filesystem::temp_directory_path() / "js8_wav_roundtrip.wav").string();
+    std::vector<float> in = {0.0f, 0.5f, -0.5f, 0.99f, -1.0f, 0.25f};
+    REQUIRE(write_wav(path, 12000, in));
+
+    WavAudio    wav;
+    std::string err;
+    REQUIRE(read_wav(path, wav, err));
+    CHECK(wav.rate == 12000);
+    REQUIRE(wav.samples.size() == in.size());
+    for (std::size_t i = 0; i < in.size(); i++) CHECK(wav.samples[i] == Catch::Approx(in[i]).margin(1.0 / 32767));
+    std::remove(path.c_str());
+
+    CHECK_FALSE(read_wav("/nonexistent/x.wav", wav, err));
+    CHECK_FALSE(err.empty());
+}
+
+namespace {
+struct Collected {
+    std::mutex               mu;
+    std::condition_variable  cv;
+    std::vector<std::string> messages;
+};
+void collect_message(const js8_rx_msg_t *m, void *ctx) {
+    auto                       *c = static_cast<Collected *>(ctx);
+    std::lock_guard<std::mutex> l(c->mu);
+    c->messages.push_back(m->text);
+    c->cv.notify_all();
+}
+} // namespace
+
+// Real time: up to 15 s to the slot boundary plus 45 s of audio.
+TEST_CASE("test mode plays a 12 kHz WAV through the decoder", "[js8][wav][.slow]") {
+    std::vector<TestStation> band = {
+        {"W1ABC", "FN42", "K2XYZ HELLO FROM A WAV FILE", 1200, -8},
+        {"VE3KP", "FN03", "CQ CQ CQ FN03", 800, -5},
+    };
+    auto path = (std::filesystem::temp_directory_path() / "js8_testmode.wav").string();
+    REQUIRE(write_wav(path, 12000, make_test_band(band, 12000)));
+
+    Collected   c;
+    js8_rx_cb_t cb{};
+    cb.on_message = collect_message;
+    cb.ctx        = &c;
+    js8_rx_t *rx  = js8_rx_create(11025, JS8_SUBMODE_NORMAL, "K2XYZ", &cb);
+    REQUIRE(rx);
+
+    char  err[128] = {};
+    float starts   = js8_rx_play_wav(rx, path.c_str(), err, sizeof(err));
+    INFO(err);
+    REQUIRE(starts >= 0.5f);
+    CHECK(js8_rx_wav_active(rx));
+
+    {
+        std::unique_lock<std::mutex> l(c.mu);
+        c.cv.wait_for(l, std::chrono::seconds(90), [&] { return c.messages.size() >= 2; });
+        std::sort(c.messages.begin(), c.messages.end());
+        REQUIRE(c.messages.size() == 2);
+        CHECK(c.messages[0] == "VE3KP: @ALLCALL CQ CQ CQ FN03");
+        CHECK(c.messages[1] == "W1ABC: K2XYZ HELLO FROM A WAV FILE");
+    }
+    js8_rx_destroy(rx);
+    std::remove(path.c_str());
+}

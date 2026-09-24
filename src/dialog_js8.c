@@ -48,6 +48,7 @@
 #define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
 #define JS8_SLOT_SEC     15.0f
 #define PSD_INTERVAL_MS  200
+#define TEST_WAV         "/mnt/js8_test.wav"  /* DATA partition, as NavTex's test file */
 
 #define HISTORY          300    /* messages kept for re-filtering */
 #define MAX_ROWS         200    /* rows shown before trimming to KEEP_ROWS */
@@ -69,6 +70,8 @@ static const char *show_label_getter(void);
 static void        show_cb(button_data_t *btn);
 static void        clear_cb(button_data_t *btn);
 static void        time_sync_cb(button_data_t *btn);
+static const char *test_wav_label_getter(void);
+static void        test_wav_cb(button_data_t *btn);
 
 /* ---- State (UI thread unless noted) ------------------------------------ */
 
@@ -91,6 +94,7 @@ static int16_t      row_hist[MAX_ROWS + 1];
 static uint16_t     rows;
 
 static unsigned cycles, cycle_decodes;
+static bool     test_wav_shown; /* label state of btn_test_wav */
 
 /* Waterfall PSD, touched only on the receiver's worker thread. */
 static spgramf  sg;
@@ -109,9 +113,10 @@ static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = c
 
 static button_data_t btn_p2        = {.type = BTN_TEXT, .label = "(JS8 2:2)", .press = button_next_page_cb, .next = &page_1};
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
+static button_data_t btn_test_wav  = {.type = BTN_TEXT_FN, .label_fn = test_wav_label_getter, .press = test_wav_cb};
 
 static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_clear}};
-static buttons_page_t page_2 = {{&btn_p2, &btn_time_sync}};
+static buttons_page_t page_2 = {{&btn_p2, &btn_time_sync, &btn_test_wav}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -301,8 +306,15 @@ static void update_status(void) {
     time_t    now = time(NULL);
     struct tm tm;
     gmtime_r(&now, &tm);
-    lv_label_set_text_fmt(status, "%s  %02d:%02d:%02dZ  last %u  total %u", cfg_digital_label_get(), tm.tm_hour,
-                          tm.tm_min, tm.tm_sec, cycle_decodes, hist_count);
+    bool testing = js8_rx_wav_active(rx);
+    lv_label_set_text_fmt(status, "%s%s  %02d:%02d:%02dZ  last %u  total %u", testing ? "TEST WAV  " : "",
+                          cfg_digital_label_get(), tm.tm_hour, tm.tm_min, tm.tm_sec, cycle_decodes, hist_count);
+
+    /* Playback ends on its own; bring the button label back in step. */
+    if (testing != test_wav_shown) {
+        test_wav_shown = testing;
+        if (btn_test_wav.disp_btn) buttons_refresh(&btn_test_wav); /* only when page 2 is shown */
+    }
 }
 
 static void ui_cycle_done(void *arg) {
@@ -513,8 +525,9 @@ static void construct_cb(lv_obj_t *parent) {
     main_screen_lock_band(true);
 
     cycles = cycle_decodes = 0;
-    update_status();
+    test_wav_shown          = false;
     rx_start();
+    update_status();
 }
 
 static void destruct_cb(void) {
@@ -571,4 +584,28 @@ static void time_sync_cb(button_data_t *btn) {
         return;
     }
     msg_update_text_fmt("Clock moved %+d s", -(int)drift);
+}
+
+static const char *test_wav_label_getter(void) {
+    return js8_rx_wav_active(rx) ? "Stop\nTest" : "Test\nWAV";
+}
+
+/* Play TEST_WAV through the decoder instead of the receiver audio, starting
+ * at the next slot boundary. tools/js8_wavgen makes suitable files. */
+static void test_wav_cb(button_data_t *btn) {
+    if (js8_rx_wav_active(rx)) {
+        js8_rx_stop_wav(rx);
+        add_info_row("Test stopped");
+    } else {
+        char  err[96];
+        float starts = js8_rx_play_wav(rx, TEST_WAV, err, sizeof(err));
+        if (starts < 0) {
+            msg_update_text_fmt("JS8 test: %s", err);
+            return;
+        }
+        add_info_row("Test: %s from next slot", TEST_WAV);
+        msg_update_text_fmt("Test WAV starts in %.0f s", starts);
+    }
+    update_status();
+    buttons_refresh(btn);
 }

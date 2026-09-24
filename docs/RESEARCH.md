@@ -78,9 +78,12 @@ No existing native JS8 implementation for the X6100 was found (checked
   | −20 dB | 1/3 |
   | −22, −24 dB | 0/3 |
 
-  This is plain FSK in pure AWGN with one decode window, and the knee near
-  −20 dB matches FT8-class codes. JS8Call's own "−24 dB" figure is a
-  reported SNR estimate, not an AWGN threshold. On-air comparison against
+  This is plain FSK in pure AWGN, with SNR computed from the signal and
+  noise powers. The decoder's own SNR estimate, which is what JS8Call
+  displays, reads a consistent ~7 dB lower on these signals (−4 → −11,
+  −10 → −17, −18 → −26; see `test-audio/README.md`). So the knee near
+  −20 dB true is about −27 dB as JS8Call would report it, in line with
+  JS8Call's advertised "−24 dB" for Normal mode. On-air comparison against
   desktop JS8Call is still to do.
 - **Cost:** ~25 ms per single-signal Normal decode on x86. First-call setup
   (FFT plans, buffers) was ~1.4 s before patch 4 and ~0.36 s after. Peak
