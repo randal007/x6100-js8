@@ -6,8 +6,33 @@ itself with no PC, phone or tablet attached.
 This is the X6100 LVGL firmware GUI with a JS8 app added alongside the
 existing FT8, RTTY, WeFax and NavTex apps.
 
-> **Status: early development. Receive-only is in progress; no transmit yet.**
-> Don't flash this expecting a finished feature. See [Roadmap](#roadmap).
+> **Status: receive-only, not yet tested on a radio.** The JS8 app decodes
+> and displays JS8 Normal-mode traffic. Every part of it has been tested on
+> a PC (see [Testing](#testing)) but none of it on real hardware or real
+> signals yet. It never transmits.
+
+![JS8 app, all messages](docs/screenshots/js8_04_all.png)
+
+*The real JS8 app code running headless on a PC with a simulated band:
+a CQ (green), heartbeats (grey), messages to this station (red) and an
+@ALLCALL message (blue). See [tools/js8_ui_harness](tools/js8_ui_harness).*
+
+## Using it
+
+APP → page 3 → **JS8**. The radio tunes the nearest JS8 frequency (the band
+keys step through JS8Call's standard dial frequencies) and starts decoding.
+
+| Button | Does |
+|---|---|
+| Show: No HB / Directed / All | Filter the list. *Directed* shows messages to your callsign (set in APP → Callsign) or to @groups. |
+| Clear | Clear the list and any half-received messages. |
+| Time Sync *(page 2)* | Snap the clock to the nearest 15 s. JS8 needs the clock within about ±1 s of UTC. |
+| Test WAV *(page 2)* | Decode `/mnt/js8_test.wav` instead of the radio audio: see [test-audio](test-audio). |
+
+Rows show UTC time, SNR, audio offset and the message. Select a row with
+the MFK to mark its offset on the waterfall. Multi-frame messages appear
+once their last frame arrives. Buffered commands such as `MSG` have their
+checksum verified and removed, as in desktop JS8Call.
 
 ## Lineage
 
@@ -49,13 +74,24 @@ the Android port's core was chosen over porting desktop JS8Call.
 
 - [x] Research: firmware, JS8 protocol, existing ports
 - [x] Vendor js8core with small documented patches ([UPSTREAM.md](third-party/js8core/UPSTREAM.md))
-- [ ] `src/js8` RX library + host tests
-- [ ] JS8 app on APP 3:3: waterfall, band activity, directed messages
-- [ ] JS8 band presets (DB migration)
-- [ ] CI image build with JS8 dependencies
-- [ ] On-air RX validation against desktop JS8Call
+- [x] `src/js8` RX library + host tests (x86 with ASan/UBSan, and ARM under qemu)
+- [x] JS8 app on APP 3:3: waterfall, message list, filters, test mode
+- [x] JS8 band presets (DB migration 4)
+- [x] Headless UI harness and test-audio generator
+- [ ] CI image build with JS8 dependencies (workflow updated; first build pending)
+- [ ] First boot on a radio: WAV test mode, then on-air RX against desktop JS8Call
+- [ ] Decode timing on the Cortex-A7 on a busy band
 - [ ] Transmit: heartbeat, CQ, directed messages, free text
 - [ ] Fast / Turbo / Slow submodes, auto-reply, logging
+
+## Testing
+
+| What | How |
+|---|---|
+| Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
+| The real UI on a PC | [tools/js8_ui_harness](tools/js8_ui_harness): the actual dialog on stock LVGL with a simulated busy band, in real time, under ASan/UBSan. |
+| On the radio, without RF | [test-audio](test-audio) and the Test WAV button. |
+| Radio compiler | Everything JS8 compiles cleanly with the image's GCC 12.3 (Cortex-A7, NEON) against Boost 1.80. |
 
 ## Building
 
