@@ -151,6 +151,8 @@ static void format_row(const js8_rx_msg_t *m, char *buf, size_t size) {
              m->checksum < 0 ? "  (bad checksum)" : "");
 }
 
+static bool auto_selecting; /* follow() is moving the selection, not the user */
+
 /* Keep following new rows if the selection is on the last one. */
 static bool at_bottom(void) {
     uint16_t sel_row = 0, sel_col = 0;
@@ -158,9 +160,24 @@ static bool at_bottom(void) {
     return rows == 0 || sel_row == LV_TABLE_CELL_NONE || sel_row + 1 >= rows;
 }
 
+/* Select the last row and scroll it into view. lv_table 8.3 has no setter
+ * for the selection, so put it one row above and let the table's own key
+ * handler step down: that also runs its scroll-to-selected logic. */
 static void follow(void) {
-    static uint32_t key = LV_KEY_DOWN;
-    lv_event_send(table, LV_EVENT_KEY, &key);
+    if (rows == 0) return;
+    lv_table_t *t   = (lv_table_t *)table;
+    auto_selecting  = true;
+    if (rows == 1) {
+        t->row_act = 0;
+        t->col_act = 0;
+        lv_obj_invalidate(table);
+    } else {
+        static uint32_t key = LV_KEY_DOWN;
+        t->row_act          = rows - 2;
+        t->col_act          = 0;
+        lv_event_send(table, LV_EVENT_KEY, &key);
+    }
+    auto_selecting = false;
 }
 
 static void append_row(const char *text, int16_t hist) {
@@ -273,8 +290,9 @@ static void table_draw_cb(lv_event_t *e) {
     if (sel_row == row) dsc->rect_dsc->bg_color = lv_color_lighten(dsc->rect_dsc->bg_color, 30);
 }
 
-static void table_press_cb(lv_event_t *e) {
-    (void)e;
+/* Mark the selected message's offset on the waterfall; `announce` also
+ * pops up who it is (on a tap, not on every MFK step). */
+static void mark_selected(bool announce) {
     uint16_t row, col;
     lv_table_get_selected_cell(table, &row, &col);
     if (row >= rows || row_hist[row] < 0) {
@@ -285,9 +303,19 @@ static void table_press_cb(lv_event_t *e) {
     const js8_rx_msg_t *m = &history[row_hist[row]];
     lv_finder_set_value(finder, (int16_t)(m->freq_hz + 0.5f));
     lv_obj_invalidate(finder);
-    if (m->from[0]) {
+    if (announce && m->from[0]) {
         msg_update_text_fmt("%s at %.0f Hz, %+d dB", m->from, m->freq_hz, m->snr);
     }
+}
+
+static void table_press_cb(lv_event_t *e) {
+    (void)e;
+    mark_selected(true);
+}
+
+static void table_select_cb(lv_event_t *e) {
+    (void)e;
+    if (!auto_selecting) mark_selected(false);
 }
 
 /* ---- Receiver callbacks (worker threads) ------------------------------- */
@@ -493,6 +521,7 @@ static void construct_cb(lv_obj_t *parent) {
     table = lv_table_create(dialog.obj);
     lv_obj_remove_style(table, NULL, LV_STATE_ANY | LV_PART_MAIN);
     lv_obj_add_event_cb(table, table_press_cb, LV_EVENT_PRESSED, NULL);
+    lv_obj_add_event_cb(table, table_select_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(table, key_cb, LV_EVENT_KEY, NULL);
     lv_obj_add_event_cb(table, table_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
     lv_obj_set_size(table, WIDTH, WF_HEIGHT - WF_VISIBLE);

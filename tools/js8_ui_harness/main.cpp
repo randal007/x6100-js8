@@ -156,6 +156,12 @@ int main() {
     pump(200);
     screenshot("04_all.ppm");
 
+    // MFK two steps back: the selection moves up and the finder marks it.
+    ui_key(LV_KEY_LEFT);
+    ui_key(LV_KEY_LEFT);
+    pump(200);
+    screenshot("04b_mfk_select.ppm");
+
     // Band change, then close with ESC.
     ui_band_up();
     pump(200);
