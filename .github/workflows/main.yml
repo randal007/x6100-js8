@@ -54,6 +54,15 @@ jobs:
         sed -i "s,^X6100_GUI_SITE_METHOD = git,X6100_GUI_SITE_METHOD = local,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
         sed -i "s,^X6100_GUI_GIT_SUBMODULES,# X6100_GUI_GIT_SUBMODULES,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
 
+    # JS8 (third-party/js8core) needs Boost headers and single-precision FFTW.
+    # The image already builds FFTW; Boost with no libraries selected installs
+    # headers only.
+    - name: Enable JS8 dependencies
+      run: |
+        sed -i "s,^X6100_GUI_DEPENDENCIES = \(.*\)$,X6100_GUI_DEPENDENCIES = \1 boost fftw," AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
+        echo "BR2_PACKAGE_BOOST=y" >> AetherX6100Buildroot/br2_external/configs/X6100_defconfig
+        grep "^X6100_GUI_DEPENDENCIES" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
+
     # Ccache
     - name: Prepare ccache timestamp
       id: ccache_cache_timestamp
@@ -95,12 +104,15 @@ jobs:
         mv sdcard.img sdcard.${{ github.ref_name }}.img
         zip sdcard.${{ github.ref_name }}.img.zip sdcard.${{ github.ref_name }}.img
 
-    # Upload image
-    # - name: 'Upload image'
-    #   uses: actions/upload-artifact@v4
-    #   with:
-    #     name: sdcard.img
-    #     path: AetherX6100Buildroot/build/images/sdcard.img
+    # Manual runs (workflow_dispatch) have no release to attach to, so keep
+    # the image as a workflow artifact.
+    - name: Upload image
+      if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: sdcard.${{ github.ref_name }}.img.zip
+        path: AetherX6100Buildroot/build/images/sdcard.${{ github.ref_name }}.img.zip
+        retention-days: 30
 
     # Create release
     - name: Release
