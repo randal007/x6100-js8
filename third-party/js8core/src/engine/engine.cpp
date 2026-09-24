@@ -80,7 +80,7 @@ public:
     enabled_submodes_.store(config_.submodes);
     init_schedules();
     start_decode_worker();
-    start_spectrum_worker();
+    if (config_.spectrum_enabled) start_spectrum_worker();
   }
 
   ~Js8EngineImpl() override {
@@ -180,7 +180,7 @@ public:
     total_samples_ += static_cast<int>(frames);
 
     // Emit a lightweight spectrum frame for UI consumers at a throttled rate.
-    if (callbacks_.on_event && frames > 0) {
+    if (config_.spectrum_enabled && callbacks_.on_event && frames > 0) {
       auto const now = std::chrono::steady_clock::now();
       if (now - last_spectrum_time_ >= kSpectrumInterval) {
         last_spectrum_time_ = now;
@@ -372,6 +372,10 @@ public:
 
   std::int64_t time_drift_ms() const override {
     return time_drift_ms_.load();
+  }
+
+  void request_realign() override {
+    drift_realign_pending_.store(true);
   }
 
  private:

@@ -76,6 +76,9 @@ struct EngineConfig {
   int tx_output_rate_hz = 48000;
   float tx_output_gain = 1.0f;
   bool tx_output_gain_boost_enabled = false;
+  // Hosts that draw their own waterfall can skip the engine's spectrum
+  // thread and its per-buffer FFT.
+  bool spectrum_enabled = true;
 };
 
 struct TxMessageRequest {
@@ -137,6 +140,10 @@ public:
   // Positive = engine clock ahead of system clock; takes effect at the next captured buffer.
   virtual void set_time_drift_ms(std::int64_t drift_ms) = 0;
   virtual std::int64_t time_drift_ms() const = 0;
+
+  // Re-snap the RX ring to the wall clock at the next captured buffer, e.g.
+  // after the host notices its sample count has slipped against real time.
+  virtual void request_realign() = 0;
 };
 
 std::unique_ptr<Js8Engine> make_engine(EngineConfig const& config,
