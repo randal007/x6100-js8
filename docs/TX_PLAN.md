@@ -147,7 +147,7 @@ Three switches on page 4, each off by default, as in desktop JS8Call:
 
   With AUTO off, the answer is *offered* instead: select the station and
   press Reply, and the keyboard opens with it filled in.
-- **HB** sends a heartbeat every 5–30 min (hold HB, turn the knob, press
+- **HB** sends a heartbeat every 5–30 min (switch it on, turn the knob, press
   again). Timing is desktop's: the next slot + 1 s + interval, one slot
   later a quarter of the time.
 - **HB ACK** answers others' heartbeats with `THEM HEARTBEAT SNR -12` in

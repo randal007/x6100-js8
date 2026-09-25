@@ -62,6 +62,7 @@
 #define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
 #define JS8_SLOT_SEC     15.0f
 #define PSD_INTERVAL_MS  200
+#define HB_ADJUST_MS     8000   /* setting the HB interval ends after this idle */
 /* The waterfall is drawn relative to the noise floor, so it works at any
  * audio level: WF_MIN_DB..WF_MAX_DB above the floor spans the palette. */
 #define WF_MIN_DB        0
@@ -122,6 +123,7 @@ static void        tx_start(void);
 static void        tx_stop_all(void);
 static void        tx_timer_cb(lv_timer_t *t);
 static void        compose_close(void);
+static void        hb_adjust_end(void);
 
 /* ---- State (UI thread unless noted) ------------------------------------ */
 
@@ -148,6 +150,7 @@ static lv_obj_t      *query_list;      /* Query popup, when open */
 static js8_auto_t *autop;
 static int64_t     hb_next_ms;       /* 0: send the first one at the next chance */
 static bool        hb_adjusting;     /* main knob sets the HB interval */
+static int64_t     hb_adjust_ms;     /* last knob turn while adjusting */
 static char        info_text[TEXT_MAX + 1], status_text[TEXT_MAX + 1];
 static char        last_tx_text[JS8_RX_TEXT_LEN]; /* for AGN? */
 static struct {
@@ -854,7 +857,7 @@ static void update_tx_bar(void) {
     uint16_t offset = params.js8_tx_freq.x;
 
     if (hb_adjusting && tx_status.state == JS8_TX_IDLE) {
-        snprintf(line, sizeof(line), "HB every %u min   turn the knob (5-30), press HB when done",
+        snprintf(line, sizeof(line), "HB every %u min: turn the knob (5-30), press HB when done",
                  params.js8_hb_interval.x);
         lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x5a4a00), 0);
         lv_label_set_text(tx_bar, line);
@@ -969,6 +972,8 @@ static void rotary_cb(int32_t diff) {
         if (v < JS8_HB_MIN_INTERVAL) v = JS8_HB_MIN_INTERVAL;
         if (v > JS8_HB_MAX_INTERVAL) v = JS8_HB_MAX_INTERVAL;
         params_uint16_set(&params.js8_hb_interval, (uint16_t)v);
+        hb_adjust_ms = now_wall_ms();
+        if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
         if (params.js8_hb.x && hb_next_ms) hb_next_ms = js8_next_heartbeat_ms(now_wall_ms(), v);
         update_tx_bar();
         update_status();
@@ -1639,6 +1644,7 @@ static void handle_incoming(const js8_rx_msg_t *m) {
 
 /* Once a second: send a heartbeat when one is due. */
 static void hb_tick(void) {
+    if (hb_adjusting && now_wall_ms() - hb_adjust_ms > HB_ADJUST_MS) hb_adjust_end();
     if (!params.js8_hb.x) {
         hb_next_ms = 0;
         return;
@@ -1672,16 +1678,31 @@ static void auto_cb(button_data_t *btn) {
 static const char *hb_label_getter(void) {
     static char buf[24];
     if (!params.js8_hb.x) return "HB:\nOff";
-    snprintf(buf, sizeof(buf), "HB:\n%u min", params.js8_hb_interval.x);
+    snprintf(buf, sizeof(buf), hb_adjusting ? "HB: knob\n< %u min >" : "HB:\n%u min", params.js8_hb_interval.x);
     return buf;
+}
+
+/* Off -> On, straight into setting the interval with the knob; press
+ * again (or wait) to finish; press once more to turn heartbeats off. */
+static void hb_adjust_start(button_data_t *btn) {
+    hb_adjusting    = true;
+    hb_adjust_ms    = now_wall_ms();
+    buttons_refresh(btn);
+    update_tx_bar();
+}
+
+static void hb_adjust_end(void) {
+    if (!hb_adjusting) return;
+    hb_adjusting = false;
+    if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
+    update_tx_bar();
+    if (params.js8_hb.x) msg_update_text_fmt("HB every %u min", params.js8_hb_interval.x);
 }
 
 static void hb_cb(button_data_t *btn) {
     user_touch();
-    if (hb_adjusting) { /* press again to finish setting the interval */
-        hb_adjusting = false;
-        buttons_refresh(btn);
-        update_tx_bar();
+    if (hb_adjusting) {
+        hb_adjust_end();
         return;
     }
     params_bool_set(&params.js8_hb, !params.js8_hb.x);
@@ -1689,7 +1710,7 @@ static void hb_cb(button_data_t *btn) {
     buttons_refresh(btn);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
     if (params.js8_hb.x) {
-        msg_update_text_fmt("HB on: every %u min (hold HB to change)", params.js8_hb_interval.x);
+        hb_adjust_start(btn);
     } else {
         msg_update_text_fmt("HB off");
     }
@@ -1698,9 +1719,7 @@ static void hb_cb(button_data_t *btn) {
 
 static void hb_hold_cb(button_data_t *btn) {
     user_touch();
-    hb_adjusting = true;
-    buttons_refresh(btn);
-    update_tx_bar();
+    hb_adjust_start(btn);
 }
 
 static const char *hb_ack_label_getter(void) {
@@ -1756,9 +1775,17 @@ static void texts_close(void) {
 
 static void texts_item_cb(lv_event_t *e) {
     int which = (int)(intptr_t)lv_event_get_user_data(e);
-    texts_close();
+    /* Straight into the keyboard: take the list's buttons out of the group
+     * now (the list itself goes later, it's running this callback) and
+     * don't hand the focus back to the table, or the keyboard opens
+     * without it and can't be used. */
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(texts_list); i++)
+        lv_group_remove_obj(lv_obj_get_child(texts_list, i));
+    lv_obj_del_async(texts_list);
+    texts_list  = NULL;
     edit_target = which;
     compose_open(which == 1 ? info_text : status_text);
+    lv_group_set_editing(keyboard_group, true); /* as after Reply / Send... */
 }
 
 static void texts_key_cb(lv_event_t *e) {

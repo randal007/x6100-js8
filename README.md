@@ -39,7 +39,7 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | 3 | **Hold: On/Off** | On (default): replies go out on your own offset. Off: Reply and Query move your offset to the station's first. |
 | 3 | **Show Stations / Messages** | Switch the list to one row per station, like desktop JS8Call's Call Activity. |
 | 4 | **AUTO: Off/On** | Answer SNR?, GRID?, INFO?, STATUS?, HEARING? and AGN? sent to your call. Off (default): the answer is offered on Reply instead. |
-| 4 | **HB: Off/N min** | Send heartbeats every N minutes. Hold it and turn the knob to set 5–30 min; press to finish. |
+| 4 | **HB: Off/N min** | Send heartbeats every N minutes. Switching it on lets the main knob set 5–30 min; press HB again (or wait 8 s) to finish, press once more to turn it off. Holding HB changes the interval without switching. |
 | 4 | **HB ACK** | Answer others' heartbeats with how you hear them. Acts only while AUTO and HB are on, as on desktop. |
 | 4 | **Texts…** | Edit what AUTO sends for INFO? and STATUS? (kept in `/mnt/js8_texts.txt`). |
 

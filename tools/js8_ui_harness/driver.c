@@ -25,6 +25,20 @@ void ui_init(void) {
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
 void ui_press(int i) { button_data_t *b = stub_page->items[i]; b->press(b); }
+const char *ui_focus_desc(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f) return "nothing";
+    if (lv_obj_check_type(f, &lv_keyboard_class)) return lv_group_get_editing(keyboard_group) ? "keyboard (editing)" : "keyboard";
+    if (lv_obj_check_type(f, &lv_textarea_class)) return "textarea";
+    if (lv_obj_check_type(f, &lv_table_class)) return "message list";
+    if (lv_obj_check_type(f, &lv_btn_class)) return "a list button";
+    return "something else";
+}
+void ui_rotary(int32_t diff) { dialog_js8->rotary_cb(diff); }
+const char *ui_button_label(int i) {
+    button_data_t *b = stub_page->items[i];
+    return b->type == BTN_TEXT_FN ? b->label_fn() : b->label;
+}
 void ui_band_up(void) { lv_event_send(dialog_js8->obj, (lv_event_code_t)EVENT_BAND_UP, NULL); }
 void ui_key(uint32_t key) { lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_KEY, &key); }
 int  ui_running(void) { return dialog_js8->run; }

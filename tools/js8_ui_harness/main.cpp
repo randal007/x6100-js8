@@ -14,6 +14,9 @@ void ui_band_up(void);
 void ui_key(uint32_t key);
 int  ui_running(void);
 int  ui_focus_is_table(void);
+void ui_rotary(int32_t diff);
+const char *ui_focus_desc(void);
+const char *ui_button_label(int i);
 void ui_compose_append(const char *text);
 const char *ui_compose_text(void);
 void ui_compose_enter(void);
@@ -145,6 +148,29 @@ int main() {
 
     ui_init();
     ui_open();
+    if (getenv("ONLY_TEXTS")) {
+        // Page 4 -> Texts... -> INFO: the keyboard must get the focus.
+        pump(300);
+        ui_page(1);
+        ui_press(3); // Send...
+        pump(300);
+        printf("[texts] Send... compose (works on the radio), focus: %s\n", ui_focus_desc());
+        ui_compose_cancel();
+        pump(300);
+        ui_page(4);
+        ui_press(4);
+        pump(200);
+        printf("[texts] list open, focus: %s\n", ui_focus_desc());
+        ui_click_focused(); // INFO
+        pump(300);          // lets the list's async delete run
+        printf("[texts] editing INFO, focus: %s\n", ui_focus_desc());
+        screenshot("20_texts_edit.ppm");
+        ui_compose_append("X6100 5W EFHW");
+        ui_compose_enter();
+        pump(300);
+        printf("[texts] after Enter, focus: %s\n", ui_focus_desc());
+        return 0;
+    }
     pump(300);
     screenshot("01_open.ppm");
 
@@ -313,7 +339,15 @@ int main() {
     ui_page(4);
     before = stub_tx_frames;
     ui_press(1); // AUTO on
-    ui_press(2); // HB on: first heartbeat at the next chance
+    ui_press(2); // HB on: first heartbeat at the next chance, and the knob sets the interval
+    printf("[t4] HB after press: '%s'\n", ui_button_label(2));
+    ui_rotary(-1);
+    ui_rotary(-1);
+    ui_rotary(-1);
+    printf("[t4] HB after knob -3: '%s'\n", ui_button_label(2));
+    screenshot("15a_hb_interval.ppm");
+    pump(9000); // setting the interval ends on its own
+    printf("[t4] HB after 9 s: '%s'\n", ui_button_label(2));
     ui_press(3); // HB ACK on
     pump(300);
     screenshot("15_auto_on.ppm");
