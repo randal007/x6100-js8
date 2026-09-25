@@ -8,6 +8,7 @@
 
 #include "classify.hpp"
 #include "commands.hpp"
+#include "inbox.hpp"
 
 #include <cctype>
 #include <sstream>
@@ -62,8 +63,22 @@ std::optional<AutoReply> build_reply(const Incoming &in, const AutoSettings &s, 
     if (!in.to_me || in.to_group) return std::nullopt;
 
     const std::string cmd = command_after_target(in.text, in.to);
-    std::string       text;
-    if (cmd == "SNR?" || cmd == "?") {
+
+    // A message for our inbox (only once its checksum checks out).
+    if (cmd.rfind("MSG ", 0) == 0 && cmd.rfind("MSG TO:", 0) != 0) {
+        if (!in.checksum_ok) return std::nullopt;
+        return AutoReply{upper(in.from) + " ACK", in.from, "MSG", ReplyKind::MsgAck};
+    }
+    // They hold a message for us ("YES MSG ID 3", or on a heartbeat ack).
+    if (auto id = msg_id_offered(cmd)) {
+        return AutoReply{upper(in.from) + " QUERY MSG " + std::to_string(*id), in.from, "MSG ID",
+                         ReplyKind::Suggest};
+    }
+
+    std::string text;
+    if (cmd == "QUERY MSGS" || cmd == "QUERY MSGS?") {
+        text = upper(in.from) + " NO";
+    } else if (cmd == "SNR?" || cmd == "?") {
         text = query_text(Query::SendSnr, in.from, in.snr, "");
     } else if (cmd == "GRID?") {
         text = query_text(Query::MyGrid, in.from, 0, s.my_grid);
@@ -93,12 +108,14 @@ std::optional<AutoReply> build_reply(const Incoming &in, const AutoSettings &s, 
 AutoPolicy::Action AutoPolicy::decide(const AutoReply &r, const AutoSettings &s, std::int64_t now_ms) {
     const bool auto_ok = s.autoreply && !idle(now_ms);
 
+    if (r.kind == ReplyKind::Suggest) return Action::Offer;
     if (r.kind == ReplyKind::HeartbeatAck) {
         // Desktop: HB ACK only with AUTO and heartbeat networking both on.
         if (!(auto_ok && s.heartbeat && s.hb_ack)) return Action::Ignore;
     } else if (!auto_ok) {
         return Action::Offer;
     }
+    if (r.kind == ReplyKind::MsgAck) return Action::Send; // a resend wants its ACK too
 
     auto key = r.to + "|" + r.command;
     auto it  = last_sent_.find(key);

@@ -13,6 +13,7 @@ add_library(JS8 STATIC
     stations.cpp
     autoreply.cpp
     qsolog.cpp
+    inbox.cpp
     js8_ops.cpp
     js8_rx.cpp
 )

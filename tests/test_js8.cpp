@@ -12,6 +12,7 @@
 #include "receiver.hpp"
 #include "js8_ops.h"
 #include "qsolog.hpp"
+#include "inbox.hpp"
 
 #include <unistd.h>
 #include "tx.hpp"
@@ -1375,4 +1376,135 @@ TEST_CASE("the QSO keeps the grid they sent anywhere in a message", "[js8][log]"
     auto list = st.sorted(1000);
     REQUIRE(list.size() == 1);
     CHECK(list[0].grid == "DN17AB");
+}
+
+// ---- Inbox -------------------------------------------------------------------
+
+TEST_CASE("MSG to us: the text for the inbox", "[js8][inbox]") {
+    CHECK(msg_body("N0XYZ: K2XYZ MSG HELLO THERE", "K2XYZ") == "HELLO THERE");
+    CHECK(msg_body("N0XYZ: K2XYZ MSG   SPACED  OUT ", "K2XYZ/P") == "SPACED  OUT");
+    CHECK_FALSE(msg_body("N0XYZ: W1ABC MSG HELLO", "K2XYZ"));          // not ours
+    CHECK_FALSE(msg_body("N0XYZ: K2XYZ MSG TO:W1ABC HELLO", "K2XYZ")); // store for W1ABC
+    CHECK_FALSE(msg_body("N0XYZ: K2XYZ MSG", "K2XYZ"));
+    CHECK_FALSE(msg_body("N0XYZ: K2XYZ HELLO MSG X", "K2XYZ"));
+    CHECK_FALSE(msg_body("N0XYZ: @ALLCALL MSG HI", "K2XYZ"));
+
+    CHECK(msg_id_offered("N0XYZ: K2XYZ YES MSG ID 3") == 3);
+    CHECK(msg_id_offered("N0XYZ: K2XYZ HEARTBEAT SNR -08 MSG ID 42") == 42);
+    CHECK_FALSE(msg_id_offered("N0XYZ: K2XYZ MSG ID X"));
+    CHECK_FALSE(msg_id_offered("N0XYZ: K2XYZ NO"));
+}
+
+TEST_CASE("the inbox keeps messages, drops resends, survives a reload", "[js8][inbox]") {
+    char path[] = "/tmp/js8_inbox_test_XXXXXX";
+    int  fd     = mkstemp(path);
+    REQUIRE(fd >= 0);
+    close(fd);
+    unlink(path); // a missing file is an empty inbox
+
+    Inbox b;
+    REQUIRE(b.load(path));
+    CHECK(b.size() == 0);
+    int a = b.add("N0XYZ", "HELLO", 1000);
+    int c = b.add("W1ABC", "TEST\tWITH TAB", 2000);
+    CHECK(b.add("N0XYZ", "HELLO", 60000) == a); // resend: same message
+    CHECK(b.add("N0XYZ", "HELLO", 1000 + Inbox::REPEAT_MS + 1) != a); // much later: new
+    CHECK(b.size() == 3);
+    CHECK(b.unread() == 3);
+    CHECK(b.list().front().id == b.list().back().id + 2); // newest first
+    CHECK(b.mark_read(a));
+    CHECK_FALSE(b.mark_read(a));
+    CHECK(b.unread() == 2);
+    REQUIRE(b.save(path));
+
+    Inbox r;
+    REQUIRE(r.load(path));
+    CHECK(r.size() == 3);
+    CHECK(r.unread() == 2);
+    REQUIRE(r.get(c));
+    CHECK(r.get(c)->text == "TEST WITH TAB");
+    CHECK(r.get(c)->from == "W1ABC");
+    CHECK(r.get(a)->read);
+    CHECK(r.remove(c));
+    CHECK_FALSE(r.remove(c));
+    CHECK(r.add("K9DEF", "NEXT", 5000) > c); // ids never reused
+    unlink(path);
+
+    // Full: the oldest read message goes first.
+    Inbox full;
+    for (std::size_t i = 0; i < Inbox::MAX_MESSAGES; i++) full.add("N0XYZ", "M" + std::to_string(i), (std::int64_t)i);
+    full.mark_read(5);
+    full.add("N0XYZ", "ONE MORE", 999);
+    CHECK(full.size() == Inbox::MAX_MESSAGES);
+    CHECK_FALSE(full.get(5));
+    CHECK(full.get(1));
+}
+
+TEST_CASE("MSG gets desktop's ACK; QUERY MSGS a NO; MSG ID is only offered", "[js8][inbox]") {
+    auto s  = settings();
+    auto in = incoming("N0XYZ", "K2XYZ MSG HELLO FROM THE PARK", -5);
+    in.checksum_ok = true;
+    auto r         = build_reply(in, s, {}, "");
+    REQUIRE(r);
+    CHECK(r->text == "N0XYZ ACK");
+    CHECK(r->kind == ReplyKind::MsgAck);
+
+    in.checksum_ok = false; // not until the checksum is good
+    CHECK_FALSE(build_reply(in, s, {}, ""));
+
+    auto q = build_reply(incoming("N0XYZ", "K2XYZ QUERY MSGS", -5), s, {}, "");
+    REQUIRE(q);
+    CHECK(q->text == "N0XYZ NO");
+
+    auto y = build_reply(incoming("N0XYZ", "K2XYZ YES MSG ID 3", -5), s, {}, "");
+    REQUIRE(y);
+    CHECK(y->text == "N0XYZ QUERY MSG 3");
+    CHECK(y->kind == ReplyKind::Suggest);
+
+    // AUTO on: ACK every time (a resend means they missed it); Suggest never sends.
+    AutoPolicy p;
+    s.autoreply = true;
+    p.user_activity(0);
+    CHECK(p.decide(*r, s, 0) == AutoPolicy::Action::Send);
+    p.sent(*r, 0);
+    CHECK(p.decide(*r, s, 1000) == AutoPolicy::Action::Send);
+    CHECK(p.decide(*y, s, 0) == AutoPolicy::Action::Offer);
+    s.autoreply = false;
+    CHECK(p.decide(*r, s, 0) == AutoPolicy::Action::Offer);
+}
+
+TEST_CASE("the inbox C API", "[js8][inbox]") {
+    char path[] = "/tmp/js8_inbox_c_XXXXXX";
+    int  fd     = mkstemp(path);
+    REQUIRE(fd >= 0);
+    close(fd);
+    js8_inbox_t *b = js8_inbox_open(path);
+    REQUIRE(b);
+    js8_rx_msg_t m{};
+    snprintf(m.from, sizeof(m.from), "N0XYZ");
+    snprintf(m.text, sizeof(m.text), "N0XYZ: K2XYZ MSG MEET AT 1800Z");
+    m.to_me    = true;
+    m.checksum = 1;
+    char text[JS8_RX_TEXT_LEN];
+    REQUIRE(js8_msg_for_me(&m, "K2XYZ", text, sizeof(text)));
+    CHECK(std::string(text) == "MEET AT 1800Z");
+    m.checksum = -1;
+    CHECK_FALSE(js8_msg_for_me(&m, "K2XYZ", text, sizeof(text)));
+
+    int id = js8_inbox_add(b, "N0XYZ", "MEET AT 1800Z", 1000);
+    CHECK(id > 0);
+    CHECK(js8_inbox_unread(b) == 1);
+    js8_inbox_msg_t list[4];
+    REQUIRE(js8_inbox_list(b, list, 4) == 1);
+    CHECK(std::string(list[0].text) == "MEET AT 1800Z");
+    js8_inbox_mark_read(b, id);
+    CHECK(js8_inbox_unread(b) == 0);
+    js8_inbox_close(b);
+
+    b = js8_inbox_open(path); // saved on every change
+    CHECK(js8_inbox_count(b) == 1);
+    js8_inbox_delete(b, id);
+    CHECK(js8_inbox_count(b) == 0);
+    js8_inbox_close(b);
+    unlink(path);
 }

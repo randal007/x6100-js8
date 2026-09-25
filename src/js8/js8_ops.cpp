@@ -10,6 +10,7 @@
 #include "autoreply.hpp"
 #include "classify.hpp"
 #include "commands.hpp"
+#include "inbox.hpp"
 #include "qsolog.hpp"
 #include "stations.hpp"
 
@@ -125,6 +126,7 @@ Incoming to_incoming(const js8_rx_msg_t *m) {
     in.to_group       = m->to_group;
     in.heartbeat      = m->heartbeat;
     in.low_confidence = m->low_confidence;
+    in.checksum_ok    = m->checksum == 1;
     in.snr            = m->snr;
     return in;
 }
@@ -308,4 +310,80 @@ extern "C" const char *js8_log_band(uint64_t freq_hz) {
     static thread_local std::string band;
     band = adif_band(freq_hz);
     return band.c_str();
+}
+
+// ---- Inbox --------------------------------------------------------------
+
+struct js8_inbox {
+    Inbox       box;
+    std::string path;
+};
+
+static void fill_msg(const InboxMessage &m, js8_inbox_msg_t *out) {
+    std::memset(out, 0, sizeof(*out));
+    out->id     = m.id;
+    out->utc_ms = m.utc_ms;
+    copy_str(out->from, sizeof(out->from), m.from);
+    copy_str(out->text, sizeof(out->text), m.text);
+    out->read = m.read;
+}
+
+extern "C" js8_inbox_t *js8_inbox_open(const char *path) {
+    auto *b = new (std::nothrow) js8_inbox;
+    if (!b) return nullptr;
+    b->path = path ? path : "";
+    b->box.load(b->path);
+    return b;
+}
+
+extern "C" void js8_inbox_close(js8_inbox_t *b) {
+    delete b;
+}
+
+extern "C" int js8_inbox_add(js8_inbox_t *b, const char *from, const char *text, int64_t utc_ms) {
+    if (!b || !from || !text) return -1;
+    int id = b->box.add(from, text, utc_ms);
+    return b->box.save(b->path) ? id : -1;
+}
+
+extern "C" int js8_inbox_list(js8_inbox_t *b, js8_inbox_msg_t *out, int max) {
+    if (!b || !out) return 0;
+    int n = 0;
+    for (auto &m : b->box.list()) {
+        if (n >= max) break;
+        fill_msg(m, &out[n++]);
+    }
+    return n;
+}
+
+extern "C" bool js8_inbox_get(js8_inbox_t *b, int id, js8_inbox_msg_t *out) {
+    if (!b || !out) return false;
+    auto m = b->box.get(id);
+    if (!m) return false;
+    fill_msg(*m, out);
+    return true;
+}
+
+extern "C" void js8_inbox_mark_read(js8_inbox_t *b, int id) {
+    if (b && b->box.mark_read(id)) b->box.save(b->path);
+}
+
+extern "C" void js8_inbox_delete(js8_inbox_t *b, int id) {
+    if (b && b->box.remove(id)) b->box.save(b->path);
+}
+
+extern "C" int js8_inbox_unread(js8_inbox_t *b) {
+    return b ? b->box.unread() : 0;
+}
+
+extern "C" int js8_inbox_count(js8_inbox_t *b) {
+    return b ? (int)b->box.size() : 0;
+}
+
+extern "C" bool js8_msg_for_me(const js8_rx_msg_t *msg, const char *my_call, char *out, unsigned out_len) {
+    if (!msg || msg->tx || msg->checksum != 1 || !my_call) return false;
+    auto body = msg_body(msg->text, my_call);
+    if (!body) return false;
+    copy_str(out, out_len, *body);
+    return true;
 }

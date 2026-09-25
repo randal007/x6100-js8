@@ -26,6 +26,7 @@ struct Incoming {
     bool         to_group       = false;
     bool         heartbeat      = false; ///< "@HB HEARTBEAT ..." or an ack
     bool         low_confidence = false;
+    bool         checksum_ok    = false; ///< a buffered command (MSG) with a valid checksum
     int          snr            = 0;
     std::int64_t when_ms        = 0;
 };
@@ -37,7 +38,11 @@ struct AutoSettings {
     std::string my_call, my_grid, info, status;
 };
 
-enum class ReplyKind { Query, HeartbeatAck };
+/// Query: answer a question (AUTO sends, else offered). HeartbeatAck: needs
+/// AUTO, HB and HB ACK. MsgAck: "CALL ACK" for a message saved to the inbox,
+/// sent again for a resend (they missed our ACK). Suggest: only ever offered
+/// on Reply, e.g. "CALL QUERY MSG 3" when they say they hold a message.
+enum class ReplyKind { Query, HeartbeatAck, MsgAck, Suggest };
 
 struct AutoReply {
     std::string text; ///< e.g. "N0XYZ SNR -12"
@@ -47,8 +52,9 @@ struct AutoReply {
 };
 
 /// What desktop JS8Call would answer to `in`, ignoring the switches: queries
-/// to our call (SNR?, ?, GRID?, INFO?, STATUS?, HEARING?, AGN?) and others'
-/// heartbeats (an ack with their SNR). Nothing for groups, our own traffic,
+/// to our call (SNR?, ?, GRID?, INFO?, STATUS?, HEARING?, AGN?, QUERY MSGS -
+/// "NO", as we hold nobody's messages), others' heartbeats (an ack with their
+/// SNR), a MSG to us (ACK), and "MSG ID n" offers (suggest QUERY MSG n). Nothing for groups, our own traffic,
 /// low-confidence decodes, or queries we can't answer (no INFO text, etc.).
 /// `heard` is recently heard calls, most recent first (for HEARING?).
 std::optional<AutoReply> build_reply(const Incoming &in, const AutoSettings &s, const std::vector<std::string> &heard,

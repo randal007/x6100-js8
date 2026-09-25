@@ -67,8 +67,8 @@ int ui_popup_has(const char *text) {
     lv_obj_t *list = lv_obj_get_parent(f);
     for (uint32_t i = 0; i < lv_obj_get_child_cnt(list); i++) {
         lv_obj_t  *c = lv_obj_get_child(list, i);
-        lv_obj_t  *l = lv_obj_check_type(c, &lv_label_class) ? c : lv_obj_get_child(c, 0);
-        const char *t = l && lv_obj_check_type(l, &lv_label_class) ? lv_label_get_text(l) : NULL;
+        lv_obj_t  *l = lv_obj_has_class(c, &lv_label_class) ? c : lv_obj_get_child(c, 0);
+        const char *t = l && lv_obj_has_class(l, &lv_label_class) ? lv_label_get_text(l) : NULL;
         if (t && strstr(t, text)) return 1;
     }
     return 0;

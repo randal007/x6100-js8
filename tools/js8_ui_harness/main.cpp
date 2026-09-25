@@ -154,6 +154,7 @@ int main() {
     lv_disp_drv_register(&drv);
 
     ui_init();
+    if (getenv("ONLY_INBOX")) unlink(JS8_INBOX_PATH); // before the dialog loads it
     ui_open();
     if (getenv("ONLY_GEN")) {
         // GEN / APP on the radio close the app with a list popup open.
@@ -407,6 +408,129 @@ int main() {
         dialog_destruct();
         pump(300);
         printf("[log] closed with the log open: running=%d\n", ui_running());
+        return 0;
+    }
+    if (getenv("ONLY_INBOX")) {
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        pump(300);
+        // A message for us, AUTO off: saved, ACK offered on Reply.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ MSG MEET AT THE PARK 1800Z", 1320, 0.05f}});
+        ui_page(3);
+        printf("[inbox] button: '%s' (want Inbox / 1 new)\n", ui_button_label(4));
+        ui_select_row_from("N0XYZ");
+        ui_page(1);
+        ui_press(2); // Reply
+        pump(200);
+        printf("[inbox] Reply offers: '%s' (want N0XYZ ACK)\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(300);
+
+        // The Inbox: straight to the unread message.
+        ui_page(3);
+        ui_press(4);
+        pump(300);
+        printf("[inbox] list focused '%s'\n", ui_focused_text());
+        screenshot("30_inbox_list.ppm");
+        ui_click_focused();
+        pump(300);
+        printf("[inbox] message view focused '%s' (want Reply: MSG to N0XYZ), shows text %d\n", ui_focused_text(),
+               ui_popup_has("MEET AT THE PARK 1800Z"));
+        screenshot("31_inbox_message.ppm");
+        printf("[inbox] after reading: '%s' (want Inbox)\n", ui_button_label(4));
+        ui_key(LV_KEY_ESC); // back to the list
+        pump(300);
+        printf("[inbox] ESC: back in the list, focused '%s'\n", ui_focused_text());
+        ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // the message again
+        pump(300);
+        ui_click_focused(); // Reply
+        pump(300);
+        printf("[inbox] reply prefill '%s' (want N0XYZ MSG ), focus %s\n", ui_compose_text(), ui_focus_desc());
+        ui_compose_append("SEE YOU THERE");
+        ui_compose_enter();
+        wait_tx();
+        printf("[inbox] sent: %d\n", ui_list_has("N0XYZ MSG SEE YOU THERE"));
+
+        // A resend (they missed our ACK) isn't a second message.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ MSG MEET AT THE PARK 1800Z", 1320, 0.05f}});
+        ui_page(3);
+        printf("[inbox] after resend: '%s' (want Inbox: no new)\n", ui_button_label(4));
+
+        // They hold a message for us: Reply offers to fetch it.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ YES MSG ID 3", 1320, 0.05f}});
+        ui_select_row_from("N0XYZ");
+        ui_page(1);
+        ui_press(2);
+        pump(200);
+        printf("[inbox] Reply offers: '%s' (want N0XYZ QUERY MSG 3)\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(300);
+
+        // Query list: Any messages?
+        ui_page(2);
+        ui_press(3);
+        pump(200);
+        for (int i = 0; i < 12; i++) ui_key(LV_KEY_RIGHT);
+        printf("[inbox] query item 13: '%s' (want Any messages?)\n", ui_focused_text());
+        ui_click_focused();
+        wait_tx();
+        printf("[inbox] QUERY MSGS sent: %d\n", ui_list_has("N0XYZ QUERY MSGS"));
+        ui_press(3);
+        pump(200);
+        for (int i = 0; i < 10; i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // Message...
+        pump(300);
+        printf("[inbox] Message... prefill '%s', focus %s\n", ui_compose_text(), ui_focus_desc());
+        ui_compose_cancel();
+        pump(300);
+
+        // AUTO on: the ACK goes by itself.
+        ui_page(4);
+        ui_press(1);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ MSG SECOND MESSAGE", 1320, 0.05f}});
+        wait_tx();
+        printf("[inbox] AUTO sent ACK: %d\n", ui_list_has("N0XYZ ACK"));
+        // A MSG while the Inbox is open: the ACK waits until it closes.
+        ui_page(3);
+        ui_press(4);
+        pump(200);
+        feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ MSG WHILE YOU READ", 1700, 0.05f}});
+        printf("[inbox] with the Inbox open, nothing sent yet: %d\n", ui_list_has("W1ABC ACK"));
+        ui_press(4); // close it
+        wait_tx();
+        printf("[inbox] after closing, ACK sent: %d\n", ui_list_has("W1ABC ACK"));
+        ui_page(4);
+        ui_press(1);
+
+        // Delete the first message; close with the inbox open.
+        ui_page(3);
+        ui_press(4);
+        pump(300);
+        ui_key(LV_KEY_RIGHT); // from the unread one to the older, read one
+        printf("[inbox] on '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        ui_key(LV_KEY_RIGHT);
+        printf("[inbox] on '%s' (want Delete)\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[inbox] after delete: list title has 2 messages %d\n", ui_popup_has("Inbox: 2 messages,"));
+        FILE *f = fopen(JS8_INBOX_PATH, "r");
+        char  line[512];
+        while (f && fgets(line, sizeof(line), f)) printf("[inbox file] %s", line);
+        if (f) fclose(f);
+        dialog_destruct();
+        pump(300);
+        printf("[inbox] closed with the inbox open: running=%d\n", ui_running());
         return 0;
     }
     if (getenv("ONLY_QSOFREQ")) {

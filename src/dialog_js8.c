@@ -64,6 +64,9 @@
 #ifndef JS8_TEXTS_PATH
 #define JS8_TEXTS_PATH   "/mnt/js8_texts.txt" /* DATA partition; editable on a PC */
 #endif
+#ifndef JS8_INBOX_PATH
+#define JS8_INBOX_PATH   "/mnt/js8_inbox.txt"   /* one message per line */
+#endif
 #ifndef JS8_LOG_PATH
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
@@ -147,6 +150,11 @@ static void        log_close(void);
 static void        log_offer(const char *call);
 static void        log_list_open(void);
 static void        log_refresh(void);
+static const char *inbox_label_getter(void);
+static void        inbox_cb(button_data_t *btn);
+static void        inbox_close(void);
+static void        inbox_received(const js8_rx_msg_t *m);
+static void        msg_compose(const char *call, const char *kind);
 static const char *act_label_getter(void);
 static void        act_cb(button_data_t *btn);
 static void        act_hold_cb(button_data_t *btn);
@@ -178,6 +186,8 @@ static int            st_count;
 static lv_obj_t      *query_list;      /* Query popup, when open */
 static lv_obj_t      *aprs_list;       /* APRS popup, when open */
 static lv_obj_t      *log_list;        /* Log QSO popup, when open */
+static lv_obj_t      *inbox_list;      /* Inbox popup (list or one message), when open */
+static js8_inbox_t   *inbox;           /* MSGs to us, JS8_INBOX_PATH */
 static bool           st_worked[MAX_ROWS]; /* in the log already (st_rows) */
 static js8_qsos_t    *qsos;            /* QSOs, for the log */
 static js8_log_entry_t log_entry;      /* the entry the Log popup shows */
@@ -202,6 +212,8 @@ static struct {
 } offer; /* AUTO off: a reply waiting for Reply, like desktop's outgoing box */
 static js8_auto_result_t pending_auto;       /* arrived while TX was busy */
 static bool              pending_auto_valid;
+static int64_t           pending_auto_ms;    /* when it was put off */
+#define PENDING_AUTO_MS  (2 * 60 * 1000)     /* then it's too late to answer */
 static int               edit_target;        /* 0 compose, else an edit_t */
 static lv_obj_t         *texts_list;
 
@@ -280,10 +292,11 @@ static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:5)", .p
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
+static button_data_t btn_inbox     = {.type = BTN_TEXT_FN, .label_fn = inbox_label_getter, .press = inbox_cb};
 
 static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn_stop_tx}};
 static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_clear}};
-static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations}};
+static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations, &btn_inbox}};
 
 static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:5)", .press = js8_next_page_cb, .next = &page_5};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
@@ -444,6 +457,7 @@ static void add_message(const js8_rx_msg_t *m) {
         sync_ms[sync_head] = now_wall_ms();
         sync_head          = (sync_head + 1) % SYNC_DTS;
     }
+    if (!m->tx) inbox_received(m);
     if (!m->tx) handle_incoming(m);
     char ended[JS8_RX_CALL_LEN];
     if (!m->tx && js8_qsos_received(qsos, m, params.callsign.x, now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
@@ -727,6 +741,12 @@ static void update_status(void) {
             strcat(flags, hb);
         }
         if (params.js8_hb_ack.x && params.js8_auto.x && params.js8_hb.x) strcat(flags, "ACK  ");
+    }
+    int unread = js8_inbox_unread(inbox);
+    if (unread) {
+        char m[24];
+        snprintf(m, sizeof(m), "MSG %d NEW  ", unread);
+        strcat(flags, m);
     }
     lv_label_set_text_fmt(status, "%s%s%s  %02d:%02d:%02dZ  total %u", flags, testing ? "TEST WAV  " : "",
                           cfg_digital_label_get(), tm.tm_hour, tm.tm_min, tm.tm_sec, hist_count);
@@ -1415,6 +1435,7 @@ static void construct_cb(lv_obj_t *parent) {
     tx_start();
     if (!stations) stations = js8_stations_create();
     if (!qsos) qsos = js8_qsos_create();
+    if (!inbox) inbox = js8_inbox_open(JS8_INBOX_PATH);
     if (!autop) autop = js8_auto_create();
     user_touch();
     load_texts();
@@ -1458,6 +1479,10 @@ static void destruct_cb(void) {
     if (log_list) {
         lv_obj_del(log_list);
         log_list = NULL;
+    }
+    if (inbox_list) {
+        lv_obj_del(inbox_list);
+        inbox_list = NULL;
     }
     hb_adjusting = false;
     radio_set_pwr(param_f_get(cfg_pwr));
@@ -1741,6 +1766,7 @@ static bool popup_guard(void) {
     texts_close();
     aprs_close();
     log_close();
+    inbox_close();
     msg_update_text_fmt("List closed");
     return true;
 }
@@ -1752,6 +1778,7 @@ static void js8_next_page_cb(button_data_t *btn) {
         texts_close();
         aprs_close();
         log_close();
+        inbox_close();
     }
     button_next_page_cb(btn);
 }
@@ -1772,6 +1799,30 @@ static lv_obj_t *list_add_item(lv_obj_t *list, const char *label) {
     lv_obj_clear_flag(b, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
     lv_obj_add_event_cb(b, list_item_focused_cb, LV_EVENT_FOCUSED, NULL);
     return b;
+}
+
+/* The Query list's message items: 0 MSG..., 1 MSG TO:..., 2 QUERY MSGS. */
+static void query_msg_cb(lv_event_t *e) {
+    int   which = (int)(intptr_t)lv_event_get_user_data(e);
+    char  call[JS8_RX_CALL_LEN];
+    float freq;
+    int   snr;
+    bool  have = selected_station(call, sizeof(call), &freq, &snr);
+    if (which == 2 || !have) {
+        query_close();
+        if (!have) return;
+        apply_hold(freq);
+        char text[JS8_RX_CALL_LEN + 16];
+        snprintf(text, sizeof(text), "%s QUERY MSGS", call);
+        tx_queue(text);
+        return;
+    }
+    /* Into the keyboard: see texts_item_cb. */
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(query_list); i++) lv_group_remove_obj(lv_obj_get_child(query_list, i));
+    lv_obj_del_async(query_list);
+    query_list = NULL;
+    apply_hold(freq);
+    msg_compose(call, which == 0 ? "MSG " : "MSG TO:");
 }
 
 static void query_close_cb(lv_event_t *e) {
@@ -1816,6 +1867,14 @@ static void query_cb(button_data_t *btn) {
         lv_obj_add_event_cb(b, query_key_cb, LV_EVENT_KEY, NULL);
         lv_group_add_obj(keyboard_group, b);
         if (!first) first = b;
+    }
+    static const char *const msg_items[] = {"Message...", "Message via them...", "Any messages?"};
+    for (int i = 0; i < 3; i++) {
+        lv_obj_t *b = list_add_item(query_list, msg_items[i]);
+        lv_obj_set_style_text_color(b, lv_color_hex(0x80ff80), 0);
+        lv_obj_add_event_cb(b, query_msg_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(b, query_key_cb, LV_EVENT_KEY, NULL);
+        lv_group_add_obj(keyboard_group, b);
     }
     /* Last, so one step back from the first item (the group wraps). */
     lv_obj_t *close = list_add_item(query_list, "Close");
@@ -1864,6 +1923,7 @@ static void auto_send(const js8_auto_result_t *r) {
     if (!allowed || js8_auto_idle(autop, now)) return;
 
     if (js8_tx_busy(tx) || composing || any_popup()) {
+        if (!pending_auto_valid || strcmp(pending_auto.text, r->text) != 0) pending_auto_ms = now;
         pending_auto       = *r; /* newest wins */
         pending_auto_valid = true;
         return;
@@ -1917,8 +1977,16 @@ static void handle_incoming(const js8_rx_msg_t *m) {
         snprintf(offer.call, sizeof(offer.call), "%s", r.to);
         snprintf(offer.text, sizeof(offer.text), "%s", r.text);
         offer.ms = now_wall_ms();
-        msg_update_text_fmt("%s asked %s - select it and press Reply to answer", r.to, r.command);
-        add_info_row("%s asked %s: Reply sends \"%s\"", r.to, r.command, r.text);
+        if (strcmp(r.command, "MSG") == 0) {
+            msg_update_text_fmt("Message from %s - select it and press Reply to send ACK", r.to);
+            add_info_row("%s: Reply sends \"%s\" (AUTO sends it by itself)", r.to, r.text);
+        } else if (strcmp(r.command, "MSG ID") == 0) {
+            msg_update_text_fmt("%s holds a message for you - select it and press Reply to fetch it", r.to);
+            add_info_row("%s holds a message for you: Reply sends \"%s\"", r.to, r.text);
+        } else {
+            msg_update_text_fmt("%s asked %s - select it and press Reply to answer", r.to, r.command);
+            add_info_row("%s asked %s: Reply sends \"%s\"", r.to, r.command, r.text);
+        }
         break;
     default:
         break;
@@ -1928,6 +1996,15 @@ static void handle_incoming(const js8_rx_msg_t *m) {
 /* Once a second: send a heartbeat when one is due. */
 static void hb_tick(void) {
     if (hb_adjusting && now_wall_ms() - hb_adjust_ms > HB_ADJUST_MS) hb_adjust_end();
+    /* An automatic reply put off by a list or the keyboard: send it once
+     * they close (after a transmission, ui_tx_done does the same). */
+    if (pending_auto_valid) {
+        if (now_wall_ms() - pending_auto_ms > PENDING_AUTO_MS) pending_auto_valid = false;
+        else if (!js8_tx_busy(tx) && !composing && !any_popup()) {
+            pending_auto_valid = false;
+            auto_send(&pending_auto);
+        }
+    }
     if (!params.js8_hb.x) {
         hb_next_ms = 0;
         return;
@@ -2385,7 +2462,7 @@ static void aprs_cb(button_data_t *btn) {
  * logged without Save. */
 
 static bool any_popup(void) {
-    return query_list || texts_list || aprs_list || log_list;
+    return query_list || texts_list || aprs_list || log_list || inbox_list;
 }
 
 static bool find_station(const char *call, js8_station_t *out) {
@@ -2717,4 +2794,241 @@ static void act_hold_cb(button_data_t *btn) {
     edit_target = v == 1 ? EDIT_POTA_REF : EDIT_SOTA_REF;
     compose_open(v == 1 ? last_pota : last_sota);
     lv_group_set_editing(keyboard_group, true);
+}
+
+/* ---- Inbox and messages -------------------------------------------------- */
+
+/* Like desktop JS8Call: "CALL MSG text" to us (checksum good) goes to the
+ * inbox, answered with "CALL ACK" (sent by AUTO, else offered on Reply).
+ * The Query list sends messages: MSG for their inbox, MSG TO: to leave one
+ * at their station for someone else, QUERY MSGS to ask what they hold. */
+
+#define INBOX_ROWS 50
+
+static int inbox_view_id; /* the message shown, 0: the list */
+
+static void inbox_refresh_button(void) {
+    if (btn_inbox.disp_btn) buttons_refresh(&btn_inbox);
+}
+
+static const char *inbox_label_getter(void) {
+    static char label[24];
+    int         unread = js8_inbox_unread(inbox);
+    if (unread) snprintf(label, sizeof(label), "Inbox\n%d new", unread);
+    else snprintf(label, sizeof(label), "Inbox");
+    return label;
+}
+
+static void inbox_received(const js8_rx_msg_t *m) {
+    char text[JS8_RX_TEXT_LEN];
+    if (!inbox || !js8_msg_for_me(m, params.callsign.x, text, sizeof(text))) return;
+    int  before = js8_inbox_count(inbox);
+    int  id     = js8_inbox_add(inbox, m->from, text, now_wall_ms());
+    bool resend = js8_inbox_count(inbox) == before;
+    if (id < 0) msg_update_text_fmt("Message from %s - can't save %s", m->from, JS8_INBOX_PATH);
+    else if (!resend) msg_update_text_fmt("New message from %s - Inbox on page 3", m->from);
+    if (!resend) add_info_row("Message from %s in the Inbox: %s", m->from, text);
+    inbox_refresh_button();
+    update_status();
+}
+
+static void inbox_close(void) {
+    if (!inbox_list) return;
+    lv_obj_del_async(inbox_list); /* often called from one of its buttons */
+    inbox_list = NULL;
+    if (table && !composing) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+/* Leave the popup from one of its own buttons, going somewhere else (the
+ * keyboard, or another view): buttons out of the group now, list later. */
+static void inbox_leave(void) {
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(inbox_list); i++) lv_group_remove_obj(lv_obj_get_child(inbox_list, i));
+    lv_obj_del_async(inbox_list);
+    inbox_list = NULL;
+}
+
+/* "CALL MSG " / "CALL MSG TO:" in the keyboard; kind is "MSG " or "MSG TO:". */
+static void msg_compose(const char *call, const char *kind) {
+    char prefill[JS8_RX_CALL_LEN + 12];
+    snprintf(prefill, sizeof(prefill), "%s %s", call, kind);
+    compose_open(prefill);
+    lv_group_set_editing(keyboard_group, true);
+    if (strcmp(kind, "MSG TO:") == 0)
+        msg_update_text_fmt("Left at %s for someone: type their call, a space, the message", call);
+    else msg_update_text_fmt("Message for %s's inbox: type it and press Enter", call);
+}
+
+static void inbox_show(int id);
+
+static void inbox_key_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    if (key == LV_KEY_ESC) {
+        if (inbox_view_id) { /* ESC in a message: back to the list */
+            inbox_leave();
+            inbox_show(0);
+        } else {
+            inbox_close();
+        }
+    } else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
+    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+}
+
+typedef enum { INBOX_NEW = -1, INBOX_CLOSE = -2, INBOX_BACK = -3, INBOX_REPLY = -4, INBOX_DELETE = -5 } inbox_action_t;
+
+static void inbox_item_cb(lv_event_t *e) {
+    int action = (int)(intptr_t)lv_event_get_user_data(e);
+    int viewed = inbox_view_id;
+    switch (action) {
+    case INBOX_CLOSE:
+        inbox_close();
+        return;
+    case INBOX_BACK:
+        inbox_leave();
+        inbox_show(0);
+        return;
+    case INBOX_DELETE:
+        js8_inbox_delete(inbox, viewed);
+        msg_update_text_fmt("Message deleted");
+        inbox_leave();
+        inbox_show(0);
+        inbox_refresh_button();
+        return;
+    case INBOX_REPLY: {
+        js8_inbox_msg_t m;
+        if (!js8_inbox_get(inbox, viewed, &m)) return;
+        inbox_leave();
+        msg_compose(m.from, "MSG ");
+        return;
+    }
+    case INBOX_NEW: {
+        char  call[JS8_RX_CALL_LEN];
+        float freq;
+        int   snr;
+        inbox_leave();
+        if (selected_station(call, sizeof(call), &freq, &snr)) {
+            apply_hold(freq);
+            msg_compose(call, "MSG ");
+        } else {
+            compose_open(NULL);
+            lv_group_set_editing(keyboard_group, true);
+            msg_update_text_fmt("Type their call, then MSG and the message");
+        }
+        return;
+    }
+    default: /* a message */
+        inbox_leave();
+        inbox_show(action);
+        return;
+    }
+}
+
+static lv_obj_t *inbox_add(const char *label, int action) {
+    lv_obj_t *b = list_add_item(inbox_list, label);
+    lv_obj_add_event_cb(b, inbox_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)action);
+    lv_obj_add_event_cb(b, inbox_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, b);
+    /* Long lines end in "..." rather than scrolling, which redraws the list. */
+    lv_label_set_long_mode(lv_obj_get_child(b, 0), LV_LABEL_LONG_DOT);
+    return b;
+}
+
+static void utc_label(int64_t ms, char *buf, size_t size, const char *fmt) {
+    time_t    t = (time_t)(ms / 1000);
+    struct tm tm;
+    gmtime_r(&t, &tm);
+    strftime(buf, size, fmt, &tm);
+}
+
+/* The list (id 0) or one message. */
+static void inbox_show(int id) {
+    inbox_view_id = id;
+    lv_group_remove_obj(table);
+    inbox_list = lv_list_create(dialog.obj);
+    lv_obj_set_size(inbox_list, 600, WF_HEIGHT - 10);
+    lv_obj_align(inbox_list, LV_ALIGN_TOP_RIGHT, -20, 18);
+    lv_obj_set_style_text_font(inbox_list, &sony_24, 0);
+    lv_obj_set_style_bg_color(inbox_list, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_border_color(inbox_list, lv_color_white(), 0);
+
+    char      line[JS8_RX_TEXT_LEN + 48];
+    lv_obj_t *first = NULL;
+    if (id) {
+        js8_inbox_msg_t m;
+        if (!js8_inbox_get(inbox, id, &m)) {
+            inbox_view_id = 0;
+            lv_obj_del(inbox_list);
+            inbox_show(0);
+            return;
+        }
+        js8_inbox_mark_read(inbox, id);
+        inbox_refresh_button();
+        update_status();
+        char when[32];
+        utc_label(m.utc_ms, when, sizeof(when), "%d %b %H:%M UTC");
+        snprintf(line, sizeof(line), "From %s  %s", m.from, when);
+        lv_obj_t *t = lv_list_add_text(inbox_list, line);
+        lv_obj_set_style_text_font(t, &sony_22, 0);
+        lv_obj_t *body = lv_list_add_text(inbox_list, m.text);
+        lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_bg_color(body, lv_color_hex(0x202020), 0);
+        lv_obj_set_style_text_color(body, lv_color_white(), 0);
+        lv_obj_set_style_pad_ver(body, 8, 0);
+        snprintf(line, sizeof(line), "Reply: MSG to %s", m.from);
+        first = inbox_add(line, INBOX_REPLY);
+        inbox_add("Delete", INBOX_DELETE);
+        lv_obj_t *back = inbox_add("Back", INBOX_BACK);
+        lv_obj_set_style_text_color(back, lv_color_hex(0xffc040), 0);
+    } else {
+        static js8_inbox_msg_t rows[INBOX_ROWS];
+        int                    n = js8_inbox_list(inbox, rows, INBOX_ROWS);
+        snprintf(line, sizeof(line), "Inbox: %d message%s, %d new", js8_inbox_count(inbox),
+                 js8_inbox_count(inbox) == 1 ? "" : "s", js8_inbox_unread(inbox));
+        lv_obj_t *t = lv_list_add_text(inbox_list, line);
+        lv_obj_set_style_text_font(t, &sony_22, 0);
+
+        char  call[JS8_RX_CALL_LEN];
+        float freq;
+        int   snr;
+        if (selected_station(call, sizeof(call), &freq, &snr)) snprintf(line, sizeof(line), "New message to %s...", call);
+        else snprintf(line, sizeof(line), "New message...");
+        first = inbox_add(line, INBOX_NEW);
+        lv_obj_set_style_text_color(first, lv_color_hex(0x80ff80), 0);
+
+        lv_obj_t *oldest_new = NULL;
+        for (int i = 0; i < n; i++) {
+            char when[16];
+            utc_label(rows[i].utc_ms, when, sizeof(when), "%d %b %H:%M");
+            snprintf(line, sizeof(line), "%s%s  %s  %s", rows[i].read ? "" : "* ", when, rows[i].from, rows[i].text);
+            lv_obj_t *b = inbox_add(line, rows[i].id);
+            if (!rows[i].read) {
+                lv_obj_set_style_text_color(b, lv_color_hex(0xffe080), 0);
+                oldest_new = b;
+            }
+        }
+        if (n == 0) {
+            t = lv_list_add_text(inbox_list, "No messages yet");
+            lv_obj_set_style_text_font(t, &sony_22, 0);
+        }
+        lv_obj_t *close = inbox_add("Close", INBOX_CLOSE);
+        lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
+        if (oldest_new) first = oldest_new; /* straight to what's unread */
+    }
+    lv_group_set_editing(keyboard_group, false);
+    lv_group_focus_obj(first);
+}
+
+static void inbox_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (inbox_list) { /* Inbox again closes it */
+        inbox_close();
+        return;
+    }
+    if (popup_guard()) return;
+    if (composing || !inbox) return;
+    inbox_show(0);
 }

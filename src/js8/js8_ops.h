@@ -176,6 +176,36 @@ bool js8_log_append(const char *path, const js8_log_entry_t *e, char *err, unsig
 /* "40m", or "" outside the bands. */
 const char *js8_log_band(uint64_t freq_hz);
 
+/* ---- Inbox ------------------------------------------------------------ */
+
+typedef struct {
+    int     id;
+    int64_t utc_ms;
+    char    from[JS8_RX_CALL_LEN];
+    char    text[JS8_RX_TEXT_LEN];
+    bool    read;
+} js8_inbox_msg_t;
+
+typedef struct js8_inbox js8_inbox_t;
+
+/* Loads `path` (missing = empty); every change is saved back to it. */
+js8_inbox_t *js8_inbox_open(const char *path);
+void         js8_inbox_close(js8_inbox_t *b);
+/* Save a message; returns its id (a resend within 30 min keeps the first),
+ * or -1 if the file can't be written (the message is still in memory). */
+int  js8_inbox_add(js8_inbox_t *b, const char *from, const char *text, int64_t utc_ms);
+/* Up to max messages, newest first; returns the count. */
+int  js8_inbox_list(js8_inbox_t *b, js8_inbox_msg_t *out, int max);
+bool js8_inbox_get(js8_inbox_t *b, int id, js8_inbox_msg_t *out);
+void js8_inbox_mark_read(js8_inbox_t *b, int id);
+void js8_inbox_delete(js8_inbox_t *b, int id);
+int  js8_inbox_unread(js8_inbox_t *b);
+int  js8_inbox_count(js8_inbox_t *b);
+
+/* A message for the inbox: "FROM: MYCALL MSG text" with a valid checksum.
+ * The text goes to out. */
+bool js8_msg_for_me(const js8_rx_msg_t *msg, const char *my_call, char *out, unsigned out_len);
+
 #define JS8_HB_MIN_INTERVAL     5
 #define JS8_HB_MAX_INTERVAL     30
 #define JS8_HB_DEFAULT_INTERVAL 30

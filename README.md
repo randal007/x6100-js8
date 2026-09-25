@@ -38,11 +38,12 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | 1 | **Stop TX** | Unkeys at once and drops the rest of the message. ESC does the same; the next ESC closes the app. |
 | 2 | **CQ** | Sends `CQ CQ CQ <grid>`. |
 | 2 | **Heartbeat** | Sends one heartbeat (`CALL: HEARTBEAT FN42`) at a free spot in the 500–1000 Hz heartbeat sub-band. Your chat offset doesn't move. |
-| 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR (how you hear them), GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73. **Close** (last; one knob step back from the top) or Query > again closes it. |
+| 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR (how you hear them), GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, then **Message…**, **Message via them…** and **Any messages?** (see [Messages](#messages)). **Close** (last; one knob step back from the top) or Query > again closes it. |
 | 2 | Clear | Clear the list, the station list and any half-received messages. |
 | 3 | Time Sync | Correct the clock from the last 2 minutes of decodes (their median DT), like desktop JS8Call's drift tool, and save it to the radio's RTC. Needs 3+ decodes, so the clock must already be within a couple of seconds: set it roughly in SETTINGS first. |
 | 3 | **Hold: Off/On** | Off (default): Reply and Query move your offset to the station's first. On: replies go out on your own offset. |
 | 3 | **Show Stations / Messages** | Switch the list to one row per station, like desktop JS8Call's Call Activity. |
+| 3 | **Inbox (N new)** | Messages sent to you with `MSG`: read, reply, delete, or write a new one. See [Messages](#messages). |
 | 4 | **AUTO: Off/On** | Answer SNR?, GRID?, INFO?, STATUS?, HEARING? and AGN? sent to your call. Off (default): the answer is offered on Reply instead. |
 | 4 | **HB: Off/N min** | Send heartbeats every N minutes. Switching it on lets the main knob set 5–30 min; press HB again (or wait 8 s) to finish, press once more to turn it off. Holding HB changes the interval without switching. |
 | 4 | **HB ACK** | Answer others' heartbeats with how you hear them. Acts only while AUTO and HB are on, as on desktop. |
@@ -100,6 +101,42 @@ system clock, 10 a second. (LVGL's own timers run slow and caught up with
 two-row jumps, which showed as a stutter.)
 
 ![Directed view in a QSO: the selected station's untagged reply still shows](docs/screenshots/js8_21_directed_qso.png)
+
+## Messages
+
+JS8's store-and-forward messages, as desktop JS8Call handles them.
+
+**Receiving.** A `MSG` sent to your call (`N0XYZ: VE7NHW MSG MEET AT 1800Z`)
+goes to the **Inbox** once its checksum checks out. The status line shows
+`MSG 1 NEW` and page 3's button shows *Inbox / 1 new*. The sender expects
+`N0XYZ ACK`: with AUTO on it goes out by itself, otherwise select them and
+press **Reply**, which has it ready. A resend (they missed your ACK) gets
+ACKed again but isn't saved twice.
+
+**The Inbox** opens on the oldest unread message, marked `*`. Press a
+message to read it all. **Reply** writes a `MSG` back to them, **Delete**
+removes it, and **Back** or ESC returns to the list. **New message to …**
+at the top writes to the selected station. Messages are kept in
+`/mnt/js8_inbox.txt` on the SD card, one per line, readable on a PC; the
+newest 200 are kept.
+
+**Sending,** from the Query list with a station selected:
+
+| Item | Sends | For |
+|---|---|---|
+| Message… | `N0XYZ MSG <your text>` | their inbox; they ACK it |
+| Message via them… | `N0XYZ MSG TO:W1ABC <your text>` | they hold it until W1ABC asks for it |
+| Any messages? | `N0XYZ QUERY MSGS` | they answer `YES MSG ID 3` or `NO` |
+
+When a station says it holds a message for you (`YES MSG ID 3`, or `MSG ID
+3` on a heartbeat ack), **Reply** has `N0XYZ QUERY MSG 3` ready to fetch
+it; the message then arrives as a `MSG` for your inbox. With AUTO on, a
+`QUERY MSGS` to you is answered `NO`: the radio doesn't hold messages for
+other stations.
+
+| The Inbox | Reading a message |
+|---|---|
+| ![Inbox](docs/screenshots/js8_30_inbox.png) | ![A message](docs/screenshots/js8_31_inbox_message.png) |
 
 ## Logging
 
@@ -166,7 +203,7 @@ cursor where you type.
   APRSLink) come back over APRS, not JS8.
 - With a GPS plugged into the radio, **Spot GPS position** sends a
   10-character grid; gateways accept grids of any length.
-- While a list (Query, Texts…, APRS, Log) is open, the other bottom buttons only
+- While a list (Query, Texts…, APRS, Log, Inbox) is open, the other bottom buttons only
   close it, so it can't be left behind; press again to do the thing.
 
 | APRS list | POTA spot, typing the park |
@@ -226,7 +263,8 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [x] Opt-in auto-reply, heartbeat interval, heartbeat acks, idle watchdog (T4)
 - [x] Time Sync from decode DTs, APRS page (grid, POTA, SOTA, SMS, email, Winlink)
 - [x] ADIF logging with a log prompt, POTA/SOTA activation fields (T5)
-- [ ] An inbox for MSG (T5)
+- [x] Inbox for MSG with ACKs, MSG / MSG TO: / QUERY MSGS from the Query list (T5)
+- [ ] Hold messages for other stations (answer QUERY MSGS / QUERY MSG from a store)
 - [x] GPS-fed grid for APRS spots
 - [x] Waterfall paced by the system clock (no catch-up jumps)
 - [ ] Fast / Turbo / Slow submodes
@@ -235,7 +273,7 @@ the Android port's core was chosen over porting desktop JS8Call.
 
 | What | How |
 |---|---|
-| Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign and gap fill, auto-reply rules, QSO tracking and ADIF records, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
+| Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign and gap fill, auto-reply rules, QSO tracking and ADIF records, the inbox, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
 | The real UI on a PC | [tools/js8_ui_harness](tools/js8_ui_harness): the actual dialog on stock LVGL with a simulated busy band, in real time, under ASan/UBSan. |
 | On the radio, without RF | [test-audio](test-audio) (the Test WAV button was removed once on-air receive worked; the library's WAV mode remains). |
 | Radio compiler | Everything JS8 compiles cleanly with the image's GCC 12.3 (Cortex-A7, NEON) against Boost 1.80. |
