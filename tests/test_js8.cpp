@@ -457,3 +457,232 @@ TEST_CASE("test mode plays a 12 kHz WAV through the decoder", "[js8][wav][.slow]
     js8_rx_destroy(rx);
     std::remove(path.c_str());
 }
+
+/* ---- Transmit (phase T1) ---------------------------------------------- */
+
+#include "tx.hpp"
+
+TEST_CASE("plan_message builds JS8Call's frames and previews what others see", "[js8][tx]") {
+    struct Case {
+        const char *typed, *preview;
+    };
+    for (auto [typed, preview] : std::vector<Case>{
+             {"k2xyz snr?", "W1ABC: K2XYZ SNR?"},
+             {"K2XYZ   HELLO FROM THE X6100", "W1ABC: K2XYZ HELLO FROM THE X6100"},
+             {"CQ CQ CQ FN42", "W1ABC: @ALLCALL CQ CQ CQ FN42"},
+             {"@ALLCALL QRV ON 20M", "W1ABC: @ALLCALL QRV ON 20M"},
+             {"K2XYZ MSG SEE YOU TOMORROW", "W1ABC: K2XYZ MSG SEE YOU TOMORROW"},
+         }) {
+        auto plan = plan_message("w1abc", "fn42", typed);
+        INFO(typed << " -> " << plan.preview << " / " << plan.error);
+        REQUIRE(plan.ok());
+        CHECK(plan.preview == preview);
+    }
+}
+
+TEST_CASE("untargeted free text is sent with our callsign", "[js8][tx]") {
+    auto plan = plan_message("W1ABC", "FN42", "JUST TESTING THE NEW RADIO");
+    REQUIRE(plan.ok());
+    CHECK(plan.preview.find("W1ABC") != std::string::npos);
+    CHECK(plan.preview.find("JUST TESTING THE NEW RADIO") != std::string::npos);
+}
+
+TEST_CASE("plan_message refuses what it can't send", "[js8][tx]") {
+    CHECK_FALSE(plan_message("", "FN42", "K2XYZ SNR?").ok());
+    CHECK_FALSE(plan_message("W1ABC", "FN42", "   ").ok());
+    auto bad = plan_message("W1ABC", "FN42", "K2XYZ 50% OFF");
+    CHECK_FALSE(bad.ok());
+    CHECK(bad.error.find('%') != std::string::npos);
+    std::string longtext(400, 'A');
+    CHECK_FALSE(plan_message("W1ABC", "FN42", longtext).ok());
+}
+
+TEST_CASE("next_tx_start_ms follows JS8 slot timing", "[js8][tx]") {
+    const std::int64_t slot = 1'700'000'010'000; // a 15 s boundary
+    REQUIRE(slot % 15000 == 0);
+    CHECK(next_tx_start_ms(slot) == slot + 500);            // still in time for this slot
+    CHECK(next_tx_start_ms(slot + 499) == slot + 500);
+    CHECK(next_tx_start_ms(slot + 500) == slot + 15500);    // too late: next slot
+    CHECK(next_tx_start_ms(slot + 14999) == slot + 15500);
+}
+
+TEST_CASE("TX waveform stays in its channel and at full scale", "[js8][tx]") {
+    auto plan = plan_message("W1ABC", "FN42", "K2XYZ SNR?");
+    REQUIRE(plan.ok());
+    auto audio = synth_frame(plan.frames[0].tones, 1500, 11025);
+    CHECK(audio.size() == (std::size_t)TX_SYMBOLS * 1764);
+    float peak = 0;
+    for (float x : audio) peak = std::max(peak, std::abs(x));
+    CHECK(peak == Catch::Approx(1.0f).margin(0.01));
+    // Energy well away from the 1500-1550 Hz channel is small.
+    double in_band  = tone_amplitude(audio, 1525, 11025);
+    double off_band = tone_amplitude(audio, 1700, 11025);
+    CHECK(20 * std::log10(off_band / in_band) < -30.0);
+}
+
+TEST_CASE("TX audio at the radio's rate decodes in our receiver (loopback)", "[js8][tx][.slow]") {
+    constexpr int RATE = 11025;
+    auto          plan = plan_message("W1ABC", "FN42", "K2XYZ HELLO FROM THE TRANSMITTER");
+    REQUIRE(plan.ok());
+    REQUIRE(plan.frames.size() > 1);
+
+    std::mutex               mu;
+    std::condition_variable  cv;
+    std::vector<std::string> messages;
+    std::size_t              cycles = 0;
+    Receiver::Config         cfg;
+    cfg.input_rate           = RATE;
+    cfg.realign_threshold_ms = 0;
+    Receiver::Callbacks cb;
+    cb.on_message = [&](const RxFrame &m) {
+        std::lock_guard<std::mutex> l(mu);
+        messages.push_back(m.text);
+        cv.notify_all();
+    };
+    cb.on_cycle_done = [&](std::size_t) {
+        std::lock_guard<std::mutex> l(mu);
+        cycles++;
+        cv.notify_all();
+    };
+    Receiver rx(cfg, cb);
+
+    // Lay the frames out as the transmitter would: one per slot, 0.5 s in,
+    // at 30 dB below full scale plus noise.
+    const std::int64_t now  = wall_ms();
+    std::size_t        lead = (std::size_t)((15'000 - now % 15'000) * RATE / 1000) + 15 * RATE;
+    std::vector<float> audio(lead + (plan.frames.size() + 1) * 15 * RATE, 0.0f);
+    for (std::size_t i = 0; i < plan.frames.size(); i++) {
+        auto        wave  = synth_frame(plan.frames[i].tones, 1200, RATE);
+        std::size_t start = lead + i * 15 * RATE + RATE / 2;
+        for (std::size_t k = 0; k < wave.size(); k++) audio[start + k] += 0.03f * wave[k];
+    }
+    std::mt19937                    rng(9);
+    std::normal_distribution<float> noise(0.0f, 0.01f);
+    for (auto &x : audio) x += noise(rng);
+
+    const std::size_t piece = RATE / 10;
+    for (std::size_t i = 0; i < lead; i += piece) {
+        rx.feed(&audio[i], std::min(piece, lead - i));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    {
+        std::unique_lock<std::mutex> l(mu);
+        REQUIRE(cv.wait_for(l, std::chrono::seconds(60), [&] { return cycles > 0; }));
+    }
+    for (std::size_t i = lead; i < audio.size(); i += piece) {
+        rx.feed(&audio[i], std::min(piece, audio.size() - i));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+    std::unique_lock<std::mutex> l(mu);
+    REQUIRE(cv.wait_for(l, std::chrono::seconds(60), [&] { return !messages.empty(); }));
+    CHECK(messages[0] == plan.preview);
+    CHECK(messages[0] == "W1ABC: K2XYZ HELLO FROM THE TRANSMITTER");
+}
+
+namespace {
+// Instant clock for Transmitter tests: waiting just advances time.
+struct FakeClock : Transmitter::Clock {
+    std::atomic<std::int64_t> t{1'700'000'003'000}; // partway into a slot
+    std::int64_t now_ms() override { return t; }
+    bool wait_until(std::int64_t ms, const std::atomic<bool> &cancelled) override {
+        if (cancelled) return false;
+        if (ms > t) t = ms;
+        return true;
+    }
+};
+} // namespace
+
+TEST_CASE("Transmitter sends frames in consecutive slots", "[js8][tx]") {
+    FakeClock clock;
+    struct Keyed {
+        std::int64_t at;
+        int          index, count;
+        std::size_t  samples;
+    };
+    std::vector<Keyed> keyed;
+    bool               completed = false;
+    std::mutex         mu;
+    std::condition_variable cv;
+    bool               done = false;
+
+    Transmitter::Callbacks cb;
+    cb.play = [&](const std::vector<float> &a, const TxFrame &, int i, int n) {
+        keyed.push_back({clock.now_ms(), i, n, a.size()});
+        clock.t += 12'640; // the frame's air time
+        return true;
+    };
+    cb.on_done = [&](const std::string &, bool c) {
+        std::lock_guard<std::mutex> l(mu);
+        completed = c;
+        done      = true;
+        cv.notify_all();
+    };
+    Transmitter tx(11025, cb, &clock);
+
+    auto plan = plan_message("W1ABC", "FN42", "K2XYZ HELLO FROM THE TRANSMITTER");
+    REQUIRE(plan.frames.size() == 3);
+    std::string why;
+    REQUIRE(tx.send(plan, 1200, &why));
+    CHECK_FALSE(tx.send(plan, 1200, &why)); // one message at a time
+    CHECK(why == "already sending");
+
+    std::unique_lock<std::mutex> l(mu);
+    REQUIRE(cv.wait_for(l, std::chrono::seconds(10), [&] { return done; }));
+    CHECK(completed);
+    REQUIRE(keyed.size() == 3);
+    const std::int64_t t0   = 1'700'000'003'000;
+    const std::int64_t slot = t0 - t0 % 15'000 + 15'000; // next boundary after the fake clock's start
+    for (int i = 0; i < 3; i++) {
+        CHECK(keyed[i].at == slot + i * 15'000 + 500);
+        CHECK(keyed[i].index == i);
+        CHECK(keyed[i].count == 3);
+        CHECK(keyed[i].samples == (std::size_t)TX_SYMBOLS * 1764);
+    }
+    CHECK_FALSE(tx.busy());
+}
+
+TEST_CASE("Transmitter stop abandons the rest of the message", "[js8][tx]") {
+    FakeClock   clock;
+    int         played = 0;
+    bool        completed = true, done = false;
+    std::mutex  mu;
+    std::condition_variable cv;
+    Transmitter *txp = nullptr;
+
+    Transmitter::Callbacks cb;
+    cb.play = [&](const std::vector<float> &, const TxFrame &, int, int) {
+        played++;
+        clock.t += 12'640;
+        if (played == 1) {
+            // The user presses Stop while the first frame is on the air.
+            std::thread([&] { txp->stop(); }).detach();
+            while (!txp->stopping()) std::this_thread::yield();
+            return false;
+        }
+        return true;
+    };
+    cb.on_done = [&](const std::string &, bool c) {
+        std::lock_guard<std::mutex> l(mu);
+        completed = c;
+        done      = true;
+        cv.notify_all();
+    };
+    Transmitter tx(11025, cb, &clock);
+    txp = &tx;
+
+    REQUIRE(tx.send(plan_message("W1ABC", "FN42", "K2XYZ HELLO FROM THE TRANSMITTER"), 1200));
+    std::unique_lock<std::mutex> l(mu);
+    REQUIRE(cv.wait_for(l, std::chrono::seconds(10), [&] { return done; }));
+    CHECK(played == 1);
+    CHECK_FALSE(completed);
+}
+
+TEST_CASE("Transmitter rejects out-of-range offsets", "[js8][tx]") {
+    FakeClock   clock;
+    Transmitter tx(11025, {}, &clock);
+    auto        plan = plan_message("W1ABC", "FN42", "K2XYZ SNR?");
+    std::string why;
+    CHECK_FALSE(tx.send(plan, 300, &why));
+    CHECK_FALSE(tx.send(plan, 2480, &why));
+    CHECK(why.find("offset") != std::string::npos);
+}

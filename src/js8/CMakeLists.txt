@@ -7,6 +7,7 @@ add_library(JS8 STATIC
     classify.cpp
     receiver.cpp
     wav.cpp
+    tx.cpp
     js8_rx.cpp
 )
 
