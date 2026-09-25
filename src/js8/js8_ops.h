@@ -70,11 +70,14 @@ void            js8_stations_clear(js8_stations_t *s);
 
 /* ---- Auto-reply, heartbeat acks, heartbeat timing (T4) --------------- */
 
+typedef struct js8_held js8_held_t;
+
 typedef struct {
     bool        autoreply; /* AUTO */
     bool        heartbeat; /* HB   */
     bool        hb_ack;    /* HB ACK: acts only with AUTO and HB on */
     const char *my_call, *my_grid, *info, *status;
+    js8_held_t *held; /* messages held for others, or NULL */
 } js8_auto_settings_t;
 
 typedef enum {
@@ -89,6 +92,7 @@ typedef struct {
     char              text[JS8_RX_TEXT_LEN];
     char              to[JS8_RX_CALL_LEN];
     char              command[16];
+    int               deliver_id; /* a held message this delivers: js8_held_delivered() once sent */
 } js8_auto_result_t;
 
 typedef struct js8_auto js8_auto_t;
@@ -202,6 +206,31 @@ void js8_inbox_mark_read(js8_inbox_t *b, int id);
 void js8_inbox_delete(js8_inbox_t *b, int id);
 int  js8_inbox_unread(js8_inbox_t *b);
 int  js8_inbox_count(js8_inbox_t *b);
+
+/* Messages held here for other stations ("MSG TO:"), as desktop JS8Call
+ * stores them until the station asks (QUERY MSGS, QUERY MSG n). */
+typedef struct {
+    int     id;
+    int64_t utc_ms;
+    char    from[JS8_RX_CALL_LEN];
+    char    to[JS8_RX_CALL_LEN];
+    char    text[JS8_RX_TEXT_LEN];
+    bool    delivered;
+} js8_held_msg_t;
+
+js8_held_t *js8_held_open(const char *path);
+void        js8_held_close(js8_held_t *h);
+/* Hold a message; returns its id (a resend keeps the first), -1 if unsaved. */
+int  js8_held_add(js8_held_t *h, const char *from, const char *to, const char *text, int64_t utc_ms);
+int  js8_held_list(js8_held_t *h, js8_held_msg_t *out, int max); /* newest first */
+bool js8_held_get(js8_held_t *h, int id, js8_held_msg_t *out);
+void js8_held_delivered(js8_held_t *h, int id);
+void js8_held_delete(js8_held_t *h, int id);
+int  js8_held_waiting(js8_held_t *h); /* not yet delivered */
+int  js8_held_count(js8_held_t *h);
+/* "FROM: MYCALL MSG TO:W1ABC text" with a valid checksum: to and text out. */
+bool js8_msg_to_for_me(const js8_rx_msg_t *msg, const char *my_call, char *to, unsigned to_len, char *text,
+                       unsigned text_len);
 
 /* A message for the inbox: "FROM: MYCALL MSG text" with a valid checksum.
  * The text goes to out. */

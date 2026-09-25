@@ -17,6 +17,8 @@
 #include <string>
 #include <vector>
 
+#include "inbox.hpp"
+
 namespace x6100::js8 {
 
 /// A decoded message, as the auto-reply logic needs it.
@@ -36,6 +38,7 @@ struct AutoSettings {
     bool        heartbeat = false; ///< HB (periodic heartbeats)
     bool        hb_ack    = false; ///< HB ACK (needs AUTO and HB, as on desktop)
     std::string my_call, my_grid, info, status;
+    const HeldMessages *held = nullptr; ///< messages held for others (QUERY MSGS / QUERY MSG n, HB acks)
 };
 
 /// Query: answer a question (AUTO sends, else offered). HeartbeatAck: needs
@@ -49,6 +52,7 @@ struct AutoReply {
     std::string to;
     std::string command; ///< e.g. "SNR?", or "HEARTBEAT" for an ack
     ReplyKind   kind = ReplyKind::Query;
+    int         deliver_id = 0; ///< a held message this delivers: mark it delivered once sent
 };
 
 /// What desktop JS8Call would answer to `in`, ignoring the switches: queries

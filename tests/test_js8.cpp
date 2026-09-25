@@ -1910,3 +1910,140 @@ TEST_CASE("a long message shows as it grows, then completes under the same id", 
     CHECK(done[2].msg_id == id);
     CHECK(done[2].text == "E1EE: F1FF");
 }
+
+// ---- Held messages (store and forward) ------------------------------------------
+
+TEST_CASE("MSG TO: and QUERY MSG parse as desktop sends them", "[js8][held]") {
+    auto a = msg_to_body("N0XYZ: K2XYZ MSG TO:W1ABC SEE YOU AT 1800Z", "K2XYZ");
+    REQUIRE(a);
+    CHECK(a->first == "W1ABC");
+    CHECK(a->second == "SEE YOU AT 1800Z");
+    auto b = msg_to_body("N0XYZ: K2XYZ MSG TO: W1ABC/P HELLO", "K2XYZ"); // desktop accepts the space too
+    REQUIRE(b);
+    CHECK(b->first == "W1ABC/P");
+    CHECK(b->second == "HELLO");
+    CHECK_FALSE(msg_to_body("N0XYZ: K2XYZ MSG HELLO", "K2XYZ"));          // for our inbox
+    CHECK_FALSE(msg_to_body("N0XYZ: W9ZZZ MSG TO:W1ABC HI", "K2XYZ"));    // held by someone else
+    CHECK_FALSE(msg_to_body("N0XYZ: K2XYZ MSG TO:W1ABC", "K2XYZ"));       // no text
+    CHECK(query_msg_id("W1ABC: K2XYZ QUERY MSG 12") == 12);
+    CHECK_FALSE(query_msg_id("W1ABC: K2XYZ QUERY MSGS"));
+    CHECK_FALSE(query_msg_id("W1ABC: K2XYZ QUERY MSG X"));
+}
+
+TEST_CASE("held messages: stored by base call, next for a station, delivered", "[js8][held]") {
+    char path[] = "/tmp/js8_held_test_XXXXXX";
+    int  fd     = mkstemp(path);
+    REQUIRE(fd >= 0);
+    close(fd);
+    HeldMessages h;
+    REQUIRE(h.load(path));
+    int a = h.add("N0XYZ", "W1ABC/P", "FIRST", 1000);
+    int b = h.add("K9DEF", "W1ABC", "SECOND", 2000);
+    CHECK(h.add("N0XYZ", "W1ABC/P", "FIRST", 5000) == a); // a resend
+    CHECK(h.get(a)->to == "W1ABC");
+    CHECK(h.next_for("W1ABC") == a);         // oldest first
+    CHECK(h.next_for("VE7/W1ABC") == a);     // any form of their call
+    CHECK_FALSE(h.next_for("W9ZZZ"));
+    CHECK(h.is_for(b, "W1ABC/M"));
+    CHECK_FALSE(h.is_for(b, "W9ZZZ"));
+    CHECK(h.mark_delivered(a));
+    CHECK(h.next_for("W1ABC") == b);
+    CHECK(h.waiting() == 1);
+    REQUIRE(h.save(path));
+    HeldMessages r;
+    REQUIRE(r.load(path));
+    CHECK(r.size() == 2);
+    CHECK(r.get(a)->delivered);
+    CHECK(r.get(b)->text == "SECOND");
+    CHECK(r.get(b)->from == "K9DEF");
+    CHECK(r.remove(b));
+    CHECK_FALSE(r.next_for("W1ABC"));
+    unlink(path);
+}
+
+TEST_CASE("store and forward replies follow desktop", "[js8][held]") {
+    HeldMessages held;
+    int          id = held.add("N0XYZ", "W1ABC", "MEET AT THE PARK", 1000);
+    auto         s  = settings();
+    s.held          = &held;
+
+    // Someone leaves a message here for W1ABC: ACKed once the checksum is good.
+    auto store = incoming("N0XYZ", "K2XYZ MSG TO:W1ABC MEET AT THE PARK", -5);
+    store.checksum_ok = true;
+    auto r            = build_reply(store, s, {}, "");
+    REQUIRE(r);
+    CHECK(r->text == "N0XYZ ACK");
+
+    // W1ABC asks what we hold: YES MSG ID n; anyone else: NO.
+    auto yes = build_reply(incoming("W1ABC", "K2XYZ QUERY MSGS", -5), s, {}, "");
+    REQUIRE(yes);
+    CHECK(yes->text == "W1ABC YES MSG ID " + std::to_string(id));
+    auto no = build_reply(incoming("W9ZZZ", "K2XYZ QUERY MSGS", -5), s, {}, "");
+    REQUIRE(no);
+    CHECK(no->text == "W9ZZZ NO");
+
+    // W1ABC fetches it: "W1ABC MSG <text> FROM N0XYZ", marked for delivery.
+    auto q        = incoming("W1ABC", "K2XYZ QUERY MSG " + std::to_string(id), -5);
+    q.checksum_ok = true;
+    auto d        = build_reply(q, s, {}, "");
+    REQUIRE(d);
+    CHECK(d->text == "W1ABC MSG MEET AT THE PARK FROM N0XYZ");
+    CHECK(d->deliver_id == id);
+    // Not someone else's, not an unknown id, not a bad checksum.
+    auto other        = incoming("W9ZZZ", "K2XYZ QUERY MSG " + std::to_string(id), -5);
+    other.checksum_ok = true;
+    CHECK_FALSE(build_reply(other, s, {}, ""));
+    auto bad = incoming("W1ABC", "K2XYZ QUERY MSG " + std::to_string(id), -5);
+    CHECK_FALSE(build_reply(bad, s, {}, ""));
+
+    // W1ABC's heartbeat gets "MSG ID n" in our ack.
+    auto hb = build_reply(incoming("W1ABC", "@HB HEARTBEAT FN42", -8), s, {}, "");
+    REQUIRE(hb);
+    CHECK(hb->text == "W1ABC HEARTBEAT SNR -08 MSG ID " + std::to_string(id));
+    auto hb2 = build_reply(incoming("W9ZZZ", "@HB HEARTBEAT FN42", -8), s, {}, "");
+    REQUIRE(hb2);
+    CHECK(hb2->text == "W9ZZZ HEARTBEAT SNR -08");
+
+    // HW CPY? is only offered: how we hear them.
+    auto hw = build_reply(incoming("W1ABC", "K2XYZ HW CPY?", -11), s, {}, "");
+    REQUIRE(hw);
+    CHECK(hw->text == "W1ABC SNR -11");
+    CHECK(hw->kind == ReplyKind::Suggest);
+
+    // Delivered: nothing more for W1ABC.
+    held.mark_delivered(id);
+    auto after = build_reply(incoming("W1ABC", "K2XYZ QUERY MSGS", -5), s, {}, "");
+    REQUIRE(after);
+    CHECK(after->text == "W1ABC NO");
+}
+
+TEST_CASE("the held-message C API", "[js8][held]") {
+    char path[] = "/tmp/js8_held_c_XXXXXX";
+    int  fd     = mkstemp(path);
+    REQUIRE(fd >= 0);
+    close(fd);
+    js8_held_t  *h = js8_held_open(path);
+    js8_rx_msg_t m{};
+    snprintf(m.from, sizeof(m.from), "N0XYZ");
+    snprintf(m.text, sizeof(m.text), "N0XYZ: K2XYZ MSG TO:W1ABC HELLO THERE");
+    m.checksum = 1;
+    char to[16], text[256];
+    REQUIRE(js8_msg_to_for_me(&m, "K2XYZ", to, sizeof(to), text, sizeof(text)));
+    CHECK(std::string(to) == "W1ABC");
+    CHECK(std::string(text) == "HELLO THERE");
+    int id = js8_held_add(h, "N0XYZ", to, text, 1000);
+    CHECK(id > 0);
+    CHECK(js8_held_waiting(h) == 1);
+    js8_held_delivered(h, id);
+    CHECK(js8_held_waiting(h) == 0);
+    js8_held_msg_t list[4];
+    REQUIRE(js8_held_list(h, list, 4) == 1);
+    CHECK(list[0].delivered);
+    js8_held_close(h);
+    h = js8_held_open(path);
+    CHECK(js8_held_count(h) == 1);
+    js8_held_delete(h, id);
+    CHECK(js8_held_count(h) == 0);
+    js8_held_close(h);
+    unlink(path);
+}

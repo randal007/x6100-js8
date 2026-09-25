@@ -141,6 +141,149 @@ int Inbox::unread() const {
     return (int)std::count_if(msgs_.begin(), msgs_.end(), [](const InboxMessage &m) { return !m.read; });
 }
 
+namespace {
+const char *const HELD_HEADER = "# X6100 JS8 held messages: id, UTC ms, H(eld)/D(elivered), from, for, message\n";
+} // namespace
+
+bool HeldMessages::load(const std::string &path) {
+    msgs_.clear();
+    next_id_ = 1;
+    std::ifstream f(path);
+    if (!f) return access(path.c_str(), F_OK) != 0;
+    for (std::string line; std::getline(f, line);) {
+        if (line.empty() || line[0] == '#') continue;
+        std::vector<std::string> field;
+        std::size_t              start = 0;
+        for (int i = 0; i < 5; i++) {
+            auto tab = line.find('\t', start);
+            if (tab == std::string::npos) break;
+            field.push_back(line.substr(start, tab - start));
+            start = tab + 1;
+        }
+        if (field.size() != 5) continue;
+        HeldMessage m;
+        try {
+            m.id     = std::stoi(field[0]);
+            m.utc_ms = std::stoll(field[1]);
+        } catch (...) {
+            continue;
+        }
+        m.delivered = field[2] == "D";
+        m.from      = field[3];
+        m.to        = field[4];
+        m.text      = line.substr(start);
+        if (!m.text.empty() && m.text.back() == '\r') m.text.pop_back();
+        next_id_ = std::max(next_id_, m.id + 1);
+        msgs_.push_back(m);
+    }
+    return true;
+}
+
+bool HeldMessages::save(const std::string &path) const {
+    std::string tmp = path + ".tmp";
+    FILE       *f   = std::fopen(tmp.c_str(), "w");
+    if (!f) return false;
+    bool ok = std::fputs(HELD_HEADER, f) >= 0;
+    for (auto &m : msgs_) {
+        ok = ok && std::fprintf(f, "%d\t%lld\t%s\t%s\t%s\t%s\n", m.id, (long long)m.utc_ms, m.delivered ? "D" : "H",
+                                one_line(m.from).c_str(), one_line(m.to).c_str(), one_line(m.text).c_str()) >= 0;
+    }
+    ok = ok && std::fflush(f) == 0;
+    fsync(fileno(f));
+    ok = std::fclose(f) == 0 && ok;
+    if (!ok || std::rename(tmp.c_str(), path.c_str()) != 0) {
+        std::remove(tmp.c_str());
+        return false;
+    }
+    return true;
+}
+
+int HeldMessages::add(const std::string &from, const std::string &to, const std::string &text, std::int64_t utc_ms) {
+    const std::string dest = base_callsign(to);
+    for (auto &m : msgs_)
+        if (m.from == from && m.to == dest && m.text == text && utc_ms - m.utc_ms < Inbox::REPEAT_MS) return m.id;
+    HeldMessage m;
+    m.id     = next_id_++;
+    m.utc_ms = utc_ms;
+    m.from   = one_line(from);
+    m.to     = one_line(dest);
+    m.text   = one_line(text);
+    msgs_.push_back(m);
+    while (msgs_.size() > MAX_MESSAGES) {
+        auto it = std::find_if(msgs_.begin(), msgs_.end(), [](const HeldMessage &x) { return x.delivered; });
+        msgs_.erase(it != msgs_.end() ? it : msgs_.begin());
+    }
+    return m.id;
+}
+
+bool HeldMessages::is_for(int id, const std::string &call) const {
+    auto m = get(id);
+    return m && (m->to == call || m->to == base_callsign(call));
+}
+
+std::optional<int> HeldMessages::next_for(const std::string &call) const {
+    for (auto &m : msgs_)
+        if (!m.delivered && !m.text.empty() && (m.to == call || m.to == base_callsign(call))) return m.id;
+    return std::nullopt;
+}
+
+std::optional<HeldMessage> HeldMessages::get(int id) const {
+    for (auto &m : msgs_)
+        if (m.id == id) return m;
+    return std::nullopt;
+}
+
+bool HeldMessages::mark_delivered(int id) {
+    for (auto &m : msgs_)
+        if (m.id == id && !m.delivered) {
+            m.delivered = true;
+            return true;
+        }
+    return false;
+}
+
+bool HeldMessages::remove(int id) {
+    auto it = std::find_if(msgs_.begin(), msgs_.end(), [id](const HeldMessage &m) { return m.id == id; });
+    if (it == msgs_.end()) return false;
+    msgs_.erase(it);
+    return true;
+}
+
+std::vector<HeldMessage> HeldMessages::list() const {
+    return std::vector<HeldMessage>(msgs_.rbegin(), msgs_.rend());
+}
+
+int HeldMessages::waiting() const {
+    return (int)std::count_if(msgs_.begin(), msgs_.end(), [](const HeldMessage &m) { return !m.delivered; });
+}
+
+std::optional<std::pair<std::string, std::string>> msg_to_body(const std::string &text, const std::string &my_call) {
+    if (my_call.empty()) return std::nullopt;
+    auto colon = text.find(':');
+    if (colon == std::string::npos) return std::nullopt;
+    auto w = words(text.substr(colon + 1));
+    if (w.size() < 4 || base_callsign(w[0]) != base_callsign(my_call) || w[1] != "MSG" || w[2].rfind("TO:", 0) != 0)
+        return std::nullopt;
+    std::size_t i    = 3;
+    std::string dest = w[2].substr(3);
+    if (dest.empty()) dest = w[i++]; // "MSG TO: W1ABC ..."
+    if (dest.empty() || dest[0] == '@' || i >= w.size()) return std::nullopt;
+    std::string body;
+    for (; i < w.size(); i++) body += (body.empty() ? "" : " ") + w[i];
+    return std::make_pair(dest, body);
+}
+
+std::optional<int> query_msg_id(const std::string &text) {
+    auto w = words(text);
+    for (std::size_t i = 0; i + 2 < w.size(); i++) {
+        if (w[i] != "QUERY" || w[i + 1] != "MSG") continue;
+        const auto &n = w[i + 2];
+        if (n.empty() || n.size() > 6 || !std::all_of(n.begin(), n.end(), ::isdigit)) return std::nullopt;
+        return std::stoi(n);
+    }
+    return std::nullopt;
+}
+
 std::optional<std::string> msg_body(const std::string &text, const std::string &my_call) {
     if (my_call.empty()) return std::nullopt;
     auto colon = text.find(':');

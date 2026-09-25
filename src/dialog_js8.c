@@ -69,6 +69,9 @@
 #ifndef JS8_INBOX_PATH
 #define JS8_INBOX_PATH   "/mnt/js8_inbox.txt"   /* one message per line */
 #endif
+#ifndef JS8_HELD_PATH
+#define JS8_HELD_PATH    "/mnt/js8_held.txt"    /* MSG TO: messages held for others */
+#endif
 #ifndef JS8_LOG_PATH
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
@@ -121,6 +124,7 @@ static void        rotary_cb(int32_t diff);
 static void        reply_cb(button_data_t *btn);
 static void        send_cb(button_data_t *btn);
 static void        stop_tx_cb(button_data_t *btn);
+static void        hw_cpy_cb(button_data_t *btn);
 static void        cq_cb(button_data_t *btn);
 static void        heartbeat_cb(button_data_t *btn);
 static void        query_cb(button_data_t *btn);
@@ -166,6 +170,7 @@ static const char *inbox_label_getter(void);
 static void        inbox_cb(button_data_t *btn);
 static void        inbox_close(void);
 static void        inbox_received(const js8_rx_msg_t *m);
+static void        held_received(const js8_rx_msg_t *m);
 static void        msg_compose(const char *call, const char *kind);
 static void        alerts_cb(button_data_t *btn);
 static void        alerts_close(void);
@@ -216,6 +221,11 @@ static lv_obj_t      *alerts_list;     /* Alerts popup, when open */
 static char           alert_words[128]; /* "VE7ABC @POTA SOTA", ALERTS= in JS8_TEXTS_PATH */
 static bool           st_alert[MAX_ROWS]; /* st_rows matching an alert word */
 static js8_inbox_t   *inbox;           /* MSGs to us, JS8_INBOX_PATH */
+static js8_held_t    *held;            /* MSG TO: messages held for others, JS8_HELD_PATH */
+static struct {
+    int  id;                           /* offered on Reply: mark it delivered when that goes */
+    char text[JS8_RX_TEXT_LEN];
+} deliver_pending;
 static bool           st_worked[MAX_ROWS]; /* in the log already (st_rows) */
 static js8_qsos_t    *qsos;            /* QSOs, for the log */
 static js8_log_entry_t log_entry;      /* the entry the Log popup shows */
@@ -237,6 +247,7 @@ static struct {
     char    call[JS8_RX_CALL_LEN];
     char    text[JS8_RX_TEXT_LEN];
     int64_t ms;
+    int     deliver_id; /* the held message it delivers, or 0 */
 } offer; /* AUTO off: a reply waiting for Reply, like desktop's outgoing box */
 static js8_auto_result_t pending_auto;       /* arrived while TX was busy */
 static bool              pending_auto_valid;
@@ -313,7 +324,7 @@ static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:6)", .pre
 static button_data_t btn_show    = {.type = BTN_TEXT_FN, .label_fn = show_label_getter, .press = show_cb};
 static button_data_t btn_reply   = {.type = BTN_TEXT, .label = "Reply", .press = reply_cb};
 static button_data_t btn_send    = {.type = BTN_TEXT, .label = "Send...", .press = send_cb};
-static button_data_t btn_stop_tx = {.type = BTN_TEXT, .label = "Stop TX", .press = stop_tx_cb};
+static button_data_t btn_hw_cpy  = {.type = BTN_TEXT, .label = "HW CPY?", .press = hw_cpy_cb};
 
 static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:6)", .press = js8_next_page_cb, .next = &page_3};
 static button_data_t btn_cq    = {.type = BTN_TEXT, .label = "CQ", .press = cq_cb};
@@ -327,7 +338,7 @@ static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_labe
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
 static button_data_t btn_inbox     = {.type = BTN_TEXT_FN, .label_fn = inbox_label_getter, .press = inbox_cb};
 
-static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn_stop_tx}};
+static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn_hw_cpy}};
 static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_clear}};
 static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations, &btn_inbox}};
 
@@ -538,6 +549,7 @@ static void process_message(js8_rx_msg_t *m) {
         sync_head          = (sync_head + 1) % SYNC_DTS;
     }
     inbox_received(m);
+    held_received(m);
     handle_incoming(m);
     char ended[JS8_RX_CALL_LEN];
     if (js8_qsos_received(qsos, m, params.callsign.x, now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
@@ -1338,11 +1350,18 @@ static bool compose_ok_cb(void) {
     char text[TX_TEXT_MAX + 8];
     if (!aprs_prepare(textarea_window_get(), text, sizeof(text))) return false;
     if (!tx_queue(text)) return false; /* keep the window open */
+    /* The held message offered on Reply went as offered: it's delivered. */
+    if (deliver_pending.id && strcasecmp(text, deliver_pending.text) == 0) {
+        js8_held_delivered(held, deliver_pending.id);
+        add_info_row("Held message %d delivered", deliver_pending.id);
+    }
+    deliver_pending.id = 0;
     compose_close();
     return true;
 }
 
 static bool compose_cancel_cb(void) {
+    deliver_pending.id = 0;
     if (edit_target >= EDIT_LOG_GRID) {
         log_edit_done(NULL);
         return true;
@@ -1580,6 +1599,7 @@ static void construct_cb(lv_obj_t *parent) {
     if (!stations) stations = js8_stations_create();
     if (!qsos) qsos = js8_qsos_create();
     if (!inbox) inbox = js8_inbox_open(JS8_INBOX_PATH);
+    if (!held) held = js8_held_open(JS8_HELD_PATH);
     if (!autop) autop = js8_auto_create();
     user_touch();
     load_texts();
@@ -1759,6 +1779,8 @@ static void reply_cb(button_data_t *btn) {
     if (offer.text[0] && now_wall_ms() - offer.ms < OFFER_MS && strcmp(offer.call, call) == 0) {
         char text[JS8_RX_TEXT_LEN];
         snprintf(text, sizeof(text), "%s", offer.text);
+        deliver_pending.id = offer.deliver_id;
+        snprintf(deliver_pending.text, sizeof(deliver_pending.text), "%s", offer.text);
         offer.text[0] = '\0';
         apply_hold(freq);
         compose_open(text);
@@ -1789,6 +1811,25 @@ static void stop_tx_cb(button_data_t *btn) {
     }
     js8_tx_stop(tx);
     msg_update_text_fmt("Stopping TX");
+}
+
+/* "CALL HW CPY?" to the selected station: desktop's usual first answer to a
+ * CQ ("how do you copy?"). Stopping TX is ESC or the top knob's press. */
+static void hw_cpy_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (popup_guard()) return;
+    char  call[JS8_RX_CALL_LEN];
+    float freq;
+    int   snr;
+    if (!selected_station(call, sizeof(call), &freq, &snr)) {
+        msg_update_text_fmt("Select a station first (MFK)");
+        return;
+    }
+    char text[JS8_RX_CALL_LEN + 12];
+    snprintf(text, sizeof(text), "%s HW CPY?", call);
+    apply_hold(freq);
+    if (tx_queue(text)) speed_warn();
 }
 
 /* CQ with the 4-character grid, as desktop JS8Call sends it. */
@@ -2096,6 +2137,7 @@ static void auto_send(const js8_auto_result_t *r) {
     LV_LOG_USER("JS8 auto: '%s' at %d Hz", r->text, offset);
     if (tx_queue_at(r->text, offset, true)) {
         js8_auto_sent(autop, r, now);
+        if (r->deliver_id) js8_held_delivered(held, r->deliver_id);
         add_info_row("Auto: %s", r->text);
     }
 }
@@ -2129,6 +2171,7 @@ static void handle_incoming(const js8_rx_msg_t *m) {
         .my_grid   = params.qth.x,
         .info      = info_text,
         .status    = status_text,
+        .held      = held,
     };
     js8_auto_result_t r;
     js8_auto_consider(autop, m, &st, heard, n, last_tx_text, now_wall_ms(), &r);
@@ -2140,10 +2183,17 @@ static void handle_incoming(const js8_rx_msg_t *m) {
     case JS8_AUTO_OFFER:
         snprintf(offer.call, sizeof(offer.call), "%s", r.to);
         snprintf(offer.text, sizeof(offer.text), "%s", r.text);
-        offer.ms = now_wall_ms();
+        offer.ms         = now_wall_ms();
+        offer.deliver_id = r.deliver_id;
         if (strcmp(r.command, "MSG") == 0) {
             msg_update_text_fmt("Message from %s - select it and press Reply to send ACK", r.to);
             add_info_row("%s: Reply sends \"%s\" (AUTO sends it by itself)", r.to, r.text);
+        } else if (r.deliver_id) {
+            msg_update_text_fmt("%s asks for the message held for them - select it and press Reply to send it", r.to);
+            add_info_row("%s asks for held message %d: Reply sends it", r.to, r.deliver_id);
+        } else if (strcmp(r.command, "HW CPY?") == 0) {
+            msg_update_text_fmt("%s asks how you copy - select it and press Reply", r.to);
+            add_info_row("%s asked HW CPY?: Reply has \"%s\"", r.to, r.text);
         } else if (strcmp(r.command, "MSG ID") == 0) {
             msg_update_text_fmt("%s holds a message for you - select it and press Reply to fetch it", r.to);
             add_info_row("%s holds a message for you: Reply sends \"%s\"", r.to, r.text);
@@ -3008,6 +3058,19 @@ static void inbox_received(const js8_rx_msg_t *m) {
     update_status();
 }
 
+/* "MSG TO:W1ABC ..." sent to us: held here until W1ABC asks (QUERY MSGS,
+ * QUERY MSG n, or our HB ack tells them "MSG ID n"), as desktop does. */
+static void held_received(const js8_rx_msg_t *m) {
+    char to[JS8_RX_CALL_LEN], text[JS8_RX_TEXT_LEN];
+    if (!held || !js8_msg_to_for_me(m, params.callsign.x, to, sizeof(to), text, sizeof(text))) return;
+    int before = js8_held_count(held);
+    int id     = js8_held_add(held, m->from, to, text, now_wall_ms());
+    if (js8_held_count(held) == before) return; /* a resend */
+    if (id < 0) msg_update_text_fmt("Can't save %s", JS8_HELD_PATH);
+    else msg_update_text_fmt("Holding a message from %s for %s (Inbox)", m->from, to);
+    add_info_row("Holding message %d from %s for %s: %s", id, m->from, to, text);
+}
+
 static void inbox_close(void) {
     if (!inbox_list) return;
     lv_obj_del_async(inbox_list); /* often called from one of its buttons */
@@ -3054,6 +3117,7 @@ static void inbox_key_cb(lv_event_t *e) {
 }
 
 typedef enum { INBOX_NEW = -1, INBOX_CLOSE = -2, INBOX_BACK = -3, INBOX_REPLY = -4, INBOX_DELETE = -5 } inbox_action_t;
+#define INBOX_HELD 100000 /* list/view ids from here on are held messages (id - INBOX_HELD) */
 
 static void inbox_item_cb(lv_event_t *e) {
     int action = (int)(intptr_t)lv_event_get_user_data(e);
@@ -3067,7 +3131,8 @@ static void inbox_item_cb(lv_event_t *e) {
         inbox_show(0);
         return;
     case INBOX_DELETE:
-        js8_inbox_delete(inbox, viewed);
+        if (viewed >= INBOX_HELD) js8_held_delete(held, viewed - INBOX_HELD);
+        else js8_inbox_delete(inbox, viewed);
         msg_update_text_fmt("Message deleted");
         inbox_leave();
         inbox_show(0);
@@ -3132,7 +3197,32 @@ static void inbox_show(int id) {
 
     char      line[JS8_RX_TEXT_LEN + 48];
     lv_obj_t *first = NULL;
-    if (id) {
+    if (id >= INBOX_HELD) {
+        /* A message held here for another station. */
+        js8_held_msg_t m;
+        if (!js8_held_get(held, id - INBOX_HELD, &m)) {
+            inbox_view_id = 0;
+            lv_obj_del(inbox_list);
+            inbox_show(0);
+            return;
+        }
+        char when[32];
+        utc_label(m.utc_ms, when, sizeof(when), "%d %b %H:%M UTC");
+        snprintf(line, sizeof(line), "For %s from %s  %s", m.to, m.from, when);
+        lv_obj_t *t = lv_list_add_text(inbox_list, line);
+        lv_obj_set_style_text_font(t, &sony_22, 0);
+        lv_obj_t *body = lv_list_add_text(inbox_list, m.text);
+        lv_label_set_long_mode(body, LV_LABEL_LONG_WRAP);
+        lv_obj_set_style_bg_color(body, lv_color_hex(0x202020), 0);
+        lv_obj_set_style_text_color(body, lv_color_white(), 0);
+        lv_obj_set_style_pad_ver(body, 8, 0);
+        snprintf(line, sizeof(line), m.delivered ? "Delivered to %s" : "Waiting for %s to ask (QUERY MSGS)", m.to);
+        t = lv_list_add_text(inbox_list, line);
+        lv_obj_set_style_text_font(t, &sony_22, 0);
+        first = inbox_add("Delete", INBOX_DELETE);
+        lv_obj_t *back = inbox_add("Back", INBOX_BACK);
+        lv_obj_set_style_text_color(back, lv_color_hex(0xffc040), 0);
+    } else if (id) {
         js8_inbox_msg_t m;
         if (!js8_inbox_get(inbox, id, &m)) {
             inbox_view_id = 0;
@@ -3188,6 +3278,20 @@ static void inbox_show(int id) {
         if (n == 0) {
             t = lv_list_add_text(inbox_list, "No messages yet");
             lv_obj_set_style_text_font(t, &sony_22, 0);
+        }
+        /* Messages held here for others (MSG TO:), until they ask. */
+        static js8_held_msg_t held_rows[INBOX_ROWS];
+        int                   nh = js8_held_list(held, held_rows, INBOX_ROWS);
+        if (nh > 0) {
+            snprintf(line, sizeof(line), "Held for others: %d waiting", js8_held_waiting(held));
+            t = lv_list_add_text(inbox_list, line);
+            lv_obj_set_style_text_font(t, &sony_22, 0);
+        }
+        for (int i = 0; i < nh; i++) {
+            snprintf(line, sizeof(line), "%sfor %s from %s  %s", held_rows[i].delivered ? "(sent) " : "",
+                     held_rows[i].to, held_rows[i].from, held_rows[i].text);
+            lv_obj_t *b = inbox_add(line, INBOX_HELD + held_rows[i].id);
+            if (held_rows[i].delivered) lv_obj_set_style_text_color(b, lv_color_hex(0x909090), 0);
         }
         lv_obj_t *close = inbox_add("Close", INBOX_CLOSE);
         lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);

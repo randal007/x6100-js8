@@ -54,8 +54,11 @@ std::optional<AutoReply> build_reply(const Incoming &in, const AutoSettings &s, 
         in.text.find("@HB HEARTBEAT") != std::string::npos) {
         auto text = query_text(Query::SendSnr, in.from, in.snr, "");
         if (text.empty()) return std::nullopt;
-        // Desktop: "%1 HEARTBEAT SNR %2", i.e. "CALL HEARTBEAT SNR -08".
+        // Desktop: "%1 HEARTBEAT SNR %2 %3", i.e. "CALL HEARTBEAT SNR -08",
+        // plus "MSG ID 3" when a message is held here for them.
         text.replace(text.find(" SNR "), 5, " HEARTBEAT SNR ");
+        if (s.held)
+            if (auto id = s.held->next_for(in.from)) text += " MSG ID " + std::to_string(*id);
         return AutoReply{text, in.from, "HEARTBEAT", ReplyKind::HeartbeatAck};
     }
 
@@ -64,10 +67,29 @@ std::optional<AutoReply> build_reply(const Incoming &in, const AutoSettings &s, 
 
     const std::string cmd = command_after_target(in.text, in.to);
 
-    // A message for our inbox (only once its checksum checks out).
-    if (cmd.rfind("MSG ", 0) == 0 && cmd.rfind("MSG TO:", 0) != 0) {
+    // A message for our inbox, or ("MSG TO:") one to hold for another
+    // station; either is ACKed, only once its checksum checks out.
+    if (cmd.rfind("MSG ", 0) == 0) {
         if (!in.checksum_ok) return std::nullopt;
         return AutoReply{upper(in.from) + " ACK", in.from, "MSG", ReplyKind::MsgAck};
+    }
+    // QUERY MSG n: deliver a message held here for them, as desktop does:
+    // "CALL MSG <text> FROM <original sender>".
+    if (auto id = query_msg_id(in.text)) {
+        if (!in.checksum_ok || !s.held || !s.held->is_for(*id, in.from)) return std::nullopt;
+        auto m = s.held->get(*id);
+        if (!m || m->text.empty()) return std::nullopt;
+        AutoReply r{upper(in.from) + " MSG " + m->text + " FROM " + m->from, in.from, "QUERY MSG " + std::to_string(*id),
+                    ReplyKind::Query};
+        r.deliver_id = *id;
+        return r;
+    }
+    // HW CPY? ("how do you copy?"): offer how we hear them; desktop leaves
+    // the answer to you, so it's only ever offered on Reply.
+    if (cmd == "HW CPY?") {
+        auto text = query_text(Query::SendSnr, in.from, in.snr, "");
+        if (text.empty()) return std::nullopt;
+        return AutoReply{text, in.from, "HW CPY?", ReplyKind::Suggest};
     }
     // They hold a message for us ("YES MSG ID 3", or on a heartbeat ack).
     if (auto id = msg_id_offered(cmd)) {
@@ -77,7 +99,8 @@ std::optional<AutoReply> build_reply(const Incoming &in, const AutoSettings &s, 
 
     std::string text;
     if (cmd == "QUERY MSGS" || cmd == "QUERY MSGS?") {
-        text = upper(in.from) + " NO";
+        auto id = s.held ? s.held->next_for(in.from) : std::nullopt;
+        text    = upper(in.from) + (id ? " YES MSG ID " + std::to_string(*id) : std::string(" NO"));
     } else if (cmd == "SNR?" || cmd == "?") {
         text = query_text(Query::SendSnr, in.from, in.snr, "");
     } else if (cmd == "GRID?") {

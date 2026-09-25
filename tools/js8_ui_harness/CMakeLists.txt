@@ -10,7 +10,8 @@ option(HARNESS_SANITIZE "Build with ASan/UBSan" ON)
 
 add_compile_definitions(LV_DRAW_NEON=0 JS8_TEXTS_PATH="${CMAKE_BINARY_DIR}/js8_texts.txt"
                         JS8_LOG_PATH="${CMAKE_BINARY_DIR}/js8call_log.adi"
-                        JS8_INBOX_PATH="${CMAKE_BINARY_DIR}/js8_inbox.txt")
+                        JS8_INBOX_PATH="${CMAKE_BINARY_DIR}/js8_inbox.txt"
+                        JS8_HELD_PATH="${CMAKE_BINARY_DIR}/js8_held.txt")
 if(HARNESS_SANITIZE)
     add_compile_options(-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address -fsanitize=undefined)

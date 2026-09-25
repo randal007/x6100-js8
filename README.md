@@ -38,7 +38,7 @@ near your TX offset first; your own filter comes back when you leave.
 | 1 | Show: No HB / Directed / All | Filter the list. *Directed* shows messages to your callsign (set in APP → Callsign) or to @groups, plus everything on the selected station's frequency (±10 Hz, the green line), since in a long QSO the other side often drops your call. |
 | 1 | **Reply** | Opens the keyboard with the selected station's call filled in, e.g. `N0XYZ `. Type the rest (`SNR?`, `HELLO …`) and press Enter. |
 | 1 | **Send…** | Opens the keyboard empty: `@ALLCALL …`, a call and a message, or free text (your call is added). |
-| 1 | **Stop TX** | Unkeys at once and drops the rest of the message. ESC does the same; the next ESC closes the app. |
+| 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station: desktop's usual first answer to a CQ. Asked it yourself, **Reply** has your report (`CALL SNR -12`) ready. |
 | 2 | **CQ** | Sends `CQ CQ CQ <grid>`. |
 | 2 | **Heartbeat** | Sends one heartbeat (`CALL: HEARTBEAT FN42`) at a free spot in the 500–1000 Hz heartbeat sub-band. Your chat offset doesn't move. |
 | 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR (how you hear them), GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, then **Message…**, **Message via them…** and **Any messages?** (see [Messages](#messages)). **Close** (last; one knob step back from the top) or Query > again closes it. |
@@ -75,6 +75,9 @@ precise one is kept (a later heartbeat's `DN17` doesn't replace `DN17AB`),
 and the `RR73` sign-off is never mistaken for a grid.
 
 ![Stations view: * marks stations that heard you](docs/screenshots/js8_11_stations.png)
+
+**Stopping TX:** ESC (or pressing the top knob) unkeys at once and drops
+the rest of the message; the next ESC closes the app.
 
 **Transmitting:** the **main tuning knob** sets your TX offset (the red band
 on the waterfall, 500–2450 Hz, remembered). The dial frequency stays
@@ -199,9 +202,18 @@ newest 200 are kept.
 
 When a station says it holds a message for you (`YES MSG ID 3`, or `MSG ID
 3` on a heartbeat ack), **Reply** has `N0XYZ QUERY MSG 3` ready to fetch
-it; the message then arrives as a `MSG` for your inbox. With AUTO on, a
-`QUERY MSGS` to you is answered `NO`: the radio doesn't hold messages for
-other stations.
+it; the message then arrives as a `MSG` for your inbox.
+
+**Holding messages for others** (desktop's store and forward):
+
+- `N0XYZ: VE7NHW MSG TO:W1ABC MEET AT 1800Z` is held here for W1ABC
+  (checksum checked) and ACKed. The Inbox lists it under *Held for others*;
+  kept in `/mnt/js8_held.txt`.
+- W1ABC asks `QUERY MSGS` → `W1ABC YES MSG ID 1` (or `NO`); then
+  `QUERY MSG 1` → `W1ABC MSG MEET AT 1800Z FROM N0XYZ`, and it's marked
+  delivered (shown as *(sent)*; delete it from the Inbox).
+- With HB ACK on, W1ABC's heartbeat is acked with `MSG ID 1` so they know.
+- As with every answer: AUTO on sends them; AUTO off puts them on Reply.
 
 | The Inbox | Reading a message |
 |---|---|
@@ -334,7 +346,7 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [x] ADIF logging with a log prompt, POTA/SOTA activation fields (T5)
 - [x] Inbox for MSG with ACKs, MSG / MSG TO: / QUERY MSGS from the Query list (T5)
 - [x] Alerts: beeps for messages, CQ, new stations; typed alert words highlighted
-- [ ] Hold messages for other stations (answer QUERY MSGS / QUERY MSG from a store)
+- [x] Hold messages for other stations: MSG TO:, QUERY MSGS / QUERY MSG n, MSG ID on HB acks
 - [x] GPS-fed grid for APRS spots
 - [x] Waterfall paced by the system clock (no catch-up jumps)
 - [x] Fast / Turbo / Slow: all speeds decoded together, send at any speed (T6, [plan](docs/T6_PLAN.md))

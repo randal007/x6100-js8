@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace x6100::js8 {
@@ -50,6 +51,51 @@ private:
     std::vector<InboxMessage> msgs_; ///< oldest first
     int                       next_id_ = 1;
 };
+
+/// A message held here for another station, as desktop JS8Call stores
+/// "MSG TO:" messages ("STORE") until that station asks with QUERY MSGS /
+/// QUERY MSG n (then "DELIVERED"). One per line in a text file, like the inbox.
+struct HeldMessage {
+    int          id     = 0;
+    std::int64_t utc_ms = 0;
+    std::string  from, to, text; ///< `to` is a base call, as desktop stores it
+    bool         delivered = false;
+};
+
+class HeldMessages {
+public:
+    static constexpr std::size_t MAX_MESSAGES = 100;
+
+    bool load(const std::string &path);
+    bool save(const std::string &path) const;
+
+    /// Hold `text` from `from` for `to` (stored as its base call). A resend
+    /// within Inbox::REPEAT_MS returns the first one's id.
+    int add(const std::string &from, const std::string &to, const std::string &text, std::int64_t utc_ms);
+
+    /// The oldest undelivered message for `call` (or its base call), as
+    /// desktop's getNextMessageIdForCallsign().
+    std::optional<int> next_for(const std::string &call) const;
+    std::optional<HeldMessage> get(int id) const;
+    /// Is message `id` for `call`? (desktop: TO equals the caller or its base)
+    bool is_for(int id, const std::string &call) const;
+    bool mark_delivered(int id);
+    bool remove(int id);
+    std::vector<HeldMessage> list() const; ///< newest first
+    int  waiting() const;                  ///< not yet delivered
+    std::size_t size() const { return msgs_.size(); }
+
+private:
+    std::vector<HeldMessage> msgs_; ///< oldest first
+    int                      next_id_ = 1;
+};
+
+/// "FROM: MYCALL MSG TO:W1ABC HELLO" (or "MSG TO: W1ABC HELLO") to my_call:
+/// {"W1ABC", "HELLO"}.
+std::optional<std::pair<std::string, std::string>> msg_to_body(const std::string &text, const std::string &my_call);
+
+/// "FROM: MYCALL QUERY MSG 3": 3.
+std::optional<int> query_msg_id(const std::string &text);
 
 /// The message in "FROM: MYCALL MSG HELLO THERE" when it's to my_call
 /// (or its base call): "HELLO THERE". Not "MSG TO:" (stored for others).

@@ -182,6 +182,7 @@ int main() {
 
     ui_init();
     if (getenv("ONLY_INBOX")) unlink(JS8_INBOX_PATH); // before the dialog loads it
+    if (getenv("ONLY_HELD")) unlink(JS8_HELD_PATH);
     ui_open();
     if (getenv("ONLY_GEN")) {
         // GEN / APP on the radio close the app with a list popup open.
@@ -693,6 +694,62 @@ int main() {
         ui_press(2); // -> Slow
         ui_press(2); // -> Normal
         printf("[speed] back to '%s'\n", ui_button_label(2));
+        return 0;
+    }
+    if (getenv("ONLY_HELD")) {
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        pump(300);
+        ui_page(4);
+        ui_press(1); // AUTO on: answers go by themselves
+        // N0XYZ leaves a message here for W1ABC: held and ACKed.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ MSG TO:W1ABC MEET AT THE PARK", 1320, 0.05f}});
+        wait_tx();
+        printf("[held] ACK sent: %d\n", ui_list_has("N0XYZ ACK"));
+        // W1ABC asks what we hold, then fetches it.
+        feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ QUERY MSGS", 1500, 0.05f}});
+        wait_tx();
+        printf("[held] YES sent: %d\n", ui_list_has("W1ABC YES MSG ID 1"));
+        feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ QUERY MSG 1", 1500, 0.05f}});
+        wait_tx();
+        printf("[held] delivered: %d\n", ui_list_has("W1ABC MSG MEET AT THE PARK FROM N0XYZ"));
+        ui_page(4);
+        ui_press(1); // AUTO off
+
+        ui_page(3);
+        ui_press(4); // Inbox
+        pump(300);
+        printf("[held] inbox shows it: %d, sent %d\n", ui_popup_has("Held for others: 0 waiting"),
+               ui_popup_has("(sent) for W1ABC from N0XYZ"));
+        screenshot("40_held.ppm");
+        for (int i = 0; i < 40 && !strstr(ui_focused_text(), "for W1ABC"); i++) ui_key(LV_KEY_RIGHT);
+        printf("[held] on '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[held] view: %d, focused '%s'\n", ui_popup_has("Delivered to W1ABC"), ui_focused_text());
+        ui_click_focused(); // Delete
+        pump(300);
+        printf("[held] after delete: %d (want 0)\n", ui_popup_has("Held for others"));
+        for (int i = 0; i < 40 && strcmp(ui_focused_text(), "Close") != 0; i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // Close
+        pump(300);
+        printf("[held] inbox closed: %d\n", ui_focus_is_table());
+
+        // HW CPY? on page 1 to the selected station.
+        ui_select_row_from("W1ABC");
+        ui_page(1);
+        printf("[held] page 1 button 4: '%s'\n", ui_button_label(4));
+        ui_press(4);
+        wait_tx();
+        printf("[held] HW CPY? sent: %d\n", ui_list_has("W1ABC HW CPY?"));
         return 0;
     }
     if (getenv("ONLY_PARTIAL")) {

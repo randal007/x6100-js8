@@ -42,6 +42,11 @@ struct js8_stations {
     StationList list;
 };
 
+struct js8_held {
+    HeldMessages held;
+    std::string  path;
+};
+
 extern "C" const char *js8_query_label(js8_query_t q) {
     return (unsigned)q < JS8_Q_COUNT ? LABELS[q] : "";
 }
@@ -158,6 +163,7 @@ extern "C" void js8_auto_consider(js8_auto_t *a, const js8_rx_msg_t *msg, const 
     settings.my_grid   = s->my_grid ? s->my_grid : "";
     settings.info      = s->info ? s->info : "";
     settings.status    = s->status ? s->status : "";
+    settings.held      = s->held ? &s->held->held : nullptr;
 
     std::vector<std::string> calls;
     for (unsigned i = 0; i < n_heard; i++) calls.emplace_back(heard[i]);
@@ -172,6 +178,7 @@ extern "C" void js8_auto_consider(js8_auto_t *a, const js8_rx_msg_t *msg, const 
     copy_str(out->text, sizeof(out->text), r->text);
     copy_str(out->to, sizeof(out->to), r->to);
     copy_str(out->command, sizeof(out->command), r->command);
+    out->deliver_id = r->deliver_id;
 }
 
 extern "C" void js8_auto_sent(js8_auto_t *a, const js8_auto_result_t *r, int64_t now_ms) {
@@ -402,5 +409,79 @@ extern "C" bool js8_alert_hit(const char *text, const char *from, const char *wo
     auto w = alert_word_hit(text, from ? from : "", parse_alert_words(words));
     if (w.empty()) return false;
     copy_str(hit, hit_len, w);
+    return true;
+}
+
+// ---- Held messages ------------------------------------------------------
+
+static void fill_held(const HeldMessage &m, js8_held_msg_t *out) {
+    std::memset(out, 0, sizeof(*out));
+    out->id        = m.id;
+    out->utc_ms    = m.utc_ms;
+    out->delivered = m.delivered;
+    copy_str(out->from, sizeof(out->from), m.from);
+    copy_str(out->to, sizeof(out->to), m.to);
+    copy_str(out->text, sizeof(out->text), m.text);
+}
+
+extern "C" js8_held_t *js8_held_open(const char *path) {
+    auto *h = new (std::nothrow) js8_held;
+    if (!h) return nullptr;
+    h->path = path ? path : "";
+    h->held.load(h->path);
+    return h;
+}
+
+extern "C" void js8_held_close(js8_held_t *h) {
+    delete h;
+}
+
+extern "C" int js8_held_add(js8_held_t *h, const char *from, const char *to, const char *text, int64_t utc_ms) {
+    if (!h || !from || !to || !text) return -1;
+    int id = h->held.add(from, to, text, utc_ms);
+    return h->held.save(h->path) ? id : -1;
+}
+
+extern "C" int js8_held_list(js8_held_t *h, js8_held_msg_t *out, int max) {
+    if (!h || !out) return 0;
+    int n = 0;
+    for (auto &m : h->held.list()) {
+        if (n >= max) break;
+        fill_held(m, &out[n++]);
+    }
+    return n;
+}
+
+extern "C" bool js8_held_get(js8_held_t *h, int id, js8_held_msg_t *out) {
+    if (!h || !out) return false;
+    auto m = h->held.get(id);
+    if (!m) return false;
+    fill_held(*m, out);
+    return true;
+}
+
+extern "C" void js8_held_delivered(js8_held_t *h, int id) {
+    if (h && h->held.mark_delivered(id)) h->held.save(h->path);
+}
+
+extern "C" void js8_held_delete(js8_held_t *h, int id) {
+    if (h && h->held.remove(id)) h->held.save(h->path);
+}
+
+extern "C" int js8_held_waiting(js8_held_t *h) {
+    return h ? h->held.waiting() : 0;
+}
+
+extern "C" int js8_held_count(js8_held_t *h) {
+    return h ? (int)h->held.size() : 0;
+}
+
+extern "C" bool js8_msg_to_for_me(const js8_rx_msg_t *msg, const char *my_call, char *to, unsigned to_len, char *text,
+                                  unsigned text_len) {
+    if (!msg || msg->tx || msg->checksum != 1 || !my_call) return false;
+    auto r = msg_to_body(msg->text, my_call);
+    if (!r) return false;
+    copy_str(to, to_len, r->first);
+    copy_str(text, text_len, r->second);
     return true;
 }
