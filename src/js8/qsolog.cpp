@@ -11,7 +11,6 @@
 #include <cctype>
 #include <cstdio>
 #include <ctime>
-#include <regex>
 #include <sstream>
 #include <unistd.h>
 #include <vector>
@@ -62,11 +61,6 @@ bool ends_qso(const std::vector<std::string> &w) {
         if (s == "73" || s == "SK" || s == "RR73") return true;
     }
     return false;
-}
-
-bool is_grid(const std::string &w) {
-    static const std::regex re("^[A-R]{2}[0-9]{2}([A-X]{2})?$");
-    return std::regex_match(w, re);
 }
 
 bool is_call(const std::string &s) {
@@ -120,7 +114,8 @@ std::optional<std::string> QsoTracker::received(const std::string &from, const s
     Qso &q      = entry(from, now_ms);
     q.heard_snr = snr;
     if (auto r = find_snr(w)) q.rcvd_snr = r;
-    if (!w.empty() && is_grid(w.back())) q.grid = w.back();
+    auto colon  = text.find(':');
+    q.grid      = better_grid(q.grid, find_grid(colon == std::string::npos ? text : text.substr(colon + 1)));
     if (is_hb_ack(w)) return std::nullopt; // an ack isn't a QSO
     q.they_sent = true;
     return maybe_offer(q, ends_qso(w));

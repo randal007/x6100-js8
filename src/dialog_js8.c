@@ -145,6 +145,7 @@ static void        log_cb(button_data_t *btn);
 static void        log_close(void);
 static void        log_offer(const char *call);
 static void        log_list_open(void);
+static void        log_refresh(void);
 static const char *act_label_getter(void);
 static void        act_cb(button_data_t *btn);
 static void        act_hold_cb(button_data_t *btn);
@@ -180,6 +181,9 @@ static bool           st_worked[MAX_ROWS]; /* in the log already (st_rows) */
 static js8_qsos_t    *qsos;            /* QSOs, for the log */
 static js8_log_entry_t log_entry;      /* the entry the Log popup shows */
 static char           log_pending[JS8_RX_CALL_LEN]; /* a QSO that ended, not logged yet */
+static bool           log_grid_typed;  /* the grid was typed: don't replace it */
+static lv_obj_t      *log_reports;     /* the popup's Sent / Rcvd line */
+static lv_obj_t      *log_grid_btn;    /* the popup's Grid item */
 
 /* T4: auto-reply and heartbeats. The switches live in params (js8_auto,
  * js8_hb, js8_hb_ack, js8_hb_interval), all off by default. */
@@ -438,6 +442,7 @@ static void add_message(const js8_rx_msg_t *m) {
     if (!m->tx) handle_incoming(m);
     char ended[JS8_RX_CALL_LEN];
     if (!m->tx && js8_qsos_received(qsos, m, params.callsign.x, now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
+    if (!m->tx && m->to_me && log_list) log_refresh();
 
     int slot = hist_head;
     history[slot] = *m;
@@ -491,7 +496,7 @@ static void station_fields(const js8_station_t *st, int64_t now, station_fields_
     f->star[0] = st->heard_me ? '*' : ' ';
     snprintf(f->call, sizeof(f->call), "%s", st->call);
     snprintf(f->snr, sizeof(f->snr), "%+d", st->snr);
-    snprintf(f->grid, sizeof(f->grid), "%s", st->grid);
+    snprintf(f->grid, sizeof(f->grid), "%.6s", st->grid); /* the column fits 6 */
     char *age = f->age, *heard = f->heard, *dist = f->dist;
     format_age(now - st->heard_ms, age, sizeof(f->age));
     if (st->heard_me) {
@@ -2381,6 +2386,17 @@ static void my_log_grid(char *out, size_t size) {
     snprintf(out, size, "%s", params.qth.x);
 }
 
+/* Sent: the report we gave them, else how we heard them. Rcvd: the report
+ * they gave us (a message or a heartbeat ack). */
+static void log_reports_fill(const js8_qso_t *q, const js8_station_t *st) {
+    char *sent = log_entry.rst_sent, *rcvd = log_entry.rst_rcvd;
+    if (q && q->has_sent_snr) snprintf(sent, sizeof(log_entry.rst_sent), "%+03d", q->sent_snr);
+    else if (q && q->has_heard_snr) snprintf(sent, sizeof(log_entry.rst_sent), "%+03d", q->heard_snr);
+    else if (st) snprintf(sent, sizeof(log_entry.rst_sent), "%+03d", st->snr);
+    if (q && q->has_rcvd_snr) snprintf(rcvd, sizeof(log_entry.rst_rcvd), "%+03d", q->rcvd_snr);
+    else if (st && st->has_reported_snr) snprintf(rcvd, sizeof(log_entry.rst_rcvd), "%+03d", st->reported_snr);
+}
+
 static void log_prepare(const char *call) {
     int64_t       now = now_wall_ms();
     js8_qso_t     q;
@@ -2389,15 +2405,11 @@ static void log_prepare(const char *call) {
     bool          have_st = find_station(call, &st);
 
     memset(&log_entry, 0, sizeof(log_entry));
+    log_grid_typed = false;
     snprintf(log_entry.call, sizeof(log_entry.call), "%s", have_q ? q.call : call);
     snprintf(log_entry.grid, sizeof(log_entry.grid), "%s", have_q && q.grid[0] ? q.grid : have_st ? st.grid : "");
 
-    /* Sent: the report we gave them, else how we heard them. */
-    if (have_q && q.has_sent_snr) snprintf(log_entry.rst_sent, sizeof(log_entry.rst_sent), "%+03d", q.sent_snr);
-    else if (have_q && q.has_heard_snr) snprintf(log_entry.rst_sent, sizeof(log_entry.rst_sent), "%+03d", q.heard_snr);
-    else if (have_st) snprintf(log_entry.rst_sent, sizeof(log_entry.rst_sent), "%+03d", st.snr);
-    if (have_q && q.has_rcvd_snr) snprintf(log_entry.rst_rcvd, sizeof(log_entry.rst_rcvd), "%+03d", q.rcvd_snr);
-    else if (have_st && st.has_reported_snr) snprintf(log_entry.rst_rcvd, sizeof(log_entry.rst_rcvd), "%+03d", st.reported_snr);
+    log_reports_fill(have_q ? &q : NULL, have_st ? &st : NULL);
 
     log_entry.on_ms   = have_q ? q.start_ms : now;
     log_entry.off_ms  = now;
@@ -2485,6 +2497,27 @@ static lv_obj_t *log_add(log_item_t item, const char *label) {
     return b;
 }
 
+static void log_reports_line(char *line, size_t size) {
+    snprintf(line, size, "Sent %s  Rcvd %s  %.3f MHz  %.0f W", log_entry.rst_sent[0] ? log_entry.rst_sent : "-",
+             log_entry.rst_rcvd[0] ? log_entry.rst_rcvd : "-", log_entry.freq_hz / 1e6, log_entry.tx_pwr_w);
+}
+
+/* They sent something while the popup is open (often their 73 after ours
+ * opened it): take in a new report or grid, in place, focus unchanged. */
+static void log_refresh(void) {
+    js8_qso_t q;
+    if (!log_list || !js8_qsos_get(qsos, log_entry.call, now_wall_ms(), &q)) return;
+    log_reports_fill(&q, NULL);
+    char line[160];
+    log_reports_line(line, sizeof(line));
+    lv_label_set_text(log_reports, line);
+    if (!log_grid_typed && q.grid[0] && strcmp(q.grid, log_entry.grid) != 0) {
+        snprintf(log_entry.grid, sizeof(log_entry.grid), "%s", q.grid);
+        snprintf(line, sizeof(line), "Grid: %s", log_entry.grid);
+        lv_label_set_text(lv_obj_get_child(log_grid_btn, 0), line);
+    }
+}
+
 static void log_list_open(void) {
     lv_group_remove_obj(table);
     log_list = lv_list_create(dialog.obj);
@@ -2502,15 +2535,14 @@ static void log_list_open(void) {
     snprintf(line, sizeof(line), "Log %s  %s  %s-%s UTC", log_entry.call, js8_log_band(log_entry.freq_hz), on, off);
     lv_obj_t *t = lv_list_add_text(log_list, line);
     lv_obj_set_style_text_font(t, &sony_22, 0);
-    snprintf(line, sizeof(line), "Sent %s  Rcvd %s  %.3f MHz  %.0f W", log_entry.rst_sent[0] ? log_entry.rst_sent : "-",
-             log_entry.rst_rcvd[0] ? log_entry.rst_rcvd : "-", log_entry.freq_hz / 1e6, log_entry.tx_pwr_w);
-    t = lv_list_add_text(log_list, line);
-    lv_obj_set_style_text_font(t, &sony_22, 0);
+    log_reports_line(line, sizeof(line));
+    log_reports = lv_list_add_text(log_list, line);
+    lv_obj_set_style_text_font(log_reports, &sony_22, 0);
 
     lv_obj_t *save = log_add(LOG_SAVE, "Save to log");
     lv_obj_set_style_text_color(save, lv_color_hex(0x80ff80), 0);
     snprintf(line, sizeof(line), "Grid: %s", log_entry.grid[0] ? log_entry.grid : "(none)");
-    log_add(LOG_GRID, line);
+    log_grid_btn = log_add(LOG_GRID, line);
     snprintf(line, sizeof(line), "Name: %s", log_entry.name[0] ? log_entry.name : "(none)");
     log_add(LOG_NAME, line);
     snprintf(line, sizeof(line), "Comment: %s", log_entry.comment[0] ? log_entry.comment : "(none)");
@@ -2540,6 +2572,7 @@ static void log_edit_done(const char *text) {
         switch (target) {
         case EDIT_LOG_GRID:
             snprintf(log_entry.grid, sizeof(log_entry.grid), "%s", value);
+            log_grid_typed = true;
             break;
         case EDIT_LOG_NAME:
             snprintf(log_entry.name, sizeof(log_entry.name), "%s", value);

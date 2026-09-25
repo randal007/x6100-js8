@@ -48,7 +48,7 @@ int js8_heartbeat_offset(const float *offsets_hz, const int64_t *heard_ms, unsig
 
 typedef struct {
     char    call[JS8_RX_CALL_LEN];
-    char    grid[8];
+    char    grid[12];         /* up to 10 characters */
     int64_t heard_ms;
     int16_t snr;          /* how we hear them */
     float   freq_hz;
@@ -130,7 +130,7 @@ bool js8_latlon_to_grid(double lat, double lon, int chars, char *out, unsigned s
 /* The QSO with one station, from the directed traffic seen so far. */
 typedef struct {
     char    call[JS8_RX_CALL_LEN];
-    char    grid[8];      /* one they sent us, or "" */
+    char    grid[12];     /* the most precise they sent us, or "" */
     int64_t start_ms;     /* first directed message either way */
     bool    has_sent_snr, has_rcvd_snr, has_heard_snr;
     int16_t sent_snr;     /* report we gave them */

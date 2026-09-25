@@ -10,7 +10,6 @@
 
 #include <algorithm>
 #include <cctype>
-#include <regex>
 #include <sstream>
 
 namespace x6100::js8 {
@@ -22,11 +21,6 @@ std::vector<std::string> words(const std::string &s) {
     std::vector<std::string> out;
     for (std::string w; in >> w;) out.push_back(w);
     return out;
-}
-
-bool is_grid(const std::string &w) {
-    static const std::regex re("^[A-R]{2}[0-9]{2}([A-X]{2})?$");
-    return std::regex_match(w, re);
 }
 
 bool parse_snr(const std::string &w, int *out) {
@@ -56,7 +50,7 @@ void StationList::add(const StationEvent &ev, const std::string &my_call) {
     auto w = words(body);
 
     // Grid: a heartbeat or CQ ends with one; so does a GRID reply.
-    if (!w.empty() && is_grid(w.back())) st.grid = w.back();
+    st.grid = better_grid(st.grid, find_grid(body));
 
     // Anything addressed to us means they hear us (desktop sets the ★ the
     // same way). "... SNR -12" or "... HEARTBEAT SNR -12" to us is how they

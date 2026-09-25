@@ -28,6 +28,7 @@ void ui_select_row_from(const char *call);
 void ui_click_focused(void);
 void ui_page(int n);
 void ui_hold(int i);
+int  ui_popup_has(const char *text);
 void ui_compose_clear(void);
 extern int stub_tx_frames;
 extern int32_t stub_tx_offset;
@@ -313,10 +314,21 @@ int main() {
         ui_compose_append("N0XYZ SNR -10");
         ui_compose_enter();
         wait_tx();
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ SNR -08 TNX", 1320, 0.05f}});
         printf("[log] before 73, list focused: %s (want yes: no prompt yet)\n", ui_focus_is_table() ? "yes" : "no");
-        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ SNR -08 TNX 73", 1320, 0.05f}});
-        pump(300);
-        printf("[log] prompt focused '%s' (want Save to log)\n", ui_focused_text());
+        ui_press(3); // Send... our 73 opens the prompt as it goes out
+        pump(200);
+        ui_compose_append("N0XYZ TU 73");
+        ui_compose_enter();
+        wait_tx();
+        printf("[log] prompt focused '%s' (want Save to log), grid none %d\n", ui_focused_text(),
+               ui_popup_has("Grid: (none)"));
+        ui_key(LV_KEY_RIGHT); // on Grid, as if about to edit
+        // Their last message arrives with the popup open.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ RR73 GRID EN34KS", 1320, 0.05f}});
+        printf("[log] after their RR73: grid EN34KS %d, still focused '%s' (want Grid: EN34KS)\n",
+               ui_popup_has("Grid: EN34KS"), ui_focused_text());
+        ui_key(LV_KEY_LEFT);
         screenshot("25_log_prompt.ppm");
 
         // Comment: Save, Grid, Name, Comment.
@@ -340,6 +352,7 @@ int main() {
 
         // Their 73 again: no second prompt.
         feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ 73 SK", 1320, 0.05f}});
+        printf("[log] popup open: %d (want -1: none)\n", ui_popup_has("Save"));
         printf("[log] second 73, list focused: %s (want yes)\n", ui_focus_is_table() ? "yes" : "no");
 
         // Stations view: N0XYZ is in the log (green).

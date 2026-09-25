@@ -32,6 +32,18 @@ enum class Checksum { None, Valid, Invalid };
 /// is removed from `text`; otherwise `text` is left unchanged.
 Checksum verify_command_checksum(std::string &text);
 
+/// A Maidenhead locator of 4, 6, 8 or 10 characters ("DN17", "CN89KG12AB").
+/// "RR73" is the FT8/JS8 sign-off, not a grid in the Arctic Ocean.
+bool is_grid(const std::string &word);
+
+/// The grid in a message body, or "": the word after "GRID" if that's a
+/// grid, else the last grid-looking word.
+std::string find_grid(const std::string &body);
+
+/// Which grid to keep: `heard` replaces `known` unless it's a less precise
+/// form of it ("DN17" after "DN17AB" keeps "DN17AB").
+std::string better_grid(const std::string &known, const std::string &heard);
+
 /// "EA8/G4ABC/P" -> "G4ABC": the longest slash-separated part containing a digit.
 std::string base_callsign(const std::string &call);
 

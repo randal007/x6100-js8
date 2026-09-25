@@ -60,6 +60,19 @@ const char *ui_focused_text(void) {
     return lv_list_get_btn_text(lv_obj_get_parent(f), f);
 }
 void ui_rotary(int32_t diff) { dialog_js8->rotary_cb(diff); }
+/* Does any item or title in the focused list contain `text`? */
+int ui_popup_has(const char *text) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_list_btn_class)) return -1;
+    lv_obj_t *list = lv_obj_get_parent(f);
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(list); i++) {
+        lv_obj_t  *c = lv_obj_get_child(list, i);
+        lv_obj_t  *l = lv_obj_check_type(c, &lv_label_class) ? c : lv_obj_get_child(c, 0);
+        const char *t = l && lv_obj_check_type(l, &lv_label_class) ? lv_label_get_text(l) : NULL;
+        if (t && strstr(t, text)) return 1;
+    }
+    return 0;
+}
 /* Long-press of a bottom button. */
 void ui_hold(int i) {
     button_data_t *b = stub_page->items[i];

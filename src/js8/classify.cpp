@@ -6,6 +6,8 @@
 
 #include "classify.hpp"
 
+#include <regex>
+
 #include "render.hpp"
 
 #include "js8core/protocol/varicode.hpp"
@@ -131,6 +133,28 @@ Checksum verify_command_checksum(std::string &text) {
     text.erase(last + 1 - len);
     while (!text.empty() && text.back() == ' ') text.pop_back();
     return Checksum::Valid;
+}
+
+bool is_grid(const std::string &w) {
+    static const std::regex re("^[A-R]{2}[0-9]{2}([A-X]{2}([0-9]{2}([A-X]{2})?)?)?$");
+    return w != "RR73" && std::regex_match(w, re);
+}
+
+std::string find_grid(const std::string &body) {
+    std::istringstream       in(body);
+    std::vector<std::string> w;
+    for (std::string t; in >> t;) w.push_back(t);
+    for (std::size_t i = 0; i + 1 < w.size(); i++)
+        if (w[i] == "GRID" && is_grid(w[i + 1])) return w[i + 1];
+    for (auto it = w.rbegin(); it != w.rend(); ++it)
+        if (is_grid(*it)) return *it;
+    return "";
+}
+
+std::string better_grid(const std::string &known, const std::string &heard) {
+    if (heard.empty()) return known;
+    if (heard.size() < known.size() && known.compare(0, heard.size(), heard) == 0) return known;
+    return heard;
 }
 
 } // namespace x6100::js8

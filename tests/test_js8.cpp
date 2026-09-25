@@ -1327,3 +1327,51 @@ TEST_CASE("the QSO log C API", "[js8][log]") {
     CHECK(std::string(js8_log_band(7078000)) == "40m");
     js8_qsos_destroy(q);
 }
+
+TEST_CASE("grids: 4 to 10 characters, not RR73, most precise kept", "[js8][log]") {
+    CHECK(is_grid("DN17"));
+    CHECK(is_grid("DN17AB"));
+    CHECK(is_grid("CN89KG12"));
+    CHECK(is_grid("CN89KG12AB"));
+    CHECK_FALSE(is_grid("RR73"));
+    CHECK_FALSE(is_grid("DN1"));
+    CHECK_FALSE(is_grid("DN17A"));
+    CHECK_FALSE(is_grid("SN17")); // fields stop at R
+    CHECK_FALSE(is_grid("DN17AB1"));
+
+    CHECK(find_grid("VE7NHW GRID DN17 TU 73") == "DN17");
+    CHECK(find_grid("VE7NHW MY QTH DN17AB NAME BOB") == "DN17AB");
+    CHECK(find_grid("VE7NHW RR73") == "");
+    CHECK(find_grid("@HB HEARTBEAT CN89") == "CN89");
+    CHECK(find_grid("VE7NHW GRID CN89KG12AB") == "CN89KG12AB");
+
+    CHECK(better_grid("", "DN17") == "DN17");
+    CHECK(better_grid("DN17AB", "DN17") == "DN17AB");  // less precise: keep
+    CHECK(better_grid("DN17", "DN17AB") == "DN17AB");
+    CHECK(better_grid("DN17AB", "CN89") == "CN89");    // they moved
+    CHECK(better_grid("DN17AB", "") == "DN17AB");
+}
+
+TEST_CASE("the QSO keeps the grid they sent anywhere in a message", "[js8][log]") {
+    QsoTracker        t;
+    const std::string me = "VE7NHW";
+    t.sent("VE7NHW: N7EAL GRID?", me, 0);
+    t.received("N7EAL", "N7EAL: VE7NHW GRID DN17AB TNX", true, -9, me, 15000);
+    t.received("N7EAL", "N7EAL: VE7NHW RR73", true, -9, me, 30000);
+    t.received("N7EAL", "N7EAL: VE7NHW HB DN17", true, -9, me, 45000);
+    auto q = t.get("N7EAL", 45000);
+    REQUIRE(q);
+    CHECK(q->grid == "DN17AB");
+
+    StationList st;
+    StationEvent ev{"N7EAL", "VE7NHW", "N7EAL: VE7NHW GRID DN17AB", true, -9, 1500, 1000};
+    st.add(ev, me);
+    ev.text = "N7EAL: VE7NHW RR73";
+    st.add(ev, me);
+    ev.text = "N7EAL: @HB HEARTBEAT DN17";
+    ev.to_me = false;
+    st.add(ev, me);
+    auto list = st.sorted(1000);
+    REQUIRE(list.size() == 1);
+    CHECK(list[0].grid == "DN17AB");
+}
