@@ -61,7 +61,9 @@
 #endif
 #define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
 #define JS8_SLOT_SEC     15.0f
-#define PSD_INTERVAL_MS  200
+#define WF_ROWS_PER_SEC  10     /* waterfall rows per second of audio */
+#define WF_ROW_SAMPLES   (SAMPLE_RATE / WF_ROWS_PER_SEC)
+#define WF_QUEUE         16     /* rows waiting to be drawn (jitter buffer) */
 #define HB_ADJUST_MS     8000   /* setting the HB interval ends after this idle */
 /* The waterfall is drawn relative to the noise floor, so it works at any
  * audio level: WF_MIN_DB..WF_MAX_DB above the floor spans the palette. */
@@ -186,7 +188,14 @@ static bool     test_wav_shown; /* label state of btn_test_wav */
 static spgramf  sg;
 static float   *psd;
 static uint16_t nfft;
-static uint64_t last_psd_ms;
+static unsigned wf_row_fill;   /* samples in the row being built (receiver thread) */
+
+/* Rows are made per fixed amount of audio, but audio arrives in bursts; a
+ * timer draws them at an even pace so the waterfall scrolls smoothly. */
+static float     *wf_queue[WF_QUEUE];
+static uint16_t   wf_queue_size[WF_QUEUE];
+static unsigned   wf_q_head, wf_q_count;
+static lv_timer_t *wf_timer;
 static float    wf_floor_db;   /* smoothed noise floor (receiver thread) */
 static bool     wf_floor_set;
 
@@ -662,10 +671,41 @@ typedef struct {
     uint16_t size;
 } wf_data_t;
 
+static void wf_queue_clear(void) {
+    while (wf_q_count) {
+        free(wf_queue[wf_q_head]);
+        wf_q_head = (wf_q_head + 1) % WF_QUEUE;
+        wf_q_count--;
+    }
+}
+
 static void ui_waterfall_add(void *arg) {
     wf_data_t *d = (wf_data_t *)arg;
-    if (dialog.run && waterfall) lv_waterfall_add_data(waterfall, d->psd, d->size);
-    free(d->psd);
+    if (!dialog.run || !waterfall) {
+        free(d->psd);
+        return;
+    }
+    if (wf_q_count == WF_QUEUE) { /* far behind: drop the oldest */
+        free(wf_queue[wf_q_head]);
+        wf_q_head = (wf_q_head + 1) % WF_QUEUE;
+        wf_q_count--;
+    }
+    unsigned tail       = (wf_q_head + wf_q_count) % WF_QUEUE;
+    wf_queue[tail]      = d->psd;
+    wf_queue_size[tail] = d->size;
+    wf_q_count++;
+}
+
+/* One row per tick; two when the queue builds up, so the delay stays short. */
+static void wf_timer_cb(lv_timer_t *t) {
+    (void)t;
+    unsigned n = wf_q_count > 3 ? 2 : (wf_q_count ? 1 : 0);
+    while (n--) {
+        lv_waterfall_add_data(waterfall, wf_queue[wf_q_head], wf_queue_size[wf_q_head]);
+        free(wf_queue[wf_q_head]);
+        wf_q_head = (wf_q_head + 1) % WF_QUEUE;
+        wf_q_count--;
+    }
 }
 
 static int cmp_float(const void *a, const void *b) {
@@ -673,16 +713,7 @@ static int cmp_float(const void *a, const void *b) {
     return (x > y) - (x < y);
 }
 
-static void on_audio(const float *samples, unsigned n, void *ctx) {
-    (void)ctx;
-    if (!sg) return;
-
-    spgramf_write(sg, (float *)samples, n);
-
-    uint64_t now = get_time();
-    if (now - last_psd_ms < PSD_INTERVAL_MS) return;
-    last_psd_ms = now;
-
+static void wf_emit_row(void) {
     spgramf_get_psd(sg, psd);
     liquid_vectorf_addscalar(psd, nfft, -10.f * log10f(sqrtf(nfft)), psd);
     spgramf_reset(sg);
@@ -705,7 +736,7 @@ static void on_audio(const float *samples, unsigned n, void *ctx) {
         qsort(sorted, d.size, sizeof(float), cmp_float);
         float floor_now = sorted[d.size * 3 / 10];
         free(sorted);
-        wf_floor_db  = wf_floor_set ? wf_floor_db + 0.1f * (floor_now - wf_floor_db) : floor_now;
+        wf_floor_db  = wf_floor_set ? wf_floor_db + 0.05f * (floor_now - wf_floor_db) : floor_now;
         wf_floor_set = true;
     }
     for (uint16_t i = 0; i < d.size; i++) d.psd[i] -= wf_floor_db;
@@ -713,13 +744,35 @@ static void on_audio(const float *samples, unsigned n, void *ctx) {
     scheduler_put(ui_waterfall_add, &d, sizeof(d));
 }
 
+static void on_audio(const float *samples, unsigned n, void *ctx) {
+    (void)ctx;
+    if (!sg) return;
+
+    /* One row per WF_ROW_SAMPLES of audio, however the audio is chunked. */
+    while (n) {
+        unsigned take = WF_ROW_SAMPLES - wf_row_fill;
+        if (take > n) take = n;
+        spgramf_write(sg, (float *)samples, take);
+        samples += take;
+        n -= take;
+        wf_row_fill += take;
+        if (wf_row_fill >= WF_ROW_SAMPLES) {
+            wf_row_fill = 0;
+            wf_emit_row();
+        }
+    }
+}
+
 /* ---- Receiver lifecycle ----------------------------------------------- */
 
 static void rx_start(void) {
     int span = filter_high - filter_low;
     nfft     = (uint16_t)(span > 0 ? WIDTH * SAMPLE_RATE / span : 4096);
-    sg       = spgramf_create(nfft, LIQUID_WINDOW_HANN, nfft, nfft / 2);
+    /* Step at most half a row, so every row gets at least one transform. */
+    unsigned step = nfft / 2 < WF_ROW_SAMPLES / 2 ? nfft / 2 : WF_ROW_SAMPLES / 2;
+    sg           = spgramf_create(nfft, LIQUID_WINDOW_HANN, nfft, step);
     wf_floor_set = false;
+    wf_row_fill  = 0;
     psd      = malloc(nfft * sizeof(float));
 
     js8_rx_cb_t cb = {
@@ -1078,6 +1131,7 @@ static void band_cb(lv_event_t *e) {
     js8_rx_clear(rx);
     js8_stations_clear(stations); /* a different band, different stations */
     lv_waterfall_clear_data(waterfall);
+    wf_queue_clear();
     lv_finder_clear_cursor(finder);
     if (view_stations) rebuild_rows();
     add_info_row("%s", cfg_digital_label_get());
@@ -1135,6 +1189,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_waterfall_set_size(waterfall, WIDTH, WF_HEIGHT);
     lv_waterfall_set_min(waterfall, WF_MIN_DB);
     lv_waterfall_set_max(waterfall, WF_MAX_DB);
+    wf_timer = lv_timer_create(wf_timer_cb, 1000 / WF_ROWS_PER_SEC, NULL);
     lv_obj_set_pos(waterfall, 13, 13);
 
     /* Finder marks the offset of the selected message. */
@@ -1251,6 +1306,10 @@ static void destruct_cb(void) {
         lv_timer_del(tx_timer);
         tx_timer = NULL;
     }
+    if (wf_timer) {
+        lv_timer_del(wf_timer);
+        wf_timer = NULL;
+    }
     compose_close();
     query_close();
     if (texts_list) {
@@ -1261,6 +1320,7 @@ static void destruct_cb(void) {
     radio_set_pwr(param_f_get(cfg_pwr));
 
     rx_stop();
+    wf_queue_clear();
 
     dsp_set_waterfall_enabled(true);
     dsp_set_spectrum_enabled(true);
@@ -1298,6 +1358,7 @@ static void clear_cb(button_data_t *btn) {
     js8_stations_clear(stations);
     js8_rx_clear(rx);
     lv_waterfall_clear_data(waterfall);
+    wf_queue_clear();
     lv_finder_clear_cursor(finder);
     rebuild_rows();
     update_status();
