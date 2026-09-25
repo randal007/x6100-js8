@@ -67,6 +67,55 @@ void            js8_stations_add(js8_stations_t *s, const js8_rx_msg_t *msg, con
 int             js8_stations_list(js8_stations_t *s, int64_t now_ms, js8_station_t *out, int max);
 void            js8_stations_clear(js8_stations_t *s);
 
+/* ---- Auto-reply, heartbeat acks, heartbeat timing (T4) --------------- */
+
+typedef struct {
+    bool        autoreply; /* AUTO */
+    bool        heartbeat; /* HB   */
+    bool        hb_ack;    /* HB ACK: acts only with AUTO and HB on */
+    const char *my_call, *my_grid, *info, *status;
+} js8_auto_settings_t;
+
+typedef enum {
+    JS8_AUTO_IGNORE,
+    JS8_AUTO_SEND,  /* queue it now */
+    JS8_AUTO_OFFER, /* AUTO is off: suggest it, like desktop's outgoing box */
+} js8_auto_action_t;
+
+typedef struct {
+    js8_auto_action_t action;
+    bool              hb_ack; /* a heartbeat ack: send in the HB sub-band */
+    char              text[JS8_RX_TEXT_LEN];
+    char              to[JS8_RX_CALL_LEN];
+    char              command[16];
+} js8_auto_result_t;
+
+typedef struct js8_auto js8_auto_t;
+
+js8_auto_t *js8_auto_create(void);
+void        js8_auto_destroy(js8_auto_t *a);
+
+/* Decide what to do about a received message. heard: recent calls, most
+ * recent first (for HEARING?). last_tx: our last message (for AGN?). */
+void js8_auto_consider(js8_auto_t *a, const js8_rx_msg_t *msg, const js8_auto_settings_t *s,
+                       const char *const *heard, unsigned n_heard, const char *last_tx, int64_t now_ms,
+                       js8_auto_result_t *out);
+/* Record that a reply was queued (rate limits). */
+void js8_auto_sent(js8_auto_t *a, const js8_auto_result_t *r, int64_t now_ms);
+/* Any key, button or knob; automatic TX stops after an hour without one. */
+void js8_auto_user_activity(js8_auto_t *a, int64_t now_ms);
+bool js8_auto_idle(js8_auto_t *a, int64_t now_ms);
+
+/* Does this message start a QSO with us? */
+bool js8_starts_qso(const js8_rx_msg_t *msg);
+
+/* Desktop's heartbeat schedule; interval clamped to 5-30 min. */
+int64_t js8_next_heartbeat_ms(int64_t now_ms, int interval_min);
+
+#define JS8_HB_MIN_INTERVAL     5
+#define JS8_HB_MAX_INTERVAL     30
+#define JS8_HB_DEFAULT_INTERVAL 30
+
 #ifdef __cplusplus
 }
 #endif

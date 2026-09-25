@@ -822,3 +822,166 @@ TEST_CASE("station list marks who heard us, with the SNR they reported", "[js8][
     // An hour later they've all expired.
     CHECK(list.sorted(t0 + StationList::EXPIRE_MS + 10'000).empty());
 }
+
+/* ---- T4: auto-reply, heartbeat acks, heartbeat timing ------------------ */
+
+#include "autoreply.hpp"
+
+namespace {
+// A message from `call` built by JS8Call's encoder and decoded by ours.
+Incoming incoming(const std::string &call, const std::string &text, int snr, const std::string &my_call = "K2XYZ") {
+    auto plan = plan_message(call, "EN52", text);
+    REQUIRE(plan.ok());
+    auto     mc = classify(plan.preview, my_call);
+    Incoming in;
+    in.from      = mc.from;
+    in.to        = mc.to;
+    in.text      = plan.preview;
+    in.to_me     = mc.to_me;
+    in.to_group  = mc.to_group;
+    in.heartbeat = mc.heartbeat;
+    in.snr       = snr;
+    return in;
+}
+AutoSettings settings() {
+    AutoSettings s;
+    s.my_call = "K2XYZ";
+    s.my_grid = "FN42AB";
+    s.info    = "X6100 5W EFHW";
+    s.status  = "IDLE";
+    return s;
+}
+} // namespace
+
+TEST_CASE("auto-reply builds desktop JS8Call's answers to queries", "[js8][t4]") {
+    auto                     s     = settings();
+    std::vector<std::string> heard = {"N0XYZ", "VE3KP", "K2XYZ", "G4ABC", "DL1XX", "W1ABC"};
+
+    struct Case {
+        const char *asked, *answer;
+    };
+    for (auto [asked, answer] : std::vector<Case>{
+             {"K2XYZ SNR?", "N0XYZ SNR -12"},
+             {"K2XYZ GRID?", "N0XYZ GRID FN42AB"},
+             {"K2XYZ INFO?", "N0XYZ INFO X6100 5W EFHW"},
+             {"K2XYZ STATUS?", "N0XYZ STATUS IDLE"},
+             // up to 4, not the asker, not us
+             {"K2XYZ HEARING?", "N0XYZ HEARING VE3KP G4ABC DL1XX W1ABC"},
+             {"K2XYZ AGN?", "N0XYZ HELLO AGAIN"},
+         }) {
+        auto r = build_reply(incoming("N0XYZ", asked, -12), s, heard, "N0XYZ HELLO AGAIN");
+        INFO(asked);
+        REQUIRE(r.has_value());
+        CHECK(r->text == answer);
+        CHECK(r->kind == ReplyKind::Query);
+        // What we'd send decodes back as a normal message from us.
+        CHECK(plan_message("K2XYZ", "FN42AB", r->text).ok());
+    }
+}
+
+TEST_CASE("auto-reply ignores what desktop JS8Call ignores", "[js8][t4]") {
+    auto s = settings();
+    // Queries to someone else, or to a group.
+    CHECK_FALSE(build_reply(incoming("N0XYZ", "W1ABC SNR?", -5), s, {}, "").has_value());
+    CHECK_FALSE(build_reply(incoming("N0XYZ", "@ALLCALL SNR?", -5), s, {}, "").has_value());
+    // Low-confidence decodes.
+    auto low           = incoming("N0XYZ", "K2XYZ SNR?", -5);
+    low.low_confidence = true;
+    CHECK_FALSE(build_reply(low, s, {}, "").has_value());
+    // Nothing to say: no INFO text, no grid, nothing heard, nothing sent yet.
+    auto empty = s;
+    empty.info = empty.status = empty.my_grid = "";
+    CHECK_FALSE(build_reply(incoming("N0XYZ", "K2XYZ INFO?", -5), empty, {}, "").has_value());
+    CHECK_FALSE(build_reply(incoming("N0XYZ", "K2XYZ STATUS?", -5), empty, {}, "").has_value());
+    CHECK_FALSE(build_reply(incoming("N0XYZ", "K2XYZ GRID?", -5), empty, {}, "").has_value());
+    CHECK_FALSE(build_reply(incoming("N0XYZ", "K2XYZ HEARING?", -5), empty, {"N0XYZ"}, "").has_value());
+    CHECK_FALSE(build_reply(incoming("N0XYZ", "K2XYZ AGN?", -5), empty, {}, "").has_value());
+    // Ordinary chat isn't a query.
+    CHECK_FALSE(build_reply(incoming("N0XYZ", "K2XYZ HELLO THERE", -5), s, {}, "").has_value());
+}
+
+TEST_CASE("heartbeats get desktop's ack; acks and our own traffic don't", "[js8][t4]") {
+    auto s = settings();
+    auto r = build_reply(incoming("K9ABC", "K9ABC: HEARTBEAT EN52", -8), s, {}, "");
+    REQUIRE(r.has_value());
+    CHECK(r->kind == ReplyKind::HeartbeatAck);
+    CHECK(r->text == "K9ABC HEARTBEAT SNR -08");
+    auto plan = plan_message("K2XYZ", "FN42AB", r->text);
+    REQUIRE(plan.ok());
+    CHECK(plan.preview == "K2XYZ: K9ABC HEARTBEAT SNR -08");
+
+    // Someone's ack to us, or to another station: not acked again.
+    CHECK_FALSE(build_reply(incoming("K9ABC", "K2XYZ HEARTBEAT SNR -08", -8), s, {}, "").has_value());
+    CHECK_FALSE(build_reply(incoming("K9ABC", "W1ABC HEARTBEAT SNR -08", -8), s, {}, "").has_value());
+    // Our own heartbeat heard back.
+    CHECK_FALSE(build_reply(incoming("K2XYZ", "K2XYZ: HEARTBEAT FN42", -8), s, {}, "").has_value());
+    // A CQ isn't a heartbeat.
+    CHECK_FALSE(build_reply(incoming("VE3KP", "CQ CQ CQ FN03", -8), s, {}, "").has_value());
+}
+
+TEST_CASE("the switches: AUTO sends, off offers; HB ACK needs AUTO and HB", "[js8][t4]") {
+    AutoPolicy         p;
+    const std::int64_t t = 1'000'000'000;
+    p.user_activity(t);
+    auto s = settings();
+
+    auto query = *build_reply(incoming("N0XYZ", "K2XYZ SNR?", -12), s, {}, "");
+    auto ack   = *build_reply(incoming("K9ABC", "K9ABC: HEARTBEAT EN52", -8), s, {}, "");
+
+    // All off (the default): offer the query reply, ignore heartbeats.
+    CHECK(p.decide(query, s, t) == AutoPolicy::Action::Offer);
+    CHECK(p.decide(ack, s, t) == AutoPolicy::Action::Ignore);
+
+    s.autoreply = true;
+    CHECK(p.decide(query, s, t) == AutoPolicy::Action::Send);
+    s.hb_ack = true; // without HB networking: still no acks
+    CHECK(p.decide(ack, s, t) == AutoPolicy::Action::Ignore);
+    s.heartbeat = true;
+    CHECK(p.decide(ack, s, t) == AutoPolicy::Action::Send);
+    s.autoreply = false; // HB + HB ACK without AUTO: no acks either
+    CHECK(p.decide(ack, s, t) == AutoPolicy::Action::Ignore);
+    s.autoreply = true;
+
+    // Rate limits: same station and command within 5 min; acks within 15 min.
+    p.sent(query, t);
+    CHECK(p.decide(query, s, t + 60'000) == AutoPolicy::Action::Ignore);
+    CHECK(p.decide(query, s, t + AutoPolicy::QUERY_REPEAT_MS + 1) == AutoPolicy::Action::Send);
+    p.sent(ack, t);
+    CHECK(p.decide(ack, s, t + 10 * 60'000) == AutoPolicy::Action::Ignore);
+    CHECK(p.decide(ack, s, t + AutoPolicy::HB_ACK_REPEAT_MS + 1) == AutoPolicy::Action::Send);
+
+    // Idle watchdog: an hour without a key press stops automatic TX.
+    AutoPolicy idle;
+    idle.user_activity(t);
+    CHECK(idle.decide(query, s, t + AutoPolicy::IDLE_MS + 1) == AutoPolicy::Action::Offer);
+    CHECK(idle.decide(ack, s, t + AutoPolicy::IDLE_MS + 1) == AutoPolicy::Action::Ignore);
+    idle.user_activity(t + AutoPolicy::IDLE_MS + 2);
+    CHECK(idle.decide(query, s, t + AutoPolicy::IDLE_MS + 3) == AutoPolicy::Action::Send);
+}
+
+TEST_CASE("a QSO starts with any message to us except a heartbeat ack", "[js8][t4]") {
+    CHECK(starts_qso(incoming("N0XYZ", "K2XYZ HELLO", -5)));
+    CHECK(starts_qso(incoming("N0XYZ", "K2XYZ SNR?", -5)));
+    CHECK_FALSE(starts_qso(incoming("K9ABC", "K2XYZ HEARTBEAT SNR -08", -5)));
+    CHECK_FALSE(starts_qso(incoming("VE3KP", "CQ CQ CQ FN03", -5)));
+    CHECK_FALSE(starts_qso(incoming("N0XYZ", "W1ABC HELLO", -5)));
+}
+
+TEST_CASE("heartbeat timing follows desktop's scheduleHeartbeat", "[js8][t4]") {
+    std::mt19937       rng(3);
+    const std::int64_t now = 1'700'000'007'400; // 7.4 s past a 15 s boundary
+    int                later = 0;
+    for (int i = 0; i < 400; i++) {
+        auto t = next_heartbeat_ms(now, 10, rng);
+        // next boundary (…015 s) + 1 s + 10 min, sometimes one slot later
+        const std::int64_t base = (now / 1000 + 14) / 15 * 15 * 1000 + 1000 + 10 * 60'000;
+        CHECK((t == base || t == base + 15'000));
+        later += t != base;
+    }
+    CHECK(later > 60);  // about 25 %
+    CHECK(later < 140);
+    // Interval clamped to 5-30 min.
+    auto lo = next_heartbeat_ms(now, 1, rng), hi = next_heartbeat_ms(now, 99, rng);
+    CHECK(lo - now < 6 * 60'000 + 20'000);
+    CHECK(hi - now > 29 * 60'000);
+}

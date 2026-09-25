@@ -7,6 +7,8 @@
 
 #include "js8_ops.h"
 
+#include "autoreply.hpp"
+#include "classify.hpp"
 #include "commands.hpp"
 #include "stations.hpp"
 
@@ -103,4 +105,87 @@ extern "C" int js8_stations_list(js8_stations_t *s, int64_t now_ms, js8_station_
 
 extern "C" void js8_stations_clear(js8_stations_t *s) {
     if (s) s->list.clear();
+}
+
+/* ---- T4 -------------------------------------------------------------- */
+
+struct js8_auto {
+    AutoPolicy policy;
+};
+
+namespace {
+Incoming to_incoming(const js8_rx_msg_t *m) {
+    Incoming in;
+    in.from           = m->from;
+    in.to             = m->to;
+    in.text           = m->text;
+    in.to_me          = m->to_me;
+    in.to_group       = m->to_group;
+    in.heartbeat      = m->heartbeat;
+    in.low_confidence = m->low_confidence;
+    in.snr            = m->snr;
+    return in;
+}
+} // namespace
+
+extern "C" js8_auto_t *js8_auto_create(void) {
+    return new (std::nothrow) js8_auto;
+}
+
+extern "C" void js8_auto_destroy(js8_auto_t *a) {
+    delete a;
+}
+
+extern "C" void js8_auto_consider(js8_auto_t *a, const js8_rx_msg_t *msg, const js8_auto_settings_t *s,
+                                  const char *const *heard, unsigned n_heard, const char *last_tx, int64_t now_ms,
+                                  js8_auto_result_t *out) {
+    if (!out) return;
+    *out = js8_auto_result_t{};
+    if (!a || !msg || !s || msg->tx) return;
+
+    AutoSettings settings;
+    settings.autoreply = s->autoreply;
+    settings.heartbeat = s->heartbeat;
+    settings.hb_ack    = s->hb_ack;
+    settings.my_call   = s->my_call ? s->my_call : "";
+    settings.my_grid   = s->my_grid ? s->my_grid : "";
+    settings.info      = s->info ? s->info : "";
+    settings.status    = s->status ? s->status : "";
+
+    std::vector<std::string> calls;
+    for (unsigned i = 0; i < n_heard; i++) calls.emplace_back(heard[i]);
+
+    auto r = build_reply(to_incoming(msg), settings, calls, last_tx ? last_tx : "");
+    if (!r) return;
+    auto act    = a->policy.decide(*r, settings, now_ms);
+    out->action = act == AutoPolicy::Action::Send    ? JS8_AUTO_SEND
+                  : act == AutoPolicy::Action::Offer ? JS8_AUTO_OFFER
+                                                     : JS8_AUTO_IGNORE;
+    out->hb_ack = r->kind == ReplyKind::HeartbeatAck;
+    copy_str(out->text, sizeof(out->text), r->text);
+    copy_str(out->to, sizeof(out->to), r->to);
+    copy_str(out->command, sizeof(out->command), r->command);
+}
+
+extern "C" void js8_auto_sent(js8_auto_t *a, const js8_auto_result_t *r, int64_t now_ms) {
+    if (!a || !r) return;
+    AutoReply reply{r->text, r->to, r->command, r->hb_ack ? ReplyKind::HeartbeatAck : ReplyKind::Query};
+    a->policy.sent(reply, now_ms);
+}
+
+extern "C" void js8_auto_user_activity(js8_auto_t *a, int64_t now_ms) {
+    if (a) a->policy.user_activity(now_ms);
+}
+
+extern "C" bool js8_auto_idle(js8_auto_t *a, int64_t now_ms) {
+    return a && a->policy.idle(now_ms);
+}
+
+extern "C" bool js8_starts_qso(const js8_rx_msg_t *msg) {
+    return msg && !msg->tx && starts_qso(to_incoming(msg));
+}
+
+extern "C" int64_t js8_next_heartbeat_ms(int64_t now_ms, int interval_min) {
+    static std::mt19937 rng{std::random_device{}()};
+    return next_heartbeat_ms(now_ms, interval_min, rng);
 }

@@ -11,6 +11,7 @@ add_library(JS8 STATIC
     js8_tx.cpp
     commands.cpp
     stations.cpp
+    autoreply.cpp
     js8_ops.cpp
     js8_rx.cpp
 )
