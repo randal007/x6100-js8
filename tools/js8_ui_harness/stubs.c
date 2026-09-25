@@ -12,6 +12,8 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
 #include <string.h>
 #include <time.h>
 
@@ -119,3 +121,11 @@ bool tx_player_play(int16_t *samples, uint32_t n, int32_t offset, float gain, tx
     return true;
 }
 void params_bool_set(params_bool_t *var, bool x) { var->x = x; }
+
+/* GPS: a fix from HARNESS_GPS="lat,lon" (age 5 s), none otherwise. */
+bool gps_last_fix(double *lat, double *lon, int *age_s) {
+    const char *e = getenv("HARNESS_GPS");
+    if (!e || sscanf(e, "%lf,%lf", lat, lon) != 2) return false;
+    *age_s = 5;
+    return true;
+}

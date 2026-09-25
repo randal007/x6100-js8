@@ -199,3 +199,24 @@ extern "C" bool js8_clock_correction(const float *dt, unsigned n, float *correct
     *correction_s  = -median;
     return true;
 }
+
+extern "C" bool js8_latlon_to_grid(double lat, double lon, int chars, char *out, unsigned size) {
+    if (!out || chars < 2 || chars > 10 || chars % 2 || size < (unsigned)chars + 1) return false;
+    if (!(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180)) return false;
+    // Each pair subdivides the last: fields 18, squares 10, subsquares 24,
+    // then 10 and 24 again. Work in fractions of the whole range.
+    static const int base[5] = {18, 10, 24, 10, 24};
+    double x = (lon + 180.0) / 360.0, y = (lat + 90.0) / 180.0;
+    for (int i = 0; i < chars / 2; i++) {
+        x *= base[i];
+        y *= base[i];
+        int xi = std::min((int)x, base[i] - 1), yi = std::min((int)y, base[i] - 1); // lat 90 / lon 180
+        char first = (i % 2) ? '0' : 'A';
+        out[2 * i]     = (char)(first + xi);
+        out[2 * i + 1] = (char)(first + yi);
+        x -= xi;
+        y -= yi;
+    }
+    out[chars] = '\0';
+    return true;
+}

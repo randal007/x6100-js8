@@ -437,6 +437,27 @@ TEST_CASE("receiver fills an audio gap with silence instead of realigning", "[js
     CHECK(rx.realign_count() == 0);
 }
 
+TEST_CASE("lat/lon to Maidenhead grid", "[js8][ops][aprs]") {
+    char g[12];
+    REQUIRE(js8_latlon_to_grid(41.714775, -72.727260, 6, g, sizeof(g))); // W1AW
+    CHECK(std::string(g) == "FN31PR");
+    REQUIRE(js8_latlon_to_grid(0.0, 0.0, 10, g, sizeof(g)));
+    CHECK(std::string(g) == "JJ00AA00AA");
+    REQUIRE(js8_latlon_to_grid(-33.8688, 151.2093, 6, g, sizeof(g))); // Sydney
+    CHECK(std::string(g) == "QF56OD");
+    REQUIRE(js8_latlon_to_grid(90.0, 180.0, 4, g, sizeof(g))); // the far corner stays in range
+    CHECK(std::string(g) == "RR99");
+    // Longer grids extend the shorter ones.
+    char g6[8], g10[12];
+    REQUIRE(js8_latlon_to_grid(49.2827, -123.1207, 6, g6, sizeof(g6)));
+    REQUIRE(js8_latlon_to_grid(49.2827, -123.1207, 10, g10, sizeof(g10)));
+    CHECK(std::string(g10).rfind(g6, 0) == 0);
+    CHECK(std::string(g6) == "CN89KG"); // downtown Vancouver; L starts at -123.0833
+    CHECK_FALSE(js8_latlon_to_grid(95.0, 0.0, 6, g, sizeof(g)));
+    CHECK_FALSE(js8_latlon_to_grid(0.0, 0.0, 7, g, sizeof(g)));
+    CHECK_FALSE(js8_latlon_to_grid(0.0, 0.0, 10, g, 8));
+}
+
 TEST_CASE("clock correction is the negated median DT", "[js8][ops]") {
     float c = 0;
     const float few[] = {1.0f, 1.2f};

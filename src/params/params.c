@@ -72,7 +72,7 @@ params_t params = {
 
     .ft8_tx_freq            = { .x = 1325,      .name = "ft8_tx_freq" },
     .js8_tx_freq            = { .x = 1500,      .name = "js8_tx_freq" },
-    .js8_hold_offset        = { .x = true,      .name = "js8_hold_offset" },
+    .js8_hold_offset        = { .x = false,     .name = "js8_hold_offset" },
     .js8_auto               = { .x = false,     .name = "js8_auto" },
     .js8_hb                 = { .x = false,     .name = "js8_hb" },
     .js8_hb_ack             = { .x = false,     .name = "js8_hb_ack" },

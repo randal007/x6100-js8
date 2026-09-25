@@ -131,8 +131,10 @@ static void        tx_timer_cb(lv_timer_t *t);
 static void        compose_close(void);
 static void        hb_adjust_end(void);
 static void        aprs_cb(button_data_t *btn);
-static void        aprs_grid_cb(button_data_t *btn);
 static void        aprs_close(void);
+static bool        popup_guard(void);
+static void        js8_next_page_cb(button_data_t *btn);
+static void        texts_close(void);
 static bool        aprs_prepare(const char *in, char *out, size_t size);
 
 /* ---- State (UI thread unless noted) ------------------------------------ */
@@ -220,19 +222,19 @@ static buttons_page_t page_3;
 static buttons_page_t page_4;
 static buttons_page_t page_5;
 
-static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:5)", .press = button_next_page_cb, .next = &page_2};
+static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:5)", .press = js8_next_page_cb, .next = &page_2};
 static button_data_t btn_show    = {.type = BTN_TEXT_FN, .label_fn = show_label_getter, .press = show_cb};
 static button_data_t btn_reply   = {.type = BTN_TEXT, .label = "Reply", .press = reply_cb};
 static button_data_t btn_send    = {.type = BTN_TEXT, .label = "Send...", .press = send_cb};
 static button_data_t btn_stop_tx = {.type = BTN_TEXT, .label = "Stop TX", .press = stop_tx_cb};
 
-static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:5)", .press = button_next_page_cb, .next = &page_3};
+static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:5)", .press = js8_next_page_cb, .next = &page_3};
 static button_data_t btn_cq    = {.type = BTN_TEXT, .label = "CQ", .press = cq_cb};
 static button_data_t btn_hb    = {.type = BTN_TEXT, .label = "Heart-\nbeat", .press = heartbeat_cb};
 static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press = query_cb};
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
-static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:5)", .press = button_next_page_cb, .next = &page_4};
+static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:5)", .press = js8_next_page_cb, .next = &page_4};
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
@@ -241,17 +243,16 @@ static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn
 static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_clear}};
 static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations}};
 
-static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:5)", .press = button_next_page_cb, .next = &page_5};
+static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:5)", .press = js8_next_page_cb, .next = &page_5};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
 static button_data_t btn_hbauto = {.type = BTN_TEXT_FN, .label_fn = hb_label_getter, .press = hb_cb, .hold = hb_hold_cb};
 static button_data_t btn_hbackk = {.type = BTN_TEXT_FN, .label_fn = hb_ack_label_getter, .press = hb_ack_cb};
 static button_data_t btn_texts  = {.type = BTN_TEXT, .label = "Texts...", .press = texts_cb};
 static buttons_page_t page_4 = {{&btn_p4, &btn_auto, &btn_hbauto, &btn_hbackk, &btn_texts}};
 
-static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:5)", .press = button_next_page_cb, .next = &page_1};
+static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:5)", .press = js8_next_page_cb, .next = &page_1};
 static button_data_t  btn_aprs      = {.type = BTN_TEXT, .label = "APRS >", .press = aprs_cb};
-static button_data_t  btn_aprs_grid = {.type = BTN_TEXT, .label = "Spot grid\nto APRS", .press = aprs_grid_cb};
-static buttons_page_t page_5        = {{&btn_p5, &btn_aprs, &btn_aprs_grid}};
+static buttons_page_t page_5        = {{&btn_p5, &btn_aprs}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -1345,8 +1346,18 @@ static void destruct_cb(void) {
         wf_timer = NULL;
     }
     compose_close();
-    query_close();
-    aprs_close();
+    /* Delete popups now, not with query_close()/aprs_close()'s delayed
+     * delete: dialog_destruct() frees dialog.obj (their parent) right after
+     * this, and the delayed delete would then touch freed memory - GEN or
+     * APP with the Query list open crashed the app. */
+    if (query_list) {
+        lv_obj_del(query_list);
+        query_list = NULL;
+    }
+    if (aprs_list) {
+        lv_obj_del(aprs_list);
+        aprs_list = NULL;
+    }
     if (texts_list) {
         lv_obj_del(texts_list);
         texts_list = NULL;
@@ -1381,6 +1392,7 @@ static const char *show_label_getter(void) {
 
 static void show_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     show = (show + 1) % SHOW_COUNT;
     buttons_refresh(btn);
     rebuild_rows();
@@ -1388,6 +1400,7 @@ static void show_cb(button_data_t *btn) {
 
 static void clear_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     (void)btn;
     hist_head = hist_count = 0;
     js8_stations_clear(stations);
@@ -1410,6 +1423,7 @@ static void clear_cb(button_data_t *btn) {
  * starts.) */
 static void time_sync_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     (void)btn;
     int64_t  now = now_wall_ms();
     float    dts[SYNC_DTS];
@@ -1456,6 +1470,7 @@ static void time_sync_cb(button_data_t *btn) {
 
 static void reply_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     (void)btn;
     char  call[JS8_RX_CALL_LEN];
     float freq;
@@ -1481,12 +1496,14 @@ static void reply_cb(button_data_t *btn) {
 
 static void send_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     (void)btn;
     compose_open(NULL);
 }
 
 static void stop_tx_cb(button_data_t *btn) {
     user_touch();
+    popup_guard(); /* close any list, but always stop */
     (void)btn;
     if (!js8_tx_busy(tx)) {
         msg_update_text_fmt("Not sending");
@@ -1499,6 +1516,7 @@ static void stop_tx_cb(button_data_t *btn) {
 /* CQ with the 4-character grid, as desktop JS8Call sends it. */
 static void cq_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     (void)btn;
     char text[32];
     snprintf(text, sizeof(text), "CQ CQ CQ %.4s", params.qth.x);
@@ -1529,6 +1547,7 @@ static bool send_heartbeat(bool automatic) {
 
 static void heartbeat_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     (void)btn;
     send_heartbeat(false);
 }
@@ -1539,6 +1558,7 @@ static const char *hold_label_getter(void) {
 
 static void hold_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     params_bool_set(&params.js8_hold_offset, !params.js8_hold_offset.x);
     buttons_refresh(btn);
     msg_update_text_fmt(params.js8_hold_offset.x ? "Replies stay on your offset" : "Replies move to their offset");
@@ -1550,6 +1570,7 @@ static const char *stations_label_getter(void) {
 
 static void stations_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     view_stations = !view_stations;
     buttons_refresh(btn);
     rebuild_rows();
@@ -1614,6 +1635,28 @@ static void query_key_cb(lv_event_t *e) {
 
 /* One-press messages for the selected station: MFK to move, press or tap
  * to send, ESC to close. */
+/* A list popup (Query, Texts..., APRS) must close before anything else
+ * happens, or it's left behind with its buttons still holding the knob.
+ * Any other bottom button just closes it; press again to do the thing. */
+static bool popup_guard(void) {
+    if (!query_list && !texts_list && !aprs_list) return false;
+    query_close();
+    texts_close();
+    aprs_close();
+    msg_update_text_fmt("List closed");
+    return true;
+}
+
+/* Changing page closes a list too (then changes page). */
+static void js8_next_page_cb(button_data_t *btn) {
+    if (query_list || texts_list || aprs_list) {
+        query_close();
+        texts_close();
+        aprs_close();
+    }
+    button_next_page_cb(btn);
+}
+
 /* Scroll a list to the focused item in one step: the default animated
  * scroll redraws the list for every animation frame, which tears on the
  * radio's display. */
@@ -1644,6 +1687,7 @@ static void query_cb(button_data_t *btn) {
         query_close();
         return;
     }
+    if (popup_guard()) return;
     if (composing || aprs_list || texts_list) return;
     char  call[JS8_RX_CALL_LEN];
     float freq;
@@ -1812,6 +1856,7 @@ static const char *auto_label_getter(void) {
 
 static void auto_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     params_bool_set(&params.js8_auto, !params.js8_auto.x);
     buttons_refresh(btn);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
@@ -1846,6 +1891,7 @@ static void hb_adjust_end(void) {
 
 static void hb_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     if (hb_adjusting) {
         hb_adjust_end();
         return;
@@ -1864,6 +1910,7 @@ static void hb_cb(button_data_t *btn) {
 
 static void hb_hold_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     hb_adjust_start(btn);
 }
 
@@ -1874,6 +1921,7 @@ static const char *hb_ack_label_getter(void) {
 
 static void hb_ack_cb(button_data_t *btn) {
     user_touch();
+    if (popup_guard()) return;
     params_bool_set(&params.js8_hb_ack, !params.js8_hb_ack.x);
     buttons_refresh(btn);
     if (params.js8_hb_ack.x && !(params.js8_auto.x && params.js8_hb.x)) {
@@ -1955,6 +2003,7 @@ static void texts_cb(button_data_t *btn) {
         texts_close();
         return;
     }
+    if (popup_guard()) return;
     if (query_list || aprs_list || composing) return;
     lv_group_remove_obj(table);
     texts_list = lv_list_create(dialog.obj);
@@ -1993,6 +2042,7 @@ static void texts_cb(button_data_t *btn) {
 
 typedef enum {
     APRS_GRID,
+    APRS_GPS,
     APRS_POTA,
     APRS_SOTA,
     APRS_SMS,
@@ -2004,7 +2054,7 @@ typedef enum {
 } aprs_item_t;
 
 static const char *const aprs_labels[APRS_COUNT] = {
-    "Spot my grid", "POTA spot", "SOTA spot", "SMS text", "Email",
+    "Spot my grid", "Spot GPS position", "POTA spot", "SOTA spot", "SMS text", "Email",
     "Winlink: start", "Winlink: text", "Winlink: send",
 };
 
@@ -2078,6 +2128,32 @@ static void aprs_send_grid(void) {
     if (tx_queue(text)) add_info_row("APRS: spotting %s at %s", params.callsign.x, grid);
 }
 
+/* From the firmware's gps.c (gpsd): the latest fix and its age. */
+bool gps_last_fix(double *lat, double *lon, int *age_s);
+
+/* A GPS on the radio: spot a 10-character grid (about 20 x 35 m); APRS
+ * gateways turn grids of any length into a position. */
+static void aprs_send_gps(void) {
+    double lat, lon;
+    int    age;
+    if (!gps_last_fix(&lat, &lon, &age)) {
+        msg_update_text_fmt("No GPS fix: plug in a GPS and wait for a fix (APP > GPS shows it)");
+        return;
+    }
+    if (age > 120) {
+        msg_update_text_fmt("No current GPS fix (last one %d min ago)", age / 60);
+        return;
+    }
+    char grid[12];
+    if (!js8_latlon_to_grid(lat, lon, 10, grid, sizeof(grid))) {
+        msg_update_text_fmt("GPS position out of range");
+        return;
+    }
+    char text[40];
+    snprintf(text, sizeof(text), "@APRSIS GRID %s", grid);
+    if (tx_queue(text)) add_info_row("APRS: spotting %s at %s (GPS %.5f, %.5f)", params.callsign.x, grid, lat, lon);
+}
+
 static void aprs_close(void) {
     if (!aprs_list) return;
     lv_obj_del_async(aprs_list); /* often called from one of its buttons */
@@ -2103,6 +2179,9 @@ static void aprs_item_cb(lv_event_t *e) {
     switch (item) {
     case APRS_GRID:
         aprs_send_grid();
+        break;
+    case APRS_GPS:
+        aprs_send_gps();
         break;
     case APRS_POTA:
         snprintf(head, sizeof(head), APRS_CMD "POTAGW   :%s %s", params.callsign.x, last_pota);
@@ -2165,6 +2244,7 @@ static void aprs_cb(button_data_t *btn) {
         aprs_close();
         return;
     }
+    if (popup_guard()) return;
     if (query_list || texts_list || composing) return;
     if (!params.callsign.x[0]) {
         msg_update_text_fmt("Set your callsign first: APP > Callsign");
@@ -2195,12 +2275,4 @@ static void aprs_cb(button_data_t *btn) {
     lv_group_add_obj(keyboard_group, close);
     lv_group_set_editing(keyboard_group, false);
     lv_group_focus_obj(first);
-}
-
-/* Page 5's quick button: the location beacon. */
-static void aprs_grid_cb(button_data_t *btn) {
-    (void)btn;
-    user_touch();
-    if (aprs_list || query_list || texts_list || composing) return;
-    aprs_send_grid();
 }

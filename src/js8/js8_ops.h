@@ -120,6 +120,11 @@ bool js8_clock_correction(const float *dt, unsigned n, float *correction_s);
 
 #define JS8_SYNC_MIN_DECODES    3
 
+/* Maidenhead locator for a position, `chars` long (4, 6, 8 or 10; 10 is
+ * about 20 x 35 m). Letters upper case, as JS8 grids are. False for an
+ * out-of-range position or length. */
+bool js8_latlon_to_grid(double lat, double lon, int chars, char *out, unsigned size);
+
 #define JS8_HB_MIN_INTERVAL     5
 #define JS8_HB_MAX_INTERVAL     30
 #define JS8_HB_DEFAULT_INTERVAL 30

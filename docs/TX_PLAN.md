@@ -1,7 +1,7 @@
 # JS8 transmit: plan and UI design
 
 Decided for T3 (2026-09-25): query set as listed below; heartbeats carry
-a 4-character grid; Hold offset defaults to On; add a Stations view like
+a 4-character grid; Hold offset defaulted to On (changed to Off 2026-09-25); add a Stations view like
 desktop's Call Activity, where ★ marks stations that heard you.
 
 Decided for T4 (2026-09-24): AUTO, HB and HB ACK are separate switches, all

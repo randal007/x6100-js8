@@ -5,6 +5,7 @@
 
 #include "lvgl/lvgl.h"
 extern "C" {
+void dialog_destruct(void);
 void dialog_audio_samples(unsigned int n, float *samples);
 void scheduler_work();
 void ui_init(void);
@@ -150,6 +151,29 @@ int main() {
 
     ui_init();
     ui_open();
+    if (getenv("ONLY_GEN")) {
+        // GEN / APP on the radio close the app with a list popup open.
+        const char *which = getenv("ONLY_GEN");
+        pump(300);
+        if (!strcmp(which, "query")) {
+            feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+            ui_select_row_from("N0XYZ");
+            ui_page(2);
+            ui_press(3); // Query >
+        } else if (!strcmp(which, "aprs")) {
+            ui_page(5);
+            ui_press(1); // APRS >
+        } else {
+            ui_page(4);
+            ui_press(4); // Texts...
+        }
+        pump(300);
+        printf("[gen] %s list open, focused '%s'\n", which, ui_focused_text());
+        dialog_destruct(); // what GEN does
+        pump(500);
+        printf("[gen] closed with the %s list open: running=%d (survived)\n", which, ui_running());
+        return 0;
+    }
     if (getenv("ONLY_APRS")) {
         // Until a queued message has been keyed and nothing more follows.
         auto wait_tx = [&]() {
@@ -164,15 +188,45 @@ int main() {
         };
         pump(300);
         ui_page(5);
-        ui_press(2); // Spot grid to APRS
+        ui_press(1); // APRS >
+        pump(200);
+        ui_click_focused(); // Spot my grid (first item)
         wait_tx();
         printf("[aprs] grid spot sent: %d\n", ui_list_has("@APRSIS GRID FN42"));
+
+        // Spot GPS position (second item): no fix -> message only.
+        ui_press(1);
+        pump(200);
+        ui_key(LV_KEY_RIGHT);
+        printf("[aprs] item 2: '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        setenv("HARNESS_GPS", "49.2827,-123.1207", 1);
+        ui_press(1);
+        pump(200);
+        ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        wait_tx();
+        printf("[aprs] GPS spot sent: %d (want @APRSIS GRID CN89KG + 4)\n", ui_list_has("@APRSIS GRID CN89KG"));
+
+        // A list stays exclusive: another bottom button only closes it.
+        ui_press(1);
+        pump(200);
+        ui_page(4);
+        printf("[aprs] after changing page, list focused: %s\n", ui_focus_is_table() ? "yes" : "no");
+        ui_page(5);
+        ui_press(1);
+        pump(200);
+        ui_page(5);
+        ui_press(0); // page button: also closes it
+        pump(300);
+        ui_page(5);
 
         ui_press(1); // APRS >
         pump(200);
         printf("[aprs] list open, focused '%s'\n", ui_focused_text());
-        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
-        printf("[aprs] after 3 steps: '%s'\n", ui_focused_text());
+        for (int i = 0; i < 4; i++) ui_key(LV_KEY_RIGHT);
+        printf("[aprs] after 4 steps: '%s' (want SMS text)\n", ui_focused_text());
         ui_click_focused(); // SMS text
         pump(300);
         printf("[aprs] SMS prefill: '%s' focus: %s\n", ui_compose_text(), ui_focus_desc());
@@ -183,6 +237,7 @@ int main() {
 
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT);
         ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // POTA spot
         pump(300);
@@ -195,6 +250,7 @@ int main() {
         ui_press(1);
         pump(200);
         ui_key(LV_KEY_RIGHT);
+        ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
         printf("[aprs] POTA again (remembers park): '%s'\n", ui_compose_text());
@@ -203,7 +259,7 @@ int main() {
 
         ui_press(1);
         pump(200);
-        for (int i = 0; i < 4; i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 5; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // Email
         pump(300);
         ui_compose_append("SOMEONE@EXAMPLE.COM THIS MESSAGE IS FAR TOO LONG FOR ONE APRS PACKET SORRY");
@@ -258,6 +314,12 @@ int main() {
         ui_press(3); // ...and Query > closes it
         pump(300);
         printf("[query] Query > twice, list focused: %s\n", ui_focus_is_table() ? "yes" : "no");
+        ui_press(3); // open it again, then press Clear: only closes the list
+        pump(200);
+        ui_press(4);
+        pump(300);
+        printf("[query] Clear with the list open: list focused %s, messages kept %d\n",
+               ui_focus_is_table() ? "yes" : "no", ui_list_has("GOOD COPY HERE"));
 
         // Time Sync from the decodes (can't actually set the PC clock here).
         ui_page(3);
@@ -298,6 +360,13 @@ int main() {
     }
     pump(300);
     screenshot("01_open.ppm");
+
+    // Hold starts Off (the default); the scenarios below were written for
+    // On, so switch it (page 3, button 2) and back to page 1.
+    ui_page(3);
+    printf("[hold] default: '%s'\n", ui_button_label(2));
+    ui_press(2);
+    ui_page(1);
 
     // Stations sharing the band; multi-frame ones overlap in time.
     std::vector<Station> stations = {

@@ -41,14 +41,13 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR (how you hear them), GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73. **Close** (last; one knob step back from the top) or Query > again closes it. |
 | 2 | Clear | Clear the list, the station list and any half-received messages. |
 | 3 | Time Sync | Correct the clock from the last 2 minutes of decodes (their median DT), like desktop JS8Call's drift tool, and save it to the radio's RTC. Needs 3+ decodes, so the clock must already be within a couple of seconds: set it roughly in SETTINGS first. |
-| 3 | **Hold: On/Off** | On (default): replies go out on your own offset. Off: Reply and Query move your offset to the station's first. |
+| 3 | **Hold: Off/On** | Off (default): Reply and Query move your offset to the station's first. On: replies go out on your own offset. |
 | 3 | **Show Stations / Messages** | Switch the list to one row per station, like desktop JS8Call's Call Activity. |
 | 4 | **AUTO: Off/On** | Answer SNR?, GRID?, INFO?, STATUS?, HEARING? and AGN? sent to your call. Off (default): the answer is offered on Reply instead. |
 | 4 | **HB: Off/N min** | Send heartbeats every N minutes. Switching it on lets the main knob set 5–30 min; press HB again (or wait 8 s) to finish, press once more to turn it off. Holding HB changes the interval without switching. |
 | 4 | **HB ACK** | Answer others' heartbeats with how you hear them. Acts only while AUTO and HB are on, as on desktop. |
 | 4 | **Texts…** | Edit what AUTO sends for INFO? and STATUS? (kept in `/mnt/js8_texts.txt`). |
-| 5 | **APRS >** | APRS through JS8 gateways: grid spot, POTA, SOTA, SMS, email, Winlink. See [APRS](#aprs). |
-| 5 | **Spot grid to APRS** | One press: `@APRSIS GRID <your grid>`, puts you on the APRS map. |
+| 5 | **APRS >** | APRS through JS8 gateways: grid spot, GPS position spot, POTA, SOTA, SMS, email, Winlink. See [APRS](#aprs). |
 
 **Who heard you:** in the Stations view, stations that have heard you are
 marked `*` and listed first. That covers anyone who acknowledged your
@@ -97,6 +96,7 @@ cursor where you type.
 | Item | Sends | You type |
 |---|---|---|
 | Spot my grid | `@APRSIS GRID CN89LH` | nothing (your grid from APP → QTH, up to 6 characters) |
+| Spot GPS position | `@APRSIS GRID CN89KG12AB` | nothing: a 10-character grid (~20 × 35 m) from a GPS plugged into the radio (gpsd); says so if there's no current fix |
 | POTA spot | `@APRSIS CMD :POTAGW   :CALL PARK 7078 JS8` | the park (remembered for next time) |
 | SOTA spot | `@APRSIS CMD :APRS2SOTA:SUMMIT 7.078 DATA CALL` | the summit (remembered). Needs [APRS2SOTA registration](https://www.sotaspots.co.uk/Aprs2Sota_Info.php) |
 | SMS text | `@APRSIS CMD :SMS      :@6045551234 message{NN}` | number and message. NA7Q's [SMS gateway](https://na7q.com/sms-gateway/): the number must be opted in |
@@ -111,8 +111,10 @@ cursor where you type.
   added, as JS8Spotter does.
 - Nothing reaches APRS unless a gateway station hears you. Replies (SMS,
   APRSLink) come back over APRS, not JS8.
-- Future: a GPS on the radio (it already runs gpsd) could give a finer
-  grid for the spot.
+- With a GPS plugged into the radio, **Spot GPS position** sends a
+  10-character grid; gateways accept grids of any length.
+- While a list (Query, Texts…, APRS) is open, the other bottom buttons only
+  close it, so it can't be left behind; press again to do the thing.
 
 | APRS list | POTA spot, typing the park |
 |---|---|
@@ -171,7 +173,7 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [x] Opt-in auto-reply, heartbeat interval, heartbeat acks, idle watchdog (T4)
 - [x] Time Sync from decode DTs, APRS page (grid, POTA, SOTA, SMS, email, Winlink)
 - [ ] Logging and an inbox for MSG (T5)
-- [ ] GPS-fed grid for APRS spots
+- [x] GPS-fed grid for APRS spots
 - [ ] Fast / Turbo / Slow submodes
 
 ## Testing

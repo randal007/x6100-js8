@@ -20,7 +20,7 @@ void ui_init(void) {
     keyboard_group = lv_group_create();
     strcpy(params.callsign.x, "K2XYZ");
     strcpy(params.qth.x, "FN42AB");
-    params.js8_hold_offset.x = true; /* the firmware defaults */
+    params.js8_hold_offset.x = false; /* the firmware defaults */
     params.js8_hb_interval.x = 30;
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
