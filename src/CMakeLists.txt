@@ -16,6 +16,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     dialog_wefax.c
     dialog_navtex.c
     dialog_js8.c
+    tx_player.c
     wefax/decoder.c
     navtex/decoder.cpp
     navtex/navtex_rx.cpp

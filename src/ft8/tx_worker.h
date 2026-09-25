@@ -26,8 +26,7 @@
 extern "C" {
 #endif
 
-/* Abort-check callback. Return true to stop TX after the current block. */
-typedef bool (*tx_abort_fn_t)(void *ctx);
+#include "../tx_player.h" /* tx_abort_fn_t */
 
 /* Transmit tx_text. Returns true on normal completion (or no-op when
  * sample generation fails); returns false if the abort callback fired

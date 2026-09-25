@@ -35,6 +35,7 @@
 #include "ft8/cq_scheduler.h"
 #include "ft8/table_view.h"
 #include "ft8/tx_worker.h"
+#include "tx_player.h"
 #include "widgets/lv_waterfall.h"
 #include "widgets/lv_finder.h"
 
@@ -531,13 +532,7 @@ static void construct_cb(lv_obj_t *parent) {
     }
 
     // setup gain offset
-    float target_pwr = LV_MIN(param_f_get(cfg_pwr), MAX_PWR);
-    if (x6100_control_get_base_ver().rev >= 3) {
-        // patched firmware has a true power control
-        base_gain_offset = -9.4f;
-    } else {
-        base_gain_offset = -16.4f + log10f(target_pwr) * 10.0f;
-    }
+    base_gain_offset = tx_player_base_gain_offset();
 }
 
 /* Buttons */
