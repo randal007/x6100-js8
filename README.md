@@ -6,18 +6,24 @@ itself with no PC, phone or tablet attached.
 This is the X6100 LVGL firmware GUI with a JS8 app added alongside the
 existing FT8, RTTY, WeFax and NavTex apps.
 
-> **Status: receive and manual transmit, not yet tested on a radio.** The
-> JS8 app decodes JS8 Normal-mode traffic and can send replies, free text
-> and CQs. Every part has been tested on a PC (see [Testing](#testing)), but
-> none of it on real hardware or real signals yet. **Test transmit into a
-> dummy load first.** There is no auto-reply and no automatic heartbeat:
-> it only transmits when you press a button.
+> **Status: receiving and transmitting on the air.** On 2026-09-24 the
+> radio decoded live 40 m JS8 traffic, its first heartbeat was answered by
+> KK6WVY (−23 dB), and an `INFO?` query to KN6OEH came back with their
+> station details: a two-way exchange with desktop JS8Call users. Transmit
+> into a dummy load first when you try a new build. Automatic replies and
+> heartbeats are off every time the app opens.
 
-![JS8 app, all messages](docs/screenshots/js8_04_all.png)
+![On the radio: first contact](docs/screenshots/radio_03_first_contact.png)
 
-*The real JS8 app code running headless on a PC with a simulated band:
-a CQ (green), heartbeats (grey), messages to this station (red) and an
-@ALLCALL message (blue). See [tools/js8_ui_harness](tools/js8_ui_harness).*
+*On a real X6100 (screen grabbed over the USB console): our heartbeat
+acknowledged by N7EAL and KN6OEH, then an INFO? query answered by KN6OEH
+("FT991A, EFRW, 30W, DM13, VER 2.2.1").*
+
+### On the radio
+
+| First heartbeat answered | Live 40 m traffic and the Query list |
+|---|---|
+| ![First heartbeat, acked by KK6WVY](docs/screenshots/radio_02_first_heartbeat_ack.png) | ![Query list over live traffic](docs/screenshots/radio_01_on_air_traffic.png) |
 
 ## Using it
 
@@ -41,6 +47,8 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | 4 | **HB: Off/N min** | Send heartbeats every N minutes. Switching it on lets the main knob set 5–30 min; press HB again (or wait 8 s) to finish, press once more to turn it off. Holding HB changes the interval without switching. |
 | 4 | **HB ACK** | Answer others' heartbeats with how you hear them. Acts only while AUTO and HB are on, as on desktop. |
 | 4 | **Texts…** | Edit what AUTO sends for INFO? and STATUS? (kept in `/mnt/js8_texts.txt`). |
+| 5 | **APRS >** | APRS through JS8 gateways: grid spot, POTA, SOTA, SMS, email, Winlink. See [APRS](#aprs). |
+| 5 | **Spot grid to APRS** | One press: `@APRSIS GRID <your grid>`, puts you on the APRS map. |
 
 **Who heard you:** in the Stations view, stations that have heard you are
 marked `*` and listed first. That covers anyone who acknowledged your
@@ -75,6 +83,40 @@ the list and marks the selected station's offset with a green line on the
 waterfall. Tapping a row also shows its callsign and SNR. Multi-frame messages appear
 once their last frame arrives. Buffered commands such as `MSG` have their
 checksum verified and removed, as in desktop JS8Call.
+
+![Directed view in a QSO: the selected station's untagged reply still shows](docs/screenshots/js8_21_directed_qso.png)
+
+## APRS
+
+Desktop JS8Call stations with "spot to APRS" enabled forward `@APRSIS`
+messages to APRS-IS. Page 5's **APRS >** list builds them for you (formats
+as desktop JS8Call and KF7MIX's [JS8Spotter](https://kf7mix.com/js8spotter.html)
+send them); most open the keyboard with the fixed part filled in and the
+cursor where you type.
+
+| Item | Sends | You type |
+|---|---|---|
+| Spot my grid | `@APRSIS GRID CN89LH` | nothing (your grid from APP → QTH, up to 6 characters) |
+| POTA spot | `@APRSIS CMD :POTAGW   :CALL PARK 7078 JS8` | the park (remembered for next time) |
+| SOTA spot | `@APRSIS CMD :APRS2SOTA:SUMMIT 7.078 DATA CALL` | the summit (remembered). Needs [APRS2SOTA registration](https://www.sotaspots.co.uk/Aprs2Sota_Info.php) |
+| SMS text | `@APRSIS CMD :SMS      :@6045551234 message{NN}` | number and message. NA7Q's [SMS gateway](https://na7q.com/sms-gateway/): the number must be opted in |
+| Email | `@APRSIS CMD :EMAIL-2  :address message{NN}` | address and message |
+| Winlink: start / text / send | `@APRSIS CMD :WLNK-1   :SP address subject`, then a line of text, then `/EX` | [APRSLink](https://winlink.org/APRSLink)'s three steps; spot your grid first |
+
+- The gateway turns your grid into a position (the square's centre), so
+  no GPS is needed; 6 characters is good to a few km. It reports you as
+  your plain callsign, no SSID (a JS8 `CALL/7` would become `CALL-7`).
+- APRS allows 67 characters after the addressee; longer messages are
+  refused before sending. SMS, email and Winlink get a message ID `{NN}`
+  added, as JS8Spotter does.
+- Nothing reaches APRS unless a gateway station hears you. Replies (SMS,
+  APRSLink) come back over APRS, not JS8.
+- Future: a GPS on the radio (it already runs gpsd) could give a finer
+  grid for the spot.
+
+| APRS list | POTA spot, typing the park |
+|---|---|
+| ![APRS list](docs/screenshots/js8_24_aprs_list.png) | ![POTA spot keyboard](docs/screenshots/js8_23_aprs_pota.png) |
 
 ## Lineage
 
@@ -121,13 +163,15 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [x] JS8 band presets (DB migration 4)
 - [x] Headless UI harness and test-audio generator
 - [x] CI image build with JS8 dependencies (GitHub Actions, manual dispatch)
-- [ ] First boot on a radio: WAV test mode, then on-air RX against desktop JS8Call
-- [ ] Decode timing on the Cortex-A7 on a busy band
+- [x] First boot on a radio: WAV test mode, then on-air RX (2026-09-24, 40 m)
+- [x] Decode load on the Cortex-A7: ~0.5 s CPU per 15 s cycle, app ~15 % of the 4 cores
 - [x] Transmit, manual: reply, directed messages, free text, CQ, stop ([plan](docs/TX_PLAN.md), phases T1–T2)
-- [ ] Transmit on air: dummy load, then PSK Reporter spots and a desktop JS8Call QSO
+- [x] Transmit on air: heartbeat acked by KK6WVY, INFO? answered by KN6OEH (2026-09-24)
 - [x] Heartbeat, query shortcuts, Hold offset, Stations view with "heard you" (T3)
 - [x] Opt-in auto-reply, heartbeat interval, heartbeat acks, idle watchdog (T4)
+- [x] Time Sync from decode DTs, APRS page (grid, POTA, SOTA, SMS, email, Winlink)
 - [ ] Logging and an inbox for MSG (T5)
+- [ ] GPS-fed grid for APRS spots
 - [ ] Fast / Turbo / Slow submodes
 
 ## Testing

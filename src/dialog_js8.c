@@ -130,6 +130,10 @@ static void        tx_stop_all(void);
 static void        tx_timer_cb(lv_timer_t *t);
 static void        compose_close(void);
 static void        hb_adjust_end(void);
+static void        aprs_cb(button_data_t *btn);
+static void        aprs_grid_cb(button_data_t *btn);
+static void        aprs_close(void);
+static bool        aprs_prepare(const char *in, char *out, size_t size);
 
 /* ---- State (UI thread unless noted) ------------------------------------ */
 
@@ -154,6 +158,7 @@ static bool           view_stations;   /* list shows stations, not messages */
 static js8_station_t  st_rows[MAX_ROWS];
 static int            st_count;
 static lv_obj_t      *query_list;      /* Query popup, when open */
+static lv_obj_t      *aprs_list;       /* APRS popup, when open */
 
 /* T4: auto-reply and heartbeats. The switches live in params (js8_auto,
  * js8_hb, js8_hb_ack, js8_hb_interval), all off by default. */
@@ -162,6 +167,7 @@ static int64_t     hb_next_ms;       /* 0: send the first one at the next chance
 static bool        hb_adjusting;     /* main knob sets the HB interval */
 static int64_t     hb_adjust_ms;     /* last knob turn while adjusting */
 static char        info_text[TEXT_MAX + 1], status_text[TEXT_MAX + 1];
+static char        last_pota[16], last_sota[24]; /* last park / summit spotted via APRS */
 static char        last_tx_text[JS8_RX_TEXT_LEN]; /* for AGN? */
 static struct {
     char    call[JS8_RX_CALL_LEN];
@@ -212,20 +218,21 @@ static buttons_page_t page_1;
 static buttons_page_t page_2;
 static buttons_page_t page_3;
 static buttons_page_t page_4;
+static buttons_page_t page_5;
 
-static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:4)", .press = button_next_page_cb, .next = &page_2};
+static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:5)", .press = button_next_page_cb, .next = &page_2};
 static button_data_t btn_show    = {.type = BTN_TEXT_FN, .label_fn = show_label_getter, .press = show_cb};
 static button_data_t btn_reply   = {.type = BTN_TEXT, .label = "Reply", .press = reply_cb};
 static button_data_t btn_send    = {.type = BTN_TEXT, .label = "Send...", .press = send_cb};
 static button_data_t btn_stop_tx = {.type = BTN_TEXT, .label = "Stop TX", .press = stop_tx_cb};
 
-static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:4)", .press = button_next_page_cb, .next = &page_3};
+static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:5)", .press = button_next_page_cb, .next = &page_3};
 static button_data_t btn_cq    = {.type = BTN_TEXT, .label = "CQ", .press = cq_cb};
 static button_data_t btn_hb    = {.type = BTN_TEXT, .label = "Heart-\nbeat", .press = heartbeat_cb};
 static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press = query_cb};
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
-static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:4)", .press = button_next_page_cb, .next = &page_4};
+static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:5)", .press = button_next_page_cb, .next = &page_4};
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
@@ -234,12 +241,17 @@ static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn
 static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_clear}};
 static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations}};
 
-static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:4)", .press = button_next_page_cb, .next = &page_1};
+static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:5)", .press = button_next_page_cb, .next = &page_5};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
 static button_data_t btn_hbauto = {.type = BTN_TEXT_FN, .label_fn = hb_label_getter, .press = hb_cb, .hold = hb_hold_cb};
 static button_data_t btn_hbackk = {.type = BTN_TEXT_FN, .label_fn = hb_ack_label_getter, .press = hb_ack_cb};
 static button_data_t btn_texts  = {.type = BTN_TEXT, .label = "Texts...", .press = texts_cb};
 static buttons_page_t page_4 = {{&btn_p4, &btn_auto, &btn_hbauto, &btn_hbackk, &btn_texts}};
+
+static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:5)", .press = button_next_page_cb, .next = &page_1};
+static button_data_t  btn_aprs      = {.type = BTN_TEXT, .label = "APRS >", .press = aprs_cb};
+static button_data_t  btn_aprs_grid = {.type = BTN_TEXT, .label = "Spot grid\nto APRS", .press = aprs_grid_cb};
+static buttons_page_t page_5        = {{&btn_p5, &btn_aprs, &btn_aprs_grid}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -1092,7 +1104,9 @@ static bool compose_ok_cb(void) {
         compose_close();
         return true;
     }
-    if (!tx_queue(textarea_window_get())) return false; /* keep the window open */
+    char text[TX_TEXT_MAX + 8];
+    if (!aprs_prepare(textarea_window_get(), text, sizeof(text))) return false;
+    if (!tx_queue(text)) return false; /* keep the window open */
     compose_close();
     return true;
 }
@@ -1114,7 +1128,7 @@ static void compose_open(const char *prefill) {
     textarea_window_open(compose_ok_cb, compose_cancel_cb);
 
     lv_obj_t *text = textarea_window_text();
-    lv_textarea_set_accepted_chars(text, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .-+?!\"/@:>");
+    lv_textarea_set_accepted_chars(text, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .-+?!\"/@:>{}_#&'(),=;");
     lv_textarea_set_max_length(text, TX_TEXT_MAX);
     lv_obj_add_event_cb(text, compose_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     if (edit_target) {
@@ -1332,6 +1346,7 @@ static void destruct_cb(void) {
     }
     compose_close();
     query_close();
+    aprs_close();
     if (texts_list) {
         lv_obj_del(texts_list);
         texts_list = NULL;
@@ -1629,7 +1644,7 @@ static void query_cb(button_data_t *btn) {
         query_close();
         return;
     }
-    if (composing) return;
+    if (composing || aprs_list || texts_list) return;
     char  call[JS8_RX_CALL_LEN];
     float freq;
     int   snr;
@@ -1705,7 +1720,7 @@ static void auto_send(const js8_auto_result_t *r) {
     bool allowed = r->hb_ack ? (params.js8_auto.x && params.js8_hb.x && params.js8_hb_ack.x) : params.js8_auto.x;
     if (!allowed || js8_auto_idle(autop, now)) return;
 
-    if (js8_tx_busy(tx) || composing || query_list || texts_list) {
+    if (js8_tx_busy(tx) || composing || query_list || texts_list || aprs_list) {
         pending_auto       = *r; /* newest wins */
         pending_auto_valid = true;
         return;
@@ -1783,7 +1798,7 @@ static void hb_tick(void) {
         update_status();
     }
     if (now < hb_next_ms - 5000) return;   /* desktop prepares it 5 s early */
-    if (js8_tx_busy(tx) || composing || query_list || texts_list || !params.callsign.x[0]) return;
+    if (js8_tx_busy(tx) || composing || query_list || texts_list || aprs_list || !params.callsign.x[0]) return;
     LV_LOG_USER("JS8 auto: heartbeat (due %lld)", (long long)hb_next_ms);
     if (send_heartbeat(true)) {
         hb_next_ms = js8_next_heartbeat_ms(now, params.js8_hb_interval.x);
@@ -1870,7 +1885,7 @@ static void hb_ack_cb(button_data_t *btn) {
 /* ---- INFO / STATUS texts -------------------------------------------- */
 
 static void load_texts(void) {
-    info_text[0] = status_text[0] = '\0';
+    info_text[0] = status_text[0] = last_pota[0] = last_sota[0] = '\0';
     FILE *f = fopen(JS8_TEXTS_PATH, "r");
     if (!f) return;
     char line[TEXT_MAX + 16];
@@ -1878,6 +1893,8 @@ static void load_texts(void) {
         line[strcspn(line, "\r\n")] = '\0';
         if (strncmp(line, "INFO=", 5) == 0) snprintf(info_text, sizeof(info_text), "%s", line + 5);
         if (strncmp(line, "STATUS=", 7) == 0) snprintf(status_text, sizeof(status_text), "%s", line + 7);
+        if (strncmp(line, "POTA=", 5) == 0) snprintf(last_pota, sizeof(last_pota), "%s", line + 5);
+        if (strncmp(line, "SOTA=", 5) == 0) snprintf(last_sota, sizeof(last_sota), "%s", line + 5);
     }
     fclose(f);
 }
@@ -1888,7 +1905,7 @@ static void save_texts(void) {
         msg_update_text_fmt("Can't write %s", JS8_TEXTS_PATH);
         return;
     }
-    fprintf(f, "INFO=%s\nSTATUS=%s\n", info_text, status_text);
+    fprintf(f, "INFO=%s\nSTATUS=%s\nPOTA=%s\nSOTA=%s\n", info_text, status_text, last_pota, last_sota);
     fclose(f);
 }
 
@@ -1938,7 +1955,7 @@ static void texts_cb(button_data_t *btn) {
         texts_close();
         return;
     }
-    if (query_list || composing) return;
+    if (query_list || aprs_list || composing) return;
     lv_group_remove_obj(table);
     texts_list = lv_list_create(dialog.obj);
     lv_obj_set_size(texts_list, 520, 200);
@@ -1963,4 +1980,227 @@ static void texts_cb(button_data_t *btn) {
     lv_obj_add_event_cb(close, texts_key_cb, LV_EVENT_KEY, NULL);
     lv_group_add_obj(keyboard_group, close);
     lv_group_set_editing(keyboard_group, false);
+}
+
+/* ---- APRS via @APRSIS -------------------------------------------------- */
+
+/* JS8Call stations with "spot to APRS" on forward these to APRS-IS; formats
+ * as desktop JS8Call and KF7MIX's JS8Spotter send them. Raw packets are
+ * "@APRSIS CMD :<addressee padded to 9>:<text>"; APRS allows 67 characters
+ * of text. The gateway sends you as your plain callsign (no SSID). */
+#define APRS_CMD      "@APRSIS CMD :"
+#define APRS_TEXT_MAX 67
+
+typedef enum {
+    APRS_GRID,
+    APRS_POTA,
+    APRS_SOTA,
+    APRS_SMS,
+    APRS_EMAIL,
+    APRS_WL_START,
+    APRS_WL_TEXT,
+    APRS_WL_SEND,
+    APRS_COUNT
+} aprs_item_t;
+
+static const char *const aprs_labels[APRS_COUNT] = {
+    "Spot my grid", "POTA spot", "SOTA spot", "SMS text", "Email",
+    "Winlink: start", "Winlink: text", "Winlink: send",
+};
+
+static unsigned aprs_msg_id;
+
+/* Before sending anything typed: APRS CMDs get checked, SMS/email/Winlink a
+ * message ID like JS8Spotter's "{01}", and POTA/SOTA refs are remembered.
+ * Anything else passes through unchanged. */
+static bool aprs_prepare(const char *in, char *out, size_t size) {
+    snprintf(out, size, "%s", in);
+    size_t pre = strlen(APRS_CMD);
+    if (strncmp(in, APRS_CMD, pre) != 0) return true;
+    if (strlen(in) < pre + 10 || in[pre + 9] != ':') {
+        msg_update_text_fmt("APRS: the addressee is 9 characters, then ':'");
+        return false;
+    }
+    char to[10];
+    memcpy(to, in + pre, 9);
+    to[9] = '\0';
+    for (int i = 8; i >= 0 && to[i] == ' '; i--) to[i] = '\0';
+    const char *body = in + pre + 10;
+    while (*body == ' ') body++;
+    if (!*body) {
+        msg_update_text_fmt("APRS: nothing to send to %s", to);
+        return false;
+    }
+
+    bool want_id = !strcmp(to, "SMS") || !strcmp(to, "EMAIL-2") || !strcmp(to, "WLNK-1");
+    if (want_id && !strchr(body, '{')) {
+        if (!aprs_msg_id) aprs_msg_id = (unsigned)(time(NULL) % 90);
+        aprs_msg_id = aprs_msg_id % 99 + 1;
+        snprintf(out, size, "%s{%02u}", in, aprs_msg_id);
+    }
+    size_t text_len = strlen(out) - pre - 10;
+    if (text_len > APRS_TEXT_MAX) {
+        msg_update_text_fmt("APRS allows %d characters after the addressee, this is %u: shorten it",
+                            APRS_TEXT_MAX, (unsigned)text_len);
+        return false;
+    }
+
+    /* "CALL PARK FREQ MODE ..." / "SUMMIT FREQ MODE ..." */
+    char w1[24] = "", w2[24] = "";
+    sscanf(body, "%23s %23s", w1, w2);
+    if (!strcmp(to, "POTAGW") && w2[0]) {
+        snprintf(last_pota, sizeof(last_pota), "%s", w2);
+        save_texts();
+    } else if (!strcmp(to, "APRS2SOTA") && w1[0]) {
+        snprintf(last_sota, sizeof(last_sota), "%s", w1);
+        save_texts();
+    }
+    return true;
+}
+
+/* The keyboard with `head` + `tail`, the cursor between them. */
+static void aprs_compose(const char *head, const char *tail) {
+    char text[TX_TEXT_MAX + 1];
+    snprintf(text, sizeof(text), "%s%s", head, tail);
+    compose_open(text);
+    if (composing) lv_textarea_set_cursor_pos(textarea_window_text(), (int32_t)strlen(head));
+}
+
+static void aprs_send_grid(void) {
+    char grid[8];
+    snprintf(grid, sizeof(grid), "%.6s", params.qth.x);
+    if (strlen(grid) < 4) {
+        msg_update_text_fmt("Set your grid first: APP > QTH");
+        return;
+    }
+    char text[32];
+    snprintf(text, sizeof(text), "@APRSIS GRID %s", grid);
+    if (tx_queue(text)) add_info_row("APRS: spotting %s at %s", params.callsign.x, grid);
+}
+
+static void aprs_close(void) {
+    if (!aprs_list) return;
+    lv_obj_del_async(aprs_list); /* often called from one of its buttons */
+    aprs_list = NULL;
+    if (table && !composing) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+static void aprs_item_cb(lv_event_t *e) {
+    aprs_item_t item = (aprs_item_t)(intptr_t)lv_event_get_user_data(e);
+    /* Straight into the keyboard for most items: take the buttons out of
+     * the group first, as Texts... does, or the keyboard opens unfocused. */
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(aprs_list); i++)
+        lv_group_remove_obj(lv_obj_get_child(aprs_list, i));
+    lv_obj_del_async(aprs_list);
+    aprs_list = NULL;
+
+    uint64_t dial = (uint64_t)cparam_i_get(cfg_fg_freq);
+    char     head[TX_TEXT_MAX + 1], tail[48];
+    switch (item) {
+    case APRS_GRID:
+        aprs_send_grid();
+        break;
+    case APRS_POTA:
+        snprintf(head, sizeof(head), APRS_CMD "POTAGW   :%s %s", params.callsign.x, last_pota);
+        snprintf(tail, sizeof(tail), " %llu JS8", (unsigned long long)(dial / 1000));
+        aprs_compose(head, tail);
+        msg_update_text_fmt("POTA: type the park, e.g. VE-1234");
+        break;
+    case APRS_SOTA:
+        snprintf(head, sizeof(head), APRS_CMD "APRS2SOTA:%s", last_sota);
+        snprintf(tail, sizeof(tail), " %.3f DATA %s", dial / 1e6, params.callsign.x);
+        aprs_compose(head, tail);
+        msg_update_text_fmt("SOTA: type the summit, e.g. VE7/LM-001 (APRS2SOTA registration needed)");
+        break;
+    case APRS_SMS:
+        aprs_compose(APRS_CMD "SMS      :@", "");
+        msg_update_text_fmt("SMS (NA7Q gateway): 10-digit number, space, message");
+        break;
+    case APRS_EMAIL:
+        aprs_compose(APRS_CMD "EMAIL-2  :", "");
+        msg_update_text_fmt("Email: address, space, message");
+        break;
+    case APRS_WL_START:
+        aprs_compose(APRS_CMD "WLNK-1   :SP ", "");
+        msg_update_text_fmt("Winlink 1/3: address (or call), space, subject. Spot your grid first");
+        break;
+    case APRS_WL_TEXT:
+        aprs_compose(APRS_CMD "WLNK-1   :", "");
+        msg_update_text_fmt("Winlink 2/3: one line of the message; repeat for more lines");
+        break;
+    case APRS_WL_SEND:
+        if (tx_queue(APRS_CMD "WLNK-1   :/EX")) msg_update_text_fmt("Winlink 3/3: sending /EX");
+        break;
+    default:
+        break;
+    }
+    if (composing) lv_group_set_editing(keyboard_group, true);
+    else if (table) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+static void aprs_close_cb(lv_event_t *e) {
+    (void)e;
+    aprs_close();
+}
+
+static void aprs_key_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    if (key == LV_KEY_ESC) aprs_close();
+    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
+    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+}
+
+static void aprs_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (aprs_list) { /* APRS > again closes it */
+        aprs_close();
+        return;
+    }
+    if (query_list || texts_list || composing) return;
+    if (!params.callsign.x[0]) {
+        msg_update_text_fmt("Set your callsign first: APP > Callsign");
+        return;
+    }
+    lv_group_remove_obj(table);
+    aprs_list = lv_list_create(dialog.obj);
+    lv_obj_set_size(aprs_list, 300, WF_HEIGHT - 10);
+    lv_obj_align(aprs_list, LV_ALIGN_TOP_RIGHT, -20, 18);
+    lv_obj_set_style_text_font(aprs_list, &sony_24, 0);
+    lv_obj_set_style_bg_color(aprs_list, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_border_color(aprs_list, lv_color_white(), 0);
+    lv_obj_t *t = lv_list_add_text(aprs_list, "APRS via @APRSIS");
+    lv_obj_set_style_text_font(t, &sony_22, 0);
+
+    lv_obj_t *first = NULL;
+    for (int i = 0; i < APRS_COUNT; i++) {
+        lv_obj_t *b = list_add_item(aprs_list, aprs_labels[i]);
+        lv_obj_add_event_cb(b, aprs_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(b, aprs_key_cb, LV_EVENT_KEY, NULL);
+        lv_group_add_obj(keyboard_group, b);
+        if (!first) first = b;
+    }
+    lv_obj_t *close = list_add_item(aprs_list, "Close");
+    lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
+    lv_obj_add_event_cb(close, aprs_close_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(close, aprs_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, close);
+    lv_group_set_editing(keyboard_group, false);
+    lv_group_focus_obj(first);
+}
+
+/* Page 5's quick button: the location beacon. */
+static void aprs_grid_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (aprs_list || query_list || texts_list || composing) return;
+    aprs_send_grid();
 }

@@ -25,18 +25,14 @@ namespace x6100::js8 {
 namespace {
 
 std::string normalise(const std::string &text) {
+    /* Upper case, other whitespace as spaces, ends trimmed. Runs of spaces
+     * inside are kept, as desktop JS8Call sends them: APRS CMDs pad the
+     * addressee to 9 characters ("@APRSIS CMD :SMS      :@..."). */
     std::string out;
-    bool        space = false;
-    for (char c : text) {
-        if (std::isspace((unsigned char)c)) {
-            space = !out.empty();
-            continue;
-        }
-        if (space) out += ' ';
-        space = false;
-        out += (char)std::toupper((unsigned char)c);
-    }
-    return out;
+    for (char c : text) out += std::isspace((unsigned char)c) ? ' ' : (char)std::toupper((unsigned char)c);
+    auto b = out.find_first_not_of(' ');
+    if (b == std::string::npos) return "";
+    return out.substr(b, out.find_last_not_of(' ') - b + 1);
 }
 
 // Decode our own frames with the same code the receiver uses.
@@ -76,9 +72,10 @@ public:
 } // namespace
 
 bool is_sendable_char(char c) {
-    static const char *const extra = " .-+?!\"/@:>";
-    unsigned char            u     = (unsigned char)std::toupper((unsigned char)c);
-    return (u >= 'A' && u <= 'Z') || (u >= '0' && u <= '9') || (c && std::strchr(extra, c));
+    /* Printable ASCII: the common characters have short codes, the rest go
+     * escaped in data frames (tests check every one round-trips), which is
+     * how "@APRSIS CMD ...{01}" gets through. */
+    return c >= ' ' && c <= '~';
 }
 
 TxPlan plan_message(const std::string &my_call, const std::string &my_grid, const std::string &text) {

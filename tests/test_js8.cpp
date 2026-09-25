@@ -11,6 +11,7 @@
 #include "classify.hpp"
 #include "receiver.hpp"
 #include "js8_ops.h"
+#include "tx.hpp"
 #include "render.hpp"
 #include "resampler.hpp"
 
@@ -130,6 +131,28 @@ TEST_CASE("frames built by JS8Call's encoder render and reassemble", "[js8][rend
     CHECK(roundtrip("W1ABC", "", "@ALLCALL HELLO EVERYONE ON THE BAND") ==
           "W1ABC: @ALLCALL HELLO EVERYONE ON THE BAND");
     CHECK(roundtrip("W1ABC", "", "JUST SOME FREE TEXT WITHOUT A CALL") == "JUST SOME FREE TEXT WITHOUT A CALL");
+}
+
+TEST_CASE("every printable character survives encoding", "[js8][render]") {
+    for (char c = 33; c < 127; c++) {
+        if (c >= 'a' && c <= 'z') continue;
+        std::string m = std::string("K2XYZ HELLO ") + c + c + " WORLD";
+        INFO("char " << c);
+        CHECK(roundtrip("W1ABC", "K2XYZ", m).rfind("W1ABC: " + m, 0) == 0);
+        CHECK(is_sendable_char(c));
+    }
+}
+
+TEST_CASE("APRS gateway commands survive encoding", "[js8][render][aprs]") {
+    for (const char *m : {"@APRSIS GRID CN89LH", "@APRSIS CMD :SMS      :@6045551234 TEST FROM JS8{01}",
+                          "@APRSIS CMD :EMAIL-2  :TEST@EXAMPLE.COM HELLO{01}",
+                          "@APRSIS CMD :POTAGW   :VE7NHW CA-1234 7078 JS8 QRV",
+                          "@APRSIS CMD :APRS2SOTA:VE7/LM-001 7.078 DATA VE7NHW QRV",
+                          "@APRSIS CMD :WLNK-1   :SP TEST@EXAMPLE.COM SUBJECT"}) {
+        INFO(m);
+        // CMD carries a 3-character checksum after the text, like MSG.
+        CHECK(roundtrip("VE7NHW", "", m).rfind(std::string("VE7NHW: ") + m, 0) == 0);
+    }
 }
 
 TEST_CASE("a compound sender's helper frame is folded into the header", "[js8][render]") {
@@ -606,12 +629,19 @@ TEST_CASE("untargeted free text is sent with our callsign", "[js8][tx]") {
     CHECK(plan.preview.find("JUST TESTING THE NEW RADIO") != std::string::npos);
 }
 
+TEST_CASE("plan_message keeps the spaces inside an APRS command", "[js8][tx][aprs]") {
+    auto p = plan_message("VE7NHW", "CN89", "  @aprsis cmd :SMS      :@6045551234 hi{01}\n");
+    REQUIRE(p.ok());
+    CHECK(p.text == "@APRSIS CMD :SMS      :@6045551234 HI{01}");
+}
+
 TEST_CASE("plan_message refuses what it can't send", "[js8][tx]") {
     CHECK_FALSE(plan_message("", "FN42", "K2XYZ SNR?").ok());
     CHECK_FALSE(plan_message("W1ABC", "FN42", "   ").ok());
-    auto bad = plan_message("W1ABC", "FN42", "K2XYZ 50% OFF");
+    auto bad = plan_message("W1ABC", "FN42", "K2XYZ CTRL\x01HERE"); // printable ASCII only
     CHECK_FALSE(bad.ok());
-    CHECK(bad.error.find('%') != std::string::npos);
+    CHECK(bad.error.find("can't send") != std::string::npos);
+    CHECK(plan_message("W1ABC", "FN42", "K2XYZ 50% OFF").ok());
     std::string longtext(400, 'A');
     CHECK_FALSE(plan_message("W1ABC", "FN42", longtext).ok());
 }

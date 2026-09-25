@@ -21,10 +21,12 @@ uint32_t    EVENT_BAND_UP;
 uint32_t    EVENT_BAND_DOWN;
 
 /* Filter edges the dialog reads through the computed-param API. */
-static int               dummy_low, dummy_high;
+static int               dummy_low, dummy_high, dummy_fg;
 ComputedParamInt        *cfg_cur_filter_low  = (ComputedParamInt *)&dummy_low;
 ComputedParamInt        *cfg_cur_filter_high = (ComputedParamInt *)&dummy_high;
+ComputedParamInt        *cfg_fg_freq         = (ComputedParamInt *)&dummy_fg; /* dial, Hz */
 int32_t cparam_i_get(const ComputedParamInt *p) {
+    if (p == cfg_fg_freq) return 14078000;
     return p == cfg_cur_filter_low ? 100 : 3000;
 }
 

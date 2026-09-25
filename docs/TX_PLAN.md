@@ -9,8 +9,10 @@ off by default; a QSO turns HB and HB ACK off until you turn them back on;
 the HB interval is 5–30 min in 1 min steps; INFO/STATUS are edited from
 page 4; with AUTO off, answers are offered on Reply, as on desktop.
 
-Status: **T1–T4 done**: manual transmit, heartbeats, queries, the Stations
-view and auto-reply work end to end in the host UI harness. Nothing has been tested on a radio yet. Decided: TX buttons on page 1, 5 W cap, auto-reply later and opt-in.
+Status: **T1–T4 done and on the air** (2026-09-24): heartbeats acked by
+KK6WVY, N7EAL and KN6OEH, INFO? answered by KN6OEH. Since then: DT-based
+Time Sync, an APRS page (@APRSIS grid/POTA/SOTA/SMS/email/Winlink), and an
+ALC fix for low power. T5 (logging, MSG inbox) is next.
 
 ## Principles
 

@@ -150,6 +150,79 @@ int main() {
 
     ui_init();
     ui_open();
+    if (getenv("ONLY_APRS")) {
+        // Until a queued message has been keyed and nothing more follows.
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        pump(300);
+        ui_page(5);
+        ui_press(2); // Spot grid to APRS
+        wait_tx();
+        printf("[aprs] grid spot sent: %d\n", ui_list_has("@APRSIS GRID FN42"));
+
+        ui_press(1); // APRS >
+        pump(200);
+        printf("[aprs] list open, focused '%s'\n", ui_focused_text());
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
+        printf("[aprs] after 3 steps: '%s'\n", ui_focused_text());
+        ui_click_focused(); // SMS text
+        pump(300);
+        printf("[aprs] SMS prefill: '%s' focus: %s\n", ui_compose_text(), ui_focus_desc());
+        ui_compose_append("6045551234 HELLO FROM THE X6100");
+        ui_compose_enter();
+        wait_tx();
+        printf("[aprs] SMS sent with an ID: %d\n", ui_list_has(":@6045551234 HELLO FROM THE X6100{"));
+
+        ui_press(1);
+        pump(200);
+        ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // POTA spot
+        pump(300);
+        printf("[aprs] POTA prefill: '%s'\n", ui_compose_text());
+        ui_compose_append("VE-1234");
+        printf("[aprs] POTA typed:   '%s'\n", ui_compose_text());
+        screenshot("23_aprs_pota.ppm");
+        ui_compose_enter();
+        wait_tx();
+        ui_press(1);
+        pump(200);
+        ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        pump(300);
+        printf("[aprs] POTA again (remembers park): '%s'\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(300);
+
+        ui_press(1);
+        pump(200);
+        for (int i = 0; i < 4; i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // Email
+        pump(300);
+        ui_compose_append("SOMEONE@EXAMPLE.COM THIS MESSAGE IS FAR TOO LONG FOR ONE APRS PACKET SORRY");
+        ui_compose_enter();
+        pump(300);
+        printf("[aprs] too long, compose still open: %s\n", ui_focus_desc());
+        ui_compose_cancel();
+        pump(300);
+
+        ui_press(1);
+        pump(200);
+        ui_key(LV_KEY_LEFT);
+        printf("[aprs] one step back: '%s'\n", ui_focused_text());
+        screenshot("24_aprs_list.ppm");
+        ui_click_focused();
+        pump(300);
+        printf("[aprs] after Close: %s\n", ui_focus_desc());
+        return 0;
+    }
     if (getenv("ONLY_QSOFREQ")) {
         // Directed view also shows whatever is on the selected station's frequency.
         pump(300);
