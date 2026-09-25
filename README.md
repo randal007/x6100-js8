@@ -6,10 +6,12 @@ itself with no PC, phone or tablet attached.
 This is the X6100 LVGL firmware GUI with a JS8 app added alongside the
 existing FT8, RTTY, WeFax and NavTex apps.
 
-> **Status: receive-only, not yet tested on a radio.** The JS8 app decodes
-> and displays JS8 Normal-mode traffic. Every part of it has been tested on
-> a PC (see [Testing](#testing)) but none of it on real hardware or real
-> signals yet. It never transmits.
+> **Status: receive and manual transmit, not yet tested on a radio.** The
+> JS8 app decodes JS8 Normal-mode traffic and can send replies, free text
+> and CQs. Every part has been tested on a PC (see [Testing](#testing)), but
+> none of it on real hardware or real signals yet. **Test transmit into a
+> dummy load first.** There is no auto-reply and no automatic heartbeat:
+> it only transmits when you press a button.
 
 ![JS8 app, all messages](docs/screenshots/js8_04_all.png)
 
@@ -22,16 +24,29 @@ a CQ (green), heartbeats (grey), messages to this station (red) and an
 APP → page 3 → **JS8**. The radio tunes the nearest JS8 frequency (the band
 keys step through JS8Call's standard dial frequencies) and starts decoding.
 
-| Button | Does |
-|---|---|
-| Show: No HB / Directed / All | Filter the list. *Directed* shows messages to your callsign (set in APP → Callsign) or to @groups. |
-| Clear | Clear the list and any half-received messages. |
-| Time Sync *(page 2)* | Snap the clock to the nearest 15 s. JS8 needs the clock within about ±1 s of UTC. |
-| Test WAV *(page 2)* | Decode `/mnt/js8_test.wav` instead of the radio audio: see [test-audio](test-audio). |
+| Page | Button | Does |
+|---|---|---|
+| 1 | Show: No HB / Directed / All | Filter the list. *Directed* shows messages to your callsign (set in APP → Callsign) or to @groups. |
+| 1 | **Reply** | Opens the keyboard with the selected station's call filled in, e.g. `N0XYZ `. Type the rest (`SNR?`, `HELLO …`) and press Enter. |
+| 1 | **Send…** | Opens the keyboard empty: `@ALLCALL …`, a call and a message, or free text (your call is added). |
+| 1 | **Stop TX** | Unkeys at once and drops the rest of the message. ESC does the same; the next ESC closes the app. |
+| 2 | **CQ** | Sends `CQ CQ CQ <grid>`. |
+| 2 | Clear | Clear the list and any half-received messages. |
+| 3 | Time Sync | Snap the clock to the nearest 15 s. JS8 needs the clock within about ±1 s of UTC. |
+| 3 | Test WAV | Decode `/mnt/js8_test.wav` instead of the radio audio: see [test-audio](test-audio). |
+
+**Transmitting:** the **main tuning knob** sets your TX offset (the red band
+on the waterfall, 500–2450 Hz, remembered). The dial frequency stays
+locked. The TX bar under the waterfall shows the offset and then the
+countdown ("starts in 9 s (1/3)"). It turns red while keyed, and the
+waterfall gets a red border. Sent messages appear in the list in blue.
+Power is capped at 5 W, as in the FT8 app, and restored when you leave.
+
+![Replying: TX bar keyed, sent message in blue](docs/screenshots/js8_08_tx_keying.png)
 
 Rows show UTC time, SNR, audio offset and the message. The MFK moves through
-the list and marks the selected station's offset on the waterfall; tapping a
-row also shows its callsign and SNR. Multi-frame messages appear
+the list and marks the selected station's offset with a green line on the
+waterfall. Tapping a row also shows its callsign and SNR. Multi-frame messages appear
 once their last frame arrives. Buffered commands such as `MSG` have their
 checksum verified and removed, as in desktop JS8Call.
 
@@ -82,7 +97,9 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [ ] CI image build with JS8 dependencies (workflow updated; first build pending)
 - [ ] First boot on a radio: WAV test mode, then on-air RX against desktop JS8Call
 - [ ] Decode timing on the Cortex-A7 on a busy band
-- [ ] Transmit: heartbeat, CQ, directed messages, free text
+- [x] Transmit, manual: reply, directed messages, free text, CQ, stop ([plan](docs/TX_PLAN.md), phases T1–T2)
+- [ ] Transmit on air: dummy load, then PSK Reporter spots and a desktop JS8Call QSO
+- [ ] Heartbeat and query shortcuts (T3); opt-in auto-reply (T4); logging (T5)
 - [ ] Fast / Turbo / Slow submodes, auto-reply, logging
 
 ## Testing

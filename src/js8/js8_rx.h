@@ -42,6 +42,7 @@ typedef struct {
     bool    to_me;
     bool    to_group;
     int8_t  checksum; /* buffered command (MSG etc.): 0 none, 1 valid, -1 bad */
+    bool    tx;       /* set by the app for its own transmissions */
     char    from[JS8_RX_CALL_LEN];
     char    to[JS8_RX_CALL_LEN];
     char    text[JS8_RX_TEXT_LEN];

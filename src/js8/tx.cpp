@@ -192,7 +192,7 @@ Transmitter::~Transmitter() {
     if (thread_.joinable()) thread_.join();
 }
 
-bool Transmitter::send(const TxPlan &plan, double offset_hz, std::string *why) {
+bool Transmitter::send(const TxPlan &plan, double offset_hz, std::string *why, double synth_hz) {
     auto reject = [&](const std::string &m) {
         if (why) *why = m;
         return false;
@@ -205,7 +205,7 @@ bool Transmitter::send(const TxPlan &plan, double offset_hz, std::string *why) {
 
     if (thread_.joinable()) thread_.join(); // previous message's thread has finished
     stop_   = false;
-    thread_ = std::thread(&Transmitter::run, this, plan, offset_hz);
+    thread_ = std::thread(&Transmitter::run, this, plan, offset_hz, synth_hz > 0 ? synth_hz : offset_hz);
     return true;
 }
 
@@ -228,7 +228,7 @@ void Transmitter::set_status(const Status &s) {
     if (cb_.on_status) cb_.on_status(s);
 }
 
-void Transmitter::run(TxPlan plan, double offset_hz) {
+void Transmitter::run(TxPlan plan, double offset_hz, double synth_hz) {
     const int count = (int)plan.frames.size();
     Status    st;
     st.frames    = count;
@@ -245,7 +245,7 @@ void Transmitter::run(TxPlan plan, double offset_hz) {
         if (start < now) start = next_tx_start_ms(now);
 
         // Synthesise before waiting so keying starts on time.
-        auto audio = synth_frame(plan.frames[i].tones, offset_hz, rate_);
+        auto audio = synth_frame(plan.frames[i].tones, synth_hz, rate_);
 
         st.state   = State::Waiting;
         st.frame   = i + 1;

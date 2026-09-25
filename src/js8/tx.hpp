@@ -105,10 +105,14 @@ public:
     Transmitter(const Transmitter &)            = delete;
     Transmitter &operator=(const Transmitter &) = delete;
 
-    /// Queue a planned message at `offset_hz`. Returns false if something is
-    /// already queued or sending, if the plan isn't ok(), or if the offset or
-    /// length is out of range.
-    bool send(const TxPlan &plan, double offset_hz, std::string *why = nullptr);
+    /// Queue a planned message at audio offset `offset_hz`. Returns false if
+    /// something is already queued or sending, if the plan isn't ok(), or if
+    /// the offset or length is out of range.
+    ///
+    /// `synth_hz`, if non-zero, is the tone the audio is generated at
+    /// instead of `offset_hz`. The X6100's TX player always takes audio
+    /// centred on a fixed tone and shifts the VFO to reach the offset.
+    bool send(const TxPlan &plan, double offset_hz, std::string *why = nullptr, double synth_hz = 0);
 
     /// Abandon the current message. Returns at once; busy() turns false once
     /// the current frame's play() has returned.
@@ -119,7 +123,7 @@ public:
     Status status() const;
 
 private:
-    void run(TxPlan plan, double offset_hz);
+    void run(TxPlan plan, double offset_hz, double synth_hz);
     void set_status(const Status &s);
 
     int                 rate_;

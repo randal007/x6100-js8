@@ -1,7 +1,7 @@
 # JS8 transmit: plan and UI design
 
-Status: **T1 done** (transmitter library, tested; not connected to the radio
-yet). Decided: TX buttons on page 1, 5 W cap, auto-reply later and opt-in.
+Status: **T1 and T2 done**: manual transmit works end to end in the host UI
+harness. Nothing has been tested on a radio yet. Decided: TX buttons on page 1, 5 W cap, auto-reply later and opt-in.
 
 ## Principles
 
@@ -167,7 +167,7 @@ enum needs a JS8 entry; that's appended, like `ACTION_APP_JS8`.
 | | Scope | Testable without a radio? |
 |---|---|---|
 | **T1** ✅ | `src/js8` transmitter: text → frames → GFSK audio at the radio rate, slot scheduling, queue, abort. Loopback tests: TX audio into our RX decodes. Frame/time estimates for the keyboard. | Yes, fully |
-| **T2** | Radio glue: split the FT8 app's TX player into a shared "play with PTT and ALC" routine; JS8 uses it. Reply, Send, CQ, Stop, TX bar, TX rows, TX offset on the main knob. | Mostly (harness), then dummy load |
+| **T2** ✅ | Radio glue: split the FT8 app's TX player into a shared "play with PTT and ALC" routine; JS8 uses it. Reply, Send, CQ, Stop, TX bar, TX rows, TX offset on the main knob. | Mostly (harness), then dummy load |
 | **T3** | Query list, single heartbeat, Hold offset | Harness + on air |
 | **T4** | Auto-reply, HB interval, HB acks, MSG ACK, watchdog | Library tests + on air |
 | **T5** | Logging; later an inbox for stored MSG and QUERY MSGS | |

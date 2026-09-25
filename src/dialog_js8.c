@@ -12,6 +12,7 @@
 #include "dialog_js8.h"
 
 #include "js8/js8_rx.h"
+#include "js8/js8_tx.h"
 
 #include "audio.h"
 #include "buttons.h"
@@ -27,6 +28,8 @@
 #include "radio.h"
 #include "scheduler.h"
 #include "styles.h"
+#include "textarea_window.h"
+#include "tx_player.h"
 #include "util.h"
 #include "widgets/lv_finder.h"
 #include "widgets/lv_waterfall.h"
@@ -36,6 +39,7 @@
 #include <errno.h>
 #include <math.h>
 #include <stdarg.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -45,6 +49,8 @@
 #define WIDTH            771
 #define WF_HEIGHT        325
 #define WF_VISIBLE       55     /* waterfall rows left uncovered by the list */
+#define TX_BAR_H         30     /* TX status line between waterfall and list */
+#define TX_TEXT_MAX      160    /* longest message the compose window takes */
 #define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
 #define JS8_SLOT_SEC     15.0f
 #define PSD_INTERVAL_MS  200
@@ -72,10 +78,30 @@ static void        clear_cb(button_data_t *btn);
 static void        time_sync_cb(button_data_t *btn);
 static const char *test_wav_label_getter(void);
 static void        test_wav_cb(button_data_t *btn);
+static void        rotary_cb(int32_t diff);
+static void        reply_cb(button_data_t *btn);
+static void        send_cb(button_data_t *btn);
+static void        stop_tx_cb(button_data_t *btn);
+static void        cq_cb(button_data_t *btn);
+static void        update_tx_bar(void);
+static void        tx_start(void);
+static void        tx_stop_all(void);
+static void        tx_timer_cb(lv_timer_t *t);
+static void        compose_close(void);
 
 /* ---- State (UI thread unless noted) ------------------------------------ */
 
 static js8_rx_t *rx;
+static js8_tx_t *tx;
+
+static lv_obj_t   *tx_bar;
+static lv_timer_t *tx_timer;           /* refreshes the TX bar countdown */
+static js8_tx_status_t tx_status;      /* UI-thread copy of the last status */
+static char        tx_preview[JS8_RX_TEXT_LEN]; /* what we're sending, as others see it */
+static float       base_gain_offset;
+static atomic_bool keyed;              /* a frame is on the air (TX thread) */
+static atomic_int  tx_offset_active;   /* offset of the message being sent */
+static bool        composing;          /* compose window open */
 
 static lv_obj_t *waterfall;
 static lv_obj_t *finder;
@@ -106,17 +132,25 @@ static uint64_t last_psd_ms;
 
 static buttons_page_t page_1;
 static buttons_page_t page_2;
+static buttons_page_t page_3;
 
-static button_data_t btn_p1    = {.type = BTN_TEXT, .label = "(JS8 1:2)", .press = button_next_page_cb, .next = &page_2};
-static button_data_t btn_show  = {.type = BTN_TEXT_FN, .label_fn = show_label_getter, .press = show_cb};
+static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:3)", .press = button_next_page_cb, .next = &page_2};
+static button_data_t btn_show    = {.type = BTN_TEXT_FN, .label_fn = show_label_getter, .press = show_cb};
+static button_data_t btn_reply   = {.type = BTN_TEXT, .label = "Reply", .press = reply_cb};
+static button_data_t btn_send    = {.type = BTN_TEXT, .label = "Send...", .press = send_cb};
+static button_data_t btn_stop_tx = {.type = BTN_TEXT, .label = "Stop TX", .press = stop_tx_cb};
+
+static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:3)", .press = button_next_page_cb, .next = &page_3};
+static button_data_t btn_cq    = {.type = BTN_TEXT, .label = "CQ", .press = cq_cb};
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
-static button_data_t btn_p2        = {.type = BTN_TEXT, .label = "(JS8 2:2)", .press = button_next_page_cb, .next = &page_1};
+static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:3)", .press = button_next_page_cb, .next = &page_1};
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
 static button_data_t btn_test_wav  = {.type = BTN_TEXT_FN, .label_fn = test_wav_label_getter, .press = test_wav_cb};
 
-static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_clear}};
-static buttons_page_t page_2 = {{&btn_p2, &btn_time_sync, &btn_test_wav}};
+static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn_stop_tx}};
+static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_clear}};
+static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_test_wav}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -124,6 +158,7 @@ static dialog_t dialog = {
     .destruct_cb  = destruct_cb,
     .audio_cb     = audio_cb,
     .key_cb       = key_cb,
+    .rotary_cb    = rotary_cb,
     .btn_page     = &page_1,
 };
 
@@ -132,6 +167,7 @@ dialog_t *dialog_js8 = &dialog;
 /* ---- Message list ----------------------------------------------------- */
 
 static bool passes_filter(const js8_rx_msg_t *m) {
+    if (m->tx) return true;
     switch (show) {
     case SHOW_ALL:      return true;
     case SHOW_NO_HB:    return !m->heartbeat;
@@ -142,6 +178,11 @@ static bool passes_filter(const js8_rx_msg_t *m) {
 
 static void format_row(const js8_rx_msg_t *m, char *buf, size_t size) {
     int hh = m->utc / 10000, mm = (m->utc / 100) % 100, ss = m->utc % 100;
+
+    if (m->tx) {
+        snprintf(buf, size, "%02d:%02d:%02d  TX %4.0f  %s", hh, mm, ss, m->freq_hz, m->text);
+        return;
+    }
 
     snprintf(buf, size, "%02d:%02d:%02d %+3d %4.0f  %s%s%s%s",
              hh, mm, ss, m->snr, m->freq_hz,
@@ -270,7 +311,9 @@ static void table_draw_cb(lv_event_t *e) {
         dsc->rect_dsc->bg_color = lv_color_hex(0x303030);
     } else {
         const js8_rx_msg_t *m = &history[h];
-        if (m->to_me) {
+        if (m->tx) {
+            dsc->rect_dsc->bg_color = lv_color_hex(0x1830a0);
+        } else if (m->to_me) {
             dsc->rect_dsc->bg_color = lv_color_hex(0xB00000);
         } else if (m->cq) {
             dsc->rect_dsc->bg_color = lv_color_hex(0x006000);
@@ -296,12 +339,12 @@ static void mark_selected(bool announce) {
     uint16_t row, col;
     lv_table_get_selected_cell(table, &row, &col);
     if (row >= rows || row_hist[row] < 0) {
-        lv_finder_set_value(finder, filter_low - 1000); /* off-screen */
+        lv_finder_clear_cursor(finder);
         lv_obj_invalidate(finder);
         return;
     }
     const js8_rx_msg_t *m = &history[row_hist[row]];
-    lv_finder_set_value(finder, (int16_t)(m->freq_hz + 0.5f));
+    lv_finder_set_cursor(finder, (int16_t)(m->freq_hz + 0.5f));
     lv_obj_invalidate(finder);
     if (announce && m->from[0]) {
         msg_update_text_fmt("%s at %.0f Hz, %+d dB", m->from, m->freq_hz, m->snr);
@@ -427,7 +470,232 @@ static void rx_stop(void) {
 }
 
 static void audio_cb(unsigned int n, float *samples) {
+    if (atomic_load(&keyed)) return; /* our own TX, or nothing useful */
     js8_rx_feed(rx, samples, n);
+}
+
+/* ---- Transmit ---------------------------------------------------------- */
+
+static bool tx_abort_check(void *ctx) {
+    (void)ctx;
+    return js8_tx_stopping(tx);
+}
+
+/* TX thread: key the radio for one frame. tx_player shifts the VFO so the
+ * 1325 Hz synthesis tone lands at our offset, drops PTT and restores the VFO
+ * afterwards. */
+static bool tx_play(int16_t *samples, unsigned n, int index, int count, void *ctx) {
+    (void)index;
+    (void)count;
+    (void)ctx;
+    atomic_store(&keyed, true);
+    bool done = tx_player_play(samples, n, atomic_load(&tx_offset_active), base_gain_offset, tx_abort_check, NULL);
+    atomic_store(&keyed, false);
+    return done;
+}
+
+static int current_utc_hhmmss(void) {
+    time_t    now = time(NULL);
+    struct tm tm;
+    gmtime_r(&now, &tm);
+    return tm.tm_hour * 10000 + tm.tm_min * 100 + tm.tm_sec;
+}
+
+static void ui_tx_status(void *arg) {
+    if (!dialog.run || !tx_bar) return;
+    const js8_tx_status_t *st = (const js8_tx_status_t *)arg;
+
+    /* When the first frame goes out, add the message to the list. */
+    if (st->state == JS8_TX_KEYING && st->frame == 1 && tx_status.state != JS8_TX_KEYING) {
+        js8_rx_msg_t m = {0};
+        m.tx           = true;
+        m.utc          = current_utc_hhmmss();
+        m.freq_hz      = st->offset_hz;
+        snprintf(m.text, sizeof(m.text), "%s", tx_preview[0] ? tx_preview : st->text);
+        add_message(&m);
+    }
+    tx_status = *st;
+    update_tx_bar();
+}
+
+static void on_tx_status(const js8_tx_status_t *st, void *ctx) {
+    (void)ctx;
+    scheduler_put(ui_tx_status, (void *)st, sizeof(*st));
+}
+
+static void ui_tx_done(void *arg) {
+    if (!dialog.run || !tx_bar) return;
+    bool completed = *(bool *)arg;
+    if (!completed) add_info_row("TX stopped");
+    memset(&tx_status, 0, sizeof(tx_status));
+    update_tx_bar();
+}
+
+static void on_tx_done(const char *text, bool completed, void *ctx) {
+    (void)text;
+    (void)ctx;
+    scheduler_put(ui_tx_done, &completed, sizeof(completed));
+}
+
+static void tx_start(void) {
+    js8_tx_cb_t cb = {
+        .play      = tx_play,
+        .on_status = on_tx_status,
+        .on_done   = on_tx_done,
+    };
+    memset(&tx_status, 0, sizeof(tx_status));
+    atomic_store(&keyed, false);
+    tx = js8_tx_create(AUDIO_PLAY_RATE, TX_PLAYER_AUDIO_HZ, &cb);
+    if (!tx) msg_schedule_text_fmt("JS8: cannot start transmitter");
+}
+
+static void tx_stop_all(void) {
+    js8_tx_destroy(tx); /* stops and waits for the current frame to end */
+    tx = NULL;
+    atomic_store(&keyed, false);
+}
+
+static void tx_timer_cb(lv_timer_t *t) {
+    (void)t;
+    static unsigned ticks;
+    update_tx_bar();
+    /* Keep the status clock moving; decode cycles, which also refresh it,
+     * pause while we transmit. */
+    if (++ticks % 4 == 0) update_status();
+}
+
+/* "TX 1500 Hz  ready" / "... K2XYZ SNR?  starts in 9 s" / "... sending 2/3" */
+static void update_tx_bar(void) {
+    if (!tx_bar) return;
+    char     line[JS8_RX_TEXT_LEN + 64];
+    uint16_t offset = params.js8_tx_freq.x;
+
+    switch (tx_status.state) {
+    case JS8_TX_WAITING: {
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        int64_t now_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        int     secs   = (int)((tx_status.next_ms - now_ms + 999) / 1000);
+        if (secs < 0) secs = 0;
+        snprintf(line, sizeof(line), "TX %4.0f Hz   %s   %s %d s  (%d/%d)", tx_status.offset_hz, tx_status.text,
+                 tx_status.frame == 1 ? "starts in" : "next frame in", secs, tx_status.frame, tx_status.frames);
+        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x5a4a00), 0);
+        break;
+    }
+    case JS8_TX_KEYING:
+        snprintf(line, sizeof(line), "TX %4.0f Hz   %s   sending %d/%d", tx_status.offset_hz, tx_status.text,
+                 tx_status.frame, tx_status.frames);
+        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0xa00000), 0);
+        break;
+    default:
+        snprintf(line, sizeof(line), "TX %4u Hz   ready%s", offset,
+                 params.callsign.x[0] ? "" : "  (set your callsign: APP > Callsign)");
+        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x202020), 0);
+        break;
+    }
+    lv_label_set_text(tx_bar, line);
+
+    /* A red frame round the waterfall while keyed. */
+    bool on = tx_status.state == JS8_TX_KEYING;
+    lv_obj_set_style_border_width(waterfall, on ? 3 : 0, 0);
+    lv_obj_set_style_border_color(waterfall, lv_color_hex(0xff2020), 0);
+}
+
+/* Queue `text` at our offset. Returns false (with a message shown) if it
+ * can't be sent, e.g. a bad character or something already sending. */
+static bool tx_queue(const char *text) {
+    if (js8_tx_busy(tx)) {
+        msg_update_text_fmt("Already sending - Stop TX first");
+        return false;
+    }
+
+    js8_tx_preview_t pv;
+    js8_tx_preview(params.callsign.x, params.qth.x, text, &pv);
+    if (!pv.ok) {
+        msg_update_text_fmt("JS8: %s", pv.error);
+        return false;
+    }
+
+    char err[JS8_TX_ERR_LEN];
+    atomic_store(&tx_offset_active, params.js8_tx_freq.x);
+    snprintf(tx_preview, sizeof(tx_preview), "%s", pv.preview);
+    if (!js8_tx_send(tx, params.callsign.x, params.qth.x, text, params.js8_tx_freq.x, err, sizeof(err))) {
+        msg_update_text_fmt("JS8: %s", err);
+        return false;
+    }
+    msg_update_text_fmt("Queued: %d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
+    return true;
+}
+
+/* Main tuning knob: move the TX offset, as in the FT8 app. The dial
+ * frequency stays locked. */
+static void rotary_cb(int32_t diff) {
+    int32_t abs_diff = abs(diff);
+    if (abs_diff > 3) diff *= (abs_diff < 6) ? 5 : 10;
+
+    int32_t f = (int32_t)params.js8_tx_freq.x + diff;
+    if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
+    if (f > JS8_TX_MAX_OFFSET) f = JS8_TX_MAX_OFFSET;
+    params_uint16_set(&params.js8_tx_freq, (uint16_t)f);
+
+    lv_finder_set_value(finder, (int16_t)f);
+    lv_obj_invalidate(finder);
+    update_tx_bar();
+}
+
+/* ---- Compose window --------------------------------------------------- */
+
+static void compose_changed_cb(lv_event_t *e) {
+    (void)e;
+    js8_tx_preview_t pv;
+    js8_tx_preview(params.callsign.x, params.qth.x, textarea_window_get(), &pv);
+    if (pv.ok) {
+        msg_update_text_fmt("%d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
+    }
+}
+
+static void compose_close(void) {
+    if (!composing) return;
+    textarea_window_close();
+    composing = false;
+    if (table) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+/* Same pattern as the FT8 app's keyboard: close here and return true;
+ * textarea_window's own close is then a no-op. */
+static bool compose_ok_cb(void) {
+    if (!tx_queue(textarea_window_get())) return false; /* keep the window open */
+    compose_close();
+    return true;
+}
+
+static bool compose_cancel_cb(void) {
+    compose_close();
+    return true;
+}
+
+static void compose_open(const char *prefill) {
+    if (composing) return;
+    if (!params.callsign.x[0]) {
+        msg_update_text_fmt("Set your callsign first: APP > Callsign");
+        return;
+    }
+    composing = true;
+    lv_group_remove_obj(table);
+    textarea_window_open(compose_ok_cb, compose_cancel_cb);
+
+    lv_obj_t *text = textarea_window_text();
+    lv_textarea_set_accepted_chars(text, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .-+?!\"/@:>");
+    lv_textarea_set_max_length(text, TX_TEXT_MAX);
+    lv_obj_add_event_cb(text, compose_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    if (prefill && prefill[0]) {
+        textarea_window_set(prefill);
+    } else {
+        lv_textarea_set_placeholder_text(text, " CALL MESSAGE / @ALLCALL ...");
+    }
 }
 
 /* ---- Band and screen -------------------------------------------------- */
@@ -443,7 +711,7 @@ static void band_cb(lv_event_t *e) {
 
     js8_rx_clear(rx);
     lv_waterfall_clear_data(waterfall);
-    lv_finder_set_value(finder, filter_low - 1000);
+    lv_finder_clear_cursor(finder);
     add_info_row("%s", cfg_digital_label_get());
     update_status();
 }
@@ -453,7 +721,11 @@ static void key_cb(lv_event_t *e) {
 
     switch (key) {
     case LV_KEY_ESC:
-        dialog_destruct();
+        if (js8_tx_busy(tx)) {
+            stop_tx_cb(NULL); /* first ESC stops TX; the next one closes */
+        } else {
+            dialog_destruct();
+        }
         break;
     case KEY_VOL_LEFT_EDIT:
     case KEY_VOL_LEFT_SELECT:
@@ -496,8 +768,17 @@ static void construct_cb(lv_obj_t *parent) {
 
     finder = lv_finder_create(waterfall);
     lv_finder_set_range(finder, filter_low, filter_high);
+    /* A stored offset outside the usable range (an old or damaged setting)
+     * would make every send fail; start from 1500 Hz instead. */
+    if (params.js8_tx_freq.x < JS8_TX_MIN_OFFSET || params.js8_tx_freq.x > JS8_TX_MAX_OFFSET) {
+        params_uint16_set(&params.js8_tx_freq, 1500);
+    }
+
+    /* The finder's band is our TX offset; its cursor line marks the
+     * selected message. */
     lv_finder_set_width(finder, JS8_WIDTH_HZ);
-    lv_finder_set_value(finder, filter_low - 1000);
+    lv_finder_set_value(finder, params.js8_tx_freq.x);
+    lv_finder_clear_cursor(finder);
     lv_obj_set_size(finder, WIDTH, WF_HEIGHT);
     lv_obj_set_pos(finder, 0, 0);
     lv_obj_set_style_radius(finder, 0, LV_PART_MAIN);
@@ -516,6 +797,17 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_bg_opa(status, LV_OPA_50, 0);
     lv_obj_align(status, LV_ALIGN_TOP_RIGHT, -4, 4);
 
+    /* TX status line */
+
+    tx_bar = lv_label_create(dialog.obj);
+    lv_obj_set_size(tx_bar, WIDTH, TX_BAR_H);
+    lv_obj_set_pos(tx_bar, 13, 13 + WF_VISIBLE);
+    lv_obj_set_style_text_font(tx_bar, &sony_22, 0);
+    lv_obj_set_style_pad_left(tx_bar, 6, 0);
+    lv_obj_set_style_pad_top(tx_bar, 3, 0);
+    lv_obj_set_style_bg_opa(tx_bar, LV_OPA_COVER, 0);
+    lv_label_set_long_mode(tx_bar, LV_LABEL_LONG_DOT);
+
     /* Message list */
 
     table = lv_table_create(dialog.obj);
@@ -524,8 +816,8 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_add_event_cb(table, table_select_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(table, key_cb, LV_EVENT_KEY, NULL);
     lv_obj_add_event_cb(table, table_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
-    lv_obj_set_size(table, WIDTH, WF_HEIGHT - WF_VISIBLE);
-    lv_obj_set_pos(table, 13, 13 + WF_VISIBLE);
+    lv_obj_set_size(table, WIDTH, WF_HEIGHT - WF_VISIBLE - TX_BAR_H);
+    lv_obj_set_pos(table, 13, 13 + WF_VISIBLE + TX_BAR_H);
     lv_table_set_col_cnt(table, 1);
     lv_table_set_col_width(table, 0, WIDTH - 2);
     lv_obj_set_style_border_width(table, 0, LV_PART_ITEMS);
@@ -557,9 +849,29 @@ static void construct_cb(lv_obj_t *parent) {
     test_wav_shown          = false;
     rx_start();
     update_status();
+
+    /* Transmit: same 5 W cap and gain start as the FT8 app. */
+    if (param_f_get(cfg_pwr) > TX_PLAYER_MAX_PWR_W) {
+        radio_set_pwr(TX_PLAYER_MAX_PWR_W);
+        msg_schedule_text_fmt("Power was limited to %0.0fW", TX_PLAYER_MAX_PWR_W);
+    }
+    base_gain_offset = tx_player_base_gain_offset();
+    tx_start();
+    tx_timer = lv_timer_create(tx_timer_cb, 250, NULL);
+    update_tx_bar();
 }
 
 static void destruct_cb(void) {
+    /* Unkey and join the TX thread first: tx_player restores the VFO and
+     * drops PTT before we restore the memory slot below. */
+    tx_stop_all();
+    if (tx_timer) {
+        lv_timer_del(tx_timer);
+        tx_timer = NULL;
+    }
+    compose_close();
+    radio_set_pwr(param_f_get(cfg_pwr));
+
     rx_stop();
 
     dsp_set_waterfall_enabled(true);
@@ -574,7 +886,7 @@ static void destruct_cb(void) {
 
     /* LVGL objects are children of dialog.obj, deleted by dialog_destruct()
      * right after this returns. */
-    waterfall = finder = table = status = NULL;
+    waterfall = finder = table = status = tx_bar = NULL;
 }
 
 /* ---- Buttons ---------------------------------------------------------- */
@@ -595,7 +907,7 @@ static void clear_cb(button_data_t *btn) {
     hist_head = hist_count = 0;
     js8_rx_clear(rx);
     lv_waterfall_clear_data(waterfall);
-    lv_finder_set_value(finder, filter_low - 1000);
+    lv_finder_clear_cursor(finder);
     rebuild_rows();
     update_status();
 }
@@ -637,4 +949,40 @@ static void test_wav_cb(button_data_t *btn) {
     }
     update_status();
     buttons_refresh(btn);
+}
+
+static void reply_cb(button_data_t *btn) {
+    (void)btn;
+    uint16_t row, col;
+    lv_table_get_selected_cell(table, &row, &col);
+    if (row >= rows || row_hist[row] < 0 || history[row_hist[row]].tx || !history[row_hist[row]].from[0]) {
+        msg_update_text_fmt("Select a station's message first (MFK)");
+        return;
+    }
+    char prefill[JS8_RX_CALL_LEN + 2];
+    snprintf(prefill, sizeof(prefill), "%s ", history[row_hist[row]].from);
+    compose_open(prefill);
+}
+
+static void send_cb(button_data_t *btn) {
+    (void)btn;
+    compose_open(NULL);
+}
+
+static void stop_tx_cb(button_data_t *btn) {
+    (void)btn;
+    if (!js8_tx_busy(tx)) {
+        msg_update_text_fmt("Not sending");
+        return;
+    }
+    js8_tx_stop(tx);
+    msg_update_text_fmt("Stopping TX");
+}
+
+/* CQ with the 4-character grid, as desktop JS8Call sends it. */
+static void cq_cb(button_data_t *btn) {
+    (void)btn;
+    char text[32];
+    snprintf(text, sizeof(text), "CQ CQ CQ %.4s", params.qth.x);
+    tx_queue(text);
 }

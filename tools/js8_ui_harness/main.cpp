@@ -13,6 +13,14 @@ void ui_press(int i);
 void ui_band_up(void);
 void ui_key(uint32_t key);
 int  ui_running(void);
+void ui_compose_append(const char *text);
+const char *ui_compose_text(void);
+void ui_compose_enter(void);
+void ui_select_row_from(const char *call);
+extern int stub_tx_frames;
+extern int32_t stub_tx_offset;
+extern uint32_t stub_tx_samples;
+extern int16_t stub_tx_peak;
 }
 
 #include "js8core/decoder.hpp"
@@ -161,6 +169,41 @@ int main() {
     ui_key(LV_KEY_LEFT);
     pump(200);
     screenshot("04b_mfk_select.ppm");
+
+    // ---- Transmit: reply to N0XYZ, who called us. Back to "All" first.
+    ui_press(1);
+    pump(100);
+    ui_select_row_from("N0XYZ");
+    ui_press(2); // Reply
+    pump(200);
+    printf("[tx] compose prefilled: '%s'\n", ui_compose_text());
+    ui_compose_append("SNR?");
+    pump(200);
+    screenshot("06_compose.ppm");
+    ui_compose_enter();
+    pump(1000);
+    screenshot("07_tx_queued.ppm");
+    // Wait for the slot boundary and the first frame to key.
+    for (int i = 0; i < 180 && stub_tx_frames == 0; i++) pump(100);
+    pump(1500);
+    screenshot("08_tx_keying.ppm");
+    for (int i = 0; i < 60 && stub_tx_frames == 1; i++) pump(100);
+    pump(500);
+    printf("[tx] frames keyed %d, offset %d Hz, %u samples, peak %d\n", stub_tx_frames, stub_tx_offset,
+           stub_tx_samples, stub_tx_peak);
+    screenshot("09_tx_done.ppm");
+
+    // A long message, stopped with ESC during its first frame; the next ESC closes.
+    ui_press(3); // Send...
+    pump(200);
+    ui_compose_append("@ALLCALL TESTING A LONGER MESSAGE FROM THE X6100");
+    ui_compose_enter();
+    for (int i = 0; i < 180 && stub_tx_frames == 1; i++) pump(100);
+    pump(500);
+    ui_key(LV_KEY_ESC);
+    pump(1500);
+    printf("[tx] after ESC during TX: running=%d frames keyed=%d\n", ui_running(), stub_tx_frames);
+    screenshot("10_tx_stopped.ppm");
 
     // Band change, then close with ESC.
     ui_band_up();

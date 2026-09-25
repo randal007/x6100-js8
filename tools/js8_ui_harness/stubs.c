@@ -75,3 +75,44 @@ uint64_t get_time() {
     return (uint64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 void event_send(lv_obj_t *obj, lv_event_code_t code, void *param) { lv_event_send(obj, code, param); }
+
+/* ---- Transmit stubs -------------------------------------------------- */
+
+#include "tx_player.h"
+#include <unistd.h>
+
+static int dummy_pwr;
+ParamFloat *cfg_pwr = (ParamFloat *)&dummy_pwr;
+float param_f_get(const ParamFloat *p) { (void)p; return 10.0f; }  /* radio set to 10 W */
+void  radio_set_pwr(float w) { printf("[radio] power %.0f W\n", w); }
+bool  keyboard_ready() { return false; }                          /* show the on-screen keyboard */
+void  params_uint16_set(params_uint16_t *var, uint16_t x) { var->x = x; }
+
+float tx_player_base_gain_offset(void) { return -9.4f; }
+
+/* Record what would go to the radio; stay "keyed" for 3 s so the harness can
+ * screenshot the keying state, instead of the real 12.6 s. */
+int      stub_tx_frames;
+int32_t  stub_tx_offset;
+uint32_t stub_tx_samples;
+int16_t  stub_tx_peak;
+bool tx_player_play(int16_t *samples, uint32_t n, int32_t offset, float gain, tx_abort_fn_t abort_check, void *ctx) {
+    (void)gain;
+    int16_t peak = 0;
+    for (uint32_t i = 0; i < n; i++) if (samples[i] > peak) peak = samples[i];
+    stub_tx_frames++;
+    stub_tx_offset  = offset;
+    stub_tx_samples = n;
+    stub_tx_peak    = peak;
+    printf("[radio] PTT on: frame %d, %u samples (%.2f s at 44.1 kHz), offset %d Hz, peak %d\n", stub_tx_frames, n,
+           n / 44100.0, offset, peak);
+    for (int i = 0; i < 30; i++) {
+        if (abort_check && abort_check(ctx)) {
+            printf("[radio] PTT off: aborted\n");
+            return false;
+        }
+        usleep(100000);
+    }
+    printf("[radio] PTT off\n");
+    return true;
+}
