@@ -16,6 +16,7 @@ int  ui_running(void);
 int  ui_focus_is_table(void);
 void ui_rotary(int32_t diff);
 int  ui_list_has(const char *text);
+const char *ui_focused_text(void);
 const char *ui_focus_desc(void);
 const char *ui_button_label(int i);
 void ui_compose_append(const char *text);
@@ -165,6 +166,30 @@ int main() {
         ui_press(1); // Directed -> All
         pump(300);
         printf("[qso] with Show: All, other station shown=%d (want 1: it was decoded)\n", ui_list_has("NICE DAY THERE"));
+
+        // Query list: Close is one step back from the first item.
+        ui_select_row_from("N0XYZ");
+        ui_page(2);
+        ui_press(3); // Query >
+        pump(200);
+        printf("[query] open, focused '%s'\n", ui_focused_text());
+        ui_key(LV_KEY_LEFT);
+        pump(200);
+        printf("[query] one step back: '%s' (want Close)\n", ui_focused_text());
+        screenshot("22_query_close.ppm");
+        ui_click_focused();
+        pump(300);
+        printf("[query] after Close, list focused: %s\n", ui_focus_is_table() ? "yes" : "no");
+        ui_press(3); // open again...
+        pump(200);
+        ui_press(3); // ...and Query > closes it
+        pump(300);
+        printf("[query] Query > twice, list focused: %s\n", ui_focus_is_table() ? "yes" : "no");
+
+        // Time Sync from the decodes (can't actually set the PC clock here).
+        ui_page(3);
+        ui_press(1);
+        pump(200);
         return 0;
     }
     if (getenv("ONLY_TEXTS")) {
@@ -188,6 +213,14 @@ int main() {
         ui_compose_enter();
         pump(300);
         printf("[texts] after Enter, focus: %s\n", ui_focus_desc());
+        ui_press(4); // Texts... then Close
+        pump(200);
+        ui_key(LV_KEY_LEFT);
+        pump(200);
+        printf("[texts] one step back: '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[texts] after Close, focus: %s\n", ui_focus_desc());
         return 0;
     }
     pump(300);
@@ -315,7 +348,7 @@ int main() {
     auto wait_done = [&]() { pump(3500); };
 
     ui_page(3);
-    ui_press(4); // Show Stations
+    ui_press(3); // Show Stations
     pump(300);
     screenshot("11_stations.ppm");
 
@@ -341,7 +374,7 @@ int main() {
     wait_done();
 
     ui_page(3);
-    ui_press(3); // Hold: On -> Off
+    ui_press(2); // Hold: On -> Off
     ui_select_row_from("N0XYZ");
     ui_page(1);
     ui_press(2); // Reply

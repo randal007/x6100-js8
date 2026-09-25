@@ -10,6 +10,7 @@
 #include "assembler.hpp"
 #include "classify.hpp"
 #include "receiver.hpp"
+#include "js8_ops.h"
 #include "render.hpp"
 #include "resampler.hpp"
 
@@ -411,6 +412,95 @@ TEST_CASE("receiver fills an audio gap with silence instead of realigning", "[js
     }
     CHECK(filled);
     CHECK(rx.realign_count() == 0);
+}
+
+TEST_CASE("clock correction is the negated median DT", "[js8][ops]") {
+    float c = 0;
+    const float few[] = {1.0f, 1.2f};
+    CHECK_FALSE(js8_clock_correction(few, 2, &c));
+    const float dts[] = {1.1f, 0.9f, 5.0f, 1.0f, -3.0f}; // outliers don't matter
+    REQUIRE(js8_clock_correction(dts, 5, &c));
+    CHECK(c == Catch::Approx(-1.0f));
+    const float even[] = {0.2f, 0.4f, 0.6f, 0.8f};
+    REQUIRE(js8_clock_correction(even, 4, &c));
+    CHECK(c == Catch::Approx(-0.5f));
+}
+
+TEST_CASE("DT is 0 on time and positive when a signal starts late", "[js8][receiver][slow]") {
+    // The sign the Time Sync button relies on: our clock 1 s fast means
+    // signals appear 1 s late, DT = +1, correction -1 s.
+    constexpr int    RATE = 11025;
+    constexpr double NSPS = 0.160 * RATE;
+
+    auto frames = vc::build_message_frames("W1ABC", "FN42", "", "W1ABC: @HB HEARTBEAT FN42", false, false, 0);
+    REQUIRE(frames.size() == 1);
+
+    for (double late : {0.0, 1.0}) {
+        std::mutex         mu;
+        std::condition_variable cv;
+        std::vector<float> dts;
+        std::size_t        cycles = 0;
+
+        Receiver::Config cfg;
+        cfg.input_rate           = RATE;
+        cfg.realign_threshold_ms = 0;
+        Receiver::Callbacks cb;
+        cb.on_frame = [&](const RxFrame &f) {
+            std::lock_guard<std::mutex> l(mu);
+            dts.push_back(f.dt);
+            cv.notify_all();
+        };
+        cb.on_cycle_done = [&](std::size_t) {
+            std::lock_guard<std::mutex> l(mu);
+            cycles++;
+            cv.notify_all();
+        };
+        Receiver rx(cfg, cb);
+
+        const std::int64_t now     = wall_ms();
+        const std::int64_t to_slot = 15'000 - (now % 15'000);
+        std::vector<float> audio((std::size_t)(to_slot * RATE / 1000), 0.0f);
+        audio.resize(audio.size() + 15 * RATE, 0.0f); // warm-up slot
+        const std::size_t warmup_end = audio.size();
+
+        const auto &costas = js8core::protocol::costas(js8core::protocol::CostasType::Original);
+        int         tones[js8core::kJs8NumSymbols];
+        js8core::legacy_encode(frames[0].second, costas, frames[0].first.c_str(), tones);
+        std::size_t slot_start = audio.size();
+        audio.resize(slot_start + 30 * RATE, 0.0f);
+        double phi   = 0;
+        auto   start = slot_start + (std::size_t)((0.5 + late) * RATE);
+        for (int s = 0; s < js8core::kJs8NumSymbols; ++s) {
+            double dphi = 2 * M_PI * (1200.0 + tones[s] * 6.25) / RATE;
+            for (int i = 0; i < (int)NSPS; ++i) {
+                audio[start + (std::size_t)(s * NSPS) + i] += 0.1f * (float)std::sin(phi);
+                phi += dphi;
+            }
+        }
+        std::mt19937                    rng(7);
+        std::normal_distribution<float> noise(0.0f, 0.01f);
+        for (auto &x : audio) x += noise(rng);
+
+        constexpr std::size_t PIECE = RATE / 10;
+        auto feed_range = [&](std::size_t from, std::size_t to) {
+            for (std::size_t i = from; i < to; i += PIECE) {
+                rx.feed(&audio[i], std::min<std::size_t>(PIECE, to - i));
+                std::this_thread::sleep_for(std::chrono::milliseconds(10));
+            }
+        };
+        feed_range(0, warmup_end);
+        {
+            std::unique_lock<std::mutex> l(mu);
+            REQUIRE(cv.wait_for(l, std::chrono::seconds(60), [&] { return cycles > 0; }));
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+        feed_range(warmup_end, audio.size());
+
+        std::unique_lock<std::mutex> l(mu);
+        REQUIRE(cv.wait_for(l, std::chrono::seconds(120), [&] { return !dts.empty(); }));
+        INFO("late " << late << " s, DT " << dts[0]);
+        CHECK(dts[0] == Catch::Approx(late).margin(0.2));
+    }
 }
 
 /* ---- WAV files and test mode ------------------------------------------ */

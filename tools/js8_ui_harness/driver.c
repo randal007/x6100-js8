@@ -24,7 +24,14 @@ void ui_init(void) {
     params.js8_hb_interval.x = 30;
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
-void ui_press(int i) { button_data_t *b = stub_page->items[i]; b->press(b); }
+void ui_press(int i) {
+    button_data_t *b = stub_page->items[i];
+    if (!b) {
+        printf("[harness] no button %d on this page\n", i);
+        return;
+    }
+    b->press(b);
+}
 const char *ui_focus_desc(void) {
     lv_obj_t *f = lv_group_get_focused(keyboard_group);
     if (!f) return "nothing";
@@ -43,6 +50,12 @@ int ui_list_has(const char *text) {
         if (v && strstr(v, text)) return 1;
     }
     return 0;
+}
+/* Text of the focused list item, or "" */
+const char *ui_focused_text(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_list_btn_class)) return "";
+    return lv_list_get_btn_text(lv_obj_get_parent(f), f);
 }
 void ui_rotary(int32_t diff) { dialog_js8->rotary_cb(diff); }
 const char *ui_button_label(int i) {

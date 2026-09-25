@@ -16,6 +16,7 @@
 #include <cstring>
 #include <new>
 #include <random>
+#include <vector>
 
 using namespace x6100::js8;
 
@@ -188,4 +189,13 @@ extern "C" bool js8_starts_qso(const js8_rx_msg_t *msg) {
 extern "C" int64_t js8_next_heartbeat_ms(int64_t now_ms, int interval_min) {
     static std::mt19937 rng{std::random_device{}()};
     return next_heartbeat_ms(now_ms, interval_min, rng);
+}
+
+extern "C" bool js8_clock_correction(const float *dt, unsigned n, float *correction_s) {
+    if (!dt || !correction_s || n < JS8_SYNC_MIN_DECODES) return false;
+    std::vector<float> v(dt, dt + n);
+    std::sort(v.begin(), v.end());
+    float median   = n % 2 ? v[n / 2] : 0.5f * (v[n / 2 - 1] + v[n / 2]);
+    *correction_s  = -median;
+    return true;
 }

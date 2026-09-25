@@ -7,7 +7,8 @@ with `tools/js8_wavgen`. Sample 0 is a 15 s slot boundary.
 
 1. Copy `js8_test.wav` to the root of the SD card's DATA partition, so the
    radio sees it as `/mnt/js8_test.wav`.
-2. Open APP → JS8, go to page 3 (JS8 3:4) and press **Test WAV**.
+2. The Test WAV button was removed from the app once on-air receive worked;
+   builds up to 2026-09-25 have it on page 3.
 3. Playback starts at the next slot boundary (up to 15 s). The radio's own
    audio is ignored until the file ends. Press **Stop Test** to end early.
 

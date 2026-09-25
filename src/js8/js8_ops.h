@@ -112,6 +112,14 @@ bool js8_starts_qso(const js8_rx_msg_t *msg);
 /* Desktop's heartbeat schedule; interval clamped to 5-30 min. */
 int64_t js8_next_heartbeat_ms(int64_t now_ms, int interval_min);
 
+/* Time sync from decodes, like desktop's drift tool: a decode's DT is how
+ * late the signal started by our clock (0 = on time), so our clock is DT
+ * fast. Given recent DTs, the correction to add to the clock in seconds
+ * (the negated median). False if there are fewer than JS8_SYNC_MIN_DECODES. */
+bool js8_clock_correction(const float *dt, unsigned n, float *correction_s);
+
+#define JS8_SYNC_MIN_DECODES    3
+
 #define JS8_HB_MIN_INTERVAL     5
 #define JS8_HB_MAX_INTERVAL     30
 #define JS8_HB_DEFAULT_INTERVAL 30

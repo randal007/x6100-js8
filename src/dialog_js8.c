@@ -39,6 +39,8 @@
 #include <liquid/liquid.h>
 
 #include <errno.h>
+#include <fcntl.h>
+#include <linux/rtc.h>
 #include <math.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -46,7 +48,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/ioctl.h>
 #include <time.h>
+#include <unistd.h>
 
 #define SAMPLE_RATE      (AUDIO_CAPTURE_RATE / AUDIO_DECIM)
 #define WIDTH            771
@@ -61,6 +65,8 @@
 #endif
 #define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
 #define JS8_SLOT_SEC     15.0f
+#define SYNC_WINDOW_MS   120000 /* Time Sync uses decodes from the last 2 min */
+#define SYNC_DTS         32
 #define RX_THRESHOLD_HZ  10     /* 'on their frequency': desktop's rxThreshold for Normal */
 #define WF_ROWS_PER_SEC  10     /* waterfall rows per second of audio */
 #define WF_ROW_SAMPLES   (SAMPLE_RATE / WF_ROWS_PER_SEC)
@@ -70,7 +76,6 @@
  * audio level: WF_MIN_DB..WF_MAX_DB above the floor spans the palette. */
 #define WF_MIN_DB        0
 #define WF_MAX_DB        30
-#define TEST_WAV         "/mnt/js8_test.wav"  /* DATA partition, as NavTex's test file */
 
 #define HISTORY          300    /* messages kept for re-filtering */
 #define MAX_ROWS         200    /* rows shown before trimming to KEEP_ROWS */
@@ -92,8 +97,6 @@ static const char *show_label_getter(void);
 static void        show_cb(button_data_t *btn);
 static void        clear_cb(button_data_t *btn);
 static void        time_sync_cb(button_data_t *btn);
-static const char *test_wav_label_getter(void);
-static void        test_wav_cb(button_data_t *btn);
 static void        rotary_cb(int32_t diff);
 static void        reply_cb(button_data_t *btn);
 static void        send_cb(button_data_t *btn);
@@ -138,6 +141,9 @@ static lv_timer_t *tx_timer;           /* refreshes the TX bar countdown */
 static js8_tx_status_t tx_status;      /* UI-thread copy of the last status */
 static char        tx_preview[JS8_RX_TEXT_LEN]; /* what we're sending, as others see it */
 static float       base_gain_offset;
+static float       sync_dt[SYNC_DTS];  /* recent decode DTs for Time Sync */
+static int64_t     sync_ms[SYNC_DTS];
+static unsigned    sync_head;
 static float       qso_freq = -1;     /* the selected station's offset (the green line), -1 none */
 static atomic_bool keyed;              /* a frame is on the air (TX thread) */
 static atomic_int  tx_offset_active;   /* offset of the message being sent */
@@ -184,7 +190,6 @@ static int16_t      row_hist[MAX_ROWS + 1];
 static uint16_t     rows;
 
 static unsigned cycles, cycle_decodes;
-static bool     test_wav_shown; /* label state of btn_test_wav */
 
 /* Waterfall PSD, touched only on the receiver's worker thread. */
 static spgramf  sg;
@@ -222,13 +227,12 @@ static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = c
 
 static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:4)", .press = button_next_page_cb, .next = &page_4};
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
-static button_data_t btn_test_wav  = {.type = BTN_TEXT_FN, .label_fn = test_wav_label_getter, .press = test_wav_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
 
 static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn_stop_tx}};
 static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_clear}};
-static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_test_wav, &btn_hold, &btn_stations}};
+static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations}};
 
 static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:4)", .press = button_next_page_cb, .next = &page_1};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
@@ -377,6 +381,11 @@ static void handle_incoming(const js8_rx_msg_t *m);
 
 static void add_message(const js8_rx_msg_t *m) {
     js8_stations_add(stations, m, params.callsign.x, now_wall_ms());
+    if (!m->tx && !m->low_confidence) {
+        sync_dt[sync_head] = m->dt;
+        sync_ms[sync_head] = now_wall_ms();
+        sync_head          = (sync_head + 1) % SYNC_DTS;
+    }
     if (!m->tx) handle_incoming(m);
 
     int slot = hist_head;
@@ -654,12 +663,6 @@ static void update_status(void) {
     }
     lv_label_set_text_fmt(status, "%s%s%s  %02d:%02d:%02dZ  total %u", flags, testing ? "TEST WAV  " : "",
                           cfg_digital_label_get(), tm.tm_hour, tm.tm_min, tm.tm_sec, hist_count);
-
-    /* Playback ends on its own; bring the button label back in step. */
-    if (testing != test_wav_shown) {
-        test_wav_shown = testing;
-        if (btn_test_wav.disp_btn) buttons_refresh(&btn_test_wav); /* only when page 2 is shown */
-    }
 }
 
 static void ui_cycle_done(void *arg) {
@@ -1291,7 +1294,6 @@ static void construct_cb(lv_obj_t *parent) {
     main_screen_lock_band(true);
 
     cycles = cycle_decodes = 0;
-    test_wav_shown          = false;
     rx_start();
     update_status();
 
@@ -1381,45 +1383,58 @@ static void clear_cb(button_data_t *btn) {
     update_status();
 }
 
-/* Snap the system clock to the nearest 15 s boundary, for use when you know
- * a transmission just started. Same approach as the FT8 app. */
+/* Time Sync, like desktop JS8Call's drift tool: a decode's DT is how late
+ * the signal started by our clock, so the median DT of recent decodes is
+ * how fast our clock runs. Shift the clock by that and save it to the
+ * battery-backed RTC, as the settings screen does. Needs the clock within
+ * a couple of seconds already (or nothing decodes): set it roughly in
+ * SETTINGS first. (Snapping to the nearest 15 s, as the FT8 app does, moves
+ * the clock up to 7 s the wrong way unless pressed exactly as a signal
+ * starts.) */
 static void time_sync_cb(button_data_t *btn) {
     user_touch();
     (void)btn;
-    time_t now   = time(NULL);
-    float  drift = fmodf((now % 60) + JS8_SLOT_SEC / 2, JS8_SLOT_SEC) - JS8_SLOT_SEC / 2;
+    int64_t  now = now_wall_ms();
+    float    dts[SYNC_DTS];
+    unsigned n = 0;
+    for (unsigned i = 0; i < SYNC_DTS; i++)
+        if (sync_ms[i] && now - sync_ms[i] <= SYNC_WINDOW_MS) dts[n++] = sync_dt[i];
 
-    struct timespec tp = {.tv_sec = now - (int)drift, .tv_nsec = 0};
-    if (clock_settime(CLOCK_REALTIME, &tp) != 0) {
-        LV_LOG_ERROR("Can't set system time: %s", strerror(errno));
+    float corr;
+    if (!js8_clock_correction(dts, n, &corr)) {
+        msg_update_text_fmt("Time Sync needs %d decodes in the last 2 min (have %u). "
+                            "Clock far off? Set it in SETTINGS first",
+                            JS8_SYNC_MIN_DECODES, n);
         return;
     }
-    msg_update_text_fmt("Clock moved %+d s", -(int)drift);
-}
-
-static const char *test_wav_label_getter(void) {
-    return js8_rx_wav_active(rx) ? "Stop\nTest" : "Test\nWAV";
-}
-
-/* Play TEST_WAV through the decoder instead of the receiver audio, starting
- * at the next slot boundary. tools/js8_wavgen makes suitable files. */
-static void test_wav_cb(button_data_t *btn) {
-    user_touch();
-    if (js8_rx_wav_active(rx)) {
-        js8_rx_stop_wav(rx);
-        add_info_row("Test stopped");
-    } else {
-        char  err[96];
-        float starts = js8_rx_play_wav(rx, TEST_WAV, err, sizeof(err));
-        if (starts < 0) {
-            msg_update_text_fmt("JS8 test: %s", err);
-            return;
-        }
-        add_info_row("Test: %s from next slot", TEST_WAV);
-        msg_update_text_fmt("Test WAV starts in %.0f s", starts);
+    if (fabsf(corr) < 0.05f) {
+        msg_update_text_fmt("Clock is on time (within 0.05 s of %u decodes)", n);
+        return;
     }
-    update_status();
-    buttons_refresh(btn);
+
+    struct timespec tp;
+    clock_gettime(CLOCK_REALTIME, &tp);
+    int64_t ns = (int64_t)tp.tv_sec * 1000000000LL + tp.tv_nsec + (int64_t)(corr * 1e9f);
+    tp.tv_sec  = ns / 1000000000LL;
+    tp.tv_nsec = ns % 1000000000LL;
+    if (clock_settime(CLOCK_REALTIME, &tp) != 0) {
+        msg_update_text_fmt("Can't set the clock: %s", strerror(errno));
+        return;
+    }
+    memset(sync_ms, 0, sizeof(sync_ms)); /* those DTs are stale now */
+
+    /* Keep it across power-off (the kernel reads rtc1 at boot). */
+    struct tm tm;
+    gmtime_r(&tp.tv_sec, &tm);
+    struct rtc_time rt = {.tm_sec = tm.tm_sec, .tm_min = tm.tm_min, .tm_hour = tm.tm_hour,
+                          .tm_mday = tm.tm_mday, .tm_mon = tm.tm_mon, .tm_year = tm.tm_year};
+    int fd = open("/dev/rtc1", O_WRONLY);
+    if (fd >= 0) {
+        if (ioctl(fd, RTC_SET_TIME, &rt) != 0) LV_LOG_ERROR("Can't set RTC: %s", strerror(errno));
+        close(fd);
+    }
+    msg_update_text_fmt("Clock moved %+.2f s (median of %u decodes)", corr, n);
+    add_info_row("Time Sync: clock moved %+.2f s", corr);
 }
 
 static void reply_cb(button_data_t *btn) {
@@ -1582,10 +1597,37 @@ static void query_key_cb(lv_event_t *e) {
 
 /* One-press messages for the selected station: MFK to move, press or tap
  * to send, ESC to close. */
+/* Scroll a list to the focused item in one step: the default animated
+ * scroll redraws the list for every animation frame, which tears on the
+ * radio's display. */
+static void list_item_focused_cb(lv_event_t *e) {
+    lv_obj_scroll_to_view(lv_event_get_target(e), LV_ANIM_OFF);
+}
+
+static lv_obj_t *list_add_item(lv_obj_t *list, const char *label) {
+    lv_obj_t *b = lv_list_add_btn(list, NULL, label);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x303030), 0);
+    lv_obj_set_style_bg_color(b, lv_color_hex(0x1830a0), LV_STATE_FOCUSED);
+    lv_obj_set_style_text_color(b, lv_color_white(), 0);
+    lv_obj_set_style_pad_ver(b, 6, 0);
+    lv_obj_clear_flag(b, LV_OBJ_FLAG_SCROLL_ON_FOCUS);
+    lv_obj_add_event_cb(b, list_item_focused_cb, LV_EVENT_FOCUSED, NULL);
+    return b;
+}
+
+static void query_close_cb(lv_event_t *e) {
+    (void)e;
+    query_close();
+}
+
 static void query_cb(button_data_t *btn) {
     user_touch();
     (void)btn;
-    if (query_list || composing) return;
+    if (query_list) { /* Query > again closes it */
+        query_close();
+        return;
+    }
+    if (composing) return;
     char  call[JS8_RX_CALL_LEN];
     float freq;
     int   snr;
@@ -1609,15 +1651,18 @@ static void query_cb(button_data_t *btn) {
 
     lv_obj_t *first = NULL;
     for (int q = 0; q < JS8_Q_COUNT; q++) {
-        lv_obj_t *b = lv_list_add_btn(query_list, NULL, js8_query_label((js8_query_t)q));
-        lv_obj_set_style_bg_color(b, lv_color_hex(0x303030), 0);
-        lv_obj_set_style_bg_color(b, lv_color_hex(0x1830a0), LV_STATE_FOCUSED);
-        lv_obj_set_style_text_color(b, lv_color_white(), 0);
+        lv_obj_t *b = list_add_item(query_list, js8_query_label((js8_query_t)q));
         lv_obj_add_event_cb(b, query_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)q);
         lv_obj_add_event_cb(b, query_key_cb, LV_EVENT_KEY, NULL);
         lv_group_add_obj(keyboard_group, b);
         if (!first) first = b;
     }
+    /* Last, so one step back from the first item (the group wraps). */
+    lv_obj_t *close = list_add_item(query_list, "Close");
+    lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
+    lv_obj_add_event_cb(close, query_close_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(close, query_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, close);
     lv_group_set_editing(keyboard_group, false);
     lv_group_focus_obj(first);
 }
@@ -1856,6 +1901,11 @@ static void texts_close(void) {
     }
 }
 
+static void texts_close_cb(lv_event_t *e) {
+    (void)e;
+    texts_close();
+}
+
 static void texts_item_cb(lv_event_t *e) {
     int which = (int)(intptr_t)lv_event_get_user_data(e);
     /* Straight into the keyboard: take the list's buttons out of the group
@@ -1882,10 +1932,14 @@ static void texts_key_cb(lv_event_t *e) {
 static void texts_cb(button_data_t *btn) {
     (void)btn;
     user_touch();
-    if (texts_list || query_list || composing) return;
+    if (texts_list) { /* Texts... again closes it */
+        texts_close();
+        return;
+    }
+    if (query_list || composing) return;
     lv_group_remove_obj(table);
     texts_list = lv_list_create(dialog.obj);
-    lv_obj_set_size(texts_list, 520, 170);
+    lv_obj_set_size(texts_list, 520, 200);
     lv_obj_align(texts_list, LV_ALIGN_TOP_RIGHT, -20, 18);
     lv_obj_set_style_text_font(texts_list, &sony_24, 0);
     lv_obj_set_style_bg_color(texts_list, lv_color_hex(0x202020), 0);
@@ -1895,14 +1949,16 @@ static void texts_cb(button_data_t *btn) {
         char        label[TEXT_MAX + 16];
         const char *v = i == 1 ? info_text : status_text;
         snprintf(label, sizeof(label), "%s: %s", i == 1 ? "INFO" : "STATUS", v[0] ? v : "(not set)");
-        lv_obj_t *b = lv_list_add_btn(texts_list, NULL, label);
-        lv_obj_set_style_bg_color(b, lv_color_hex(0x303030), 0);
-        lv_obj_set_style_bg_color(b, lv_color_hex(0x1830a0), LV_STATE_FOCUSED);
-        lv_obj_set_style_text_color(b, lv_color_white(), 0);
+        lv_obj_t *b = list_add_item(texts_list, label);
         lv_obj_add_event_cb(b, texts_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
         lv_obj_add_event_cb(b, texts_key_cb, LV_EVENT_KEY, NULL);
         lv_group_add_obj(keyboard_group, b);
         if (i == 1) lv_group_focus_obj(b);
     }
+    lv_obj_t *close = list_add_item(texts_list, "Close");
+    lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
+    lv_obj_add_event_cb(close, texts_close_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(close, texts_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, close);
     lv_group_set_editing(keyboard_group, false);
 }

@@ -32,10 +32,9 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | 1 | **Stop TX** | Unkeys at once and drops the rest of the message. ESC does the same; the next ESC closes the app. |
 | 2 | **CQ** | Sends `CQ CQ CQ <grid>`. |
 | 2 | **Heartbeat** | Sends one heartbeat (`CALL: HEARTBEAT FN42`) at a free spot in the 500–1000 Hz heartbeat sub-band. Your chat offset doesn't move. |
-| 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR (how you hear them), GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73. |
+| 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR (how you hear them), GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73. **Close** (last; one knob step back from the top) or Query > again closes it. |
 | 2 | Clear | Clear the list, the station list and any half-received messages. |
-| 3 | Time Sync | Snap the clock to the nearest 15 s. JS8 needs the clock within about ±1 s of UTC. |
-| 3 | Test WAV | Decode `/mnt/js8_test.wav` instead of the radio audio: see [test-audio](test-audio). |
+| 3 | Time Sync | Correct the clock from the last 2 minutes of decodes (their median DT), like desktop JS8Call's drift tool, and save it to the radio's RTC. Needs 3+ decodes, so the clock must already be within a couple of seconds: set it roughly in SETTINGS first. |
 | 3 | **Hold: On/Off** | On (default): replies go out on your own offset. Off: Reply and Query move your offset to the station's first. |
 | 3 | **Show Stations / Messages** | Switch the list to one row per station, like desktop JS8Call's Call Activity. |
 | 4 | **AUTO: Off/On** | Answer SNR?, GRID?, INFO?, STATUS?, HEARING? and AGN? sent to your call. Off (default): the answer is offered on Reply instead. |
@@ -137,7 +136,7 @@ the Android port's core was chosen over porting desktop JS8Call.
 |---|---|
 | Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign and gap fill, auto-reply rules, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
 | The real UI on a PC | [tools/js8_ui_harness](tools/js8_ui_harness): the actual dialog on stock LVGL with a simulated busy band, in real time, under ASan/UBSan. |
-| On the radio, without RF | [test-audio](test-audio) and the Test WAV button. |
+| On the radio, without RF | [test-audio](test-audio) (the Test WAV button was removed once on-air receive worked; the library's WAV mode remains). |
 | Radio compiler | Everything JS8 compiles cleanly with the image's GCC 12.3 (Cortex-A7, NEON) against Boost 1.80. |
 
 ## Building
