@@ -80,6 +80,13 @@
 #define WF_QUEUE         16     /* rows waiting to be drawn (jitter buffer) */
 #define WF_TICK_MS       10     /* how often the drawing timer looks at the clock */
 #define HB_ADJUST_MS     8000   /* setting the HB interval ends after this idle */
+#define ALERT_COLOR      0x6a2ca0 /* rows matching an alert word */
+/* params.js8_alerts bits: what beeps (alert words always highlight). */
+#define JS8_ALERT_BEEP     0x01 /* beeping at all */
+#define JS8_ALERT_TO_ME    0x02 /* a message to your call (not a heartbeat ack) */
+#define JS8_ALERT_INBOX    0x04 /* a MSG saved to the inbox */
+#define JS8_ALERT_CQ       0x08 /* someone calling CQ */
+#define JS8_ALERT_NEW      0x10 /* a station heard for the first time, not in the log */
 /* The waterfall is drawn relative to the noise floor, so it works at any
  * audio level: WF_MIN_DB..WF_MAX_DB above the floor spans the palette. */
 #define WF_MIN_DB        0
@@ -155,6 +162,10 @@ static void        inbox_cb(button_data_t *btn);
 static void        inbox_close(void);
 static void        inbox_received(const js8_rx_msg_t *m);
 static void        msg_compose(const char *call, const char *kind);
+static void        alerts_cb(button_data_t *btn);
+static void        alerts_close(void);
+static void        alert_check(js8_rx_msg_t *m, bool new_station);
+static void        alert_beep(int count);
 static const char *act_label_getter(void);
 static void        act_cb(button_data_t *btn);
 static void        act_hold_cb(button_data_t *btn);
@@ -187,6 +198,9 @@ static lv_obj_t      *query_list;      /* Query popup, when open */
 static lv_obj_t      *aprs_list;       /* APRS popup, when open */
 static lv_obj_t      *log_list;        /* Log QSO popup, when open */
 static lv_obj_t      *inbox_list;      /* Inbox popup (list or one message), when open */
+static lv_obj_t      *alerts_list;     /* Alerts popup, when open */
+static char           alert_words[128]; /* "VE7ABC @POTA SOTA", ALERTS= in JS8_TEXTS_PATH */
+static bool           st_alert[MAX_ROWS]; /* st_rows matching an alert word */
 static js8_inbox_t   *inbox;           /* MSGs to us, JS8_INBOX_PATH */
 static bool           st_worked[MAX_ROWS]; /* in the log already (st_rows) */
 static js8_qsos_t    *qsos;            /* QSOs, for the log */
@@ -234,10 +248,12 @@ typedef enum {
     EDIT_LOG_NOTE,
     EDIT_POTA_REF, /* your park / summit for the log */
     EDIT_SOTA_REF,
+    EDIT_ALERT_WORDS, /* then back to the Alerts popup */
     EDIT_COUNT,
 } edit_t;
 
 static void log_edit_done(const char *value);
+static void alerts_show(void);
 
 /* Message history, a ring, so the list can be rebuilt when the filter
  * changes. row_hist[] maps a table row to its history slot (-1 = info row). */
@@ -275,20 +291,21 @@ static buttons_page_t page_2;
 static buttons_page_t page_3;
 static buttons_page_t page_4;
 static buttons_page_t page_5;
+static buttons_page_t page_6;
 
-static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:5)", .press = js8_next_page_cb, .next = &page_2};
+static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:6)", .press = js8_next_page_cb, .next = &page_2};
 static button_data_t btn_show    = {.type = BTN_TEXT_FN, .label_fn = show_label_getter, .press = show_cb};
 static button_data_t btn_reply   = {.type = BTN_TEXT, .label = "Reply", .press = reply_cb};
 static button_data_t btn_send    = {.type = BTN_TEXT, .label = "Send...", .press = send_cb};
 static button_data_t btn_stop_tx = {.type = BTN_TEXT, .label = "Stop TX", .press = stop_tx_cb};
 
-static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:5)", .press = js8_next_page_cb, .next = &page_3};
+static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:6)", .press = js8_next_page_cb, .next = &page_3};
 static button_data_t btn_cq    = {.type = BTN_TEXT, .label = "CQ", .press = cq_cb};
 static button_data_t btn_hb    = {.type = BTN_TEXT, .label = "Heart-\nbeat", .press = heartbeat_cb};
 static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press = query_cb};
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
-static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:5)", .press = js8_next_page_cb, .next = &page_4};
+static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:6)", .press = js8_next_page_cb, .next = &page_4};
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
@@ -298,19 +315,23 @@ static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn
 static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_clear}};
 static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations, &btn_inbox}};
 
-static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:5)", .press = js8_next_page_cb, .next = &page_5};
+static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:6)", .press = js8_next_page_cb, .next = &page_5};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
 static button_data_t btn_hbauto = {.type = BTN_TEXT_FN, .label_fn = hb_label_getter, .press = hb_cb, .hold = hb_hold_cb};
 static button_data_t btn_hbackk = {.type = BTN_TEXT_FN, .label_fn = hb_ack_label_getter, .press = hb_ack_cb};
 static button_data_t btn_texts  = {.type = BTN_TEXT, .label = "Texts...", .press = texts_cb};
 static buttons_page_t page_4 = {{&btn_p4, &btn_auto, &btn_hbauto, &btn_hbackk, &btn_texts}};
 
-static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:5)", .press = js8_next_page_cb, .next = &page_1};
+static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:6)", .press = js8_next_page_cb, .next = &page_6};
 static button_data_t  btn_aprs      = {.type = BTN_TEXT, .label = "APRS >", .press = aprs_cb};
 static button_data_t  btn_log       = {.type = BTN_TEXT, .label = "Log QSO", .press = log_cb};
 static button_data_t  btn_act       = {.type = BTN_TEXT_FN, .label_fn = act_label_getter, .press = act_cb, .hold = act_hold_cb};
 static button_data_t  btn_prompt    = {.type = BTN_TEXT_FN, .label_fn = prompt_label_getter, .press = prompt_cb};
 static buttons_page_t page_5        = {{&btn_p5, &btn_aprs, &btn_log, &btn_act, &btn_prompt}};
+
+static button_data_t  btn_p6        = {.type = BTN_TEXT, .label = "(JS8 6:6)", .press = js8_next_page_cb, .next = &page_1};
+static button_data_t  btn_alerts    = {.type = BTN_TEXT, .label = "Alerts >", .press = alerts_cb};
+static buttons_page_t page_6        = {{&btn_p6, &btn_alerts}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -450,8 +471,15 @@ static int64_t now_wall_ms(void) {
 
 static void handle_incoming(const js8_rx_msg_t *m);
 
-static void add_message(const js8_rx_msg_t *m) {
+static bool find_station(const char *call, js8_station_t *out);
+
+static void add_message(const js8_rx_msg_t *msg) {
+    js8_rx_msg_t  copy = *msg;
+    js8_rx_msg_t *m    = &copy;
+    js8_station_t seen;
+    bool          new_station = !m->tx && m->from[0] && !find_station(m->from, &seen);
     js8_stations_add(stations, m, params.callsign.x, now_wall_ms());
+    if (!m->tx) alert_check(m, new_station);
     if (!m->tx && !m->low_confidence) {
         sync_dt[sync_head] = m->dt;
         sync_ms[sync_head] = now_wall_ms();
@@ -572,6 +600,8 @@ static void rebuild_station_rows(void) {
 
     int keep_row = 0;
     for (int i = 0; i < st_count; i++) {
+        char hit[16];
+        st_alert[i]  = js8_alert_hit("", st_rows[i].call, alert_words, hit, sizeof(hit));
         st_worked[i] = qso_log_search_worked(st_rows[i].call, MODE_JS8, qso_log_freq_to_band(cparam_i_get(cfg_fg_freq))) > 0;
         if (keep[0] && strcmp(st_rows[i].call, keep) == 0) keep_row = rows;
         append_row(" ", (int16_t)i); /* drawn by table_draw_end_cb() */
@@ -595,11 +625,15 @@ static void table_draw_cb(lv_event_t *e) {
         dsc->rect_dsc->bg_color = lv_color_hex(0x303030);
     } else if (view_stations) {
         /* Stations that heard us stand out, like desktop's star. */
-        dsc->rect_dsc->bg_color = st_rows[h].heard_me ? lv_color_hex(0x5a4400) : lv_color_black();
+        dsc->rect_dsc->bg_color = st_alert[h]           ? lv_color_hex(ALERT_COLOR)
+                                  : st_rows[h].heard_me ? lv_color_hex(0x5a4400)
+                                                        : lv_color_black();
     } else {
         const js8_rx_msg_t *m = &history[h];
         if (m->tx) {
             dsc->rect_dsc->bg_color = lv_color_hex(0x1830a0);
+        } else if (m->alert) {
+            dsc->rect_dsc->bg_color = lv_color_hex(ALERT_COLOR);
         } else if (m->to_me) {
             dsc->rect_dsc->bg_color = lv_color_hex(0xB00000);
         } else if (m->cq) {
@@ -1236,6 +1270,7 @@ static void compose_open(const char *prefill) {
         lv_textarea_set_max_length(text, edit_target == EDIT_LOG_GRID   ? 6
                                          : edit_target == EDIT_POTA_REF ? sizeof(last_pota) - 1
                                          : edit_target == EDIT_SOTA_REF ? sizeof(last_sota) - 1
+                                         : edit_target == EDIT_ALERT_WORDS ? sizeof(alert_words) - 1
                                                                         : TEXT_MAX);
         lv_obj_remove_event_cb(text, compose_changed_cb);
     }
@@ -1251,6 +1286,7 @@ static void compose_open(const char *prefill) {
             [EDIT_LOG_NOTE] = " Comment for the log",
             [EDIT_POTA_REF] = " Your park, e.g. CA-1234",
             [EDIT_SOTA_REF] = " Your summit, e.g. VE7/LM-001",
+            [EDIT_ALERT_WORDS] = " Calls or words, e.g. VE7ABC @POTA SOTA",
         };
         lv_textarea_set_placeholder_text(text, placeholders[edit_target]);
     }
@@ -1483,6 +1519,10 @@ static void destruct_cb(void) {
     if (inbox_list) {
         lv_obj_del(inbox_list);
         inbox_list = NULL;
+    }
+    if (alerts_list) {
+        lv_obj_del(alerts_list);
+        alerts_list = NULL;
     }
     hb_adjusting = false;
     radio_set_pwr(param_f_get(cfg_pwr));
@@ -1767,6 +1807,7 @@ static bool popup_guard(void) {
     aprs_close();
     log_close();
     inbox_close();
+    alerts_close();
     msg_update_text_fmt("List closed");
     return true;
 }
@@ -1779,6 +1820,7 @@ static void js8_next_page_cb(button_data_t *btn) {
         aprs_close();
         log_close();
         inbox_close();
+        alerts_close();
     }
     button_next_page_cb(btn);
 }
@@ -2109,16 +2151,17 @@ static void hb_ack_cb(button_data_t *btn) {
 /* ---- INFO / STATUS texts -------------------------------------------- */
 
 static void load_texts(void) {
-    info_text[0] = status_text[0] = last_pota[0] = last_sota[0] = '\0';
+    info_text[0] = status_text[0] = last_pota[0] = last_sota[0] = alert_words[0] = '\0';
     FILE *f = fopen(JS8_TEXTS_PATH, "r");
     if (!f) return;
-    char line[TEXT_MAX + 16];
+    char line[sizeof(alert_words) + 16];
     while (fgets(line, sizeof(line), f)) {
         line[strcspn(line, "\r\n")] = '\0';
         if (strncmp(line, "INFO=", 5) == 0) snprintf(info_text, sizeof(info_text), "%s", line + 5);
         if (strncmp(line, "STATUS=", 7) == 0) snprintf(status_text, sizeof(status_text), "%s", line + 7);
         if (strncmp(line, "POTA=", 5) == 0) snprintf(last_pota, sizeof(last_pota), "%s", line + 5);
         if (strncmp(line, "SOTA=", 5) == 0) snprintf(last_sota, sizeof(last_sota), "%s", line + 5);
+        if (strncmp(line, "ALERTS=", 7) == 0) js8_alert_words_normalise(line + 7, alert_words, sizeof(alert_words));
     }
     fclose(f);
 }
@@ -2129,7 +2172,8 @@ static void save_texts(void) {
         msg_update_text_fmt("Can't write %s", JS8_TEXTS_PATH);
         return;
     }
-    fprintf(f, "INFO=%s\nSTATUS=%s\nPOTA=%s\nSOTA=%s\n", info_text, status_text, last_pota, last_sota);
+    fprintf(f, "INFO=%s\nSTATUS=%s\nPOTA=%s\nSOTA=%s\nALERTS=%s\n", info_text, status_text, last_pota, last_sota,
+            alert_words);
     fclose(f);
 }
 
@@ -2462,7 +2506,7 @@ static void aprs_cb(button_data_t *btn) {
  * logged without Save. */
 
 static bool any_popup(void) {
-    return query_list || texts_list || aprs_list || log_list || inbox_list;
+    return query_list || texts_list || aprs_list || log_list || inbox_list || alerts_list;
 }
 
 static bool find_station(const char *call, js8_station_t *out) {
@@ -2661,9 +2705,9 @@ static void log_list_open(void) {
 /* Back from the keyboard: keep the value (NULL: cancelled), reopen. */
 static void log_edit_done(const char *text) {
     /* Copy first: closing the window frees the text. */
-    char  buf[TEXT_MAX + 1];
+    char  buf[sizeof(alert_words)];
     char *value = NULL;
-    if (text) value = strncpy(buf, text, TEXT_MAX), buf[TEXT_MAX] = '\0', buf;
+    if (text) value = strncpy(buf, text, sizeof(buf) - 1), buf[sizeof(buf) - 1] = '\0', buf;
     int target  = edit_target;
     edit_target = 0;
     compose_close();
@@ -2687,7 +2731,16 @@ static void log_edit_done(const char *text) {
             snprintf(last_sota, sizeof(last_sota), "%s", value);
             save_texts();
             break;
+        case EDIT_ALERT_WORDS:
+            js8_alert_words_normalise(value, alert_words, sizeof(alert_words));
+            save_texts();
+            if (view_stations) rebuild_station_rows();
+            break;
         }
+    }
+    if (target == EDIT_ALERT_WORDS) {
+        alerts_show();
+        return;
     }
     if (target == EDIT_POTA_REF || target == EDIT_SOTA_REF) {
         if (btn_act.disp_btn) buttons_refresh(&btn_act);
@@ -2828,6 +2881,7 @@ static void inbox_received(const js8_rx_msg_t *m) {
     if (id < 0) msg_update_text_fmt("Message from %s - can't save %s", m->from, JS8_INBOX_PATH);
     else if (!resend) msg_update_text_fmt("New message from %s - Inbox on page 3", m->from);
     if (!resend) add_info_row("Message from %s in the Inbox: %s", m->from, text);
+    if (!resend && (params.js8_alerts.x & JS8_ALERT_INBOX)) alert_beep(2);
     inbox_refresh_button();
     update_status();
 }
@@ -3031,4 +3085,192 @@ static void inbox_cb(button_data_t *btn) {
     if (popup_guard()) return;
     if (composing || !inbox) return;
     inbox_show(0);
+}
+
+/* ---- Alerts ---------------------------------------------------------------- */
+
+/* Like desktop JS8Call's notifications and highlight words: a beep through
+ * the speaker for what's switched on in the Alerts list, and rows matching
+ * an alert word (calls or words you type) in purple. Never while
+ * transmitting: the speaker path is the TX audio path then. */
+
+#define BEEP_HZ       1000
+#define BEEP_MS       120
+#define BEEP_GAP_MS   100
+#define BEEP_EVERY_MS 3000 /* at most one alert sound per 3 s */
+
+static int64_t beep_last_ms;
+
+static void alert_beep(int count) {
+    if (!(params.js8_alerts.x & JS8_ALERT_BEEP)) return;
+    if (atomic_load(&keyed) || js8_tx_busy(tx)) return;
+    int64_t now = now_wall_ms();
+    if (now - beep_last_ms < BEEP_EVERY_MS) return;
+    beep_last_ms = now;
+
+    enum { TONE = AUDIO_PLAY_RATE * BEEP_MS / 1000, GAP = AUDIO_PLAY_RATE * BEEP_GAP_MS / 1000 };
+    static int16_t tone[TONE + GAP];
+    static bool    made;
+    if (!made) {
+        int ramp = AUDIO_PLAY_RATE / 200; /* 5 ms fades: no clicks */
+        for (int i = 0; i < TONE; i++) {
+            float env = 1.0f;
+            if (i < ramp) env = (float)i / ramp;
+            if (i > TONE - ramp) env = (float)(TONE - i) / ramp;
+            tone[i] = (int16_t)(8000.0f * env * sinf(2.0f * (float)M_PI * BEEP_HZ * i / AUDIO_PLAY_RATE));
+        }
+        made = true;
+    }
+    for (int i = 0; i < count; i++) audio_play(tone, TONE + GAP);
+}
+
+/* Every decode but our own: alert words, then what beeps. */
+static void alert_check(js8_rx_msg_t *m, bool new_station) {
+    if (m->low_confidence) return;
+    char hit[16];
+    if (js8_alert_hit(m->text, m->from, alert_words, hit, sizeof(hit))) {
+        m->alert = true;
+        msg_update_text_fmt("Alert %s: %s", hit, m->text);
+        alert_beep(2);
+        return;
+    }
+    uint8_t a      = params.js8_alerts.x;
+    bool    hb_ack = strstr(m->text, " HEARTBEAT SNR") != NULL;
+    if ((a & JS8_ALERT_TO_ME) && m->to_me && !hb_ack) alert_beep(1);
+    else if ((a & JS8_ALERT_CQ) && m->cq) alert_beep(1);
+    else if ((a & JS8_ALERT_NEW) && new_station && m->from[0] &&
+             qso_log_search_worked(m->from, MODE_JS8, qso_log_freq_to_band(cparam_i_get(cfg_fg_freq))) <= 0) {
+        msg_update_text_fmt("New station: %s", m->from);
+        alert_beep(1);
+    }
+}
+
+typedef enum {
+    AL_BEEP,
+    AL_TO_ME,
+    AL_INBOX,
+    AL_CQ,
+    AL_NEW,
+    AL_WORDS,
+    AL_TEST,
+    AL_CLOSE,
+} alerts_item_t;
+
+static const struct {
+    uint8_t     bit;
+    const char *label;
+} alert_switches[] = {
+    [AL_BEEP]  = {JS8_ALERT_BEEP, "Beep"},
+    [AL_TO_ME] = {JS8_ALERT_TO_ME, "Message to me"},
+    [AL_INBOX] = {JS8_ALERT_INBOX, "Inbox message"},
+    [AL_CQ]    = {JS8_ALERT_CQ, "Someone calls CQ"},
+    [AL_NEW]   = {JS8_ALERT_NEW, "New station (not in log)"},
+};
+
+static void alerts_switch_label(alerts_item_t item, char *buf, size_t size) {
+    snprintf(buf, size, "%s: %s", alert_switches[item].label,
+             (params.js8_alerts.x & alert_switches[item].bit) ? "On" : "Off");
+}
+
+static void alerts_close(void) {
+    if (!alerts_list) return;
+    lv_obj_del_async(alerts_list); /* often called from one of its buttons */
+    alerts_list = NULL;
+    if (table && !composing) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+static void alerts_item_cb(lv_event_t *e) {
+    alerts_item_t item = (alerts_item_t)(intptr_t)lv_event_get_user_data(e);
+    lv_obj_t     *btn  = lv_event_get_target(e);
+    char          line[sizeof(alert_words) + 24];
+    switch (item) {
+    case AL_CLOSE:
+        alerts_close();
+        return;
+    case AL_TEST: {
+        int64_t last = beep_last_ms;
+        beep_last_ms = 0;
+        if (!(params.js8_alerts.x & JS8_ALERT_BEEP)) msg_update_text_fmt("Beep is off");
+        else if (atomic_load(&keyed) || js8_tx_busy(tx)) msg_update_text_fmt("Not while transmitting");
+        alert_beep(2);
+        if (!beep_last_ms) beep_last_ms = last;
+        return;
+    }
+    case AL_WORDS:
+        /* Into the keyboard, then back here (see texts_item_cb). */
+        for (uint32_t i = 0; i < lv_obj_get_child_cnt(alerts_list); i++)
+            lv_group_remove_obj(lv_obj_get_child(alerts_list, i));
+        lv_obj_del_async(alerts_list);
+        alerts_list = NULL;
+        edit_target = EDIT_ALERT_WORDS;
+        compose_open(alert_words[0] ? alert_words : NULL);
+        lv_group_set_editing(keyboard_group, true);
+        msg_update_text_fmt("Calls or words to watch for, separated by spaces");
+        return;
+    default: /* a switch: flip it, relabel in place */
+        params_uint8_set(&params.js8_alerts, params.js8_alerts.x ^ alert_switches[item].bit);
+        alerts_switch_label(item, line, sizeof(line));
+        lv_label_set_text(lv_obj_get_child(btn, 0), line);
+        return;
+    }
+}
+
+static void alerts_key_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    if (key == LV_KEY_ESC) alerts_close();
+    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
+    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+}
+
+static lv_obj_t *alerts_add(alerts_item_t item, const char *label) {
+    lv_obj_t *b = list_add_item(alerts_list, label);
+    lv_obj_add_event_cb(b, alerts_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)item);
+    lv_obj_add_event_cb(b, alerts_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, b);
+    lv_label_set_long_mode(lv_obj_get_child(b, 0), LV_LABEL_LONG_DOT);
+    return b;
+}
+
+static void alerts_show(void) {
+    lv_group_remove_obj(table);
+    alerts_list = lv_list_create(dialog.obj);
+    lv_obj_set_size(alerts_list, 560, WF_HEIGHT - 10);
+    lv_obj_align(alerts_list, LV_ALIGN_TOP_RIGHT, -20, 18);
+    lv_obj_set_style_text_font(alerts_list, &sony_24, 0);
+    lv_obj_set_style_bg_color(alerts_list, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_border_color(alerts_list, lv_color_white(), 0);
+    lv_obj_t *t = lv_list_add_text(alerts_list, "Alerts: beep, and alert words in purple");
+    lv_obj_set_style_text_font(t, &sony_22, 0);
+
+    char      line[sizeof(alert_words) + 24];
+    lv_obj_t *first = NULL;
+    for (int i = AL_BEEP; i <= AL_NEW; i++) {
+        alerts_switch_label((alerts_item_t)i, line, sizeof(line));
+        lv_obj_t *b = alerts_add((alerts_item_t)i, line);
+        if (!first) first = b;
+    }
+    snprintf(line, sizeof(line), "Alert words: %s", alert_words[0] ? alert_words : "(none)");
+    lv_obj_t *words = alerts_add(AL_WORDS, line);
+    lv_obj_set_style_text_color(words, lv_color_hex(0xd0a0ff), 0);
+    alerts_add(AL_TEST, "Test beep");
+    lv_obj_t *close = alerts_add(AL_CLOSE, "Close");
+    lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
+    lv_group_set_editing(keyboard_group, false);
+    lv_group_focus_obj(first);
+}
+
+static void alerts_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (alerts_list) { /* Alerts > again closes it */
+        alerts_close();
+        return;
+    }
+    if (popup_guard()) return;
+    if (composing) return;
+    alerts_show();
 }

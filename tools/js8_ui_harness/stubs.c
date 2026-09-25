@@ -162,3 +162,10 @@ qso_log_search_worked_t qso_log_search_worked(const char *callsign, qso_log_mode
         if (strcmp(worked_calls[i], callsign) == 0) return SEARCH_WORKED_SAME_MODE;
     return SEARCH_WORKED_NO;
 }
+
+/* The speaker: alert beeps. */
+int audio_play(int16_t *buf, size_t samples) {
+    (void)buf;
+    printf("[audio] beep %zu samples\n", samples);
+    return 0;
+}

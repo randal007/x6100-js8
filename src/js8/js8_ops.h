@@ -206,6 +206,14 @@ int  js8_inbox_count(js8_inbox_t *b);
  * The text goes to out. */
 bool js8_msg_for_me(const js8_rx_msg_t *msg, const char *my_call, char *out, unsigned out_len);
 
+/* ---- Alerts ----------------------------------------------------------- */
+
+/* Alert words as typed -> "VE7ABC @POTA SOTA" (upper case, deduplicated,
+ * at most 20). */
+void js8_alert_words_normalise(const char *typed, char *out, unsigned out_len);
+/* The first of `words` (as normalised) in a decode, into hit; false if none. */
+bool js8_alert_hit(const char *text, const char *from, const char *words, char *hit, unsigned hit_len);
+
 #define JS8_HB_MIN_INTERVAL     5
 #define JS8_HB_MAX_INTERVAL     30
 #define JS8_HB_DEFAULT_INTERVAL 30

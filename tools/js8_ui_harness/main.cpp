@@ -165,6 +165,9 @@ int main() {
             ui_select_row_from("N0XYZ");
             ui_page(2);
             ui_press(3); // Query >
+        } else if (!strcmp(which, "alerts")) {
+            ui_page(6);
+            ui_press(1); // Alerts >
         } else if (!strcmp(which, "aprs")) {
             ui_page(5);
             ui_press(1); // APRS >
@@ -531,6 +534,60 @@ int main() {
         dialog_destruct();
         pump(300);
         printf("[inbox] closed with the inbox open: running=%d\n", ui_running());
+        return 0;
+    }
+    if (getenv("ONLY_ALERTS")) {
+        pump(300);
+        ui_page(6);
+        ui_press(1); // Alerts >
+        pump(300);
+        printf("[alerts] open, focused '%s'\n", ui_focused_text());
+        for (int i = 0; i < 5; i++) ui_key(LV_KEY_RIGHT);
+        printf("[alerts] item 6: '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[alerts] editing words, focus %s\n", ui_focus_desc());
+        ui_compose_clear();
+        ui_compose_append("VE7ABC, @POTA");
+        ui_compose_enter();
+        pump(300);
+        printf("[alerts] back: words shown %d, focused '%s'\n", ui_popup_has("Alert words: VE7ABC @POTA"),
+               ui_focused_text());
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT); // Someone calls CQ
+        ui_click_focused();
+        printf("[alerts] toggled: '%s'\n", ui_focused_text());
+        screenshot("32_alerts.ppm");
+        ui_press(1); // Alerts > closes it
+        pump(300);
+
+        printf("[alerts] band: expect beeps for @POTA (double) and VE7ABC\n");
+        feed_band({{"W1ABC", "FN42", "", "@POTA ACTIVATING CA-1234", 1300, 0.05f},
+                   {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1800, 0.05f}});
+        feed_band({{"VE7ABC", "CN89", "", "@HB HEARTBEAT CN89", 900, 0.05f}});
+        feed_band({{"N0XYZ", "EN34", "", "CQ CQ CQ EN34", 1500, 0.05f}});
+        ui_page(1);
+        ui_press(1); // Show: No HB -> Directed
+        ui_press(1); // -> All
+        pump(300);
+        screenshot("33_alert_rows.ppm");
+        ui_page(3);
+        ui_press(3); // Stations
+        pump(300);
+        screenshot("34_alert_stations.ppm");
+        ui_press(3);
+
+        ui_page(6);
+        ui_press(1);
+        pump(200);
+        ui_click_focused(); // Beep: Off
+        printf("[alerts] '%s'\n", ui_focused_text());
+        for (int i = 0; i < 6; i++) ui_key(LV_KEY_RIGHT);
+        printf("[alerts] on '%s'\n", ui_focused_text());
+        ui_click_focused(); // Test beep with beep off
+        pump(200);
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        printf("[alerts] ESC closed it: list focused %s\n", ui_focus_is_table() ? "yes" : "no");
         return 0;
     }
     if (getenv("ONLY_QSOFREQ")) {

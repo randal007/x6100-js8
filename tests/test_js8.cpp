@@ -13,6 +13,7 @@
 #include "js8_ops.h"
 #include "qsolog.hpp"
 #include "inbox.hpp"
+#include "alerts.hpp"
 
 #include <unistd.h>
 #include "tx.hpp"
@@ -1507,4 +1508,35 @@ TEST_CASE("the inbox C API", "[js8][inbox]") {
     CHECK(js8_inbox_count(b) == 0);
     js8_inbox_close(b);
     unlink(path);
+}
+
+// ---- Alerts ------------------------------------------------------------------
+
+TEST_CASE("alert words: typed any way, saved one way", "[js8][alerts]") {
+    auto w = parse_alert_words(" ve7abc, @pota  sota,,VE7ABC\tn7eal ");
+    REQUIRE(w.size() == 4);
+    CHECK(format_alert_words(w) == "VE7ABC @POTA SOTA N7EAL");
+    CHECK(parse_alert_words("").empty());
+    std::string many;
+    for (int i = 0; i < 30; i++) many += "W" + std::to_string(i) + " ";
+    CHECK(parse_alert_words(many).size() == 20);
+}
+
+TEST_CASE("alert words match whole words and the sender's call", "[js8][alerts]") {
+    auto w = parse_alert_words("VE7ABC @POTA SOTA");
+    CHECK(alert_word_hit("N7EAL: @POTA VE7/LM-001 SPOT", "N7EAL", w) == "@POTA");
+    CHECK(alert_word_hit("N7EAL: VE7ABC HELLO", "N7EAL", w) == "VE7ABC");
+    CHECK(alert_word_hit("VE7ABC/P: @HB HEARTBEAT CN89", "VE7ABC/P", w) == "VE7ABC"); // their portable call
+    CHECK(alert_word_hit("N7EAL: K2XYZ>VE7ABC HI", "N7EAL", w) == "VE7ABC");          // relay path
+    CHECK(alert_word_hit("N7EAL: W1ABC GOING SOTA TODAY", "N7EAL", w) == "SOTA");
+    CHECK(alert_word_hit("N7EAL: W1ABC SOTAS AND POTA", "N7EAL", w) == "");           // whole words only
+    CHECK(alert_word_hit("N7EAL: W1ABC HI", "N7EAL", {}) == "");
+
+    char hit[16];
+    CHECK(js8_alert_hit("N7EAL: @POTA HI", "N7EAL", "ve7abc @pota", hit, sizeof(hit)));
+    CHECK(std::string(hit) == "@POTA");
+    CHECK_FALSE(js8_alert_hit("N7EAL: HI", "N7EAL", "", hit, sizeof(hit)));
+    char norm[64];
+    js8_alert_words_normalise("sota,  pota", norm, sizeof(norm));
+    CHECK(std::string(norm) == "SOTA POTA");
 }

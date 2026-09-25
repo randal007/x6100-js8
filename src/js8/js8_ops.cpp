@@ -7,6 +7,7 @@
 
 #include "js8_ops.h"
 
+#include "alerts.hpp"
 #include "autoreply.hpp"
 #include "classify.hpp"
 #include "commands.hpp"
@@ -385,5 +386,19 @@ extern "C" bool js8_msg_for_me(const js8_rx_msg_t *msg, const char *my_call, cha
     auto body = msg_body(msg->text, my_call);
     if (!body) return false;
     copy_str(out, out_len, *body);
+    return true;
+}
+
+// ---- Alerts -------------------------------------------------------------
+
+extern "C" void js8_alert_words_normalise(const char *typed, char *out, unsigned out_len) {
+    copy_str(out, out_len, format_alert_words(parse_alert_words(typed ? typed : "")));
+}
+
+extern "C" bool js8_alert_hit(const char *text, const char *from, const char *words, char *hit, unsigned hit_len) {
+    if (!text || !words || !words[0]) return false;
+    auto w = alert_word_hit(text, from ? from : "", parse_alert_words(words));
+    if (w.empty()) return false;
+    copy_str(hit, hit_len, w);
     return true;
 }

@@ -52,6 +52,7 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | 5 | **Log QSO** | Log the QSO that just ended, or the selected station, to `/mnt/js8call_log.adi`. See [Logging](#logging). |
 | 5 | **Activ.: Off / POTA / SOTA** | Activating a park or summit: adds it to every log entry. Hold to type the reference. |
 | 5 | **Log prompt: On/Off** | On (default): the Log popup opens by itself when a QSO ends with 73 or SK. |
+| 6 | **Alerts >** | Beeps and alert words. See [Alerts](#alerts). |
 
 **Who heard you:** in the Stations view, stations that have heard you are
 marked `*` and listed first. That covers anyone who acknowledged your
@@ -101,6 +102,33 @@ system clock, 10 a second. (LVGL's own timers run slow and caught up with
 two-row jumps, which showed as a stutter.)
 
 ![Directed view in a QSO: the selected station's untagged reply still shows](docs/screenshots/js8_21_directed_qso.png)
+
+## Alerts
+
+Like desktop JS8Call's notifications and highlight words. Page 6's
+**Alerts >** list:
+
+| Item | Default | Beeps when |
+|---|---|---|
+| Beep | On | switches all beeps off or on |
+| Message to me | On | a message to your call (not a heartbeat ack) |
+| Inbox message | On | a `MSG` lands in the Inbox (two beeps) |
+| Someone calls CQ | Off | a CQ is decoded |
+| New station (not in log) | Off | a station is heard for the first time and isn't in your log |
+| **Alert words** | none | a decode contains one of them (two beeps, row in purple) |
+
+- **Alert words** are calls or words you type, separated by spaces, e.g.
+  `VE7ABC @POTA SOTA`. They match whole words of a decode, as on desktop;
+  a call also matches its other forms (`VE7ABC/P`). Matching rows are
+  purple in the list and in the Stations view. Kept as `ALERTS=` in
+  `/mnt/js8_texts.txt`, so they can be edited on a PC too.
+- The beep is a short 1 kHz tone through the speaker, at most one alert
+  every 3 s. It never sounds while transmitting (the speaker path carries
+  the TX audio then). **Test beep** plays it.
+
+| The Alerts list | An alert word and a call in purple |
+|---|---|
+| ![Alerts](docs/screenshots/js8_32_alerts.png) | ![Purple rows](docs/screenshots/js8_33_alert_rows.png) |
 
 ## Messages
 
@@ -203,7 +231,7 @@ cursor where you type.
   APRSLink) come back over APRS, not JS8.
 - With a GPS plugged into the radio, **Spot GPS position** sends a
   10-character grid; gateways accept grids of any length.
-- While a list (Query, Texts…, APRS, Log, Inbox) is open, the other bottom buttons only
+- While a list (Query, Texts…, APRS, Log, Inbox, Alerts) is open, the other bottom buttons only
   close it, so it can't be left behind; press again to do the thing.
 
 | APRS list | POTA spot, typing the park |
@@ -264,6 +292,7 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [x] Time Sync from decode DTs, APRS page (grid, POTA, SOTA, SMS, email, Winlink)
 - [x] ADIF logging with a log prompt, POTA/SOTA activation fields (T5)
 - [x] Inbox for MSG with ACKs, MSG / MSG TO: / QUERY MSGS from the Query list (T5)
+- [x] Alerts: beeps for messages, CQ, new stations; typed alert words highlighted
 - [ ] Hold messages for other stations (answer QUERY MSGS / QUERY MSG from a store)
 - [x] GPS-fed grid for APRS spots
 - [x] Waterfall paced by the system clock (no catch-up jumps)
@@ -273,7 +302,7 @@ the Android port's core was chosen over porting desktop JS8Call.
 
 | What | How |
 |---|---|
-| Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign and gap fill, auto-reply rules, QSO tracking and ADIF records, the inbox, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
+| Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign and gap fill, auto-reply rules, QSO tracking and ADIF records, the inbox, alert words, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
 | The real UI on a PC | [tools/js8_ui_harness](tools/js8_ui_harness): the actual dialog on stock LVGL with a simulated busy band, in real time, under ASan/UBSan. |
 | On the radio, without RF | [test-audio](test-audio) (the Test WAV button was removed once on-air receive worked; the library's WAV mode remains). |
 | Radio compiler | Everything JS8 compiles cleanly with the image's GCC 12.3 (Cortex-A7, NEON) against Boost 1.80. |
