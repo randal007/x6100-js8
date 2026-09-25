@@ -44,6 +44,8 @@ typedef struct {
     int8_t  checksum; /* buffered command (MSG etc.): 0 none, 1 valid, -1 bad */
     bool    tx;       /* set by the app for its own transmissions */
     bool    alert;    /* set by the app: matched an alert word */
+    bool     partial; /* a message still arriving: the text so far (on_message) */
+    uint32_t msg_id;  /* partials and the final message share it */
     char    from[JS8_RX_CALL_LEN];
     char    to[JS8_RX_CALL_LEN];
     char    text[JS8_RX_TEXT_LEN];
@@ -52,7 +54,10 @@ typedef struct {
 /* All callbacks run on receiver worker threads, never the caller's. */
 typedef struct {
     void (*on_frame)(const js8_rx_msg_t *msg, void *ctx);   /* every decode */
-    void (*on_message)(const js8_rx_msg_t *msg, void *ctx); /* assembled */
+    /* Assembled messages; also, with msg->partial set, the text so far of a
+     * multi-frame message after each of its frames (the final one follows
+     * with the same msg_id). */
+    void (*on_message)(const js8_rx_msg_t *msg, void *ctx);
     void (*on_cycle_done)(unsigned decodes, void *ctx);
     /* Input-rate audio off the audio thread, e.g. for a waterfall. */
     void (*on_audio)(const float *samples, unsigned n, void *ctx);
@@ -71,6 +76,10 @@ void js8_rx_feed(js8_rx_t *rx, const float *samples, unsigned n);
 void js8_rx_clear(js8_rx_t *rx);
 /* Change which speeds are decoded (JS8_SUBMODE_* bits), from any thread. */
 void js8_rx_set_submodes(js8_rx_t *rx, int submodes);
+/* The audio range searched (low..high Hz) and our TX offset, whose
+ * neighbours are decoded first. From any thread. */
+void js8_rx_set_decode_range(js8_rx_t *rx, int low_hz, int high_hz);
+void js8_rx_set_qso_offset(js8_rx_t *rx, int offset_hz);
 
 /* Test mode: play a 16-bit PCM WAV (any rate; resampled as needed) into the
  * decoder in real time, starting at the next 30 s boundary (a slot start for

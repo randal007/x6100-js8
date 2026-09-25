@@ -379,6 +379,7 @@ TEST_CASE("receiver decodes a multi-frame message from 11025 Hz audio", "[js8][r
         decoded_frames.push_back(f.text);
     };
     cb.on_message = [&](const RxFrame &m) {
+        if (m.partial) return; // complete messages only
         std::lock_guard<std::mutex> l(mu);
         messages.push_back(m.text);
         cv.notify_all();
@@ -640,6 +641,7 @@ struct Collected {
     std::vector<std::string> messages;
 };
 void collect_message(const js8_rx_msg_t *m, void *ctx) {
+    if (m->partial) return; // complete messages only
     auto                       *c = static_cast<Collected *>(ctx);
     std::lock_guard<std::mutex> l(c->mu);
     c->messages.push_back(m->text);
@@ -765,6 +767,7 @@ TEST_CASE("TX audio at the radio's rate decodes in our receiver (loopback)", "[j
     cfg.realign_threshold_ms = 0;
     Receiver::Callbacks cb;
     cb.on_message = [&](const RxFrame &m) {
+        if (m.partial) return; // complete messages only
         std::lock_guard<std::mutex> l(mu);
         messages.push_back(m.text);
         cv.notify_all();
@@ -1726,7 +1729,7 @@ namespace {
 // block that builds each speed's decoder. `audio` starts at a slot start.
 // Fed at `speedup` x real time. Returns the assembled messages and every frame.
 struct Decoded {
-    std::vector<RxFrame> messages, frames;
+    std::vector<RxFrame> messages, frames, partials;
 };
 
 Decoded decode_all_speeds(const std::vector<float> &band, int rate, int submodes, double speedup,
@@ -1746,6 +1749,10 @@ Decoded decode_all_speeds(const std::vector<float> &band, int rate, int submodes
     };
     cb.on_message = [&](const RxFrame &m) {
         std::lock_guard<std::mutex> l(mu);
+        if (m.partial) {
+            out.partials.push_back(m);
+            return;
+        }
         out.messages.push_back(m);
         cv.notify_all();
     };
@@ -1811,6 +1818,18 @@ TEST_CASE("all four speeds decode together from one band", "[js8][speed][receive
     CHECK(has_message(d, "N0XYZ: K2XYZ HELLO AT TURBO SPEED", 2));
     CHECK(has_message(d, "VE7ABC: K2XYZ HELLO AT SLOW", 4));
     CHECK(d.messages.size() == 4); // no Turbo retry decoded twice into a stray message
+    // Each multi-frame message showed as it grew (desktop updates the line
+    // every decode cycle), under the same id as the final message.
+    for (auto &m : d.messages) {
+        int grew = 0;
+        for (auto &p : d.partials)
+            if (p.msg_id == m.msg_id) {
+                CHECK(m.text.rfind(p.text, 0) == 0); // the final text starts with what was shown
+                grew++;
+            }
+        INFO(m.text);
+        CHECK(grew >= 1);
+    }
     // Time Sync: on-time signals at every speed have DT near 0.
     for (auto &f : d.frames) {
         INFO("mode " << f.mode << ": " << f.text);
@@ -1857,4 +1876,37 @@ TEST_CASE("speeds switched on while running decode from their next slot", "[js8]
     CHECK(has_message(on, "K9DEF: K2XYZ FAST AFTER THE SWITCH", 1));
     CHECK(has_message(off, "W1ABC: K2XYZ NORMAL AS BEFORE", 0));
     for (auto &m : off.frames) CHECK(m.mode == 0); // nothing Fast when it's off
+}
+
+TEST_CASE("a long message shows as it grows, then completes under the same id", "[js8][assembler]") {
+    std::vector<RxFrame> done, so_far;
+    MessageAssembler     a([&](const RxFrame &m) { done.push_back(m); }, [&](const RxFrame &m) { so_far.push_back(m); });
+    a.add(frame("A1AA: B1BB", FRAME_FIRST, 1000, 0));
+    REQUIRE(so_far.size() == 1);
+    CHECK(so_far[0].text == "A1AA: B1BB");
+    CHECK(so_far[0].partial);
+    a.add(frame(" HELLO", FRAME_DATA, 1000, 15'000));
+    REQUIRE(so_far.size() == 2);
+    CHECK(so_far[1].text == "A1AA: B1BB HELLO");
+    CHECK(so_far[1].msg_id == so_far[0].msg_id);
+    a.add(frame(" WORLD", FRAME_DATA | FRAME_LAST, 1000, 30'000));
+    CHECK(so_far.size() == 2); // the last frame completes it instead
+    REQUIRE(done.size() == 1);
+    CHECK(done[0].text == "A1AA: B1BB HELLO WORLD");
+    CHECK_FALSE(done[0].partial);
+    CHECK(done[0].msg_id == so_far[0].msg_id);
+
+    // Single-frame messages don't show partials, and get their own ids.
+    a.add(frame("C1CC: D1DD SNR -05", FRAME_FIRST | FRAME_LAST, 1500, 40'000));
+    CHECK(so_far.size() == 2);
+    REQUIRE(done.size() == 2);
+    CHECK(done[1].msg_id != done[0].msg_id);
+
+    // One that never finishes completes after 60 s quiet, same id.
+    a.add(frame("E1EE: F1FF", FRAME_FIRST, 700, 50'000));
+    auto id = so_far.back().msg_id;
+    a.flush_stale(110'001);
+    REQUIRE(done.size() == 3);
+    CHECK(done[2].msg_id == id);
+    CHECK(done[2].text == "E1EE: F1FF");
 }

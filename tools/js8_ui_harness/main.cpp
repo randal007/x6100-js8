@@ -28,6 +28,7 @@ void ui_select_row_from(const char *call);
 void ui_click_focused(void);
 void ui_page(int n);
 void ui_hold(int i);
+int  ui_list_count(const char *text);
 int  ui_popup_has(const char *text);
 void ui_compose_clear(void);
 extern int stub_tx_frames;
@@ -96,18 +97,18 @@ struct Station {
 
 // Synthesise `band` (one slot per frame, starting at the next slot
 // boundary) and feed it through the dialog's audio callback in real time.
-static void feed_band(const std::vector<Station> &band) {
+static void feed_band(const std::vector<Station> &band, std::size_t first = 0, std::size_t last = 99) {
     const auto &costas = js8core::protocol::costas(js8core::protocol::CostasType::Original);
     std::vector<std::vector<std::array<int, js8core::kJs8NumSymbols>>> tones(band.size());
     std::size_t slots = 0;
     for (std::size_t i = 0; i < band.size(); i++) {
         auto frames = vc::build_message_frames(band[i].call, band[i].grid, "", band[i].text, false, false, 0);
-        for (auto &[frame, bits] : frames) {
+        for (std::size_t f = first; f < frames.size() && f < last; f++) { // frames [first, last)
             std::array<int, js8core::kJs8NumSymbols> t{};
-            js8core::legacy_encode(bits, costas, frame.c_str(), t.data());
+            js8core::legacy_encode(frames[f].second, costas, frames[f].first.c_str(), t.data());
             tones[i].push_back(t);
         }
-        slots = std::max(slots, frames.size());
+        slots = std::max(slots, tones[i].size());
         printf("[band] %-7s %4.0f Hz  %s\n", band[i].call, band[i].offset_hz, band[i].text);
     }
     auto               now  = std::chrono::system_clock::now().time_since_epoch();
@@ -692,6 +693,24 @@ int main() {
         ui_press(2); // -> Slow
         ui_press(2); // -> Normal
         printf("[speed] back to '%s'\n", ui_button_label(2));
+        return 0;
+    }
+    if (getenv("ONLY_PARTIAL")) {
+        // A long message shows as it arrives, one decode cycle at a time.
+        pump(300);
+        std::vector<Station> st = {
+            {"N0XYZ", "EN34", "K2XYZ", "K2XYZ THIS IS A LONG MESSAGE THAT TAKES SEVERAL FRAMES TO ARRIVE", 1320, 0.05f}};
+        feed_band(st, 0, 2); // the first two frames
+        printf("[partial] after 2 frames: growing row %d, complete row %d\n", ui_list_has("N0XYZ: K2XYZ THIS"),
+               ui_list_has("TO ARRIVE"));
+        printf("[partial] marked in progress: %d\n", ui_list_has(" ..."));
+        screenshot("38_partial.ppm");
+        feed_band(st, 2);
+        printf("[partial] after the rest: complete %d, still marked %d\n",
+               ui_list_has("N0XYZ: K2XYZ THIS IS A LONG MESSAGE THAT TAKES SEVERAL FRAMES TO ARRIVE"),
+               ui_list_has(" ..."));
+        printf("[partial] rows with the message: %d (want 1: updated in place)\n", ui_list_count("N0XYZ: K2XYZ THIS"));
+        screenshot("39_partial_done.ppm");
         return 0;
     }
     if (getenv("ONLY_QSOFREQ")) {

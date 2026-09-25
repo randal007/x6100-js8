@@ -349,6 +349,15 @@ public:
     config_.tx_output_gain_boost_enabled = enabled;
   }
 
+  void set_decode_range(int low_hz, int high_hz) override {
+    if (low_hz < 0) low_hz = 0;
+    if (high_hz <= low_hz) return;
+    nfa_.store(low_hz);
+    nfb_.store(high_hz);
+  }
+
+  void set_qso_offset(int offset_hz) override { nfqso_.store(offset_hz); }
+
   void set_submodes(int submodes) override {
     constexpr int knownSubmodes = (1 << static_cast<int>(protocol::SubmodeId::A)) |
                                  (1 << static_cast<int>(protocol::SubmodeId::B)) |
@@ -538,6 +547,9 @@ public:
       decode_state_.params.utc = utc_tm.tm_hour * 10000 + utc_tm.tm_min * 100 + utc_tm.tm_sec;
       decode_state_.params.newdat = true;
       decode_state_.params.syncStats = false;
+      decode_state_.params.nfa = nfa_.load();
+      decode_state_.params.nfb = nfb_.load();
+      decode_state_.params.nfqso = nfqso_.load();
     }
 
     // Port of isDecodeReady() from mainwindow.cpp
@@ -1034,6 +1046,9 @@ public:
     int k0_{0};  // Previous sample position for isDecodeReady logic
     std::atomic<std::int64_t> time_drift_ms_{0};
     std::atomic<int> enabled_submodes_{0};
+    std::atomic<int> nfa_{200};    // patch 9: set_decode_range()
+    std::atomic<int> nfb_{2500};
+    std::atomic<int> nfqso_{1500}; // set_qso_offset()
     std::atomic<bool> drift_realign_pending_{false};
     // Written only on the audio thread; may lag time_drift_ms_ by one capture buffer.
     std::int64_t ring_drift_ms_{0};

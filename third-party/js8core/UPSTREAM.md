@@ -75,7 +75,13 @@ Each one is its own commit on top of the pristine import, so
    replaces it and inherits any speed's window only the older one had
    (the 60 s ring still holds that audio).
 
-All eight are candidates to send upstream. Patch 5 matters to upstream only
+9. **Decode range and QSO offset are settable.** The engine searched a fixed
+   200-2500 Hz with `nfqso` 1500 Hz. Desktop searches its waterfall filter's
+   edges (0-5000 Hz without a filter) and passes its own offset as `nfqso`,
+   which the decoder uses to try candidates near it first.
+   `set_decode_range()` and `set_qso_offset()` feed the next decode.
+
+All nine are candidates to send upstream. Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 

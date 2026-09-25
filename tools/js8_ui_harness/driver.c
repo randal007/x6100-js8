@@ -56,6 +56,17 @@ int ui_list_has(const char *text) {
     }
     return 0;
 }
+/* How many rows of the dialog's list contain `text`. */
+int ui_list_count(const char *text) {
+    lv_obj_t *t = lv_group_get_focused(keyboard_group);
+    if (!t || !lv_obj_check_type(t, &lv_table_class)) return -1;
+    int n = 0;
+    for (uint16_t r = 0; r < lv_table_get_row_cnt(t); r++) {
+        const char *v = lv_table_get_cell_value(t, r, 0);
+        if (v && strstr(v, text)) n++;
+    }
+    return n;
+}
 /* Text of the focused list item, or "" */
 const char *ui_focused_text(void) {
     lv_obj_t *f = lv_group_get_focused(keyboard_group);

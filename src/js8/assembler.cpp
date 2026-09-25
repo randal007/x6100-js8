@@ -154,7 +154,16 @@ RxFrame MessageAssembler::assemble(const Buffer &buffer) const {
     // Metadata comes from the most recent frame.
     RxFrame msg = buffer.frames.back();
     msg.text    = assemble_multipart_text(frames);
+    msg.msg_id  = buffer.id;
+    msg.partial = false;
     return msg;
+}
+
+void MessageAssembler::show_partial(const Buffer &buffer) const {
+    if (!partial_) return;
+    RxFrame msg = assemble(buffer);
+    msg.partial = true;
+    partial_(msg);
 }
 
 MessageAssembler::Key MessageAssembler::key_for(const RxFrame &frame) {
@@ -177,14 +186,18 @@ void MessageAssembler::add(const RxFrame &frame) {
     // Complete single-frame message.
     if (frame.is_first() && frame.is_last()) {
         if (match) buffers_.erase(*match);
-        emit_(frame);
+        RxFrame msg = frame;
+        msg.msg_id  = next_id_++;
+        msg.partial = false;
+        emit_(msg);
         return;
     }
 
     // First frame: start a fresh buffer at this offset.
     if (frame.is_first()) {
         if (match) buffers_.erase(*match);
-        buffers_[key_for(frame)] = Buffer{{frame}, frame.timestamp_ms};
+        auto &buf = buffers_[key_for(frame)] = Buffer{{frame}, frame.timestamp_ms, next_id_++};
+        show_partial(buf);
         return;
     }
 
@@ -197,16 +210,19 @@ void MessageAssembler::add(const RxFrame &frame) {
         if (frame.is_last()) {
             emit_(assemble(buf));
             buffers_.erase(key);
+        } else {
+            show_partial(buf);
         }
         return;
     }
 
     // No buffer: probably a missed first frame. Start one anyway.
-    Buffer buf{{frame}, frame.timestamp_ms};
+    Buffer buf{{frame}, frame.timestamp_ms, next_id_++};
     if (frame.is_last()) {
         emit_(assemble(buf));
         return;
     }
+    show_partial(buf);
     buffers_[key_for(frame)] = std::move(buf);
 }
 

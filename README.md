@@ -29,6 +29,9 @@ acknowledged by N7EAL and KN6OEH, then an INFO? query answered by KN6OEH
 
 APP → page 3 → **JS8**. The radio tunes the nearest JS8 frequency (the band
 keys step through JS8Call's standard dial frequencies) and starts decoding.
+While the app is open the receive filter is 200–3000 Hz and the decoder
+searches all of it (desktop searches its filter's edges), trying signals
+near your TX offset first; your own filter comes back when you leave.
 
 | Page | Button | Does |
 |---|---|---|
@@ -93,9 +96,12 @@ until you press something. The status line always shows what's on.
 
 Rows show UTC time, SNR, audio offset and the message. The MFK moves through
 the list and marks the selected station's offset with a green line on the
-waterfall. Tapping a row also shows its callsign and SNR. Multi-frame messages appear
-once their last frame arrives (one that never finishes shows after 60 s
-without a new frame, as on desktop; long messages are no longer cut). Buffered commands such as `MSG` have their
+waterfall. Tapping a row also shows its callsign and SNR. A multi-frame message shows
+as it arrives: its row grows after each decode cycle, marked `...` until
+the last frame completes it (as desktop's band activity does). One that
+never finishes stays as it got after 60 s without a new frame; long
+messages are no longer cut. Replies, the inbox, logging and alerts act only
+on complete messages. Buffered commands such as `MSG` have their
 checksum verified and removed, as in desktop JS8Call.
 
 **Waterfall:** one row per 0.1 s of audio, drawn relative to the noise

@@ -54,7 +54,8 @@ public:
     struct Callbacks {
         /// Every decoded frame, rendered (band activity).
         std::function<void(const RxFrame &)> on_frame;
-        /// Complete messages after multi-frame assembly.
+        /// Complete messages after multi-frame assembly, and (partial set)
+        /// the text so far of a message still arriving, after each frame.
         std::function<void(const RxFrame &)> on_message;
         /// A decode pass finished with this many unique decodes.
         std::function<void(std::size_t)> on_cycle_done;
@@ -80,6 +81,11 @@ public:
     /// The engine keeps a slot schedule for every speed; this only switches
     /// them on and off, and a speed's decoder is built the first time it's used.
     void set_submodes(int submodes);
+
+    /// The audio range searched for signals, and our TX offset (signals near
+    /// it are decoded first), as desktop JS8Call passes its filter and freq().
+    void set_decode_range(int low_hz, int high_hz);
+    void set_qso_offset(int offset_hz);
 
     /// How often the ring has been re-snapped to the clock since start.
     unsigned realign_count() const { return realigns_.load(); }

@@ -137,6 +137,12 @@ public:
   virtual void set_tx_boost_enabled(bool enabled) = 0;
   virtual void set_submodes(int submodes) = 0;
 
+  // x6100 patch 9: the audio range searched (desktop: its waterfall filter
+  // edges, or 0-5000 Hz) and our own offset, whose neighbours are decoded
+  // first (desktop passes freq() as nfqso). Take effect at the next decode.
+  virtual void set_decode_range(int low_hz, int high_hz) = 0;
+  virtual void set_qso_offset(int offset_hz) = 0;
+
   // Positive = engine clock ahead of system clock; takes effect at the next captured buffer.
   virtual void set_time_drift_ms(std::int64_t drift_ms) = 0;
   virtual std::int64_t time_drift_ms() const = 0;

@@ -32,6 +32,8 @@ struct RxFrame {
     int         mode    = 0; ///< varicode submode (0 = Normal)
     int         drift_ms = 0;
     std::int64_t timestamp_ms = 0; ///< local receive time
+    std::uint32_t msg_id  = 0;     ///< the assembler's message number (partials and final share it)
+    bool          partial = false; ///< the text so far of a message still arriving
 
     bool is_first() const { return type & 0b001; }
     bool is_last() const { return type & 0b010; }
@@ -53,7 +55,11 @@ public:
 
     static constexpr std::int64_t IDLE_TIMEOUT_MS = 60'000;
 
-    explicit MessageAssembler(Emit emit) : emit_(std::move(emit)) {}
+    /// `partial`, if given, gets the text so far after every frame of a
+    /// message still arriving (desktop shows a message growing each decode
+    /// cycle); the final message comes to `emit` with the same msg_id.
+    explicit MessageAssembler(Emit emit, Emit partial = {})
+        : emit_(std::move(emit)), partial_(std::move(partial)) {}
 
     void add(const RxFrame &frame);
 
@@ -66,15 +72,19 @@ private:
     struct Buffer {
         std::vector<RxFrame> frames;
         std::int64_t         last_timestamp_ms;
+        std::uint32_t        id;
     };
     using Key = std::pair<int, int>; ///< (speed's varicode submode, offset in Hz)
 
     RxFrame            assemble(const Buffer &buffer) const;
+    void               show_partial(const Buffer &buffer) const;
     std::optional<Key> find_key(const RxFrame &frame) const;
     static Key         key_for(const RxFrame &frame);
 
     Emit                  emit_;
+    Emit                  partial_;
     std::map<Key, Buffer> buffers_;
+    std::uint32_t         next_id_ = 1;
 };
 
 /// Drops a frame decoded again in the same slot. The engine retries Turbo

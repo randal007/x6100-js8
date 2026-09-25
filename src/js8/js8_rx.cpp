@@ -52,6 +52,8 @@ js8_rx_msg_t to_c(const RxFrame &f, const std::string &my_call) {
     m.submode        = (uint8_t)f.mode;
     m.low_confidence = f.low_confidence;
     m.checksum       = (int8_t)f.checksum;
+    m.partial        = f.partial;
+    m.msg_id         = f.msg_id;
 
     auto mc    = classify(f.text, my_call);
     m.heartbeat = mc.heartbeat;
@@ -206,6 +208,14 @@ extern "C" void js8_rx_clear(js8_rx_t *rx) {
 
 extern "C" void js8_rx_set_submodes(js8_rx_t *rx, int submodes) {
     if (rx) rx->receiver->set_submodes(submodes);
+}
+
+extern "C" void js8_rx_set_decode_range(js8_rx_t *rx, int low_hz, int high_hz) {
+    if (rx) rx->receiver->set_decode_range(low_hz, high_hz);
+}
+
+extern "C" void js8_rx_set_qso_offset(js8_rx_t *rx, int offset_hz) {
+    if (rx) rx->receiver->set_qso_offset(offset_hz);
 }
 
 extern "C" void js8_rx_destroy(js8_rx_t *rx) {

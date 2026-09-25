@@ -91,6 +91,12 @@
 #define WF_MIN_DB        0
 #define WF_MAX_DB        30
 
+/* The receive filter while the app is open, and the range the decoder
+ * searches (desktop searches its waterfall filter's edges). Yours comes
+ * back when the app closes. */
+#define JS8_FILTER_LOW   200
+#define JS8_FILTER_HIGH  3000
+
 #define HISTORY          300    /* messages kept for re-filtering */
 #define MAX_ROWS         200    /* rows shown before trimming to KEEP_ROWS */
 #define KEEP_ROWS        150
@@ -245,6 +251,8 @@ static lv_obj_t *table;
 static lv_obj_t *status;
 
 static int32_t filter_low, filter_high;
+static int32_t saved_filter_low, saved_filter_high; /* the user's, restored on close */
+static bool    filter_saved;
 static show_t  show = SHOW_NO_HB;
 
 /* What the compose window is editing (edit_target). */
@@ -392,7 +400,7 @@ static void format_row(const js8_rx_msg_t *m, char *buf, size_t size) {
              m->low_confidence ? "[" : "",
              m->text,
              m->low_confidence ? "]" : "",
-             m->checksum < 0 ? "  (bad checksum)" : "");
+             m->partial ? " ..." : m->checksum < 0 ? "  (bad checksum)" : "");
 }
 
 static bool auto_selecting; /* follow() is moving the selection, not the user */
@@ -505,23 +513,69 @@ static void handle_incoming(const js8_rx_msg_t *m);
 
 static bool find_station(const char *call, js8_station_t *out);
 
-static void add_message(const js8_rx_msg_t *msg) {
-    js8_rx_msg_t  copy = *msg;
-    js8_rx_msg_t *m    = &copy;
+/* The history slot of a message still arriving (desktop grows the line
+ * each decode cycle), or -1. Only recent slots can hold one. */
+static int find_partial(uint32_t msg_id) {
+    if (!msg_id) return -1;
+    for (int age = 0; age < hist_count && age < 100; age++) {
+        int slot = (hist_head - 1 - age + HISTORY) % HISTORY;
+        if (!history[slot].tx && history[slot].partial && history[slot].msg_id == msg_id) return slot;
+    }
+    return -1;
+}
+
+/* Everything that acts on a message, once it's complete: never on the text
+ * so far of one still arriving. */
+static void process_message(js8_rx_msg_t *m) {
     js8_station_t seen;
     bool          new_station = !m->tx && m->from[0] && !find_station(m->from, &seen);
     js8_stations_add(stations, m, params.callsign.x, now_wall_ms());
-    if (!m->tx) alert_check(m, new_station);
-    if (!m->tx && !m->low_confidence) {
+    if (m->tx) return;
+    alert_check(m, new_station);
+    if (!m->low_confidence) {
         sync_dt[sync_head] = m->dt;
         sync_ms[sync_head] = now_wall_ms();
         sync_head          = (sync_head + 1) % SYNC_DTS;
     }
-    if (!m->tx) inbox_received(m);
-    if (!m->tx) handle_incoming(m);
+    inbox_received(m);
+    handle_incoming(m);
     char ended[JS8_RX_CALL_LEN];
-    if (!m->tx && js8_qsos_received(qsos, m, params.callsign.x, now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
-    if (!m->tx && m->to_me && log_list) log_refresh();
+    if (js8_qsos_received(qsos, m, params.callsign.x, now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
+    if (m->to_me && log_list) log_refresh();
+}
+
+/* A message that was showing as it arrived: new text in its slot, and in
+ * its row if it has one (else a row now, if it passes the filter). */
+static void update_slot(int slot, const js8_rx_msg_t *m) {
+    history[slot] = *m;
+    if (view_stations) {
+        if (!m->partial) rebuild_station_rows();
+        return;
+    }
+    char buf[JS8_RX_TEXT_LEN + 48];
+    format_row(m, buf, sizeof(buf));
+    for (uint16_t r = 0; r < rows; r++) {
+        if (row_hist[r] == slot) {
+            lv_table_set_cell_value(table, r, 0, buf);
+            return;
+        }
+    }
+    if (!passes_filter(m) || rows >= MAX_ROWS) return;
+    bool scroll = at_bottom();
+    append_row(buf, (int16_t)slot);
+    if (scroll) follow();
+}
+
+static void add_message(const js8_rx_msg_t *msg) {
+    js8_rx_msg_t  copy = *msg;
+    js8_rx_msg_t *m    = &copy;
+
+    int existing = m->tx ? -1 : find_partial(m->msg_id);
+    if (!m->partial) process_message(m);
+    if (existing >= 0) {
+        update_slot(existing, m);
+        return;
+    }
 
     int slot = hist_head;
     history[slot] = *m;
@@ -532,7 +586,7 @@ static void add_message(const js8_rx_msg_t *msg) {
      * message; the ring is larger than MAX_ROWS so this only happens after a
      * long session, and rebuilding fixes it. */
     if (view_stations) {
-        rebuild_station_rows();
+        if (!m->partial) rebuild_station_rows();
         return;
     }
     for (uint16_t r = 0; r < rows; r++) {
@@ -966,6 +1020,8 @@ static void rx_start(void) {
     };
     rx = js8_rx_create(SAMPLE_RATE, rx_speed_mask(), params.callsign.x, &cb);
     if (!rx) msg_schedule_text_fmt("JS8: cannot start decoder");
+    js8_rx_set_decode_range(rx, filter_low, filter_high);
+    js8_rx_set_qso_offset(rx, params.js8_tx_freq.x);
 }
 
 static void rx_stop(void) {
@@ -1205,6 +1261,7 @@ static void apply_hold(float their_freq) {
     if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
     if (f > js8_speed_max_offset_hz(cur_speed())) f = js8_speed_max_offset_hz(cur_speed());
     params_uint16_set(&params.js8_tx_freq, (uint16_t)f);
+    js8_rx_set_qso_offset(rx, f);
     lv_finder_set_value(finder, (int16_t)f);
     lv_obj_invalidate(finder);
     update_tx_bar();
@@ -1233,6 +1290,7 @@ static void rotary_cb(int32_t diff) {
     if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
     if (f > js8_speed_max_offset_hz(cur_speed())) f = js8_speed_max_offset_hz(cur_speed());
     params_uint16_set(&params.js8_tx_freq, (uint16_t)f);
+    js8_rx_set_qso_offset(rx, f);
 
     lv_finder_set_value(finder, (int16_t)f);
     lv_obj_invalidate(finder);
@@ -1400,6 +1458,14 @@ static void construct_cb(lv_obj_t *parent) {
 
     mem_save(MEM_BACKUP_ID);
     load_band(0);
+
+    /* 200-3000 Hz while JS8 is open. High first: each edge is validated
+     * against the other. */
+    saved_filter_low  = cparam_i_get(cfg_cur_filter_low);
+    saved_filter_high = cparam_i_get(cfg_cur_filter_high);
+    filter_saved      = true;
+    cparam_i_set(cfg_cur_filter_high, JS8_FILTER_HIGH);
+    cparam_i_set(cfg_cur_filter_low, JS8_FILTER_LOW);
 
     filter_low  = cparam_i_get(cfg_cur_filter_low);
     filter_high = cparam_i_get(cfg_cur_filter_high);
@@ -1575,6 +1641,12 @@ static void destruct_cb(void) {
     dsp_set_waterfall_enabled(true);
     dsp_set_spectrum_enabled(true);
 
+    /* Your filter back, before the saved band and mode return. */
+    if (filter_saved) {
+        cparam_i_set(cfg_cur_filter_high, saved_filter_high);
+        cparam_i_set(cfg_cur_filter_low, saved_filter_low);
+        filter_saved = false;
+    }
     mem_load(MEM_BACKUP_ID);
 
     main_screen_lock_mode(false);
@@ -3389,6 +3461,7 @@ static void set_speed(js8_speed_t s) {
     /* The offset must leave room for the wider signal below 2500 Hz. */
     int max = js8_speed_max_offset_hz(s);
     if (params.js8_tx_freq.x > max) params_uint16_set(&params.js8_tx_freq, (uint16_t)max);
+    js8_rx_set_qso_offset(rx, params.js8_tx_freq.x);
     lv_finder_set_width(finder, js8_speed_bandwidth_hz(s));
     lv_finder_set_value(finder, (int16_t)params.js8_tx_freq.x);
     lv_obj_invalidate(finder);

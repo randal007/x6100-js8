@@ -57,6 +57,10 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
           case Checksum::Invalid: msg.checksum = -1; break;
           }
           cb_.on_message(msg);
+      },
+      [this](const RxFrame &so_far) {
+          // No checksum yet: it comes with the last frame.
+          if (cb_.on_message) cb_.on_message(so_far);
       }) {
     js8core::EngineConfig ec;
     ec.sample_rate_hz   = JS8_RATE;
@@ -118,6 +122,14 @@ Receiver::~Receiver() {
 
 void Receiver::set_submodes(int submodes) {
     engine_->set_submodes(submodes);
+}
+
+void Receiver::set_decode_range(int low_hz, int high_hz) {
+    engine_->set_decode_range(low_hz, high_hz);
+}
+
+void Receiver::set_qso_offset(int offset_hz) {
+    engine_->set_qso_offset(offset_hz);
 }
 
 void Receiver::feed(const float *samples, std::size_t n) {

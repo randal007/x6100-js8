@@ -27,9 +27,16 @@ static int               dummy_low, dummy_high, dummy_fg;
 ComputedParamInt        *cfg_cur_filter_low  = (ComputedParamInt *)&dummy_low;
 ComputedParamInt        *cfg_cur_filter_high = (ComputedParamInt *)&dummy_high;
 ComputedParamInt        *cfg_fg_freq         = (ComputedParamInt *)&dummy_fg; /* dial, Hz */
+/* The radio's filter: 100-2900 Hz (a typical USB setting) until the app sets it. */
+static int32_t filter_low = 100, filter_high = 2900;
 int32_t cparam_i_get(const ComputedParamInt *p) {
     if (p == cfg_fg_freq) return 14078000;
-    return p == cfg_cur_filter_low ? 100 : 3000;
+    return p == cfg_cur_filter_low ? filter_low : filter_high;
+}
+void cparam_i_set(ComputedParamInt *p, int32_t v) {
+    if (p == cfg_cur_filter_low) filter_low = v;
+    else if (p == cfg_cur_filter_high) filter_high = v;
+    printf("[radio] filter %d-%d Hz\n", filter_low, filter_high);
 }
 
 static const char *band_labels[] = {"JS8 40m", "JS8 30m", "JS8 20m", "JS8 17m"};
