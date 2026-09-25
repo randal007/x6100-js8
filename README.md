@@ -26,7 +26,7 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 
 | Page | Button | Does |
 |---|---|---|
-| 1 | Show: No HB / Directed / All | Filter the list. *Directed* shows messages to your callsign (set in APP → Callsign) or to @groups. |
+| 1 | Show: No HB / Directed / All | Filter the list. *Directed* shows messages to your callsign (set in APP → Callsign) or to @groups, plus everything on the selected station's frequency (±10 Hz, the green line), since in a long QSO the other side often drops your call. |
 | 1 | **Reply** | Opens the keyboard with the selected station's call filled in, e.g. `N0XYZ `. Type the rest (`SNR?`, `HELLO …`) and press Enter. |
 | 1 | **Send…** | Opens the keyboard empty: `@ALLCALL …`, a call and a message, or free text (your call is added). |
 | 1 | **Stop TX** | Unkeys at once and drops the rest of the message. ESC does the same; the next ESC closes the app. |
@@ -62,8 +62,9 @@ Power is capped at 5 W, as in the FT8 app, and restored when you leave.
 
 ![Replying: TX bar keyed, sent message in blue](docs/screenshots/js8_08_tx_keying.png)
 
-**Automatic replies and heartbeats** are off until you switch them on, each
-on its own, like desktop JS8Call. A message to you (other than a heartbeat
+**Automatic replies and heartbeats** are off every time the app opens; switch
+them on each on its own, like desktop JS8Call. The first automatic heartbeat
+goes out one interval after HB is switched on (page 2's Heartbeat sends one now). A message to you (other than a heartbeat
 ack) turns HB and HB ACK off again, so heartbeats don't cut into a QSO.
 After an hour without touching the radio, automatic transmissions pause
 until you press something. The status line always shows what's on.

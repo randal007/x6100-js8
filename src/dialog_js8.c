@@ -61,6 +61,7 @@
 #endif
 #define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
 #define JS8_SLOT_SEC     15.0f
+#define RX_THRESHOLD_HZ  10     /* 'on their frequency': desktop's rxThreshold for Normal */
 #define WF_ROWS_PER_SEC  10     /* waterfall rows per second of audio */
 #define WF_ROW_SAMPLES   (SAMPLE_RATE / WF_ROWS_PER_SEC)
 #define WF_QUEUE         16     /* rows waiting to be drawn (jitter buffer) */
@@ -137,6 +138,7 @@ static lv_timer_t *tx_timer;           /* refreshes the TX bar countdown */
 static js8_tx_status_t tx_status;      /* UI-thread copy of the last status */
 static char        tx_preview[JS8_RX_TEXT_LEN]; /* what we're sending, as others see it */
 static float       base_gain_offset;
+static float       qso_freq = -1;     /* the selected station's offset (the green line), -1 none */
 static atomic_bool keyed;              /* a frame is on the air (TX thread) */
 static atomic_int  tx_offset_active;   /* offset of the message being sent */
 static bool        composing;          /* compose window open */
@@ -254,7 +256,11 @@ static bool passes_filter(const js8_rx_msg_t *m) {
     switch (show) {
     case SHOW_ALL:      return true;
     case SHOW_NO_HB:    return !m->heartbeat || m->to_me; /* e.g. HB acks to us */
-    case SHOW_DIRECTED: return m->to_me || (m->to_group && !m->heartbeat && !m->cq);
+    case SHOW_DIRECTED:
+        /* Also everything on the selected station's frequency: in a long
+         * QSO they often stop putting your call in. */
+        if (qso_freq >= 0 && fabsf(m->freq_hz - qso_freq) <= RX_THRESHOLD_HZ) return true;
+        return m->to_me || (m->to_group && !m->heartbeat && !m->cq);
     default:            return true;
     }
 }
@@ -571,6 +577,7 @@ static void mark_selected(bool announce) {
     uint16_t row, col;
     lv_table_get_selected_cell(table, &row, &col);
     if (row >= rows || row_hist[row] < 0) {
+        qso_freq = -1;
         lv_finder_clear_cursor(finder);
         lv_obj_invalidate(finder);
         return;
@@ -587,6 +594,7 @@ static void mark_selected(bool announce) {
         freq = history[row_hist[row]].freq_hz;
         snr  = history[row_hist[row]].snr;
     }
+    qso_freq = (!view_stations && history[row_hist[row]].tx) ? -1 : freq; /* not our own rows */
     lv_finder_set_cursor(finder, (int16_t)(freq + 0.5f));
     lv_obj_invalidate(finder);
     if (announce && from[0]) {
@@ -1133,6 +1141,7 @@ static void band_cb(lv_event_t *e) {
     lv_waterfall_clear_data(waterfall);
     wf_queue_clear();
     lv_finder_clear_cursor(finder);
+    qso_freq = -1;
     if (view_stations) rebuild_rows();
     add_info_row("%s", cfg_digital_label_get());
     update_status();
@@ -1166,6 +1175,12 @@ static void key_cb(lv_event_t *e) {
 
 static void construct_cb(lv_obj_t *parent) {
     dialog.obj = dialog_init(parent);
+
+    /* Nothing transmits on its own when the app opens: AUTO, HB and HB ACK
+     * start off every time (the HB interval is remembered). */
+    params_bool_set(&params.js8_auto, false);
+    params_bool_set(&params.js8_hb, false);
+    params_bool_set(&params.js8_hb_ack, false);
 
     /* Full-screen app with its own waterfall: skip main-screen DSP. */
     dsp_set_waterfall_enabled(false);
@@ -1207,6 +1222,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_finder_set_width(finder, JS8_WIDTH_HZ);
     lv_finder_set_value(finder, params.js8_tx_freq.x);
     lv_finder_clear_cursor(finder);
+    qso_freq = -1;
     lv_obj_set_size(finder, WIDTH, WF_HEIGHT);
     lv_obj_set_pos(finder, 0, 0);
     lv_obj_set_style_radius(finder, 0, LV_PART_MAIN);
@@ -1250,7 +1266,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_table_set_col_cnt(table, 1);
     lv_table_set_col_width(table, 0, WIDTH - 2);
     lv_obj_set_style_border_width(table, 0, LV_PART_ITEMS);
-    lv_obj_set_style_bg_opa(table, 192, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(table, 150, LV_PART_MAIN); /* waterfall shows through */
     lv_obj_set_style_bg_color(table, lv_color_black(), LV_PART_MAIN);
     lv_obj_set_style_border_width(table, 1, LV_PART_MAIN);
     lv_obj_set_style_border_color(table, lv_color_white(), LV_PART_MAIN);
@@ -1360,6 +1376,7 @@ static void clear_cb(button_data_t *btn) {
     lv_waterfall_clear_data(waterfall);
     wf_queue_clear();
     lv_finder_clear_cursor(finder);
+    qso_freq = -1;
     rebuild_rows();
     update_status();
 }
@@ -1712,7 +1729,12 @@ static void hb_tick(void) {
     }
     int64_t now = now_wall_ms();
     if (js8_auto_idle(autop, now)) return;
-    if (hb_next_ms == 0) hb_next_ms = now; /* first one at the next chance */
+    /* As on desktop, the first one comes an interval after switching on;
+     * page 2's Heartbeat sends one now. */
+    if (hb_next_ms == 0) {
+        hb_next_ms = js8_next_heartbeat_ms(now, params.js8_hb_interval.x);
+        update_status();
+    }
     if (now < hb_next_ms - 5000) return;   /* desktop prepares it 5 s early */
     if (js8_tx_busy(tx) || composing || query_list || texts_list || !params.callsign.x[0]) return;
     LV_LOG_USER("JS8 auto: heartbeat (due %lld)", (long long)hb_next_ms);

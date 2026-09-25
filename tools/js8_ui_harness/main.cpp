@@ -15,6 +15,7 @@ void ui_key(uint32_t key);
 int  ui_running(void);
 int  ui_focus_is_table(void);
 void ui_rotary(int32_t diff);
+int  ui_list_has(const char *text);
 const char *ui_focus_desc(void);
 const char *ui_button_label(int i);
 void ui_compose_append(const char *text);
@@ -148,6 +149,24 @@ int main() {
 
     ui_init();
     ui_open();
+    if (getenv("ONLY_QSOFREQ")) {
+        // Directed view also shows whatever is on the selected station's frequency.
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+        ui_select_row_from("N0XYZ");
+        ui_page(1);
+        ui_press(1); // Show: No HB -> Directed
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "", "GOOD COPY HERE", 1320, 0.05f},
+                   {"W1ABC", "FN42", "", "NICE DAY THERE", 1800, 0.05f}});
+        printf("[qso] on their frequency, no call: shown=%d (want 1)\n", ui_list_has("GOOD COPY HERE"));
+        printf("[qso] other station, not directed: shown=%d (want 0)\n", ui_list_has("NICE DAY THERE"));
+        screenshot("21_directed_qso.ppm");
+        ui_press(1); // Directed -> All
+        pump(300);
+        printf("[qso] with Show: All, other station shown=%d (want 1: it was decoded)\n", ui_list_has("NICE DAY THERE"));
+        return 0;
+    }
     if (getenv("ONLY_TEXTS")) {
         // Page 4 -> Texts... -> INFO: the keyboard must get the focus.
         pump(300);
@@ -351,9 +370,9 @@ int main() {
     ui_press(3); // HB ACK on
     pump(300);
     screenshot("15_auto_on.ppm");
-    wait_keyed(before);
-    printf("[t4] first automatic heartbeat keyed at %d Hz\n", stub_tx_offset);
-    wait_done();
+    // As on desktop: no heartbeat right away, the first one is an interval out.
+    pump(20000);
+    printf("[t4] 20 s after HB on: frames %d (was %d, want no change)\n", stub_tx_frames, before);
 
     // Someone's heartbeat: expect an automatic ack in the HB sub-band.
     before = stub_tx_frames;

@@ -34,6 +34,16 @@ const char *ui_focus_desc(void) {
     if (lv_obj_check_type(f, &lv_btn_class)) return "a list button";
     return "something else";
 }
+/* Is `text` in any row of the dialog's list? */
+int ui_list_has(const char *text) {
+    lv_obj_t *t = lv_group_get_focused(keyboard_group);
+    if (!t || !lv_obj_check_type(t, &lv_table_class)) return -1;
+    for (uint16_t r = 0; r < lv_table_get_row_cnt(t); r++) {
+        const char *v = lv_table_get_cell_value(t, r, 0);
+        if (v && strstr(v, text)) return 1;
+    }
+    return 0;
+}
 void ui_rotary(int32_t diff) { dialog_js8->rotary_cb(diff); }
 const char *ui_button_label(int i) {
     button_data_t *b = stub_page->items[i];
