@@ -54,12 +54,12 @@ jobs:
         sed -i "s,^X6100_GUI_SITE_METHOD = git,X6100_GUI_SITE_METHOD = local,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
         sed -i "s,^X6100_GUI_GIT_SUBMODULES,# X6100_GUI_GIT_SUBMODULES,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
 
-    # JS8 (third-party/js8core) needs Boost headers and single-precision FFTW.
-    # The image already builds FFTW; Boost with no libraries selected installs
-    # headers only.
+    # JS8 (third-party/js8core) needs Boost headers and single-precision FFTW
+    # (buildroot package fftw-single, already built for liquid-dsp). Boost
+    # with no libraries selected installs headers only.
     - name: Enable JS8 dependencies
       run: |
-        sed -i "s,^X6100_GUI_DEPENDENCIES = \(.*\)$,X6100_GUI_DEPENDENCIES = \1 boost fftw," AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
+        sed -i "s,^X6100_GUI_DEPENDENCIES = \(.*\)$,X6100_GUI_DEPENDENCIES = \1 boost fftw-single," AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
         echo "BR2_PACKAGE_BOOST=y" >> AetherX6100Buildroot/br2_external/configs/X6100_defconfig
         grep "^X6100_GUI_DEPENDENCIES" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
 
@@ -71,8 +71,10 @@ jobs:
         string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
         file(APPEND "$ENV{GITHUB_OUTPUT}" "timestamp=${current_date}")
 
-    - name: Ccache cache files
-      uses: actions/cache@v4
+    # Restore here and save right after Build, even when Build fails, so a
+    # failed attempt still leaves its compiled work for the next one.
+    - name: Restore ccache
+      uses: actions/cache/restore@v4
       with:
         path: ~/.buildroot-ccache
         key: ${{ runner.os }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
@@ -91,6 +93,13 @@ jobs:
         make lame mpg123
         make libsndfile-dirclean
         make
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.buildroot-ccache
+        key: ${{ runner.os }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
 
     # Replace U-boot
     - name: Replace u-boot
