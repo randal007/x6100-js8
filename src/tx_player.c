@@ -35,8 +35,12 @@ static float get_correction(void) {
         float target_pwr = LV_MIN(param_f_get(cfg_pwr), TX_PLAYER_MAX_PWR_W);
         if (alc > 0.5f) {
             correction = log10f(log10f(11.1f - alc)) * 20.0f - 0.38f;
-        } else if (target_pwr - pwr > 0.5f) {
+        } else if (pwr < target_pwr * 0.8f && target_pwr - pwr > 0.1f) {
+            /* Relative, not "0.5 W short": at 0.5-1 W a fixed 0.5 W margin
+             * meant the drive could only ever go down, and the learned
+             * (saved) offset stayed low until power was raised and lowered. */
             correction = log10f(target_pwr / (pwr + 0.01f)) * 10.0f;
+            if (correction > 3.0f) correction = 3.0f;
         }
     }
     return correction;

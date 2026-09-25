@@ -829,6 +829,8 @@ static bool tx_play(int16_t *samples, unsigned n, int index, int count, void *ct
     (void)count;
     (void)ctx;
     atomic_store(&keyed, true);
+    /* Per frame, so a power change made while the app is open counts. */
+    base_gain_offset = tx_player_base_gain_offset();
     bool done = tx_player_play(samples, n, atomic_load(&tx_offset_active), base_gain_offset, tx_abort_check, NULL);
     atomic_store(&keyed, false);
     return done;
