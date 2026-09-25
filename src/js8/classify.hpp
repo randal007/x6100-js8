@@ -37,7 +37,8 @@ Checksum verify_command_checksum(std::string &text);
 bool is_grid(const std::string &word);
 
 /// The grid in a message body, or "": the word after "GRID" if that's a
-/// grid, else the last grid-looking word.
+/// grid, else the last grid-looking word. Cut to 6 characters (subsquare,
+/// a few km): what logs and the Stations list use.
 std::string find_grid(const std::string &body);
 
 /// Which grid to keep: `heard` replaces `known` unless it's a less precise

@@ -62,9 +62,10 @@ band change clears the list. Calls you've logged show in green (see
 [Logging](#logging)).
 
 **Grids** are taken from heartbeats, CQs and messages: the word after
-`GRID`, else any grid in the message, 4 to 10 characters. The most precise
-one is kept (a later heartbeat's `DN17` doesn't replace `DN17AB`), and the
-`RR73` sign-off is never mistaken for a grid. The column shows 6 characters.
+`GRID`, else any grid in the message. Longer grids (8 or 10 characters)
+are cut to 6, a few km, which is what the list and the log keep. The most
+precise one is kept (a later heartbeat's `DN17` doesn't replace `DN17AB`),
+and the `RR73` sign-off is never mistaken for a grid.
 
 ![Stations view: * marks stations that heard you](docs/screenshots/js8_11_stations.png)
 

@@ -145,9 +145,9 @@ std::string find_grid(const std::string &body) {
     std::vector<std::string> w;
     for (std::string t; in >> t;) w.push_back(t);
     for (std::size_t i = 0; i + 1 < w.size(); i++)
-        if (w[i] == "GRID" && is_grid(w[i + 1])) return w[i + 1];
+        if (w[i] == "GRID" && is_grid(w[i + 1])) return w[i + 1].substr(0, 6);
     for (auto it = w.rbegin(); it != w.rend(); ++it)
-        if (is_grid(*it)) return *it;
+        if (is_grid(*it)) return it->substr(0, 6);
     return "";
 }
 

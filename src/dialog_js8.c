@@ -501,7 +501,7 @@ static void station_fields(const js8_station_t *st, int64_t now, station_fields_
     f->star[0] = st->heard_me ? '*' : ' ';
     snprintf(f->call, sizeof(f->call), "%s", st->call);
     snprintf(f->snr, sizeof(f->snr), "%+d", st->snr);
-    snprintf(f->grid, sizeof(f->grid), "%.6s", st->grid); /* the column fits 6 */
+    snprintf(f->grid, sizeof(f->grid), "%s", st->grid);
     char *age = f->age, *heard = f->heard, *dist = f->dist;
     format_age(now - st->heard_ms, age, sizeof(f->age));
     if (st->heard_me) {
@@ -1213,7 +1213,7 @@ static void compose_open(const char *prefill) {
     lv_textarea_set_max_length(text, TX_TEXT_MAX);
     lv_obj_add_event_cb(text, compose_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     if (edit_target) {
-        lv_textarea_set_max_length(text, edit_target == EDIT_LOG_GRID   ? 10
+        lv_textarea_set_max_length(text, edit_target == EDIT_LOG_GRID   ? 6
                                          : edit_target == EDIT_POTA_REF ? sizeof(last_pota) - 1
                                          : edit_target == EDIT_SOTA_REF ? sizeof(last_sota) - 1
                                                                         : TEXT_MAX);

@@ -1328,7 +1328,7 @@ TEST_CASE("the QSO log C API", "[js8][log]") {
     js8_qsos_destroy(q);
 }
 
-TEST_CASE("grids: 4 to 10 characters, not RR73, most precise kept", "[js8][log]") {
+TEST_CASE("grids: 4 to 10 characters read, 6 kept, not RR73, most precise kept", "[js8][log]") {
     CHECK(is_grid("DN17"));
     CHECK(is_grid("DN17AB"));
     CHECK(is_grid("CN89KG12"));
@@ -1343,7 +1343,8 @@ TEST_CASE("grids: 4 to 10 characters, not RR73, most precise kept", "[js8][log]"
     CHECK(find_grid("VE7NHW MY QTH DN17AB NAME BOB") == "DN17AB");
     CHECK(find_grid("VE7NHW RR73") == "");
     CHECK(find_grid("@HB HEARTBEAT CN89") == "CN89");
-    CHECK(find_grid("VE7NHW GRID CN89KG12AB") == "CN89KG12AB");
+    CHECK(find_grid("VE7NHW GRID CN89KG12AB") == "CN89KG"); // logged as 6
+    CHECK(find_grid("VE7NHW QTH CN89KG12") == "CN89KG");
 
     CHECK(better_grid("", "DN17") == "DN17");
     CHECK(better_grid("DN17AB", "DN17") == "DN17AB");  // less precise: keep
