@@ -163,9 +163,16 @@ qso_log_search_worked_t qso_log_search_worked(const char *callsign, qso_log_mode
     return SEARCH_WORKED_NO;
 }
 
-/* The speaker: alert beeps. */
+/* The speaker: alert beeps. The real audio_play() waits for that much room
+ * in the PulseAudio stream and never finds it for big writes (a 9702-sample
+ * beep froze the radio), so every caller writes parts of 2048 samples. */
 int audio_play(int16_t *buf, size_t samples) {
     (void)buf;
+    if (samples > 2048) {
+        printf("[audio] FAIL: %zu samples in one audio_play() hangs the radio\n", samples);
+        abort();
+    }
     printf("[audio] beep %zu samples\n", samples);
     return 0;
 }
+void audio_play_wait(void) { printf("[audio] drained\n"); }

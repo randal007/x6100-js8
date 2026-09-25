@@ -44,6 +44,7 @@
 #include <fcntl.h>
 #include <linux/rtc.h>
 #include <math.h>
+#include <pthread.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdatomic.h>
@@ -191,6 +192,9 @@ static int64_t     sync_ms[SYNC_DTS];
 static unsigned    sync_head;
 static float       qso_freq = -1;     /* the selected station's offset (the green line), -1 none */
 static atomic_bool keyed;              /* a frame is on the air (TX thread) */
+/* Held while an alert beep plays; tx_play takes it after setting keyed, so
+ * a beep stops within one part and never goes out with our TX audio. */
+static pthread_mutex_t speaker_lock = PTHREAD_MUTEX_INITIALIZER;
 static atomic_int  tx_offset_active;   /* offset of the message being sent */
 static bool        composing;          /* compose window open */
 
@@ -998,6 +1002,10 @@ static bool tx_play(int16_t *samples, unsigned n, int index, int count, void *ct
     (void)count;
     (void)ctx;
     atomic_store(&keyed, true);
+    struct timespec until; /* a beep stops within one part; never hang TX on it */
+    clock_gettime(CLOCK_REALTIME, &until);
+    until.tv_sec += 1;
+    if (pthread_mutex_timedlock(&speaker_lock, &until) == 0) pthread_mutex_unlock(&speaker_lock);
     /* Per frame, so a power change made while the app is open counts. */
     base_gain_offset = tx_player_base_gain_offset();
     bool done = tx_player_play(samples, n, atomic_load(&tx_offset_active), base_gain_offset, tx_abort_check, NULL);
@@ -3143,27 +3151,53 @@ static void inbox_cb(button_data_t *btn) {
 
 static int64_t beep_last_ms;
 
+enum { BEEP_TONE = AUDIO_PLAY_RATE * BEEP_MS / 1000, BEEP_GAP = AUDIO_PLAY_RATE * BEEP_GAP_MS / 1000 };
+static int16_t         beep_buf[BEEP_TONE + BEEP_GAP];
+static int             beep_count;
+static atomic_bool     beeping;
+
+/* Beep thread: audio_play() waits for room in the stream, so it can't run
+ * on the LVGL thread, and it only ever gets small parts (like tx_player):
+ * one call with the whole beep never finds room and hangs forever. */
+static void *beep_thread(void *arg) {
+    (void)arg;
+    pthread_mutex_lock(&speaker_lock);
+    for (int i = 0; i < beep_count && !atomic_load(&keyed); i++) {
+        for (size_t at = 0; at < BEEP_TONE + BEEP_GAP && !atomic_load(&keyed);) {
+            size_t part = LV_MIN(1024 * 2, BEEP_TONE + BEEP_GAP - at);
+            audio_play(beep_buf + at, part);
+            at += part;
+        }
+    }
+    audio_play_wait();
+    pthread_mutex_unlock(&speaker_lock);
+    atomic_store(&beeping, false);
+    return NULL;
+}
+
 static void alert_beep(int count) {
     if (!(params.js8_alerts.x & JS8_ALERT_BEEP)) return;
     if (atomic_load(&keyed) || js8_tx_busy(tx)) return;
     int64_t now = now_wall_ms();
     if (now - beep_last_ms < BEEP_EVERY_MS) return;
+    if (atomic_exchange(&beeping, true)) return;
     beep_last_ms = now;
 
-    enum { TONE = AUDIO_PLAY_RATE * BEEP_MS / 1000, GAP = AUDIO_PLAY_RATE * BEEP_GAP_MS / 1000 };
-    static int16_t tone[TONE + GAP];
-    static bool    made;
+    static bool made;
     if (!made) {
         int ramp = AUDIO_PLAY_RATE / 200; /* 5 ms fades: no clicks */
-        for (int i = 0; i < TONE; i++) {
+        for (int i = 0; i < BEEP_TONE; i++) {
             float env = 1.0f;
             if (i < ramp) env = (float)i / ramp;
-            if (i > TONE - ramp) env = (float)(TONE - i) / ramp;
-            tone[i] = (int16_t)(8000.0f * env * sinf(2.0f * (float)M_PI * BEEP_HZ * i / AUDIO_PLAY_RATE));
+            if (i > BEEP_TONE - ramp) env = (float)(BEEP_TONE - i) / ramp;
+            beep_buf[i] = (int16_t)(8000.0f * env * sinf(2.0f * (float)M_PI * BEEP_HZ * i / AUDIO_PLAY_RATE));
         }
         made = true;
     }
-    for (int i = 0; i < count; i++) audio_play(tone, TONE + GAP);
+    beep_count = count;
+    pthread_t th;
+    if (pthread_create(&th, NULL, beep_thread, NULL) == 0) pthread_detach(th);
+    else atomic_store(&beeping, false);
 }
 
 /* Every decode but our own: alert words, then what beeps. */
