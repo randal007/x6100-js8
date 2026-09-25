@@ -75,6 +75,7 @@
 #define WF_ROWS_PER_SEC  10     /* waterfall rows per second of audio */
 #define WF_ROW_SAMPLES   (SAMPLE_RATE / WF_ROWS_PER_SEC)
 #define WF_QUEUE         16     /* rows waiting to be drawn (jitter buffer) */
+#define WF_TICK_MS       10     /* how often the drawing timer looks at the clock */
 #define HB_ADJUST_MS     8000   /* setting the HB interval ends after this idle */
 /* The waterfall is drawn relative to the noise floor, so it works at any
  * audio level: WF_MIN_DB..WF_MAX_DB above the floor spans the palette. */
@@ -243,11 +244,15 @@ static uint16_t nfft;
 static unsigned wf_row_fill;   /* samples in the row being built (receiver thread) */
 
 /* Rows are made per fixed amount of audio, but audio arrives in bursts; a
- * timer draws them at an even pace so the waterfall scrolls smoothly. */
+ * timer draws them at an even pace so the waterfall scrolls smoothly. The
+ * pace comes from the system clock: an LVGL timer's period counts from when
+ * it last ran (and LVGL's tick runs slow), so a 100 ms timer drew ~9.7 rows
+ * a second, fell behind and caught up with a two-row jump every 2 s. */
 static float     *wf_queue[WF_QUEUE];
 static uint16_t   wf_queue_size[WF_QUEUE];
 static unsigned   wf_q_head, wf_q_count;
 static lv_timer_t *wf_timer;
+static int64_t    wf_due_ms;   /* when the next row should be drawn (monotonic) */
 static float    wf_floor_db;   /* smoothed noise floor (receiver thread) */
 static bool     wf_floor_set;
 
@@ -769,16 +774,32 @@ static void ui_waterfall_add(void *arg) {
     wf_q_count++;
 }
 
-/* One row per tick; two when the queue builds up, so the delay stays short. */
+static int64_t now_mono_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
+/* At most one row per tick, each when it's due by the clock. Rows come a
+ * little faster than 10 a second (1102 samples at 11025 Hz, and the audio
+ * clock isn't the CPU's), so a queue that builds up is drained by drawing
+ * slightly faster, never by a jump. */
 static void wf_timer_cb(lv_timer_t *t) {
     (void)t;
-    unsigned n = wf_q_count > 3 ? 2 : (wf_q_count ? 1 : 0);
-    while (n--) {
-        lv_waterfall_add_data(waterfall, wf_queue[wf_q_head], wf_queue_size[wf_q_head]);
-        free(wf_queue[wf_q_head]);
-        wf_q_head = (wf_q_head + 1) % WF_QUEUE;
-        wf_q_count--;
-    }
+    if (!wf_q_count) return;
+    int64_t now    = now_mono_ms();
+    int     period = 1000 / WF_ROWS_PER_SEC;
+    if (wf_q_count > 6) period = period * 3 / 4;
+    else if (wf_q_count > 3) period = period * 19 / 20;
+    /* After a pause (no audio while transmitting) start again now. */
+    if (now - wf_due_ms > period) wf_due_ms = now;
+    if (now < wf_due_ms) return;
+
+    lv_waterfall_add_data(waterfall, wf_queue[wf_q_head], wf_queue_size[wf_q_head]);
+    free(wf_queue[wf_q_head]);
+    wf_q_head = (wf_q_head + 1) % WF_QUEUE;
+    wf_q_count--;
+    wf_due_ms += period;
 }
 
 static int cmp_float(const void *a, const void *b) {
@@ -1294,7 +1315,8 @@ static void construct_cb(lv_obj_t *parent) {
     lv_waterfall_set_size(waterfall, WIDTH, WF_HEIGHT);
     lv_waterfall_set_min(waterfall, WF_MIN_DB);
     lv_waterfall_set_max(waterfall, WF_MAX_DB);
-    wf_timer = lv_timer_create(wf_timer_cb, 1000 / WF_ROWS_PER_SEC, NULL);
+    wf_due_ms = 0;
+    wf_timer  = lv_timer_create(wf_timer_cb, WF_TICK_MS, NULL);
     lv_obj_set_pos(waterfall, 13, 13);
 
     /* Finder marks the offset of the selected message. */
