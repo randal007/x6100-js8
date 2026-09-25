@@ -53,6 +53,8 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | 5 | **Activ.: Off / POTA / SOTA** | Activating a park or summit: adds it to every log entry. Hold to type the reference. |
 | 5 | **Log prompt: On/Off** | On (default): the Log popup opens by itself when a QSO ends with 73 or SK. |
 | 6 | **Alerts >** | Beeps and alert words. See [Alerts](#alerts). |
+| 6 | **Speed: Normal / Fast / Turbo / Slow** | The speed you send at. Press to cycle; hold to match the selected station. See [Speeds](#speeds). |
+| 6 | **Decode: All speeds / My speed** | All (default): every speed is decoded at once, like desktop's multi-decoder. |
 
 **Who heard you:** in the Stations view, stations that have heard you are
 marked `*` and listed first. That covers anyone who acknowledged your
@@ -92,7 +94,8 @@ until you press something. The status line always shows what's on.
 Rows show UTC time, SNR, audio offset and the message. The MFK moves through
 the list and marks the selected station's offset with a green line on the
 waterfall. Tapping a row also shows its callsign and SNR. Multi-frame messages appear
-once their last frame arrives. Buffered commands such as `MSG` have their
+once their last frame arrives (one that never finishes shows after 60 s
+without a new frame, as on desktop; long messages are no longer cut). Buffered commands such as `MSG` have their
 checksum verified and removed, as in desktop JS8Call.
 
 **Waterfall:** one row per 0.1 s of audio, drawn relative to the noise
@@ -102,6 +105,34 @@ system clock, 10 a second. (LVGL's own timers run slow and caught up with
 two-row jumps, which showed as a stutter.)
 
 ![Directed view in a QSO: the selected station's untagged reply still shows](docs/screenshots/js8_21_directed_qso.png)
+
+## Speeds
+
+JS8 has four speeds; desktop JS8Call's numbers:
+
+| Speed | Slot | Width | Decodes down to | Marked |
+|---|---|---|---|---|
+| Normal | 15 s | 50 Hz | −24 dB | (nothing) |
+| Fast | 10 s | 80 Hz | −22 dB | `F` |
+| Turbo | 6 s | 160 Hz | −20 dB | `T` |
+| Slow | 30 s | 25 Hz | −28 dB | `S` |
+
+- **Receiving:** every speed is decoded at the same time, so the list mixes
+  them; rows and the Stations view show `F`, `T` or `S` for anything not
+  Normal. **Decode: My speed** (page 6) decodes only the speed you send at,
+  if the radio ever struggles with all four.
+- **Sending:** everything you send, automatic replies included, goes at the
+  speed on page 6, as on desktop; the TX bar shows it. Replying to a
+  station last heard at another speed says so; **hold Speed** to switch to
+  theirs (desktop's "Jump to … speed"). The red band on the waterfall is the
+  speed's width, and the offset stops where the signal would pass 2500 Hz
+  (Normal 2450, Fast 2420, Turbo 2340, Slow 2475 Hz).
+- **Heartbeats:** none in Turbo, as on desktop (Heartbeat is refused, HB and
+  HB ACK pause); changing speed restarts the HB interval.
+
+| Every speed in one list | Stations with their speed |
+|---|---|
+| ![Mixed speeds](docs/screenshots/js8_35_speeds.png) | ![Speed column](docs/screenshots/js8_36_speed_stations.png) |
 
 ## Alerts
 
@@ -296,7 +327,7 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [ ] Hold messages for other stations (answer QUERY MSGS / QUERY MSG from a store)
 - [x] GPS-fed grid for APRS spots
 - [x] Waterfall paced by the system clock (no catch-up jumps)
-- [ ] Fast / Turbo / Slow submodes
+- [x] Fast / Turbo / Slow: all speeds decoded together, send at any speed (T6, [plan](docs/T6_PLAN.md))
 
 ## Testing
 

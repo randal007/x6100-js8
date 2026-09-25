@@ -36,7 +36,7 @@ std::string normalise(const std::string &text) {
 }
 
 // Decode our own frames with the same code the receiver uses.
-std::string decode_back(const std::vector<TxFrame> &frames) {
+std::string decode_back(const std::vector<TxFrame> &frames, const Speed &sp) {
     FrameRenderer    renderer;
     std::string      out;
     MessageAssembler assembler([&](const RxFrame &m) { out = m.text; });
@@ -44,6 +44,7 @@ std::string decode_back(const std::vector<TxFrame> &frames) {
         RxFrame rx;
         rx.type    = f.bits;
         rx.freq_hz = 1500;
+        rx.mode    = sp.varicode;
         rx.text    = renderer.render(f.frame, &rx.type, rx.freq_hz);
         assembler.add(rx);
     }
@@ -78,10 +79,13 @@ bool is_sendable_char(char c) {
     return c >= ' ' && c <= '~';
 }
 
-TxPlan plan_message(const std::string &my_call, const std::string &my_grid, const std::string &text) {
+TxPlan plan_message(const std::string &my_call, const std::string &my_grid, const std::string &text,
+                    js8_speed_t speed_id) {
     namespace vc = js8core::protocol::varicode;
+    const Speed &sp = speed(speed_id);
     TxPlan plan;
-    plan.text = normalise(text);
+    plan.speed = sp.id;
+    plan.text  = normalise(text);
 
     if (my_call.empty()) {
         plan.error = "set your callsign first";
@@ -105,7 +109,7 @@ TxPlan plan_message(const std::string &my_call, const std::string &my_grid, cons
     std::vector<std::pair<std::string, int>> frames;
     try {
         frames = vc::build_message_frames(normalise(my_call), normalise(my_grid), "", plan.text, force_identify,
-                                          false, 0);
+                                          false, sp.varicode);
     } catch (const std::exception &e) {
         plan.error = e.what();
         return plan;
@@ -115,7 +119,8 @@ TxPlan plan_message(const std::string &my_call, const std::string &my_grid, cons
         return plan;
     }
 
-    const auto &costas = js8core::protocol::costas(js8core::protocol::CostasType::Original);
+    const auto &costas = js8core::protocol::costas(sp.original_costas ? js8core::protocol::CostasType::Original
+                                                                       : js8core::protocol::CostasType::Modified);
     for (auto &[frame, bits] : frames) {
         TxFrame f;
         f.frame = frame.substr(0, 12);
@@ -123,7 +128,7 @@ TxPlan plan_message(const std::string &my_call, const std::string &my_grid, cons
         js8core::legacy_encode(bits, costas, f.frame.c_str(), f.tones.data());
         plan.frames.push_back(f);
     }
-    plan.preview = decode_back(plan.frames);
+    plan.preview = decode_back(plan.frames, sp);
     if ((int)plan.frames.size() > TX_MAX_FRAMES)
         plan.error = "too long: " + std::to_string(plan.frames.size()) + " frames (max " +
                      std::to_string(TX_MAX_FRAMES) + ")";
@@ -132,9 +137,10 @@ TxPlan plan_message(const std::string &my_call, const std::string &my_grid, cons
 
 // Same pulse shaping as src/ft8/gfsk.c, generalised to any BT and returning
 // float samples.
-std::vector<float> synth_frame(const std::array<int, TX_SYMBOLS> &tones, double offset_hz, int rate, double bt) {
+std::vector<float> synth_frame(const std::array<int, TX_SYMBOLS> &tones, double offset_hz, int rate,
+                               js8_speed_t speed_id, double bt) {
     constexpr double K        = 5.336446; // pi * sqrt(2 / ln 2)
-    const int        nsps     = (int)std::lround(0.16 * rate);
+    const int        nsps     = (int)std::lround(speed(speed_id).symbol_seconds() * rate);
     const std::size_t n_wave  = (std::size_t)TX_SYMBOLS * nsps;
     const double     dphi_pk  = 2.0 * M_PI / nsps; // one tone spacing (1 / T) in radians per sample
 
@@ -170,10 +176,11 @@ std::vector<float> synth_frame(const std::array<int, TX_SYMBOLS> &tones, double 
     return out;
 }
 
-std::int64_t next_tx_start_ms(std::int64_t now_ms) {
-    std::int64_t slot_start = now_ms - now_ms % TX_SLOT_MS;
-    if (now_ms - slot_start < TX_START_DELAY_MS) return slot_start + TX_START_DELAY_MS;
-    return slot_start + TX_SLOT_MS + TX_START_DELAY_MS;
+std::int64_t next_tx_start_ms(std::int64_t now_ms, js8_speed_t speed_id) {
+    const Speed       &sp         = speed(speed_id);
+    const std::int64_t slot_start = now_ms - now_ms % sp.period_ms();
+    if (now_ms - slot_start < sp.start_delay_ms) return slot_start + sp.start_delay_ms;
+    return slot_start + sp.period_ms() + sp.start_delay_ms;
 }
 
 Transmitter::Transmitter(int rate, Callbacks callbacks, Clock *clock)
@@ -195,9 +202,10 @@ bool Transmitter::send(const TxPlan &plan, double offset_hz, std::string *why, d
         return false;
     };
     if (!plan.ok()) return reject(plan.error.empty() ? "nothing to send" : plan.error);
-    if (offset_hz < TX_MIN_OFFSET_HZ || offset_hz > TX_MAX_OFFSET_HZ)
-        return reject("offset must be " + std::to_string(TX_MIN_OFFSET_HZ) + "-" + std::to_string(TX_MAX_OFFSET_HZ) +
-                      " Hz");
+    const int max_offset = speed(plan.speed).max_offset_hz();
+    if (offset_hz < TX_MIN_OFFSET_HZ || offset_hz > max_offset)
+        return reject("offset must be " + std::to_string(TX_MIN_OFFSET_HZ) + "-" + std::to_string(max_offset) +
+                      " Hz in " + speed(plan.speed).name);
     if (busy_.exchange(true)) return reject("already sending");
 
     if (thread_.joinable()) thread_.join(); // previous message's thread has finished
@@ -231,18 +239,20 @@ void Transmitter::run(TxPlan plan, double offset_hz, double synth_hz) {
     st.frames    = count;
     st.text      = plan.text;
     st.offset_hz = offset_hz;
+    st.speed     = plan.speed;
 
+    const Speed &sp        = speed(plan.speed);
     bool         completed = false;
-    std::int64_t start     = next_tx_start_ms(clock_->now_ms());
+    std::int64_t start     = next_tx_start_ms(clock_->now_ms(), sp.id);
 
     for (int i = 0; i < count && !stop_; i++) {
         // Each frame takes the next free slot: consecutive slots, unless
         // playing the last one overran its slot.
         std::int64_t now = clock_->now_ms();
-        if (start < now) start = next_tx_start_ms(now);
+        if (start < now) start = next_tx_start_ms(now, sp.id);
 
         // Synthesise before waiting so keying starts on time.
-        auto audio = synth_frame(plan.frames[i].tones, synth_hz, rate_);
+        auto audio = synth_frame(plan.frames[i].tones, synth_hz, rate_, sp.id);
 
         st.state   = State::Waiting;
         st.frame   = i + 1;
@@ -255,7 +265,7 @@ void Transmitter::run(TxPlan plan, double offset_hz, double synth_hz) {
         bool played = cb_.play ? cb_.play(audio, plan.frames[i], i, count) : true;
         if (!played || stop_) break;
 
-        start += TX_SLOT_MS;
+        start += sp.period_ms();
         completed = (i == count - 1);
     }
 

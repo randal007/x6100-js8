@@ -40,21 +40,24 @@ struct RxFrame {
 
 /// Joins multi-frame JS8 transmissions back into one message.
 ///
-/// Frames are grouped by audio offset (±10 Hz). A frame flagged both first
-/// and last is a complete message by itself. A buffer that never sees its
-/// last frame is emitted as-is after 90 s, the same as the Android port.
+/// Frames are grouped by speed and audio offset, within the speed's
+/// rxThreshold (±10 Hz Normal and Slow, ±16 Fast, ±32 Turbo), as desktop
+/// JS8Call matches its message buffers; frames of different speeds never
+/// join. A frame flagged both first and last is a complete message by
+/// itself. A buffer that never sees its last frame is emitted as-is once
+/// 60 s pass without a new frame (desktop closes it then; the time runs from
+/// the latest frame, so long messages and Slow's 30 s frames aren't cut).
 class MessageAssembler {
 public:
     using Emit = std::function<void(const RxFrame &)>;
 
-    static constexpr std::int64_t BUFFER_TIMEOUT_MS = 90'000;
-    static constexpr float        FREQ_TOLERANCE_HZ = 10.0f;
+    static constexpr std::int64_t IDLE_TIMEOUT_MS = 60'000;
 
     explicit MessageAssembler(Emit emit) : emit_(std::move(emit)) {}
 
     void add(const RxFrame &frame);
 
-    /// Emit and drop buffers older than BUFFER_TIMEOUT_MS.
+    /// Emit and drop buffers with no new frame for IDLE_TIMEOUT_MS.
     void flush_stale(std::int64_t now_ms);
 
     void clear() { buffers_.clear(); }
@@ -62,14 +65,36 @@ public:
 private:
     struct Buffer {
         std::vector<RxFrame> frames;
-        std::int64_t         first_timestamp_ms;
+        std::int64_t         last_timestamp_ms;
     };
+    using Key = std::pair<int, int>; ///< (speed's varicode submode, offset in Hz)
 
-    RxFrame assemble(const Buffer &buffer) const;
-    std::optional<int> find_key(float freq_hz) const;
+    RxFrame            assemble(const Buffer &buffer) const;
+    std::optional<Key> find_key(const RxFrame &frame) const;
+    static Key         key_for(const RxFrame &frame);
 
-    Emit                emit_;
-    std::map<int, Buffer> buffers_;
+    Emit                  emit_;
+    std::map<Key, Buffer> buffers_;
+};
+
+/// Drops a frame decoded again in the same slot. The engine retries Turbo
+/// every second (as desktop does), so one Turbo frame can decode twice; a
+/// repeat would become a stray message. Same speed, same 12-character frame,
+/// within the speed's rxThreshold, less than one slot (minus 1 s for decode
+/// timing jitter) apart: a duplicate.
+class DuplicateFilter {
+public:
+    /// True if this frame was already seen (and should be dropped).
+    bool seen(int mode, const std::string &frame, float freq_hz, std::int64_t now_ms);
+
+private:
+    struct Entry {
+        int          mode;
+        std::string  frame;
+        float        freq_hz;
+        std::int64_t at_ms;
+    };
+    std::vector<Entry> recent_;
 };
 
 /// Concatenate frame texts, adding a space only at a directed-header/payload

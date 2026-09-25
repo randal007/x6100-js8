@@ -17,13 +17,12 @@
 #include <thread>
 #include <vector>
 
+#include "speeds.hpp"
+
 namespace x6100::js8 {
 
-constexpr int TX_SLOT_MS        = 15000; ///< JS8 Normal period
-constexpr int TX_START_DELAY_MS = 500;   ///< frames start this far into a slot
 constexpr int TX_SYMBOLS        = 79;
-constexpr int TX_MIN_OFFSET_HZ  = 500;
-constexpr int TX_MAX_OFFSET_HZ  = 2450;  ///< keeps the 50 Hz signal below 2500 Hz
+constexpr int TX_MIN_OFFSET_HZ  = 500;   ///< the top is Speed::max_offset_hz()
 constexpr int TX_MAX_FRAMES     = 20;    ///< 5 minutes of transmitting
 constexpr double TX_GFSK_BT     = 3.0;   ///< see docs/TX_PLAN.md: decodes like CPFSK, less splatter
 
@@ -39,30 +38,39 @@ struct TxPlan {
     std::string          text;    ///< as sent (upper case, trimmed)
     std::string          preview; ///< our own frames decoded back, as others will see them
     std::string          error;   ///< non-empty if the message can't be sent
+    js8_speed_t          speed = JS8_SPEED_NORMAL;
 
     bool ok() const { return error.empty() && !frames.empty(); }
     /// Seconds of air time, from the first frame's start to the last one's end.
-    double seconds() const { return frames.empty() ? 0.0 : (frames.size() - 1) * 15.0 + TX_SYMBOLS * 0.16; }
+    double seconds() const {
+        const Speed &sp = x6100::js8::speed(speed);
+        return frames.empty() ? 0.0 : (frames.size() - 1) * (double)sp.period_s + sp.frame_seconds();
+    }
 };
 
 /// Build frames for `text` exactly as desktop JS8Call would, then decode them
 /// back with this app's receive code to produce `preview`. Examples of text:
 /// "K2XYZ SNR?", "K2XYZ HELLO THERE", "CQ CQ CQ FN42", "@ALLCALL QRV".
-/// Untargeted free text is sent with our callsign attached.
-TxPlan plan_message(const std::string &my_call, const std::string &my_grid, const std::string &text);
+/// Untargeted free text is sent with our callsign attached. Outside Normal,
+/// free text goes in desktop's "fast data" frames and the tones use the
+/// modified Costas array, as desktop does for that speed.
+TxPlan plan_message(const std::string &my_call, const std::string &my_grid, const std::string &text,
+                    js8_speed_t speed = JS8_SPEED_NORMAL);
 
 /// Characters JS8 can carry in free text, plus those its message syntax uses.
 bool is_sendable_char(char c);
 
-/// GFSK audio for one frame at `rate`: 79 symbols of 0.16 s from `offset_hz`,
-/// amplitude 1.0 with a short ramp at each end.
+/// GFSK audio for one frame at `rate`: 79 symbols of the speed's length
+/// (0.16 s Normal, 0.1 Fast, 0.05 Turbo, 0.32 Slow; tone spacing 1 / symbol)
+/// from `offset_hz`, amplitude 1.0 with a short ramp at each end.
 std::vector<float> synth_frame(const std::array<int, TX_SYMBOLS> &tones, double offset_hz, int rate,
-                               double bt = TX_GFSK_BT);
+                               js8_speed_t speed = JS8_SPEED_NORMAL, double bt = TX_GFSK_BT);
 
 /// Wall-clock time (ms since the epoch) at which a message queued at `now_ms`
-/// starts: the next slot boundary plus the 0.5 s start delay, or this slot's
-/// if we are still inside the first 0.5 s of it.
-std::int64_t next_tx_start_ms(std::int64_t now_ms);
+/// starts: the next slot boundary of the speed plus its start delay (0.5 s
+/// Normal and Slow, 0.2 s Fast, 0.1 s Turbo), or this slot's if we are
+/// still inside the delay.
+std::int64_t next_tx_start_ms(std::int64_t now_ms, js8_speed_t speed = JS8_SPEED_NORMAL);
 
 /// Sends queued messages frame by frame in consecutive slots.
 ///
@@ -83,6 +91,7 @@ public:
         std::int64_t next_ms = 0;  ///< wall-clock start of the next frame
         std::string  text;
         double       offset_hz = 0;
+        js8_speed_t  speed     = JS8_SPEED_NORMAL;
     };
 
     struct Callbacks {
@@ -105,9 +114,10 @@ public:
     Transmitter(const Transmitter &)            = delete;
     Transmitter &operator=(const Transmitter &) = delete;
 
-    /// Queue a planned message at audio offset `offset_hz`. Returns false if
-    /// something is already queued or sending, if the plan isn't ok(), or if
-    /// the offset or length is out of range.
+    /// Queue a planned message at audio offset `offset_hz`, at the plan's
+    /// speed. Returns false if something is already queued or sending, if
+    /// the plan isn't ok(), or if the offset (500 Hz to the speed's
+    /// max_offset_hz()) or length is out of range.
     ///
     /// `synth_hz`, if non-zero, is the tone the audio is generated at
     /// instead of `offset_hz`. The X6100's TX player always takes audio

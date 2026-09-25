@@ -52,6 +52,7 @@ typedef struct {
     int64_t heard_ms;
     int16_t snr;          /* how we hear them */
     float   freq_hz;
+    uint8_t submode;      /* speed last heard at: 0 Normal, 1 Fast, 2 Turbo, 4 Slow */
     bool    heard_me;     /* ★: they've sent us something */
     int64_t heard_me_ms;
     bool    has_reported_snr;

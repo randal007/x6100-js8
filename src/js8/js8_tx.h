@@ -10,14 +10,14 @@
 #include <stdint.h>
 
 #include "js8_rx.h" /* JS8_RX_TEXT_LEN */
+#include "js8_speed.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #define JS8_TX_ERR_LEN      96
-#define JS8_TX_MIN_OFFSET   500
-#define JS8_TX_MAX_OFFSET   2450
+#define JS8_TX_MIN_OFFSET   500 /* the top is js8_speed_max_offset_hz() */
 
 typedef enum {
     JS8_TX_IDLE,
@@ -31,6 +31,7 @@ typedef struct {
     int            frames;
     int64_t        next_ms; /* wall clock, ms since the epoch */
     float          offset_hz;
+    js8_speed_t    speed;
     char           text[JS8_RX_TEXT_LEN];
 } js8_tx_status_t;
 
@@ -56,16 +57,18 @@ typedef struct {
 
 typedef struct js8_tx js8_tx_t;
 
-void js8_tx_preview(const char *my_call, const char *my_grid, const char *text, js8_tx_preview_t *out);
+void js8_tx_preview(const char *my_call, const char *my_grid, const char *text, js8_speed_t speed,
+                    js8_tx_preview_t *out);
 bool js8_tx_sendable_char(char c);
 
 /* rate: audio output rate. synth_hz: tone the audio is generated around
  * (0 = at the requested offset). */
 js8_tx_t *js8_tx_create(int rate, float synth_hz, const js8_tx_cb_t *cb);
 
-/* Queue a message at offset_hz. On failure returns false with a reason. */
+/* Queue a message at offset_hz and speed. On failure returns false with a
+ * reason. */
 bool js8_tx_send(js8_tx_t *tx, const char *my_call, const char *my_grid, const char *text, float offset_hz,
-                 char *err, unsigned err_len);
+                 js8_speed_t speed, char *err, unsigned err_len);
 
 /* Abandon the current message. Returns at once; js8_tx_busy() turns false
  * once the current frame's play() has returned. Safe from any thread. */

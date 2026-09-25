@@ -82,6 +82,7 @@ extern "C" void js8_stations_add(js8_stations_t *s, const js8_rx_msg_t *m, const
     ev.to_me   = m->to_me;
     ev.snr     = m->snr;
     ev.freq_hz = m->freq_hz;
+    ev.mode    = m->submode;
     ev.when_ms = now_ms;
     s->list.add(ev, my_call ? my_call : "");
 }
@@ -99,6 +100,7 @@ extern "C" int js8_stations_list(js8_stations_t *s, int64_t now_ms, js8_station_
         o.heard_ms         = st.heard_ms;
         o.snr              = (int16_t)st.snr;
         o.freq_hz          = st.freq_hz;
+        o.submode          = (uint8_t)st.mode;
         o.heard_me         = st.heard_me;
         o.heard_me_ms      = st.heard_me_ms;
         o.has_reported_snr = st.reported_snr.has_value();

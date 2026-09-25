@@ -76,6 +76,11 @@ public:
     /// Drop partially received multi-frame messages (e.g. after a band change).
     void clear_messages();
 
+    /// Change which speeds are decoded (SubmodeMask bits), from any thread.
+    /// The engine keeps a slot schedule for every speed; this only switches
+    /// them on and off, and a speed's decoder is built the first time it's used.
+    void set_submodes(int submodes);
+
     /// How often the ring has been re-snapped to the clock since start.
     unsigned realign_count() const { return realigns_.load(); }
 
@@ -107,6 +112,7 @@ private:
     // Decode-thread state; assembler also touched by the worker's flush.
     FrameRenderer    renderer_;
     std::mutex       assembler_mutex_;
+    DuplicateFilter  duplicates_; ///< under assembler_mutex_
     MessageAssembler assembler_;
 };
 

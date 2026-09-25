@@ -14,6 +14,7 @@
 #include "js8/js8_rx.h"
 #include "js8/js8_tx.h"
 #include "js8/js8_ops.h"
+#include "js8/js8_speed.h"
 #include "qth/qth.h"
 #include "qso_log.h"
 
@@ -70,11 +71,8 @@
 #ifndef JS8_LOG_PATH
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
-#define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
-#define JS8_SLOT_SEC     15.0f
 #define SYNC_WINDOW_MS   120000 /* Time Sync uses decodes from the last 2 min */
 #define SYNC_DTS         32
-#define RX_THRESHOLD_HZ  10     /* 'on their frequency': desktop's rxThreshold for Normal */
 #define WF_ROWS_PER_SEC  10     /* waterfall rows per second of audio */
 #define WF_ROW_SAMPLES   (SAMPLE_RATE / WF_ROWS_PER_SEC)
 #define WF_QUEUE         16     /* rows waiting to be drawn (jitter buffer) */
@@ -166,6 +164,12 @@ static void        alerts_cb(button_data_t *btn);
 static void        alerts_close(void);
 static void        alert_check(js8_rx_msg_t *m, bool new_station);
 static void        alert_beep(int count);
+static const char *speed_label_getter(void);
+static void        speed_cb(button_data_t *btn);
+static void        speed_hold_cb(button_data_t *btn);
+static const char *decode_label_getter(void);
+static void        decode_cb(button_data_t *btn);
+static void        speed_warn(void);
 static const char *act_label_getter(void);
 static void        act_cb(button_data_t *btn);
 static void        act_hold_cb(button_data_t *btn);
@@ -331,7 +335,9 @@ static buttons_page_t page_5        = {{&btn_p5, &btn_aprs, &btn_log, &btn_act, 
 
 static button_data_t  btn_p6        = {.type = BTN_TEXT, .label = "(JS8 6:6)", .press = js8_next_page_cb, .next = &page_1};
 static button_data_t  btn_alerts    = {.type = BTN_TEXT, .label = "Alerts >", .press = alerts_cb};
-static buttons_page_t page_6        = {{&btn_p6, &btn_alerts}};
+static button_data_t  btn_speed     = {.type = BTN_TEXT_FN, .label_fn = speed_label_getter, .press = speed_cb, .hold = speed_hold_cb};
+static button_data_t  btn_decode    = {.type = BTN_TEXT_FN, .label_fn = decode_label_getter, .press = decode_cb};
+static buttons_page_t page_6        = {{&btn_p6, &btn_alerts, &btn_speed, &btn_decode}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -355,7 +361,10 @@ static bool passes_filter(const js8_rx_msg_t *m) {
     case SHOW_DIRECTED:
         /* Also everything on the selected station's frequency: in a long
          * QSO they often stop putting your call in. */
-        if (qso_freq >= 0 && fabsf(m->freq_hz - qso_freq) <= RX_THRESHOLD_HZ) return true;
+        /* 'On their frequency': within the decode's speed's rxThreshold, as desktop. */
+        if (qso_freq >= 0 &&
+            fabsf(m->freq_hz - qso_freq) <= js8_speed_rx_threshold_hz(js8_speed_from_submode(m->submode)))
+            return true;
         return m->to_me || (m->to_group && !m->heartbeat && !m->cq);
     default:            return true;
     }
@@ -364,13 +373,18 @@ static bool passes_filter(const js8_rx_msg_t *m) {
 static void format_row(const js8_rx_msg_t *m, char *buf, size_t size) {
     int hh = m->utc / 10000, mm = (m->utc / 100) % 100, ss = m->utc % 100;
 
+    /* Speed letter outside Normal: " F", " T", " S" (desktop's speed column). */
+    js8_speed_t sp       = js8_speed_from_submode(m->submode);
+    char        speed[4] = "";
+    if (sp != JS8_SPEED_NORMAL) snprintf(speed, sizeof(speed), " %c", js8_speed_letter(sp));
+
     if (m->tx) {
-        snprintf(buf, size, "%02d:%02d:%02d  TX %4.0f  %s", hh, mm, ss, m->freq_hz, m->text);
+        snprintf(buf, size, "%02d:%02d:%02d  TX %4.0f%s  %s", hh, mm, ss, m->freq_hz, speed, m->text);
         return;
     }
 
-    snprintf(buf, size, "%02d:%02d:%02d %+3d %4.0f  %s%s%s%s",
-             hh, mm, ss, m->snr, m->freq_hz,
+    snprintf(buf, size, "%02d:%02d:%02d %+3d %4.0f%s  %s%s%s%s",
+             hh, mm, ss, m->snr, m->freq_hz, speed,
              m->low_confidence ? "[" : "",
              m->text,
              m->low_confidence ? "]" : "",
@@ -463,6 +477,20 @@ static void rebuild_rows(void) {
     follow();
 }
 
+/* The speed we transmit at (page 6). */
+static js8_speed_t cur_speed(void) {
+    return params.js8_speed.x < JS8_SPEED_COUNT ? (js8_speed_t)params.js8_speed.x : JS8_SPEED_NORMAL;
+}
+
+/* What the receiver decodes: every speed (desktop's multi-decoder, the
+ * default) or only the one we transmit at. */
+static int rx_speed_mask(void) {
+    if (!params.js8_rx_all.x) return js8_speed_rx_mask(cur_speed());
+    int mask = 0;
+    for (int s = 0; s < JS8_SPEED_COUNT; s++) mask |= js8_speed_rx_mask((js8_speed_t)s);
+    return mask;
+}
+
 static int64_t now_wall_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_REALTIME, &ts);
@@ -535,13 +563,15 @@ static void format_age(int64_t ms, char *buf, size_t size) {
 /* Station-view fields, drawn in fixed columns by table_draw_end_cb() since
  * the radio's font is proportional and spaces can't line text up. */
 typedef struct {
-    char star[2], call[JS8_RX_CALL_LEN], age[8], snr[8], heard[40], grid[8], dist[16];
+    char star[2], call[JS8_RX_CALL_LEN], speed[2], age[8], snr[8], heard[40], grid[8], dist[16];
 } station_fields_t;
 
 static void station_fields(const js8_station_t *st, int64_t now, station_fields_t *f) {
     memset(f, 0, sizeof(*f));
     f->star[0] = st->heard_me ? '*' : ' ';
     snprintf(f->call, sizeof(f->call), "%s", st->call);
+    js8_speed_t sp = js8_speed_from_submode(st->submode);
+    if (sp != JS8_SPEED_NORMAL) f->speed[0] = js8_speed_letter(sp); /* F, T, S */
     snprintf(f->snr, sizeof(f->snr), "%+d", st->snr);
     snprintf(f->grid, sizeof(f->grid), "%s", st->grid);
     char *age = f->age, *heard = f->heard, *dist = f->dist;
@@ -673,9 +703,9 @@ static void table_draw_end_cb(lv_event_t *e) {
         size_t     field;
     } cols[] = {
         {0, offsetof(station_fields_t, star)},    {18, offsetof(station_fields_t, call)},
-        {150, offsetof(station_fields_t, age)},   {210, offsetof(station_fields_t, snr)},
-        {270, offsetof(station_fields_t, heard)}, {520, offsetof(station_fields_t, grid)},
-        {610, offsetof(station_fields_t, dist)},
+        {140, offsetof(station_fields_t, speed)}, {162, offsetof(station_fields_t, age)},
+        {218, offsetof(station_fields_t, snr)},   {276, offsetof(station_fields_t, heard)},
+        {520, offsetof(station_fields_t, grid)},  {610, offsetof(station_fields_t, dist)},
     };
 
     lv_area_t area = *dsc->draw_area;
@@ -764,7 +794,9 @@ static void update_status(void) {
         if (params.js8_auto.x) strcat(flags, "AUTO  ");
         if (params.js8_hb.x) {
             char hb[40];
-            if (hb_next_ms > now_ms) {
+            if (!js8_speed_heartbeats(cur_speed())) {
+                snprintf(hb, sizeof(hb), "HB paused (Turbo)  ");
+            } else if (hb_next_ms > now_ms) {
                 time_t    t = (time_t)(hb_next_ms / 1000);
                 struct tm nt;
                 gmtime_r(&t, &nt);
@@ -928,7 +960,7 @@ static void rx_start(void) {
         .on_cycle_done = on_cycle_done,
         .on_audio      = on_audio,
     };
-    rx = js8_rx_create(SAMPLE_RATE, JS8_SUBMODE_NORMAL, params.callsign.x, &cb);
+    rx = js8_rx_create(SAMPLE_RATE, rx_speed_mask(), params.callsign.x, &cb);
     if (!rx) msg_schedule_text_fmt("JS8: cannot start decoder");
 }
 
@@ -990,6 +1022,7 @@ static void ui_tx_status(void *arg) {
         m.tx           = true;
         m.utc          = current_utc_hhmmss();
         m.freq_hz      = st->offset_hz;
+        m.submode      = (uint8_t)js8_speed_submode(st->speed);
         snprintf(m.text, sizeof(m.text), "%s", tx_preview[0] ? tx_preview : st->text);
         add_message(&m);
         char ended[JS8_RX_CALL_LEN];
@@ -1076,18 +1109,19 @@ static void update_tx_bar(void) {
         int64_t now_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
         int     secs   = (int)((tx_status.next_ms - now_ms + 999) / 1000);
         if (secs < 0) secs = 0;
-        snprintf(line, sizeof(line), "TX %4.0f Hz   %s   %s %d s  (%d/%d)", tx_status.offset_hz, tx_status.text,
+        snprintf(line, sizeof(line), "TX %4.0f Hz %s   %s   %s %d s  (%d/%d)", tx_status.offset_hz,
+                 js8_speed_name(tx_status.speed), tx_status.text,
                  tx_status.frame == 1 ? "starts in" : "next frame in", secs, tx_status.frame, tx_status.frames);
         lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x5a4a00), 0);
         break;
     }
     case JS8_TX_KEYING:
-        snprintf(line, sizeof(line), "TX %4.0f Hz   %s   sending %d/%d", tx_status.offset_hz, tx_status.text,
-                 tx_status.frame, tx_status.frames);
+        snprintf(line, sizeof(line), "TX %4.0f Hz %s   %s   sending %d/%d", tx_status.offset_hz,
+                 js8_speed_name(tx_status.speed), tx_status.text, tx_status.frame, tx_status.frames);
         lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0xa00000), 0);
         break;
     default:
-        snprintf(line, sizeof(line), "TX %4u Hz   ready%s", offset,
+        snprintf(line, sizeof(line), "TX %4u Hz %s   ready%s", offset, js8_speed_name(cur_speed()),
                  params.callsign.x[0] ? "" : "  (set your callsign: APP > Callsign)");
         lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x202020), 0);
         break;
@@ -1127,7 +1161,7 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
     }
 
     js8_tx_preview_t pv;
-    js8_tx_preview(params.callsign.x, params.qth.x, text, &pv);
+    js8_tx_preview(params.callsign.x, params.qth.x, text, cur_speed(), &pv);
     if (!pv.ok) {
         msg_update_text_fmt("JS8: %s", pv.error);
         return false;
@@ -1136,7 +1170,7 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
     char err[JS8_TX_ERR_LEN];
     atomic_store(&tx_offset_active, offset_hz);
     snprintf(tx_preview, sizeof(tx_preview), "%s", pv.preview);
-    if (!js8_tx_send(tx, params.callsign.x, params.qth.x, text, (float)offset_hz, err, sizeof(err))) {
+    if (!js8_tx_send(tx, params.callsign.x, params.qth.x, text, (float)offset_hz, cur_speed(), err, sizeof(err))) {
         msg_update_text_fmt("JS8: %s", err);
         return false;
     }
@@ -1161,7 +1195,7 @@ static void apply_hold(float their_freq) {
     if (params.js8_hold_offset.x) return;
     int f = (int)(their_freq + 0.5f);
     if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
-    if (f > JS8_TX_MAX_OFFSET) f = JS8_TX_MAX_OFFSET;
+    if (f > js8_speed_max_offset_hz(cur_speed())) f = js8_speed_max_offset_hz(cur_speed());
     params_uint16_set(&params.js8_tx_freq, (uint16_t)f);
     lv_finder_set_value(finder, (int16_t)f);
     lv_obj_invalidate(finder);
@@ -1189,7 +1223,7 @@ static void rotary_cb(int32_t diff) {
 
     int32_t f = (int32_t)params.js8_tx_freq.x + diff;
     if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
-    if (f > JS8_TX_MAX_OFFSET) f = JS8_TX_MAX_OFFSET;
+    if (f > js8_speed_max_offset_hz(cur_speed())) f = js8_speed_max_offset_hz(cur_speed());
     params_uint16_set(&params.js8_tx_freq, (uint16_t)f);
 
     lv_finder_set_value(finder, (int16_t)f);
@@ -1202,7 +1236,7 @@ static void rotary_cb(int32_t diff) {
 static void compose_changed_cb(lv_event_t *e) {
     (void)e;
     js8_tx_preview_t pv;
-    js8_tx_preview(params.callsign.x, params.qth.x, textarea_window_get(), &pv);
+    js8_tx_preview(params.callsign.x, params.qth.x, textarea_window_get(), cur_speed(), &pv);
     if (pv.ok) {
         msg_update_text_fmt("%d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
     }
@@ -1381,13 +1415,13 @@ static void construct_cb(lv_obj_t *parent) {
     lv_finder_set_range(finder, filter_low, filter_high);
     /* A stored offset outside the usable range (an old or damaged setting)
      * would make every send fail; start from 1500 Hz instead. */
-    if (params.js8_tx_freq.x < JS8_TX_MIN_OFFSET || params.js8_tx_freq.x > JS8_TX_MAX_OFFSET) {
+    if (params.js8_tx_freq.x < JS8_TX_MIN_OFFSET || params.js8_tx_freq.x > js8_speed_max_offset_hz(cur_speed())) {
         params_uint16_set(&params.js8_tx_freq, 1500);
     }
 
     /* The finder's band is our TX offset; its cursor line marks the
      * selected message. */
-    lv_finder_set_width(finder, JS8_WIDTH_HZ);
+    lv_finder_set_width(finder, js8_speed_bandwidth_hz(cur_speed()));
     lv_finder_set_value(finder, params.js8_tx_freq.x);
     lv_finder_clear_cursor(finder);
     qso_freq = -1;
@@ -1648,12 +1682,14 @@ static void reply_cb(button_data_t *btn) {
         offer.text[0] = '\0';
         apply_hold(freq);
         compose_open(text);
+        speed_warn();
         return;
     }
     char prefill[JS8_RX_CALL_LEN + 2];
     snprintf(prefill, sizeof(prefill), "%s ", call);
     apply_hold(freq);
     compose_open(prefill);
+    speed_warn();
 }
 
 static void send_cb(button_data_t *btn) {
@@ -1702,6 +1738,10 @@ static int free_hb_offset(void) {
 }
 
 static bool send_heartbeat(bool automatic) {
+    if (!js8_speed_heartbeats(cur_speed())) {
+        if (!automatic) msg_update_text_fmt("No heartbeats in Turbo, as in desktop JS8Call");
+        return false;
+    }
     char text[48];
     js8_heartbeat_text(params.callsign.x, params.qth.x, text, sizeof(text));
     return tx_queue_at(text, free_hb_offset(), automatic);
@@ -1926,6 +1966,7 @@ static void query_cb(button_data_t *btn) {
     lv_group_add_obj(keyboard_group, close);
     lv_group_set_editing(keyboard_group, false);
     lv_group_focus_obj(first);
+    speed_warn();
 }
 
 /* For tools/js8_ui_harness: the station the selection points at. */
@@ -1970,6 +2011,7 @@ static void auto_send(const js8_auto_result_t *r) {
         pending_auto_valid = true;
         return;
     }
+    if (r->hb_ack && !js8_speed_heartbeats(cur_speed())) return; /* desktop: no HB ACKs in Turbo */
     int offset = r->hb_ack ? free_hb_offset() : params.js8_tx_freq.x;
     LV_LOG_USER("JS8 auto: '%s' at %d Hz", r->text, offset);
     if (tx_queue_at(r->text, offset, true)) {
@@ -2052,7 +2094,7 @@ static void hb_tick(void) {
         return;
     }
     int64_t now = now_wall_ms();
-    if (js8_auto_idle(autop, now)) return;
+    if (js8_auto_idle(autop, now) || !js8_speed_heartbeats(cur_speed())) return;
     /* As on desktop, the first one comes an interval after switching on;
      * page 2's Heartbeat sends one now. */
     if (hb_next_ms == 0) {
@@ -3273,4 +3315,100 @@ static void alerts_cb(button_data_t *btn) {
     if (popup_guard()) return;
     if (composing) return;
     alerts_show();
+}
+
+/* ---- Speeds (T6) ----------------------------------------------------------- */
+
+/* As desktop JS8Call: everything we send goes at one speed (Normal, Fast,
+ * Turbo, Slow), and the receiver decodes every speed at once unless
+ * Decode is set to My speed. Turbo sends no heartbeats or HB acks. */
+
+/* The selected row's speed (station or message). */
+static bool selected_speed(js8_speed_t *out) {
+    uint16_t row, col;
+    lv_table_get_selected_cell(table, &row, &col);
+    if (row >= rows || row_hist[row] < 0) return false;
+    uint8_t submode = view_stations ? st_rows[row_hist[row]].submode : history[row_hist[row]].submode;
+    if (!view_stations && history[row_hist[row]].tx) return false;
+    *out = js8_speed_from_submode(submode);
+    return true;
+}
+
+/* Replying to someone heard on another speed: say so (desktop offers "Jump
+ * to Fast speed"; here, hold Speed). */
+static void speed_warn(void) {
+    js8_speed_t their;
+    char        call[JS8_RX_CALL_LEN];
+    float       freq;
+    int         snr;
+    if (!selected_speed(&their) || their == cur_speed() || !selected_station(call, sizeof(call), &freq, &snr)) return;
+    msg_update_text_fmt("%s was heard on %s, you send %s - hold Speed (page 6) to match", call, js8_speed_name(their),
+                        js8_speed_name(cur_speed()));
+}
+
+static void set_speed(js8_speed_t s) {
+    if (js8_tx_busy(tx)) {
+        msg_update_text_fmt("Not while sending - Stop TX first");
+        return;
+    }
+    params_uint8_set(&params.js8_speed, (uint8_t)s);
+    /* The offset must leave room for the wider signal below 2500 Hz. */
+    int max = js8_speed_max_offset_hz(s);
+    if (params.js8_tx_freq.x > max) params_uint16_set(&params.js8_tx_freq, (uint16_t)max);
+    lv_finder_set_width(finder, js8_speed_bandwidth_hz(s));
+    lv_finder_set_value(finder, (int16_t)params.js8_tx_freq.x);
+    lv_obj_invalidate(finder);
+    if (!params.js8_rx_all.x) js8_rx_set_submodes(rx, rx_speed_mask());
+    /* A heartbeat that fell due while in Turbo mustn't go out the moment we
+     * leave it: start the interval again. */
+    hb_next_ms = 0;
+    if (btn_speed.disp_btn) buttons_refresh(&btn_speed);
+    update_tx_bar();
+    msg_update_text_fmt("Sending %s: %d s slots, %d Hz wide%s", js8_speed_name(s), js8_speed_period_s(s),
+                        js8_speed_bandwidth_hz(s), js8_speed_heartbeats(s) ? "" : ", no heartbeats (as desktop)");
+    add_info_row("Sending at %s speed", js8_speed_name(s));
+}
+
+static const char *speed_label_getter(void) {
+    static char label[24];
+    snprintf(label, sizeof(label), "Speed:\n%s", js8_speed_name(cur_speed()));
+    return label;
+}
+
+static void speed_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (popup_guard()) return;
+    set_speed((js8_speed_t)((cur_speed() + 1) % JS8_SPEED_COUNT));
+}
+
+/* Hold: the selected station's speed. */
+static void speed_hold_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (popup_guard()) return;
+    js8_speed_t their;
+    if (!selected_speed(&their)) {
+        msg_update_text_fmt("Select a station first (MFK)");
+        return;
+    }
+    if (their == cur_speed()) {
+        msg_update_text_fmt("Already sending %s", js8_speed_name(their));
+        return;
+    }
+    set_speed(their);
+}
+
+static const char *decode_label_getter(void) {
+    return params.js8_rx_all.x ? "Decode:\nAll speeds" : "Decode:\nMy speed";
+}
+
+static void decode_cb(button_data_t *btn) {
+    user_touch();
+    if (popup_guard()) return;
+    params_bool_set(&params.js8_rx_all, !params.js8_rx_all.x);
+    js8_rx_set_submodes(rx, rx_speed_mask());
+    buttons_refresh(btn);
+    if (params.js8_rx_all.x) msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Slow)");
+    else msg_update_text_fmt("Decoding %s only", js8_speed_name(cur_speed()));
 }

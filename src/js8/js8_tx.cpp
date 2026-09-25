@@ -34,10 +34,11 @@ void copy_str(char *dst, std::size_t cap, const std::string &src) {
 
 } // namespace
 
-extern "C" void js8_tx_preview(const char *my_call, const char *my_grid, const char *text, js8_tx_preview_t *out) {
+extern "C" void js8_tx_preview(const char *my_call, const char *my_grid, const char *text, js8_speed_t speed,
+                               js8_tx_preview_t *out) {
     if (!out) return;
     *out      = js8_tx_preview_t{};
-    auto plan = plan_message(my_call ? my_call : "", my_grid ? my_grid : "", text ? text : "");
+    auto plan = plan_message(my_call ? my_call : "", my_grid ? my_grid : "", text ? text : "", speed);
     out->ok      = plan.ok();
     out->frames  = (int)plan.frames.size();
     out->seconds = (float)plan.seconds();
@@ -74,6 +75,7 @@ extern "C" js8_tx_t *js8_tx_create(int rate, float synth_hz, const js8_tx_cb_t *
         st.frames    = s.frames;
         st.next_ms   = s.next_ms;
         st.offset_hz = (float)s.offset_hz;
+        st.speed     = s.speed;
         copy_str(st.text, sizeof(st.text), s.text);
         t->cb.on_status(&st, t->cb.ctx);
     };
@@ -91,9 +93,9 @@ extern "C" js8_tx_t *js8_tx_create(int rate, float synth_hz, const js8_tx_cb_t *
 }
 
 extern "C" bool js8_tx_send(js8_tx_t *t, const char *my_call, const char *my_grid, const char *text, float offset_hz,
-                            char *err, unsigned err_len) {
+                            js8_speed_t speed, char *err, unsigned err_len) {
     if (!t) return false;
-    auto        plan = plan_message(my_call ? my_call : "", my_grid ? my_grid : "", text ? text : "");
+    auto        plan = plan_message(my_call ? my_call : "", my_grid ? my_grid : "", text ? text : "", speed);
     std::string why;
     if (!t->tx->send(plan, offset_hz, &why, t->synth_hz)) {
         copy_str(err, err_len, why);

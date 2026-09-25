@@ -25,6 +25,8 @@ void ui_init(void) {
     params.js8_log_prompt.x  = true;
     params.js8_log_activation.x = 0;
     params.js8_alerts.x = 7;
+    params.js8_speed.x  = 0;
+    params.js8_rx_all.x = true;
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
 void ui_press(int i) {

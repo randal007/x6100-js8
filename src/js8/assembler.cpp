@@ -9,7 +9,9 @@
 #include "assembler.hpp"
 
 #include "render.hpp"
+#include "speeds.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <regex>
@@ -155,9 +157,14 @@ RxFrame MessageAssembler::assemble(const Buffer &buffer) const {
     return msg;
 }
 
-std::optional<int> MessageAssembler::find_key(float freq_hz) const {
+MessageAssembler::Key MessageAssembler::key_for(const RxFrame &frame) {
+    return {frame.mode, (int)std::lround(frame.freq_hz)};
+}
+
+std::optional<MessageAssembler::Key> MessageAssembler::find_key(const RxFrame &frame) const {
+    const float tolerance = (float)speed_from_varicode(frame.mode).rx_threshold_hz;
     for (auto &[key, buf] : buffers_) {
-        if (std::fabs(freq_hz - (float)key) <= FREQ_TOLERANCE_HZ) return key;
+        if (key.first == frame.mode && std::fabs(frame.freq_hz - (float)key.second) <= tolerance) return key;
     }
     return std::nullopt;
 }
@@ -165,7 +172,7 @@ std::optional<int> MessageAssembler::find_key(float freq_hz) const {
 void MessageAssembler::add(const RxFrame &frame) {
     flush_stale(frame.timestamp_ms);
 
-    auto match = find_key(frame.freq_hz);
+    auto match = find_key(frame);
 
     // Complete single-frame message.
     if (frame.is_first() && frame.is_last()) {
@@ -177,16 +184,16 @@ void MessageAssembler::add(const RxFrame &frame) {
     // First frame: start a fresh buffer at this offset.
     if (frame.is_first()) {
         if (match) buffers_.erase(*match);
-        int key       = (int)std::lround(frame.freq_hz);
-        buffers_[key] = Buffer{{frame}, frame.timestamp_ms};
+        buffers_[key_for(frame)] = Buffer{{frame}, frame.timestamp_ms};
         return;
     }
 
     // Middle or last frame of a buffer we're tracking.
     if (match) {
-        int   key = *match;
+        auto key = *match;
         auto &buf = buffers_[key];
         buf.frames.push_back(frame);
+        buf.last_timestamp_ms = frame.timestamp_ms;
         if (frame.is_last()) {
             emit_(assemble(buf));
             buffers_.erase(key);
@@ -195,18 +202,32 @@ void MessageAssembler::add(const RxFrame &frame) {
     }
 
     // No buffer: probably a missed first frame. Start one anyway.
-    int key = (int)std::lround(frame.freq_hz);
     Buffer buf{{frame}, frame.timestamp_ms};
     if (frame.is_last()) {
         emit_(assemble(buf));
         return;
     }
-    buffers_[key] = std::move(buf);
+    buffers_[key_for(frame)] = std::move(buf);
+}
+
+bool DuplicateFilter::seen(int mode, const std::string &frame, float freq_hz, std::int64_t now_ms) {
+    const Speed &sp = speed_from_varicode(mode);
+    // Forget what's older than the longest slot.
+    recent_.erase(std::remove_if(recent_.begin(), recent_.end(),
+                                 [&](const Entry &e) { return now_ms - e.at_ms >= 30'000; }),
+                  recent_.end());
+    for (auto &e : recent_) {
+        if (e.mode == mode && e.frame == frame && std::fabs(e.freq_hz - freq_hz) <= sp.rx_threshold_hz &&
+            now_ms - e.at_ms < sp.period_ms() - 1000) // the next slot's decode can come a little early
+            return true;
+    }
+    recent_.push_back({mode, frame, freq_hz, now_ms});
+    return false;
 }
 
 void MessageAssembler::flush_stale(std::int64_t now_ms) {
     for (auto it = buffers_.begin(); it != buffers_.end();) {
-        if (now_ms - it->second.first_timestamp_ms > BUFFER_TIMEOUT_MS) {
+        if (now_ms - it->second.last_timestamp_ms > IDLE_TIMEOUT_MS) {
             emit_(assemble(it->second));
             it = buffers_.erase(it);
         } else {

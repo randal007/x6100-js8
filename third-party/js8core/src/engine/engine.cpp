@@ -1146,13 +1146,41 @@ public:
       if (spectrum_thread_.joinable()) spectrum_thread_.join();
     }
 
+    // x6100 patch 8: never drop a ready decode window. Upstream returned
+    // here while a decode was running, but isDecodeReady() has already
+    // marked the window done, so with several speeds on, a Normal or Fast
+    // slot falling due during a decode (Turbo retries every second) was
+    // never decoded. Desktop JS8Call queues its ready windows instead. Keep
+    // at most one snapshot waiting behind the running decode: a newer one
+    // takes over the waiting one (fresher audio; the ring still holds the
+    // older windows) along with any speed's window only the older one had.
+    static void merge_windows(DecodeParams& into, DecodeParams const& older) {
+      struct Win { int bit; int DecodeParams::*pos; int DecodeParams::*sz; };
+      static constexpr Win wins[] = {
+          {1 << static_cast<int>(protocol::SubmodeId::A), &DecodeParams::kposA, &DecodeParams::kszA},
+          {1 << static_cast<int>(protocol::SubmodeId::B), &DecodeParams::kposB, &DecodeParams::kszB},
+          {1 << static_cast<int>(protocol::SubmodeId::C), &DecodeParams::kposC, &DecodeParams::kszC},
+          {1 << static_cast<int>(protocol::SubmodeId::E), &DecodeParams::kposE, &DecodeParams::kszE},
+          {1 << static_cast<int>(protocol::SubmodeId::I), &DecodeParams::kposI, &DecodeParams::kszI},
+      };
+      for (auto const& w : wins) {
+        if ((older.nsubmodes & w.bit) == 0 || (into.nsubmodes & w.bit) != 0) continue;
+        into.*w.pos = older.*w.pos;
+        into.*w.sz  = older.*w.sz;
+        into.nsubmodes |= w.bit;
+      }
+    }
+
     void enqueue_decode(DecodeState snapshot) {
-      // Turbo can retry every second. Do not turn retries into stale work when
-      // the single decoder worker is still processing the previous snapshot.
-      if (decode_pending_.exchange(true)) return;
       {
         std::lock_guard<std::mutex> lock(decode_mutex_);
-        decode_queue_.push_back(std::move(snapshot));
+        if (!decode_queue_.empty()) {
+          merge_windows(snapshot.params, decode_queue_.back().params);
+          decode_queue_.back() = std::move(snapshot);
+        } else {
+          decode_queue_.push_back(std::move(snapshot));
+        }
+        decode_pending_.store(true);
       }
       decode_cv_.notify_one();
     }
@@ -1208,7 +1236,10 @@ public:
           }
           emit_event(ev);
         });
-        decode_pending_.store(false);
+        {
+          std::lock_guard<std::mutex> lock(decode_mutex_);
+          decode_pending_.store(!decode_queue_.empty());
+        }
 
         if (callbacks_.on_log) {
           char log_msg[256];

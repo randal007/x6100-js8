@@ -20,6 +20,7 @@ struct Station {
     std::int64_t heard_ms = 0;   ///< last decoded, wall clock ms
     int          snr      = 0;   ///< how we hear them (last decode)
     float        freq_hz  = 0;   ///< their last audio offset
+    int          mode     = 0;   ///< speed last heard at (varicode submode 0/1/2/4)
     bool         heard_me = false;       ///< they have sent us something
     std::int64_t heard_me_ms = 0;
     std::optional<int> reported_snr;     ///< how they hear us, if they said
@@ -31,6 +32,7 @@ struct StationEvent {
     bool         to_me = false;
     int          snr   = 0;
     float        freq_hz = 0;
+    int          mode    = 0;    ///< speed (varicode submode 0/1/2/4)
     std::int64_t when_ms = 0;
 };
 

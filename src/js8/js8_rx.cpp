@@ -114,7 +114,7 @@ extern "C" void js8_rx_feed(js8_rx_t *rx, const float *samples, unsigned n) {
 
 namespace {
 
-constexpr int SLOT_MS = 15000;
+constexpr int SLOT_MS = 30000; // a slot start for every speed (6, 10, 15 and 30 s)
 
 // Real-time feeder: silence until the next slot boundary, then the file.
 // Feeding silence (rather than nothing) keeps the decoder's ring continuous.
@@ -202,6 +202,10 @@ extern "C" bool js8_rx_wav_active(js8_rx_t *rx) {
 
 extern "C" void js8_rx_clear(js8_rx_t *rx) {
     if (rx) rx->receiver->clear_messages();
+}
+
+extern "C" void js8_rx_set_submodes(js8_rx_t *rx, int submodes) {
+    if (rx) rx->receiver->set_submodes(submodes);
 }
 
 extern "C" void js8_rx_destroy(js8_rx_t *rx) {

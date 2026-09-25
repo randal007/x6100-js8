@@ -42,6 +42,7 @@ void StationList::add(const StationEvent &ev, const std::string &my_call) {
     st.heard_ms = ev.when_ms;
     st.snr      = ev.snr;
     st.freq_hz  = ev.freq_hz;
+    st.mode     = ev.mode;
 
     // Text after "FROM:", e.g. "@HB HEARTBEAT FN42", "K2XYZ SNR -12",
     // "K2XYZ HEARTBEAT SNR -08", "@ALLCALL CQ CQ CQ FN03", "K2XYZ GRID EM48AB".

@@ -60,12 +60,17 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
       }) {
     js8core::EngineConfig ec;
     ec.sample_rate_hz   = JS8_RATE;
-    ec.submodes         = config_.submodes;
+    // Schedules for every speed; set_submodes() below picks what's decoded.
+    ec.submodes         = SUBMODE_NORMAL | SUBMODE_FAST | SUBMODE_TURBO | SUBMODE_SLOW;
     ec.spectrum_enabled = false;
 
     js8core::EngineCallbacks ecb;
     ecb.on_event = [this](js8core::events::Variant const &ev) {
         if (auto d = std::get_if<js8core::events::Decoded>(&ev)) {
+            {
+                std::lock_guard<std::mutex> lock(assembler_mutex_);
+                if (duplicates_.seen(d->mode, d->data, d->frequency, wall_ms())) return;
+            }
             RxFrame f;
             f.type           = d->type;
             f.text           = renderer_.render(d->data, &f.type, d->frequency);
@@ -92,6 +97,7 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
     }
 
     engine_ = js8core::make_engine(ec, std::move(ecb), {});
+    engine_->set_submodes(config_.submodes);
     engine_->start();
 
     worker_ = std::thread([this] { worker_loop(); });
@@ -108,6 +114,10 @@ Receiver::~Receiver() {
     // Joins the engine's decode thread; no callbacks fire after this.
     engine_->stop();
     engine_.reset();
+}
+
+void Receiver::set_submodes(int submodes) {
+    engine_->set_submodes(submodes);
 }
 
 void Receiver::feed(const float *samples, std::size_t n) {

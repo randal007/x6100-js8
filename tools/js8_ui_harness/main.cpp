@@ -37,6 +37,7 @@ extern int16_t stub_tx_peak;
 }
 
 #include "js8core/decoder.hpp"
+#include "testsignal.hpp"
 #include "js8core/protocol/costas.hpp"
 #include "js8core/protocol/varicode.hpp"
 
@@ -137,6 +138,31 @@ static void feed_band(const std::vector<Station> &band) {
         while (std::chrono::steady_clock::now() < due) pump(5);
     }
     pump(1500);
+}
+
+// A band of stations at any speeds (src/js8/testsignal), fed in real time
+// from the next 30 s boundary, a slot start for every speed.
+static void feed_speeds(const std::vector<x6100::js8::TestStation> &band) {
+    auto               audio = x6100::js8::make_test_band(band, RATE, 0.02f, 7);
+    auto               now   = std::chrono::system_clock::now().time_since_epoch();
+    long long          ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    std::size_t        lead  = (std::size_t)((30000 - ms % 30000) * RATE / 1000);
+    std::vector<float> all(lead, 0.0f);
+    std::mt19937                    rng(3);
+    std::normal_distribution<float> noise(0.0f, 0.02f);
+    for (auto &x : all) x = noise(rng);
+    all.insert(all.end(), audio.begin(), audio.end());
+    for (auto &st : band) printf("[band] %-7s %4.0f Hz %-6s %s\n", st.call.c_str(), st.offset_hz,
+                                 js8_speed_name(st.speed), st.text.c_str());
+    const std::size_t piece = RATE / 50;
+    auto              t0    = std::chrono::steady_clock::now();
+    for (std::size_t i = 0; i < all.size(); i += piece) {
+        unsigned n = (unsigned)std::min(piece, all.size() - i);
+        dialog_audio_samples(n, &all[i]);
+        auto due = t0 + std::chrono::microseconds((long long)((i + n) * 1e6 / RATE));
+        while (std::chrono::steady_clock::now() < due) pump(5);
+    }
+    pump(2000);
 }
 
 int main() {
@@ -588,6 +614,84 @@ int main() {
         ui_key(LV_KEY_ESC);
         pump(300);
         printf("[alerts] ESC closed it: list focused %s\n", ui_focus_is_table() ? "yes" : "no");
+        return 0;
+    }
+    if (getenv("ONLY_SPEED")) {
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 300 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 330 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        using x6100::js8::TestStation;
+        pump(300);
+        ui_page(6);
+        printf("[speed] page 6: %s | %s\n", ui_button_label(2), ui_button_label(3));
+        // A band with every speed, decoded together.
+        feed_speeds({{"W1ABC", "FN42", "K2XYZ NORMAL HERE", 700, -5, JS8_SPEED_NORMAL},
+                     {"K9DEF", "EN52", "@HB HEARTBEAT EN52", 1100, -5, JS8_SPEED_FAST},
+                     {"N0XYZ", "EN34", "CQ CQ CQ EN34", 1500, -5, JS8_SPEED_TURBO},
+                     {"VE7ABC", "CN89", "K2XYZ SLOW ONE", 2000, -5, JS8_SPEED_SLOW}});
+        ui_page(1);
+        ui_press(1); // Show: No HB -> Directed
+        ui_press(1); // -> All
+        pump(300);
+        printf("[speed] rows: normal %d, fast F %d, turbo T %d, slow S %d\n", ui_list_has(" 700  W1ABC"),
+               ui_list_has("1100 F  K9DEF"), ui_list_has("1500 T  N0XYZ"), ui_list_has("2000 S  VE7ABC"));
+        screenshot("35_speed_rows.ppm");
+        ui_page(3);
+        ui_press(3); // Stations
+        pump(300);
+        screenshot("36_speed_stations.ppm");
+
+        // Reply to the Turbo station while on Normal: warned; hold Speed matches.
+        ui_select_row_from("N0XYZ");
+        ui_page(1);
+        ui_press(2); // Reply
+        pump(200);
+        ui_compose_cancel();
+        pump(200);
+        ui_page(6);
+        ui_hold(2);
+        printf("[speed] after hold: '%s'\n", ui_button_label(2));
+        ui_page(2);
+        ui_press(2); // Heartbeat in Turbo: refused
+        pump(200);
+
+        // Top offset follows the speed: Turbo 2340 Hz.
+        ui_rotary(2000);
+        ui_rotary(2000);
+        pump(100);
+        ui_page(6);
+        ui_press(2); // -> Slow
+        printf("[speed] after cycling: '%s'\n", ui_button_label(2));
+        ui_press(2); // -> Normal
+        ui_press(2); // -> Fast
+        printf("[speed] now: '%s'\n", ui_button_label(2));
+        ui_page(3);
+        ui_press(3); // back to messages
+        pump(200);
+
+        // Send at Fast: 10 s slots, 0.1 s symbols -> 79 x 4410 samples at 44.1 kHz.
+        ui_page(2);
+        ui_press(1); // CQ
+        wait_tx();
+        printf("[speed] Fast frame: %u samples (want %d)\n", stub_tx_samples, 79 * 4410);
+        printf("[speed] our row: %d (offset kept at Turbo's 2340 limit)\n", ui_list_has("TX 2340 F"));
+        screenshot("37_speed_tx.ppm");
+
+        ui_page(6);
+        ui_press(3); // Decode: My speed
+        printf("[speed] decode: '%s'\n", ui_button_label(3));
+        ui_press(3);
+        ui_press(2); // Fast -> Turbo
+        ui_press(2); // -> Slow
+        ui_press(2); // -> Normal
+        printf("[speed] back to '%s'\n", ui_button_label(2));
         return 0;
     }
     if (getenv("ONLY_QSOFREQ")) {

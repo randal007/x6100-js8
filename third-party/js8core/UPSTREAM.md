@@ -65,7 +65,17 @@ Each one is its own commit on top of the pristine import, so
    didn't return empty outside -60..+60 as desktop does. Only affects how
    received reports are displayed.
 
-All seven are candidates to send upstream. Patch 5 matters to upstream only
+8. **Ready decode windows are never dropped.** `enqueue_decode()` returned
+   without queuing while a decode was running, but `isDecodeReady()` had
+   already marked the window done. With several speeds on (Turbo re-checks
+   every second), a Normal or Fast slot falling due during a decode was
+   silently never decoded; a test that switches Fast on mid-run lost a
+   Normal frame every time. Desktop JS8Call queues ready windows. Now at
+   most one snapshot waits behind the running decode; a newer snapshot
+   replaces it and inherits any speed's window only the older one had
+   (the 60 s ring still holds that audio).
+
+All eight are candidates to send upstream. Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 

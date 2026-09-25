@@ -14,6 +14,7 @@
 #include "qsolog.hpp"
 #include "inbox.hpp"
 #include "alerts.hpp"
+#include "speeds.hpp"
 
 #include <unistd.h>
 #include "tx.hpp"
@@ -77,12 +78,13 @@ std::string roundtrip(const std::string &mycall, const std::string &selected, co
     return got;
 }
 
-RxFrame frame(const std::string &text, int type, float freq = 1000.0f, std::int64_t t_ms = 0) {
+RxFrame frame(const std::string &text, int type, float freq = 1000.0f, std::int64_t t_ms = 0, int mode = 0) {
     RxFrame f;
     f.text         = text;
     f.type         = type;
     f.freq_hz      = freq;
     f.timestamp_ms = t_ms;
+    f.mode         = mode;
     return f;
 }
 
@@ -223,16 +225,69 @@ TEST_CASE("assembler treats first+last frames as complete messages", "[js8][asse
     CHECK(out.back() == " LATE");
 }
 
-TEST_CASE("assembler flushes incomplete messages after 90 s", "[js8][assembler]") {
+TEST_CASE("assembler flushes an incomplete message 60 s after its latest frame", "[js8][assembler]") {
     std::vector<std::string> out;
     MessageAssembler         a([&](const RxFrame &m) { out.push_back(m.text); });
     a.add(frame("A1AA: B1BB", FRAME_FIRST, 1000, 0));
     a.add(frame(" PARTIAL", FRAME_DATA, 1000, 15'000));
-    a.flush_stale(60'000);
+    a.flush_stale(75'000); // 60 s after the latest frame: not yet
     CHECK(out.empty());
-    a.flush_stale(90'001);
+    a.flush_stale(75'001);
     REQUIRE(out.size() == 1);
     CHECK(out[0] == "A1AA: B1BB PARTIAL");
+}
+
+TEST_CASE("a long message isn't cut: the timeout runs from the latest frame", "[js8][assembler]") {
+    // 9 Normal frames take 2 minutes; desktop keeps the buffer open while
+    // frames keep coming (the old 90 s-from-the-first-frame rule split it).
+    std::vector<std::string> out;
+    MessageAssembler         a([&](const RxFrame &m) { out.push_back(m.text); });
+    a.add(frame("A1AA: B1BB", FRAME_FIRST, 1000, 0));
+    for (int i = 1; i < 8; i++) a.add(frame(" W" + std::to_string(i), FRAME_DATA, 1000, i * 15'000));
+    CHECK(out.empty());
+    a.add(frame(" END", FRAME_DATA | FRAME_LAST, 1000, 8 * 15'000));
+    REQUIRE(out.size() == 1);
+    CHECK(out[0] == "A1AA: B1BB W1 W2 W3 W4 W5 W6 W7 END");
+}
+
+TEST_CASE("a frame decoded twice in one slot is dropped", "[js8][assembler][speed]") {
+    DuplicateFilter f;
+    CHECK_FALSE(f.seen(2, "ABCDEFGHIJKL", 1500, 0));
+    CHECK(f.seen(2, "ABCDEFGHIJKL", 1510, 1'000));      // Turbo retry a second later
+    CHECK_FALSE(f.seen(2, "ABCDEFGHIJKL", 1500, 6'000)); // next Turbo slot: a real repeat
+    CHECK_FALSE(f.seen(0, "ABCDEFGHIJKL", 1500, 6'500)); // another speed
+    CHECK_FALSE(f.seen(2, "ABCDEFGHIJKL", 1600, 6'500)); // another station
+    CHECK_FALSE(f.seen(2, "ZZZZZZZZZZZZ", 1500, 6'500)); // another frame
+    CHECK(f.seen(0, "ABCDEFGHIJKL", 1505, 20'000));      // Normal, same slot window (15 s)
+    CHECK_FALSE(f.seen(0, "ABCDEFGHIJKL", 1500, 21'500));
+}
+
+TEST_CASE("assembler keeps speeds apart and uses each speed's window", "[js8][assembler]") {
+    std::vector<std::string> out;
+    MessageAssembler         a([&](const RxFrame &m) { out.push_back(m.text); });
+    // A Normal and a Turbo station 5 Hz apart: never mixed.
+    a.add(frame("A1AA: B1BB", FRAME_FIRST, 1000, 0, 0));
+    a.add(frame("C1CC: D1DD", FRAME_FIRST, 1005, 0, 2));
+    a.add(frame(" TURBO", FRAME_DATA | FRAME_LAST, 1025, 6'000, 2)); // Turbo drifts 20 Hz (window 32)
+    REQUIRE(out.size() == 1);
+    CHECK(out[0] == "C1CC: D1DD TURBO");
+    a.add(frame(" NORMAL", FRAME_DATA | FRAME_LAST, 1008, 15'000, 0));
+    REQUIRE(out.size() == 2);
+    CHECK(out[1] == "A1AA: B1BB NORMAL");
+
+    // Fast's window is 16 Hz: 14 Hz away joins, 20 Hz away doesn't.
+    a.add(frame("E1EE: F1FF", FRAME_FIRST, 1500, 30'000, 1));
+    a.add(frame(" NEAR", FRAME_DATA, 1514, 40'000, 1));
+    a.add(frame(" FAR", FRAME_DATA | FRAME_LAST, 1534, 50'000, 1));
+    CHECK(out.back() == " FAR"); // a stray last frame on its own
+    a.add(frame(" DONE", FRAME_DATA | FRAME_LAST, 1512, 50'000, 1));
+    CHECK(out.back() == "E1EE: F1FF NEAR DONE");
+
+    // Slow frames 30 s apart stay together.
+    a.add(frame("G1GG: H1HH", FRAME_FIRST, 700, 100'000, 4));
+    a.add(frame(" SLOW", FRAME_DATA, 700, 130'000, 4));
+    a.add(frame(" ONE", FRAME_DATA | FRAME_LAST, 702, 160'000, 4));
+    CHECK(out.back() == "G1GG: H1HH SLOW ONE");
 }
 
 /* ---- Classification --------------------------------------------------- */
@@ -1367,7 +1422,7 @@ TEST_CASE("the QSO keeps the grid they sent anywhere in a message", "[js8][log]"
     CHECK(q->grid == "DN17AB");
 
     StationList st;
-    StationEvent ev{"N7EAL", "VE7NHW", "N7EAL: VE7NHW GRID DN17AB", true, -9, 1500, 1000};
+    StationEvent ev{"N7EAL", "VE7NHW", "N7EAL: VE7NHW GRID DN17AB", true, -9, 1500, 0, 1000};
     st.add(ev, me);
     ev.text = "N7EAL: VE7NHW RR73";
     st.add(ev, me);
@@ -1539,4 +1594,267 @@ TEST_CASE("alert words match whole words and the sender's call", "[js8][alerts]"
     char norm[64];
     js8_alert_words_normalise("sota,  pota", norm, sizeof(norm));
     CHECK(std::string(norm) == "SOTA POTA");
+}
+
+// ---- T6: speeds ----------------------------------------------------------------
+
+TEST_CASE("the speed table matches desktop JS8Call's JS8Submode.cpp", "[js8][speed]") {
+    struct Want {
+        js8_speed_t id;
+        int         varicode, bandwidth, period, delay, threshold, max_offset;
+        double      spacing;
+        bool        hb, original;
+    };
+    const Want want[] = {
+        {JS8_SPEED_NORMAL, 0, 50, 15, 500, 10, 2450, 6.25, true, true},
+        {JS8_SPEED_FAST, 1, 80, 10, 200, 16, 2420, 10.0, true, false},
+        {JS8_SPEED_TURBO, 2, 160, 6, 100, 32, 2340, 20.0, false, false},
+        {JS8_SPEED_SLOW, 4, 25, 30, 500, 10, 2475, 3.125, true, false},
+    };
+    for (auto &w : want) {
+        const Speed &sp = speed(w.id);
+        INFO(sp.name);
+        CHECK(sp.varicode == w.varicode);
+        CHECK(sp.bandwidth_hz() == w.bandwidth);
+        CHECK(sp.period_s == w.period);
+        CHECK(sp.start_delay_ms == w.delay);
+        CHECK(sp.rx_threshold_hz == w.threshold);
+        CHECK(sp.max_offset_hz() == w.max_offset);
+        CHECK(sp.tone_spacing_hz() == Catch::Approx(w.spacing));
+        CHECK(sp.heartbeats == w.hb);
+        CHECK(sp.original_costas == w.original);
+        CHECK(&speed_from_varicode(w.varicode) == &sp);
+        CHECK(js8_speed_from_submode(w.varicode) == w.id);
+        CHECK(60 % sp.period_s == 0); // a minute is a slot start for every speed
+        CHECK(sp.frame_seconds() < sp.period_s - sp.start_delay_ms / 1000.0);
+    }
+    CHECK(speed_from_varicode(99).id == JS8_SPEED_NORMAL);
+    CHECK(js8_speed_letter(JS8_SPEED_TURBO) == 'T');
+    CHECK(std::string(js8_speed_name(JS8_SPEED_SLOW)) == "Slow");
+    CHECK(js8_speed_rx_mask(JS8_SPEED_SLOW) == JS8_SUBMODE_SLOW);
+}
+
+TEST_CASE("each speed starts on its own slot grid", "[js8][speed][tx]") {
+    const std::int64_t minute = 1'700'000'040'000; // a minute boundary
+    REQUIRE(minute % 60000 == 0);
+    CHECK(next_tx_start_ms(minute, JS8_SPEED_FAST) == minute + 200);
+    CHECK(next_tx_start_ms(minute + 200, JS8_SPEED_FAST) == minute + 10'200);
+    CHECK(next_tx_start_ms(minute + 3'000, JS8_SPEED_TURBO) == minute + 6'100);
+    CHECK(next_tx_start_ms(minute + 6'099, JS8_SPEED_TURBO) == minute + 6'100);
+    CHECK(next_tx_start_ms(minute + 1'000, JS8_SPEED_SLOW) == minute + 30'500);
+    CHECK(next_tx_start_ms(minute + 29'999, JS8_SPEED_SLOW) == minute + 30'500);
+    CHECK(next_tx_start_ms(minute + 1'000, JS8_SPEED_NORMAL) == minute + 15'500);
+}
+
+TEST_CASE("messages plan and preview the same at every speed", "[js8][speed][tx]") {
+    // Directed, free text (fast data outside Normal) and a checksummed MSG.
+    const char *texts[] = {"K2XYZ SNR?", "JUST TESTING THE NEW RADIO", "K2XYZ MSG MEET AT THE PARK 1800Z"};
+    const char *want[]  = {"W1ABC: K2XYZ SNR?", "W1ABC: JUST TESTING THE NEW RADIO",
+                           "W1ABC: K2XYZ MSG MEET AT THE PARK 1800Z"};
+    for (int s = 0; s < JS8_SPEED_COUNT; s++) {
+        auto id = (js8_speed_t)s;
+        INFO(speed(id).name);
+        for (int i = 0; i < 3; i++) {
+            auto plan = plan_message("W1ABC", "FN42", texts[i], id);
+            REQUIRE(plan.ok());
+            CHECK(plan.speed == id);
+            CHECK(plan.preview == want[i]);
+            const Speed &sp = speed(id);
+            CHECK(plan.seconds() ==
+                  Catch::Approx((plan.frames.size() - 1) * sp.period_s + 79 * sp.symbol_seconds()));
+        }
+    }
+    // Free text really is packed differently outside Normal (desktop's
+    // packFastDataMessage), and the tones use a different Costas array.
+    auto n = plan_message("W1ABC", "FN42", "JUST TESTING THE NEW RADIO", JS8_SPEED_NORMAL);
+    auto f = plan_message("W1ABC", "FN42", "JUST TESTING THE NEW RADIO", JS8_SPEED_FAST);
+    CHECK(n.frames.back().frame != f.frames.back().frame);
+    auto n1 = plan_message("W1ABC", "FN42", "K2XYZ SNR?", JS8_SPEED_NORMAL);
+    auto t1 = plan_message("W1ABC", "FN42", "K2XYZ SNR?", JS8_SPEED_TURBO);
+    CHECK(n1.frames[0].frame == t1.frames[0].frame); // same payload...
+    CHECK(n1.frames[0].tones != t1.frames[0].tones); // ...different sync tones
+}
+
+TEST_CASE("TX audio has each speed's symbol length and bandwidth", "[js8][speed][tx]") {
+    for (int s = 0; s < JS8_SPEED_COUNT; s++) {
+        auto         id = (js8_speed_t)s;
+        const Speed &sp = speed(id);
+        INFO(sp.name);
+        auto plan  = plan_message("W1ABC", "FN42", "K2XYZ SNR?", id);
+        auto audio = synth_frame(plan.frames[0].tones, 1000, 11025, id);
+        CHECK(audio.size() == (std::size_t)TX_SYMBOLS * (std::size_t)std::lround(sp.symbol_seconds() * 11025));
+        double in_band  = tone_amplitude(audio, 1000 + sp.bandwidth_hz() / 2.0, 11025);
+        double off_band = tone_amplitude(audio, 1000 + sp.bandwidth_hz() + 150, 11025);
+        CHECK(20 * std::log10(off_band / in_band) < -30.0);
+    }
+}
+
+TEST_CASE("Transmitter uses the plan's speed for slots and offsets", "[js8][speed][tx]") {
+    FakeClock                 clock;
+    std::vector<std::int64_t> starts;
+    std::atomic<bool>         done{false};
+    Transmitter::Callbacks    cb;
+    cb.play = [&](const std::vector<float> &, const TxFrame &, int, int) {
+        starts.push_back(clock.now_ms());
+        clock.t += 7'900; // Fast frame air time
+        return true;
+    };
+    cb.on_done = [&](const std::string &, bool) { done = true; };
+    Transmitter tx(11025, cb, &clock);
+
+    auto plan = plan_message("W1ABC", "FN42", "K2XYZ HELLO FROM THE FAST TRANSMITTER", JS8_SPEED_FAST);
+    REQUIRE(plan.frames.size() >= 3);
+    std::string why;
+    CHECK_FALSE(tx.send(plan, 2430, &why)); // above Fast's 2420 Hz
+    CHECK(why.find("Fast") != std::string::npos);
+    REQUIRE(tx.send(plan, 2420, &why));
+    for (int i = 0; i < 200 && !done; i++) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    REQUIRE(done);
+    REQUIRE(starts.size() == plan.frames.size());
+    CHECK(starts[0] % 10'000 == 200);
+    for (std::size_t i = 1; i < starts.size(); i++) CHECK(starts[i] - starts[i - 1] == 10'000);
+
+    // Turbo's top is 2340 Hz; Slow's 2475 Hz.
+    CHECK_FALSE(tx.send(plan_message("W1ABC", "FN42", "K2XYZ SNR?", JS8_SPEED_TURBO), 2341, &why));
+    while (tx.busy()) std::this_thread::sleep_for(std::chrono::milliseconds(5));
+}
+
+namespace {
+
+// Feed audio to a Receiver decoding `submodes`, starting at the next 30 s
+// wall-clock boundary (a slot start for every speed) after one silent 30 s
+// block that builds each speed's decoder. `audio` starts at a slot start.
+// Fed at `speedup` x real time. Returns the assembled messages and every frame.
+struct Decoded {
+    std::vector<RxFrame> messages, frames;
+};
+
+Decoded decode_all_speeds(const std::vector<float> &band, int rate, int submodes, double speedup,
+                          int switch_to = 0) {
+    std::mutex              mu;
+    std::condition_variable cv;
+    Decoded                 out;
+    std::size_t             cycles = 0;
+    Receiver::Config        cfg;
+    cfg.input_rate           = rate;
+    cfg.submodes             = submodes;
+    cfg.realign_threshold_ms = 0;
+    Receiver::Callbacks cb;
+    cb.on_frame = [&](const RxFrame &f) {
+        std::lock_guard<std::mutex> l(mu);
+        out.frames.push_back(f);
+    };
+    cb.on_message = [&](const RxFrame &m) {
+        std::lock_guard<std::mutex> l(mu);
+        out.messages.push_back(m);
+        cv.notify_all();
+    };
+    cb.on_cycle_done = [&](std::size_t) {
+        std::lock_guard<std::mutex> l(mu);
+        cycles++;
+        cv.notify_all();
+    };
+    Receiver rx(cfg, cb);
+
+    const std::int64_t now  = wall_ms();
+    std::size_t        lead = (std::size_t)((30'000 - now % 30'000) * rate / 1000) + (std::size_t)30 * rate;
+    std::vector<float> audio(lead, 0.0f);
+    audio.insert(audio.end(), band.begin(), band.end());
+    audio.resize(audio.size() + (std::size_t)31 * rate, 0.0f); // time for the last decodes
+    std::mt19937                    rng(11);
+    std::normal_distribution<float> noise(0.0f, 0.005f);
+    for (std::size_t i = 0; i < lead; i++) audio[i] += noise(rng);
+
+    const std::size_t piece    = (std::size_t)rate / 10;
+    const auto        piece_us = std::chrono::microseconds((long long)(100'000 / speedup));
+    auto feed = [&](std::size_t from, std::size_t to) {
+        for (std::size_t i = from; i < to; i += piece) {
+            rx.feed(&audio[i], std::min(piece, to - i));
+            std::this_thread::sleep_for(piece_us);
+        }
+    };
+    feed(0, lead);
+    {
+        std::unique_lock<std::mutex> l(mu);
+        cv.wait_for(l, std::chrono::seconds(60), [&] { return cycles > 0; });
+    }
+    if (switch_to) rx.set_submodes(switch_to); // as the Decode button does, mid-run
+    feed(lead, audio.size());
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+    std::lock_guard<std::mutex> l(mu);
+    return out;
+}
+
+bool has_message(const Decoded &d, const std::string &text, int mode) {
+    for (auto &m : d.messages)
+        if (m.text == text && m.mode == mode) return true;
+    return false;
+}
+
+} // namespace
+
+TEST_CASE("all four speeds decode together from one band", "[js8][speed][receiver][.slow]") {
+    constexpr int RATE = 11025;
+    // Multi-frame messages at every speed, spread over the band.
+    std::vector<TestStation> band = {
+        {"W1ABC", "FN42", "K2XYZ HELLO AT NORMAL SPEED", 700, -5, JS8_SPEED_NORMAL},
+        {"K9DEF", "EN52", "K2XYZ HELLO AT FAST SPEED", 1100, -5, JS8_SPEED_FAST},
+        {"N0XYZ", "EN34", "K2XYZ HELLO AT TURBO SPEED", 1500, -5, JS8_SPEED_TURBO},
+        {"VE7ABC", "CN89", "K2XYZ HELLO AT SLOW", 2000, -5, JS8_SPEED_SLOW},
+    };
+    auto audio = make_test_band(band, RATE, 0.02f, 3);
+    int  all   = JS8_SUBMODE_NORMAL | JS8_SUBMODE_FAST | JS8_SUBMODE_TURBO | JS8_SUBMODE_SLOW;
+    auto d     = decode_all_speeds(audio, RATE, all, 1.5);
+    for (auto &m : d.messages) UNSCOPED_INFO("mode " << m.mode << " dt " << m.dt << ": " << m.text);
+    CHECK(has_message(d, "W1ABC: K2XYZ HELLO AT NORMAL SPEED", 0));
+    CHECK(has_message(d, "K9DEF: K2XYZ HELLO AT FAST SPEED", 1));
+    CHECK(has_message(d, "N0XYZ: K2XYZ HELLO AT TURBO SPEED", 2));
+    CHECK(has_message(d, "VE7ABC: K2XYZ HELLO AT SLOW", 4));
+    CHECK(d.messages.size() == 4); // no Turbo retry decoded twice into a stray message
+    // Time Sync: on-time signals at every speed have DT near 0.
+    for (auto &f : d.frames) {
+        INFO("mode " << f.mode << ": " << f.text);
+        CHECK(std::fabs(f.dt) < 0.3f);
+    }
+}
+
+TEST_CASE("our TX audio decodes at every speed (loopback)", "[js8][speed][tx][.slow]") {
+    constexpr int RATE = 11025;
+    for (int s = 0; s < JS8_SPEED_COUNT; s++) {
+        auto         id = (js8_speed_t)s;
+        const Speed &sp = speed(id);
+        INFO(sp.name);
+        auto plan = plan_message("W1ABC", "FN42", "K2XYZ LOOPBACK AT EVERY SPEED", id);
+        REQUIRE(plan.ok());
+        std::vector<float> band((std::size_t)((plan.frames.size() * sp.period_s + 30) / 30 * 30) * RATE, 0.0f);
+        for (std::size_t i = 0; i < plan.frames.size(); i++) {
+            auto        wave  = synth_frame(plan.frames[i].tones, 1200, RATE, id);
+            std::size_t start = (i * sp.period_ms() + sp.start_delay_ms) * (std::size_t)RATE / 1000;
+            for (std::size_t k = 0; k < wave.size(); k++) band[start + k] += 0.03f * wave[k];
+        }
+        std::mt19937                    rng(9);
+        std::normal_distribution<float> noise(0.0f, 0.01f);
+        for (auto &x : band) x += noise(rng);
+        // Only this speed, as "Decode: mine only" would.
+        auto d = decode_all_speeds(band, RATE, sp.rx_mask, 3.0);
+        CHECK(has_message(d, plan.preview, sp.varicode));
+        CHECK(plan.preview == "W1ABC: K2XYZ LOOPBACK AT EVERY SPEED");
+    }
+}
+
+TEST_CASE("speeds switched on while running decode from their next slot", "[js8][speed][receiver][.slow]") {
+    constexpr int            RATE = 11025;
+    std::vector<TestStation> band = {
+        {"W1ABC", "FN42", "K2XYZ NORMAL AS BEFORE", 700, -5, JS8_SPEED_NORMAL},
+        {"K9DEF", "EN52", "K2XYZ FAST AFTER THE SWITCH", 1500, -5, JS8_SPEED_FAST},
+    };
+    auto audio = make_test_band(band, RATE, 0.02f, 5);
+    // Normal only, then Normal + Fast; and Normal only throughout.
+    auto on  = decode_all_speeds(audio, RATE, JS8_SUBMODE_NORMAL, 1.0, JS8_SUBMODE_NORMAL | JS8_SUBMODE_FAST);
+    auto off = decode_all_speeds(audio, RATE, JS8_SUBMODE_NORMAL, 1.5);
+    for (auto &f : on.frames) UNSCOPED_INFO("on: mode " << f.mode << " " << f.text);
+    CHECK(has_message(on, "W1ABC: K2XYZ NORMAL AS BEFORE", 0));
+    CHECK(has_message(on, "K9DEF: K2XYZ FAST AFTER THE SWITCH", 1));
+    CHECK(has_message(off, "W1ABC: K2XYZ NORMAL AS BEFORE", 0));
+    for (auto &m : off.frames) CHECK(m.mode == 0); // nothing Fast when it's off
 }
