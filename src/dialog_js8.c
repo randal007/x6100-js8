@@ -62,6 +62,10 @@
 #define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
 #define JS8_SLOT_SEC     15.0f
 #define PSD_INTERVAL_MS  200
+/* The waterfall is drawn relative to the noise floor, so it works at any
+ * audio level: WF_MIN_DB..WF_MAX_DB above the floor spans the palette. */
+#define WF_MIN_DB        0
+#define WF_MAX_DB        30
 #define TEST_WAV         "/mnt/js8_test.wav"  /* DATA partition, as NavTex's test file */
 
 #define HISTORY          300    /* messages kept for re-filtering */
@@ -180,6 +184,8 @@ static spgramf  sg;
 static float   *psd;
 static uint16_t nfft;
 static uint64_t last_psd_ms;
+static float    wf_floor_db;   /* smoothed noise floor (receiver thread) */
+static bool     wf_floor_set;
 
 /* ---- Buttons ---------------------------------------------------------- */
 
@@ -659,6 +665,11 @@ static void ui_waterfall_add(void *arg) {
     free(d->psd);
 }
 
+static int cmp_float(const void *a, const void *b) {
+    float x = *(const float *)a, y = *(const float *)b;
+    return (x > y) - (x < y);
+}
+
 static void on_audio(const float *samples, unsigned n, void *ctx) {
     (void)ctx;
     if (!sg) return;
@@ -683,6 +694,19 @@ static void on_audio(const float *samples, unsigned n, void *ctx) {
     d.psd       = malloc(d.size * sizeof(float));
     if (!d.psd) return;
     memcpy(d.psd, &psd[low_bin], d.size * sizeof(float));
+
+    /* Noise floor: the 30th percentile of the row, smoothed over ~2 s. */
+    float *sorted = malloc(d.size * sizeof(float));
+    if (sorted) {
+        memcpy(sorted, d.psd, d.size * sizeof(float));
+        qsort(sorted, d.size, sizeof(float), cmp_float);
+        float floor_now = sorted[d.size * 3 / 10];
+        free(sorted);
+        wf_floor_db  = wf_floor_set ? wf_floor_db + 0.1f * (floor_now - wf_floor_db) : floor_now;
+        wf_floor_set = true;
+    }
+    for (uint16_t i = 0; i < d.size; i++) d.psd[i] -= wf_floor_db;
+
     scheduler_put(ui_waterfall_add, &d, sizeof(d));
 }
 
@@ -692,6 +716,7 @@ static void rx_start(void) {
     int span = filter_high - filter_low;
     nfft     = (uint16_t)(span > 0 ? WIDTH * SAMPLE_RATE / span : 4096);
     sg       = spgramf_create(nfft, LIQUID_WINDOW_HANN, nfft, nfft / 2);
+    wf_floor_set = false;
     psd      = malloc(nfft * sizeof(float));
 
     js8_rx_cb_t cb = {
@@ -1103,7 +1128,8 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_clear_flag(waterfall, LV_OBJ_FLAG_SCROLLABLE);
     lv_waterfall_set_palette(waterfall, (lv_color_t *)wf_palette, 256);
     lv_waterfall_set_size(waterfall, WIDTH, WF_HEIGHT);
-    lv_waterfall_set_min(waterfall, -27);
+    lv_waterfall_set_min(waterfall, WF_MIN_DB);
+    lv_waterfall_set_max(waterfall, WF_MAX_DB);
     lv_obj_set_pos(waterfall, 13, 13);
 
     /* Finder marks the offset of the selected message. */
