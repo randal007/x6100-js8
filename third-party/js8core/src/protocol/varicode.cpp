@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cctype>
+#include <cstdio>
 #include <cmath>
 
 #ifdef __ANDROID__
@@ -180,8 +181,13 @@ int dbmTomwatts(int dbm) {
   return it->second;
 }
 
+// Desktop's Varicode::formatSNR(): "+05", "-08"; empty outside -60..+60
+// (local patch 7; this was unpadded and unchecked).
 std::string format_snr(int snr) {
-  return (snr >= 0 ? "+" : "") + std::to_string(snr);
+  if (snr < -60 || snr > 60) return {};
+  char buf[8];
+  std::snprintf(buf, sizeof(buf), "%s%0*d", snr >= 0 ? "+" : "", snr < 0 ? 3 : 2, snr);
+  return buf;
 }
 
 std::string trimmed_left(std::string s) {

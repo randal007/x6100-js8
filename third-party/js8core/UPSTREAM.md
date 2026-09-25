@@ -60,7 +60,12 @@ Each one is its own commit on top of the pristine import, so
    `isValidCompoundCallsign()`. The upstream varicode round-trip test
    still passes (31/31).
 
-All six are candidates to send upstream. Patch 5 matters to upstream only
+7. **SNR format matches desktop.** `format_snr()` printed "-8" and "+5"
+   where desktop's `Varicode::formatSNR()` prints "-08" and "+05", and it
+   didn't return empty outside -60..+60 as desktop does. Only affects how
+   received reports are displayed.
+
+All seven are candidates to send upstream. Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 
