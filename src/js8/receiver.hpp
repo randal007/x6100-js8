@@ -83,6 +83,7 @@ private:
     void worker_loop();
     void submit(const std::vector<float> &audio_12k);
     void check_clock(std::size_t new_samples);
+    void push_pcm(const std::int16_t *pcm, std::size_t count);
 
     Config    config_;
     Callbacks cb_;

@@ -29,6 +29,12 @@ constexpr double MAX_PENDING_SEC = 5.0;
 // How often the sample count is compared with the wall clock.
 constexpr std::int64_t CLOCK_CHECK_MS = 2000;
 
+// Audio this far behind the clock went missing (a stall, or the caller
+// stopped feeding it during TX). The gap is filled with silence: a realign
+// alone would leave minute-old audio in the ring, which decodes again as new.
+constexpr std::int64_t GAP_FILL_MS = 1000;
+constexpr std::int64_t RING_MS     = 60000;
+
 int gcd(int a, int b) { return b == 0 ? a : gcd(b, a % b); }
 
 } // namespace
@@ -160,27 +166,25 @@ void Receiver::submit(const std::vector<float> &audio_12k) {
         float v = std::clamp(audio_12k[i], -1.0f, 1.0f);
         pcm[i]  = (std::int16_t)std::lrintf(v * 32767.0f);
     }
+    push_pcm(pcm.data(), pcm.size());
+}
 
+void Receiver::push_pcm(const std::int16_t *pcm, std::size_t count) {
     // The engine's slot scheduler steps through its ring one capture buffer
     // at a time; a multi-second burst (after a stall) would jump over decode
     // windows. Hand it audio in sound-card-sized pieces.
     constexpr std::size_t CHUNK = 4096;
-    for (std::size_t off = 0; off < pcm.size(); off += CHUNK) {
-        std::size_t n = std::min(CHUNK, pcm.size() - off);
+    for (std::size_t off = 0; off < count; off += CHUNK) {
+        std::size_t n = std::min(CHUNK, count - off);
 
         js8core::AudioInputBuffer buf;
-        buf.data        = std::as_bytes(std::span<const std::int16_t>(pcm.data() + off, n));
+        buf.data        = std::as_bytes(std::span<const std::int16_t>(pcm + off, n));
         buf.format      = {JS8_RATE, 1, js8core::SampleType::Int16};
         buf.captured_at = std::chrono::steady_clock::now();
         engine_->submit_capture(buf);
     }
 }
 
-// The engine places each sample in its 60 s ring by counting from where it
-// last aligned to the wall clock. If audio stops (dialog paused, TX, a
-// PulseAudio hiccup) or the codec clock runs off from system time, that count
-// drifts away from real time and decode windows no longer line up with the
-// 15 s slots. When the two disagree by more than the threshold, re-snap.
 void Receiver::check_clock(std::size_t new_samples) {
     const std::int64_t now = wall_ms();
 
@@ -203,6 +207,20 @@ void Receiver::check_clock(std::size_t new_samples) {
     // Audio arrives in bursts, so compare against the end of this buffer.
     const std::int64_t elapsed_audio = (std::int64_t)(samples_since_align_ * 1000 / JS8_RATE);
     const std::int64_t error_ms      = elapsed_wall - elapsed_audio;
+
+    if (error_ms >= GAP_FILL_MS) {
+        // Silence for the missing audio (at most one ring's worth), placed
+        // before the buffer about to be submitted.
+        const std::int64_t fill_ms = std::min(error_ms, RING_MS);
+        std::vector<std::int16_t> silence((std::size_t)(fill_ms * JS8_RATE / 1000), 0);
+        push_pcm(silence.data(), silence.size());
+        if (cb_.on_log) cb_.on_log("gap: " + std::to_string(error_ms) + " ms of audio missing, filled with silence");
+        if (error_ms <= RING_MS) {
+            samples_since_align_ += silence.size();
+            return;
+        }
+        // Longer than the ring: the silence cleared it; now realign.
+    }
 
     if (std::llabs(error_ms) > config_.realign_threshold_ms) {
         engine_->request_realign();

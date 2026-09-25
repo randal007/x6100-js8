@@ -384,6 +384,35 @@ TEST_CASE("receiver re-snaps to the clock when audio and wall time disagree", "[
     CHECK(rx.realign_count() == 1);
 }
 
+TEST_CASE("receiver fills an audio gap with silence instead of realigning", "[js8][receiver]") {
+    // The dialog stops feeding audio while it transmits. A plain realign would
+    // leave minute-old audio in the ring, and it would decode again as new.
+    Receiver::Config cfg;
+    cfg.input_rate = 11025;
+    std::mutex               mu;
+    std::vector<std::string> logs;
+    Receiver::Callbacks      cb;
+    cb.on_log = [&](const std::string &s) {
+        std::lock_guard<std::mutex> lk(mu);
+        logs.push_back(s);
+    };
+    Receiver rx(cfg, cb);
+
+    std::vector<float> piece(11025 / 10, 0.0f);
+    rx.feed(piece.data(), piece.size());
+    std::this_thread::sleep_for(std::chrono::milliseconds(2600)); // ~2.5 s missing
+    rx.feed(piece.data(), piece.size());
+
+    bool filled = false;
+    for (int i = 0; i < 40 && !filled; ++i) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+        std::lock_guard<std::mutex> lk(mu);
+        for (auto &l : logs) filled |= l.rfind("gap:", 0) == 0;
+    }
+    CHECK(filled);
+    CHECK(rx.realign_count() == 0);
+}
+
 /* ---- WAV files and test mode ------------------------------------------ */
 
 #include "js8_rx.h"
