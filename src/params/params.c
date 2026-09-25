@@ -72,6 +72,7 @@ params_t params = {
 
     .ft8_tx_freq            = { .x = 1325,      .name = "ft8_tx_freq" },
     .js8_tx_freq            = { .x = 1500,      .name = "js8_tx_freq" },
+    .js8_hold_offset        = { .x = true,      .name = "js8_hold_offset" },
     .ft8_output_gain_offset = { .x = 0.0f,      .name = "ft8_output_gain_offset" },
     .ft8_cq_modifier        = { .x = "",        .name = "ft8_cq_modifier"},
 
@@ -229,6 +230,7 @@ static bool params_load() {
 
         if (params_load_uint8(&params.charger, name, i)) continue;
         if (params_load_bool(&params.mag_freq, name, i)) continue;
+        if (params_load_bool(&params.js8_hold_offset, name, i)) continue;
         if (params_load_bool(&params.mag_info, name, i)) continue;
         if (params_load_bool(&params.mag_alc, name, i)) continue;
         if (params_load_uint8(&params.spectrum_beta, name, i)) continue;
@@ -347,6 +349,7 @@ static void params_save() {
 
     params_save_uint8(&params.charger);
     params_save_bool(&params.mag_freq);
+    params_save_bool(&params.js8_hold_offset);
     params_save_bool(&params.mag_info);
     params_save_bool(&params.mag_alc);
     params_save_uint8(&params.spectrum_beta);

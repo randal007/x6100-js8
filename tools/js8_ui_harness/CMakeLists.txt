@@ -32,6 +32,7 @@ add_executable(js8_ui_harness
     main.cpp stubs.c driver.c
     ${X}/src/dialog_js8.c
     ${X}/src/textarea_window.c
+    ${X}/src/qth/qth.c
     ${X}/src/dialog.c
     ${X}/src/scheduler.cpp
     ${X}/src/widgets/lv_waterfall.c

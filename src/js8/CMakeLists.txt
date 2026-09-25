@@ -9,6 +9,9 @@ add_library(JS8 STATIC
     wav.cpp
     tx.cpp
     js8_tx.cpp
+    commands.cpp
+    stations.cpp
+    js8_ops.cpp
     js8_rx.cpp
 )
 

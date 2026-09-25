@@ -116,3 +116,4 @@ bool tx_player_play(int16_t *samples, uint32_t n, int32_t offset, float gain, tx
     printf("[radio] PTT off\n");
     return true;
 }
+void params_bool_set(params_bool_t *var, bool x) { var->x = x; }

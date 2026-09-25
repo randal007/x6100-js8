@@ -7,6 +7,7 @@
 #include "params/params.h"
 #include "styles.h"
 
+#include <stdio.h>
 #include <string.h>
 
 extern buttons_page_t *stub_page;
@@ -18,6 +19,8 @@ void ui_init(void) {
     lv_obj_set_style_bg_color(lv_scr_act(), bg_color, 0);
     keyboard_group = lv_group_create();
     strcpy(params.callsign.x, "K2XYZ");
+    strcpy(params.qth.x, "FN42AB");
+    params.js8_hold_offset.x = true; /* the firmware default */
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
 void ui_press(int i) { button_data_t *b = stub_page->items[i]; b->press(b); }
@@ -33,14 +36,17 @@ void ui_compose_enter(void) {
     uint32_t key = LV_KEY_ENTER;
     lv_event_send(textarea_window_text(), LV_EVENT_KEY, &key);
 }
+/* Move the selection with MFK steps to the row for `call`, searching down
+ * from the top. Station rows are drawn, not stored in the cell, so ask the
+ * dialog what's selected. */
+bool dialog_js8_selected_call(char *call, unsigned len); /* test hook */
 void ui_select_row_from(const char *call) {
-    /* Step the MFK up from the newest row until the selected text starts with call. */
-    lv_obj_t *table = lv_group_get_focused(keyboard_group);
-    for (int i = 0; i < 20; i++) {
-        uint16_t row, col;
-        lv_table_get_selected_cell(table, &row, &col);
-        const char *v = lv_table_get_cell_value(table, row, 0);
-        if (v && strstr(v, call)) return;
-        ui_key(LV_KEY_LEFT);
+    for (int i = 0; i < 60; i++) ui_key(LV_KEY_LEFT); /* to the top */
+    for (int i = 0; i < 60; i++) {
+        char sel[32];
+        if (dialog_js8_selected_call(sel, sizeof(sel)) && strcmp(sel, call) == 0) return;
+        ui_key(LV_KEY_RIGHT);
     }
+    printf("[harness] could not select %s\n", call);
 }
+void ui_click_focused(void) { lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_CLICKED, NULL); }

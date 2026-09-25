@@ -17,6 +17,7 @@ void ui_compose_append(const char *text);
 const char *ui_compose_text(void);
 void ui_compose_enter(void);
 void ui_select_row_from(const char *call);
+void ui_click_focused(void);
 extern int stub_tx_frames;
 extern int32_t stub_tx_offset;
 extern uint32_t stub_tx_samples;
@@ -103,6 +104,8 @@ int main() {
         {"G4ABC", "IO91", "", "@ALLCALL ANYONE ON THE BAND FOR A CHAT", 1760, 0.02f},
         {"KN4CRD", "EM73", "K2XYZ", "K2XYZ MSG STORED MESSAGE FOR YOU", 2150, 0.03f},
         {"DL1XX", "JO62", "", "DL1XX: HEARTBEAT JO62", 2380, 0.015f},
+        // K9ABC acknowledges our heartbeat, as desktop JS8Call's auto-reply does.
+        {"K9ABC", "EN52", "K2XYZ", "K2XYZ HEARTBEAT SNR -08", 1100, 0.03f},
     };
 
     const auto &costas = js8core::protocol::costas(js8core::protocol::CostasType::Original);
@@ -204,6 +207,54 @@ int main() {
     pump(1500);
     printf("[tx] after ESC during TX: running=%d frames keyed=%d\n", ui_running(), stub_tx_frames);
     screenshot("10_tx_stopped.ppm");
+
+    // ---- T3. We're on page 1. Pages cycle 1 -> 2 -> 3 -> 1.
+    auto wait_keyed = [&](int before) {
+        for (int i = 0; i < 180 && stub_tx_frames == before; i++) pump(100);
+        pump(300);
+    };
+    auto wait_done = [&]() { pump(3500); };
+
+    ui_press(0); // page 2
+    ui_press(0); // page 3
+    ui_press(4); // Show Stations
+    pump(300);
+    screenshot("11_stations.ppm");
+
+    ui_select_row_from("N0XYZ");
+    ui_press(0); // page 1
+    ui_press(0); // page 2
+    ui_press(3); // Query >
+    pump(300);
+    screenshot("12_query.ppm");
+    ui_key(LV_KEY_DOWN); // "SNR?" -> "Send SNR"
+    pump(100);
+    ui_click_focused();
+    int before = stub_tx_frames;
+    wait_keyed(before);
+    printf("[t3] Send SNR keyed at %d Hz\n", stub_tx_offset);
+    screenshot("13_send_snr.ppm");
+    wait_done();
+
+    before = stub_tx_frames;
+    ui_press(2); // Heartbeat
+    wait_keyed(before);
+    printf("[t3] heartbeat keyed at %d Hz (want 500-999, clear of stations)\n", stub_tx_offset);
+    wait_done();
+
+    ui_press(0); // page 3
+    ui_press(3); // Hold: On -> Off
+    ui_select_row_from("N0XYZ");
+    ui_press(0); // page 1
+    ui_press(2); // Reply
+    pump(200);
+    ui_compose_append("73");
+    ui_compose_enter();
+    before = stub_tx_frames;
+    wait_keyed(before);
+    printf("[t3] reply with Hold off keyed at %d Hz (N0XYZ is at 1320)\n", stub_tx_offset);
+    wait_done();
+    screenshot("14_after_t3.ppm");
 
     // Band change, then close with ESC.
     ui_band_up();

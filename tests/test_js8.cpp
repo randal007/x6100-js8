@@ -686,3 +686,139 @@ TEST_CASE("Transmitter rejects out-of-range offsets", "[js8][tx]") {
     CHECK_FALSE(tx.send(plan, 2480, &why));
     CHECK(why.find("offset") != std::string::npos);
 }
+
+/* ---- T3: queries, heartbeats, station list ---------------------------- */
+
+#include "commands.hpp"
+#include "stations.hpp"
+
+TEST_CASE("one-press messages have desktop JS8Call's wording and survive the air", "[js8][t3]") {
+    struct Case {
+        Query       q;
+        const char *text, *seen;
+    };
+    for (auto [q, text, seen] : std::vector<Case>{
+             {Query::SnrQ, "N0XYZ SNR?", "W1ABC: N0XYZ SNR?"},
+             {Query::SendSnr, "N0XYZ SNR -12", "W1ABC: N0XYZ SNR -12"},
+             {Query::GridQ, "N0XYZ GRID?", "W1ABC: N0XYZ GRID?"},
+             {Query::MyGrid, "N0XYZ GRID FN42AB", "W1ABC: N0XYZ GRID FN42AB"},
+             {Query::InfoQ, "N0XYZ INFO?", "W1ABC: N0XYZ INFO?"},
+             {Query::StatusQ, "N0XYZ STATUS?", "W1ABC: N0XYZ STATUS?"},
+             {Query::HearingQ, "N0XYZ HEARING?", "W1ABC: N0XYZ HEARING?"},
+             {Query::AgnQ, "N0XYZ AGN?", "W1ABC: N0XYZ AGN?"},
+             {Query::RR, "N0XYZ RR", "W1ABC: N0XYZ RR"},
+             {Query::SeventyThree, "N0XYZ 73", "W1ABC: N0XYZ 73"},
+         }) {
+        auto t = query_text(q, "n0xyz", -12, "fn42ab");
+        CHECK(t == text);
+        auto plan = plan_message("W1ABC", "FN42AB", t);
+        INFO(t << " -> " << plan.preview << plan.error);
+        REQUIRE(plan.ok());
+        CHECK(plan.preview == seen);
+    }
+    CHECK(query_text(Query::SendSnr, "N0XYZ", 5, "") == "N0XYZ SNR +05");
+    CHECK(query_text(Query::SendSnr, "N0XYZ", -99, "").empty()); // desktop sends nothing out of range
+    CHECK(query_text(Query::MyGrid, "N0XYZ", 0, "").empty());
+    CHECK(query_text(Query::SnrQ, "", 0, "").empty());
+}
+
+TEST_CASE("heartbeat is sent the way desktop JS8Call sends it", "[js8][t3]") {
+    CHECK(heartbeat_text("w1abc", "fn42ab") == "W1ABC: HEARTBEAT FN42");
+    auto plan = plan_message("W1ABC", "FN42AB", heartbeat_text("W1ABC", "FN42AB"));
+    REQUIRE(plan.ok());
+    CHECK(plan.frames.size() == 1);
+    CHECK(plan.preview == "W1ABC: @HB HEARTBEAT FN42");
+}
+
+TEST_CASE("free heartbeat offsets follow desktop's rule", "[js8][t3]") {
+    std::mt19937       rng(1);
+    const std::int64_t now = 1'000'000;
+
+    for (int i = 0; i < 50; i++) {
+        int f = find_free_offset({}, now, rng);
+        CHECK(f >= 500);
+        CHECK(f < 1000);
+    }
+
+    // Everything but 700 Hz heard in the last 30 s. Desktop's search only
+    // tries random slots, so it finds the one clear slot some of the time
+    // and otherwise falls back to 500 Hz; never anything else.
+    std::vector<OffsetActivity> busy;
+    for (int f = 500; f < 1000; f += 50)
+        if (f != 700) busy.push_back({(float)f, now - 5'000});
+    int found = 0;
+    for (int i = 0; i < 200; i++) {
+        int f = find_free_offset(busy, now, rng);
+        INFO(f);
+        bool clear = true;
+        for (auto &a : busy) clear &= std::fabs(a.offset_hz - f) >= 50;
+        CHECK((clear || f == 500));
+        found += clear;
+    }
+    CHECK(found > 50);
+
+    // Activity older than 30 s doesn't count.
+    std::vector<OffsetActivity> old;
+    for (int f = 500; f < 1000; f += 10) old.push_back({(float)f, now - 31'000});
+    int f = find_free_offset(old, now, rng);
+    CHECK(f >= 500);
+    CHECK(f < 1000);
+
+    // A solid band falls back to 500 Hz, as desktop does.
+    std::vector<OffsetActivity> full;
+    for (int f2 = 450; f2 < 1050; f2 += 10) full.push_back({(float)f2, now});
+    CHECK(find_free_offset(full, now, rng) == 500);
+}
+
+namespace {
+// Run `text` from `call` through JS8Call's encoder and our decoder, then
+// classify it as the dialog does.
+StationEvent heard(const std::string &call, const std::string &grid, const std::string &text, int snr,
+                   std::int64_t when, const std::string &my_call = "K2XYZ") {
+    auto plan = plan_message(call, grid, text);
+    REQUIRE(plan.ok());
+    auto         mc = classify(plan.preview, my_call);
+    StationEvent ev;
+    ev.from    = mc.from;
+    ev.to      = mc.to;
+    ev.text    = plan.preview;
+    ev.to_me   = mc.to_me;
+    ev.snr     = snr;
+    ev.freq_hz = 1000;
+    ev.when_ms = when;
+    return ev;
+}
+} // namespace
+
+TEST_CASE("station list marks who heard us, with the SNR they reported", "[js8][t3]") {
+    StationList list;
+    const std::int64_t t0 = 10'000'000;
+
+    list.add(heard("VE3KP", "FN03", "CQ CQ CQ FN03", -7, t0), "K2XYZ");
+    list.add(heard("DL1XX", "JO62", "DL1XX: HEARTBEAT JO62", -24, t0 + 1000), "K2XYZ");
+    // K9ABC acknowledges our heartbeat, as desktop JS8Call's auto-reply does.
+    list.add(heard("K9ABC", "EN52", "K2XYZ HEARTBEAT SNR -08", -15, t0 + 2000), "K2XYZ");
+    // G4ABC sends us a message (heard us, but no SNR report).
+    list.add(heard("G4ABC", "IO91", "K2XYZ HELLO FROM LONDON", -19, t0 + 3000), "K2XYZ");
+    // Our own heartbeat echoing back isn't a station.
+    list.add(heard("K2XYZ", "FN42", "K2XYZ: HEARTBEAT FN42", 0, t0 + 4000), "K2XYZ");
+
+    auto s = list.sorted(t0 + 5000);
+    REQUIRE(s.size() == 4);
+    CHECK(s[0].call == "G4ABC"); // heard us, most recently
+    CHECK(s[0].heard_me);
+    CHECK_FALSE(s[0].reported_snr.has_value());
+    CHECK(s[1].call == "K9ABC");
+    CHECK(s[1].heard_me);
+    REQUIRE(s[1].reported_snr.has_value());
+    CHECK(*s[1].reported_snr == -8);
+    CHECK(s[1].snr == -15);
+    CHECK(s[2].call == "DL1XX"); // then the rest, most recent first
+    CHECK(s[2].grid == "JO62");
+    CHECK_FALSE(s[2].heard_me);
+    CHECK(s[3].call == "VE3KP");
+    CHECK(s[3].grid == "FN03");
+
+    // An hour later they've all expired.
+    CHECK(list.sorted(t0 + StationList::EXPIRE_MS + 10'000).empty());
+}

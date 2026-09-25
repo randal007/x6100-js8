@@ -13,6 +13,8 @@
 
 #include "js8/js8_rx.h"
 #include "js8/js8_tx.h"
+#include "js8/js8_ops.h"
+#include "qth/qth.h"
 
 #include "audio.h"
 #include "buttons.h"
@@ -39,6 +41,7 @@
 #include <errno.h>
 #include <math.h>
 #include <stdarg.h>
+#include <stddef.h>
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,6 +86,13 @@ static void        reply_cb(button_data_t *btn);
 static void        send_cb(button_data_t *btn);
 static void        stop_tx_cb(button_data_t *btn);
 static void        cq_cb(button_data_t *btn);
+static void        heartbeat_cb(button_data_t *btn);
+static void        query_cb(button_data_t *btn);
+static const char *hold_label_getter(void);
+static void        hold_cb(button_data_t *btn);
+static const char *stations_label_getter(void);
+static void        stations_cb(button_data_t *btn);
+static void        query_close(void);
 static void        update_tx_bar(void);
 static void        tx_start(void);
 static void        tx_stop_all(void);
@@ -102,6 +112,12 @@ static float       base_gain_offset;
 static atomic_bool keyed;              /* a frame is on the air (TX thread) */
 static atomic_int  tx_offset_active;   /* offset of the message being sent */
 static bool        composing;          /* compose window open */
+
+static js8_stations_t *stations;       /* who we've heard, who heard us */
+static bool           view_stations;   /* list shows stations, not messages */
+static js8_station_t  st_rows[MAX_ROWS];
+static int            st_count;
+static lv_obj_t      *query_list;      /* Query popup, when open */
 
 static lv_obj_t *waterfall;
 static lv_obj_t *finder;
@@ -142,15 +158,19 @@ static button_data_t btn_stop_tx = {.type = BTN_TEXT, .label = "Stop TX", .press
 
 static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:3)", .press = button_next_page_cb, .next = &page_3};
 static button_data_t btn_cq    = {.type = BTN_TEXT, .label = "CQ", .press = cq_cb};
+static button_data_t btn_hb    = {.type = BTN_TEXT, .label = "Heart-\nbeat", .press = heartbeat_cb};
+static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press = query_cb};
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
 static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:3)", .press = button_next_page_cb, .next = &page_1};
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
 static button_data_t btn_test_wav  = {.type = BTN_TEXT_FN, .label_fn = test_wav_label_getter, .press = test_wav_cb};
+static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
+static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
 
 static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn_stop_tx}};
-static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_clear}};
-static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_test_wav}};
+static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_clear}};
+static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_test_wav, &btn_hold, &btn_stations}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -170,7 +190,7 @@ static bool passes_filter(const js8_rx_msg_t *m) {
     if (m->tx) return true;
     switch (show) {
     case SHOW_ALL:      return true;
-    case SHOW_NO_HB:    return !m->heartbeat;
+    case SHOW_NO_HB:    return !m->heartbeat || m->to_me; /* e.g. HB acks to us */
     case SHOW_DIRECTED: return m->to_me || (m->to_group && !m->heartbeat && !m->cq);
     default:            return true;
     }
@@ -204,21 +224,27 @@ static bool at_bottom(void) {
 /* Select the last row and scroll it into view. lv_table 8.3 has no setter
  * for the selection, so put it one row above and let the table's own key
  * handler step down: that also runs its scroll-to-selected logic. */
-static void follow(void) {
+static void select_row(uint16_t r) {
     if (rows == 0) return;
-    lv_table_t *t   = (lv_table_t *)table;
-    auto_selecting  = true;
-    if (rows == 1) {
+    if (r >= rows) r = rows - 1;
+    lv_table_t *t  = (lv_table_t *)table;
+    auto_selecting = true;
+    if (r == 0) {
         t->row_act = 0;
         t->col_act = 0;
+        lv_obj_scroll_to_y(table, 0, LV_ANIM_OFF);
         lv_obj_invalidate(table);
     } else {
         static uint32_t key = LV_KEY_DOWN;
-        t->row_act          = rows - 2;
+        t->row_act          = r - 1;
         t->col_act          = 0;
         lv_event_send(table, LV_EVENT_KEY, &key);
     }
     auto_selecting = false;
+}
+
+static void follow(void) {
+    if (rows > 0) select_row(rows - 1);
 }
 
 static void append_row(const char *text, int16_t hist) {
@@ -234,6 +260,7 @@ static void add_info_row(const char *fmt, ...) {
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
 
+    if (view_stations) return;
     bool scroll = at_bottom();
     if (rows >= MAX_ROWS) return;
     append_row(buf, -1);
@@ -241,7 +268,13 @@ static void add_info_row(const char *fmt, ...) {
 }
 
 /* Rebuild the list from history, newest KEEP_ROWS matching messages. */
+static void rebuild_station_rows(void);
+
 static void rebuild_rows(void) {
+    if (view_stations) {
+        rebuild_station_rows();
+        return;
+    }
     int16_t idx[KEEP_ROWS]; /* newest first */
     int     n = 0;
 
@@ -265,7 +298,15 @@ static void rebuild_rows(void) {
     follow();
 }
 
+static int64_t now_wall_ms(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
 static void add_message(const js8_rx_msg_t *m) {
+    js8_stations_add(stations, m, params.callsign.x, now_wall_ms());
+
     int slot = hist_head;
     history[slot] = *m;
     hist_head     = (hist_head + 1) % HISTORY;
@@ -274,6 +315,10 @@ static void add_message(const js8_rx_msg_t *m) {
     /* Rows pointing at the slot we just overwrote would now show the wrong
      * message; the ring is larger than MAX_ROWS so this only happens after a
      * long session, and rebuilding fixes it. */
+    if (view_stations) {
+        rebuild_station_rows();
+        return;
+    }
     for (uint16_t r = 0; r < rows; r++) {
         if (row_hist[r] == slot) {
             rebuild_rows();
@@ -295,6 +340,88 @@ static void add_message(const js8_rx_msg_t *m) {
     if (scroll) follow();
 }
 
+/* "4m" style age; "now" under a minute. */
+static void format_age(int64_t ms, char *buf, size_t size) {
+    int64_t min = ms / 60000;
+    if (min <= 0) snprintf(buf, size, "now");
+    else if (min < 60) snprintf(buf, size, "%dm", (int)min);
+    else snprintf(buf, size, "%dh", (int)(min / 60));
+}
+
+/* Station-view fields, drawn in fixed columns by table_draw_end_cb() since
+ * the radio's font is proportional and spaces can't line text up. */
+typedef struct {
+    char star[2], call[JS8_RX_CALL_LEN], age[8], snr[8], heard[40], grid[8], dist[16];
+} station_fields_t;
+
+static void station_fields(const js8_station_t *st, int64_t now, station_fields_t *f) {
+    memset(f, 0, sizeof(*f));
+    f->star[0] = st->heard_me ? '*' : ' ';
+    snprintf(f->call, sizeof(f->call), "%s", st->call);
+    snprintf(f->snr, sizeof(f->snr), "%+d", st->snr);
+    snprintf(f->grid, sizeof(f->grid), "%s", st->grid);
+    char *age = f->age, *heard = f->heard, *dist = f->dist;
+    format_age(now - st->heard_ms, age, sizeof(f->age));
+    if (st->heard_me) {
+        char hage[8];
+        format_age(now - st->heard_me_ms, hage, sizeof(hage));
+        if (st->has_reported_snr) {
+            snprintf(heard, sizeof(f->heard), "heard you %+03d (%s)", st->reported_snr, hage);
+        } else {
+            snprintf(heard, sizeof(f->heard), "heard you (%s)", hage);
+        }
+    }
+    if (st->grid[0] && params.qth.x[0]) {
+        double lat, lon, my_lat, my_lon;
+        qth_str_to_pos(st->grid, &lat, &lon);
+        qth_str_to_pos(params.qth.x, &my_lat, &my_lon);
+        snprintf(dist, sizeof(f->dist), "%.0f km", qth_pos_dist(lat, lon, my_lat, my_lon));
+    }
+}
+
+/* The station the list's selection points at, in either view. */
+static bool selected_station(char *call, size_t call_len, float *freq, int *snr) {
+    uint16_t row, col;
+    lv_table_get_selected_cell(table, &row, &col);
+    if (row >= rows || row_hist[row] < 0) return false;
+    if (view_stations) {
+        const js8_station_t *st = &st_rows[row_hist[row]];
+        snprintf(call, call_len, "%s", st->call);
+        *freq = st->freq_hz;
+        *snr  = st->snr;
+    } else {
+        const js8_rx_msg_t *m = &history[row_hist[row]];
+        if (m->tx || !m->from[0]) return false;
+        snprintf(call, call_len, "%s", m->from);
+        *freq = m->freq_hz;
+        *snr  = m->snr;
+    }
+    return true;
+}
+
+static void rebuild_station_rows(void) {
+    /* Keep the cursor on the same station while the list re-sorts. */
+    char  keep[JS8_RX_CALL_LEN] = "";
+    float f;
+    int   n;
+    if (!selected_station(keep, sizeof(keep), &f, &n)) keep[0] = '\0';
+
+    int64_t now = now_wall_ms();
+    st_count    = js8_stations_list(stations, now, st_rows, MAX_ROWS);
+
+    lv_table_set_row_cnt(table, 1);
+    lv_table_set_cell_value(table, 0, 0, "");
+    rows = 0;
+    if (st_count == 0) append_row("No stations heard yet", -1);
+
+    int keep_row = 0;
+    for (int i = 0; i < st_count; i++) {
+        if (keep[0] && strcmp(st_rows[i].call, keep) == 0) keep_row = rows;
+        append_row(" ", (int16_t)i); /* drawn by table_draw_end_cb() */
+    }
+    select_row(keep_row);
+}
+
 static void table_draw_cb(lv_event_t *e) {
     lv_obj_t               *obj = lv_event_get_target(e);
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
@@ -309,6 +436,9 @@ static void table_draw_cb(lv_event_t *e) {
     if (h < 0) {
         dsc->label_dsc->align   = LV_TEXT_ALIGN_CENTER;
         dsc->rect_dsc->bg_color = lv_color_hex(0x303030);
+    } else if (view_stations) {
+        /* Stations that heard us stand out, like desktop's star. */
+        dsc->rect_dsc->bg_color = st_rows[h].heard_me ? lv_color_hex(0x5a4400) : lv_color_black();
     } else {
         const js8_rx_msg_t *m = &history[h];
         if (m->tx) {
@@ -333,6 +463,42 @@ static void table_draw_cb(lv_event_t *e) {
     if (sel_row == row) dsc->rect_dsc->bg_color = lv_color_lighten(dsc->rect_dsc->bg_color, 30);
 }
 
+/* Station view: draw the fields at fixed x positions within the cell. */
+static void table_draw_end_cb(lv_event_t *e) {
+    if (!view_stations) return;
+    lv_obj_t               *obj = lv_event_get_target(e);
+    lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
+    if (dsc->part != LV_PART_ITEMS) return;
+
+    uint32_t row = dsc->id / lv_table_get_col_cnt(obj);
+    int16_t  h   = row < rows ? row_hist[row] : -1;
+    if (h < 0) return;
+
+    station_fields_t f;
+    station_fields(&st_rows[h], now_wall_ms(), &f);
+
+    static const struct {
+        lv_coord_t x;
+        size_t     field;
+    } cols[] = {
+        {0, offsetof(station_fields_t, star)},    {18, offsetof(station_fields_t, call)},
+        {150, offsetof(station_fields_t, age)},   {210, offsetof(station_fields_t, snr)},
+        {270, offsetof(station_fields_t, heard)}, {520, offsetof(station_fields_t, grid)},
+        {610, offsetof(station_fields_t, dist)},
+    };
+
+    lv_area_t area = *dsc->draw_area;
+    area.y1 += lv_obj_get_style_pad_top(obj, LV_PART_ITEMS);
+    area.y2 -= lv_obj_get_style_pad_bottom(obj, LV_PART_ITEMS);
+    lv_coord_t x0 = dsc->draw_area->x1 + lv_obj_get_style_pad_left(obj, LV_PART_ITEMS);
+
+    for (size_t i = 0; i < sizeof(cols) / sizeof(cols[0]); i++) {
+        area.x1 = x0 + cols[i].x;
+        area.x2 = (i + 1 < sizeof(cols) / sizeof(cols[0])) ? x0 + cols[i + 1].x - 6 : dsc->draw_area->x2;
+        lv_draw_label(dsc->draw_ctx, dsc->label_dsc, &area, (const char *)&f + cols[i].field, NULL);
+    }
+}
+
 /* Mark the selected message's offset on the waterfall; `announce` also
  * pops up who it is (on a tap, not on every MFK step). */
 static void mark_selected(bool announce) {
@@ -343,11 +509,22 @@ static void mark_selected(bool announce) {
         lv_obj_invalidate(finder);
         return;
     }
-    const js8_rx_msg_t *m = &history[row_hist[row]];
-    lv_finder_set_cursor(finder, (int16_t)(m->freq_hz + 0.5f));
+    const char *from;
+    float       freq;
+    int         snr;
+    if (view_stations) {
+        from = st_rows[row_hist[row]].call;
+        freq = st_rows[row_hist[row]].freq_hz;
+        snr  = st_rows[row_hist[row]].snr;
+    } else {
+        from = history[row_hist[row]].from;
+        freq = history[row_hist[row]].freq_hz;
+        snr  = history[row_hist[row]].snr;
+    }
+    lv_finder_set_cursor(finder, (int16_t)(freq + 0.5f));
     lv_obj_invalidate(finder);
-    if (announce && m->from[0]) {
-        msg_update_text_fmt("%s at %.0f Hz, %+d dB", m->from, m->freq_hz, m->snr);
+    if (announce && from[0]) {
+        msg_update_text_fmt("%s at %.0f Hz, %+d dB", from, freq, snr);
     }
 }
 
@@ -562,6 +739,7 @@ static void tx_timer_cb(lv_timer_t *t) {
     /* Keep the status clock moving; decode cycles, which also refresh it,
      * pause while we transmit. */
     if (++ticks % 4 == 0) update_status();
+    if (view_stations && ticks % 20 == 0) rebuild_station_rows(); /* ages */
 }
 
 /* "TX 1500 Hz  ready" / "... K2XYZ SNR?  starts in 9 s" / "... sending 2/3" */
@@ -603,7 +781,7 @@ static void update_tx_bar(void) {
 
 /* Queue `text` at our offset. Returns false (with a message shown) if it
  * can't be sent, e.g. a bad character or something already sending. */
-static bool tx_queue(const char *text) {
+static bool tx_queue_at(const char *text, int offset_hz) {
     if (js8_tx_busy(tx)) {
         msg_update_text_fmt("Already sending - Stop TX first");
         return false;
@@ -617,14 +795,32 @@ static bool tx_queue(const char *text) {
     }
 
     char err[JS8_TX_ERR_LEN];
-    atomic_store(&tx_offset_active, params.js8_tx_freq.x);
+    atomic_store(&tx_offset_active, offset_hz);
     snprintf(tx_preview, sizeof(tx_preview), "%s", pv.preview);
-    if (!js8_tx_send(tx, params.callsign.x, params.qth.x, text, params.js8_tx_freq.x, err, sizeof(err))) {
+    if (!js8_tx_send(tx, params.callsign.x, params.qth.x, text, (float)offset_hz, err, sizeof(err))) {
         msg_update_text_fmt("JS8: %s", err);
         return false;
     }
     msg_update_text_fmt("Queued: %d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
     return true;
+}
+
+/* At our TX offset (the red band). */
+static bool tx_queue(const char *text) {
+    return tx_queue_at(text, params.js8_tx_freq.x);
+}
+
+/* Hold off: answer on the other station's offset. Hold on (default): stay
+ * on ours, which is JS8 etiquette. */
+static void apply_hold(float their_freq) {
+    if (params.js8_hold_offset.x) return;
+    int f = (int)(their_freq + 0.5f);
+    if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
+    if (f > JS8_TX_MAX_OFFSET) f = JS8_TX_MAX_OFFSET;
+    params_uint16_set(&params.js8_tx_freq, (uint16_t)f);
+    lv_finder_set_value(finder, (int16_t)f);
+    lv_obj_invalidate(finder);
+    update_tx_bar();
 }
 
 /* Main tuning knob: move the TX offset, as in the FT8 app. The dial
@@ -710,8 +906,10 @@ static void band_cb(lv_event_t *e) {
     load_band(lv_event_get_code(e) == EVENT_BAND_UP ? 1 : -1);
 
     js8_rx_clear(rx);
+    js8_stations_clear(stations); /* a different band, different stations */
     lv_waterfall_clear_data(waterfall);
     lv_finder_clear_cursor(finder);
+    if (view_stations) rebuild_rows();
     add_info_row("%s", cfg_digital_label_get());
     update_status();
 }
@@ -816,6 +1014,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_add_event_cb(table, table_select_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(table, key_cb, LV_EVENT_KEY, NULL);
     lv_obj_add_event_cb(table, table_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
+    lv_obj_add_event_cb(table, table_draw_end_cb, LV_EVENT_DRAW_PART_END, NULL);
     lv_obj_set_size(table, WIDTH, WF_HEIGHT - WF_VISIBLE - TX_BAR_H);
     lv_obj_set_pos(table, 13, 13 + WF_VISIBLE + TX_BAR_H);
     lv_table_set_col_cnt(table, 1);
@@ -857,6 +1056,7 @@ static void construct_cb(lv_obj_t *parent) {
     }
     base_gain_offset = tx_player_base_gain_offset();
     tx_start();
+    if (!stations) stations = js8_stations_create();
     tx_timer = lv_timer_create(tx_timer_cb, 250, NULL);
     update_tx_bar();
 }
@@ -870,6 +1070,7 @@ static void destruct_cb(void) {
         tx_timer = NULL;
     }
     compose_close();
+    query_close();
     radio_set_pwr(param_f_get(cfg_pwr));
 
     rx_stop();
@@ -905,6 +1106,7 @@ static void show_cb(button_data_t *btn) {
 static void clear_cb(button_data_t *btn) {
     (void)btn;
     hist_head = hist_count = 0;
+    js8_stations_clear(stations);
     js8_rx_clear(rx);
     lv_waterfall_clear_data(waterfall);
     lv_finder_clear_cursor(finder);
@@ -953,14 +1155,16 @@ static void test_wav_cb(button_data_t *btn) {
 
 static void reply_cb(button_data_t *btn) {
     (void)btn;
-    uint16_t row, col;
-    lv_table_get_selected_cell(table, &row, &col);
-    if (row >= rows || row_hist[row] < 0 || history[row_hist[row]].tx || !history[row_hist[row]].from[0]) {
-        msg_update_text_fmt("Select a station's message first (MFK)");
+    char  call[JS8_RX_CALL_LEN];
+    float freq;
+    int   snr;
+    if (!selected_station(call, sizeof(call), &freq, &snr)) {
+        msg_update_text_fmt("Select a station first (MFK)");
         return;
     }
     char prefill[JS8_RX_CALL_LEN + 2];
-    snprintf(prefill, sizeof(prefill), "%s ", history[row_hist[row]].from);
+    snprintf(prefill, sizeof(prefill), "%s ", call);
+    apply_hold(freq);
     compose_open(prefill);
 }
 
@@ -985,4 +1189,149 @@ static void cq_cb(button_data_t *btn) {
     char text[32];
     snprintf(text, sizeof(text), "CQ CQ CQ %.4s", params.qth.x);
     tx_queue(text);
+}
+
+/* One heartbeat now, at a free spot in the 500-1000 Hz heartbeat sub-band
+ * (desktop's rule: clear of anything heard in the last 30 s). Our chat
+ * offset (the red band) doesn't move. */
+static void heartbeat_cb(button_data_t *btn) {
+    (void)btn;
+    static js8_station_t heard[MAX_ROWS];
+    float                offsets[MAX_ROWS];
+    int64_t              times[MAX_ROWS];
+    int64_t              now = now_wall_ms();
+    int                  n   = js8_stations_list(stations, now, heard, MAX_ROWS);
+    for (int i = 0; i < n; i++) {
+        offsets[i] = heard[i].freq_hz;
+        times[i]   = heard[i].heard_ms;
+    }
+    int  offset = js8_heartbeat_offset(offsets, times, (unsigned)n, now);
+    char text[48];
+    js8_heartbeat_text(params.callsign.x, params.qth.x, text, sizeof(text));
+    tx_queue_at(text, offset);
+}
+
+static const char *hold_label_getter(void) {
+    return params.js8_hold_offset.x ? "Hold:\nOn" : "Hold:\nOff";
+}
+
+static void hold_cb(button_data_t *btn) {
+    params_bool_set(&params.js8_hold_offset, !params.js8_hold_offset.x);
+    buttons_refresh(btn);
+    msg_update_text_fmt(params.js8_hold_offset.x ? "Replies stay on your offset" : "Replies move to their offset");
+}
+
+static const char *stations_label_getter(void) {
+    return view_stations ? "Show\nMessages" : "Show\nStations";
+}
+
+static void stations_cb(button_data_t *btn) {
+    view_stations = !view_stations;
+    buttons_refresh(btn);
+    rebuild_rows();
+}
+
+/* ---- Query popup ------------------------------------------------------ */
+
+static void query_close(void) {
+    if (!query_list) return;
+    /* Often called from one of the list's own buttons: delete later. */
+    lv_obj_del_async(query_list);
+    query_list = NULL;
+    if (table) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+static void query_item_cb(lv_event_t *e) {
+    js8_query_t q = (js8_query_t)(intptr_t)lv_event_get_user_data(e);
+    char        call[JS8_RX_CALL_LEN];
+    float       freq;
+    int         snr;
+    bool        have = selected_station(call, sizeof(call), &freq, &snr);
+    query_close();
+    if (!have) return;
+
+    char text[64];
+    if (!js8_query_text(q, call, snr, params.qth.x, text, sizeof(text))) {
+        msg_update_text_fmt(q == JS8_Q_MY_GRID ? "Set your grid first: APP > QTH" : "Nothing to send");
+        return;
+    }
+    apply_hold(freq);
+    tx_queue(text);
+}
+
+static void query_key_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    switch (key) {
+    case LV_KEY_ESC:
+        query_close();
+        break;
+    case LV_KEY_LEFT:
+    case LV_KEY_UP:
+        lv_group_focus_prev(keyboard_group);
+        break;
+    case LV_KEY_RIGHT:
+    case LV_KEY_DOWN:
+        lv_group_focus_next(keyboard_group);
+        break;
+    case KEY_VOL_LEFT_EDIT:
+    case KEY_VOL_LEFT_SELECT:
+        radio_change_vol(-1);
+        break;
+    case KEY_VOL_RIGHT_EDIT:
+    case KEY_VOL_RIGHT_SELECT:
+        radio_change_vol(1);
+        break;
+    }
+}
+
+/* One-press messages for the selected station: MFK to move, press or tap
+ * to send, ESC to close. */
+static void query_cb(button_data_t *btn) {
+    (void)btn;
+    if (query_list || composing) return;
+    char  call[JS8_RX_CALL_LEN];
+    float freq;
+    int   snr;
+    if (!selected_station(call, sizeof(call), &freq, &snr)) {
+        msg_update_text_fmt("Select a station first (MFK)");
+        return;
+    }
+
+    lv_group_remove_obj(table);
+    query_list = lv_list_create(dialog.obj);
+    lv_obj_set_size(query_list, 300, WF_HEIGHT - 10);
+    lv_obj_align(query_list, LV_ALIGN_TOP_RIGHT, -20, 18);
+    lv_obj_set_style_text_font(query_list, &sony_24, 0);
+    lv_obj_set_style_bg_color(query_list, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_border_color(query_list, lv_color_white(), 0);
+
+    char title[40];
+    snprintf(title, sizeof(title), "To %s (%+d dB)", call, snr);
+    lv_obj_t *t = lv_list_add_text(query_list, title);
+    lv_obj_set_style_text_font(t, &sony_22, 0);
+
+    lv_obj_t *first = NULL;
+    for (int q = 0; q < JS8_Q_COUNT; q++) {
+        lv_obj_t *b = lv_list_add_btn(query_list, NULL, js8_query_label((js8_query_t)q));
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x303030), 0);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x1830a0), LV_STATE_FOCUSED);
+        lv_obj_set_style_text_color(b, lv_color_white(), 0);
+        lv_obj_add_event_cb(b, query_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)q);
+        lv_obj_add_event_cb(b, query_key_cb, LV_EVENT_KEY, NULL);
+        lv_group_add_obj(keyboard_group, b);
+        if (!first) first = b;
+    }
+    lv_group_set_editing(keyboard_group, false);
+    lv_group_focus_obj(first);
+}
+
+/* For tools/js8_ui_harness: the station the selection points at. */
+bool dialog_js8_selected_call(char *call, unsigned len) {
+    float freq;
+    int   snr;
+    return table && selected_station(call, len, &freq, &snr);
 }
