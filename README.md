@@ -58,7 +58,13 @@ heartbeat or sent you a message. When they reported your signal (e.g. a
 heartbeat ack `YOU HEARTBEAT SNR -08`) the view shows "heard you −08" and
 how long ago. The other columns are time since last heard, their SNR here,
 their grid and your distance to them. Stations drop off after an hour; a
-band change clears the list.
+band change clears the list. Calls you've logged show in green (see
+[Logging](#logging)).
+
+**Grids** are taken from heartbeats, CQs and messages: the word after
+`GRID`, else any grid in the message, 4 to 10 characters. The most precise
+one is kept (a later heartbeat's `DN17` doesn't replace `DN17AB`), and the
+`RR73` sign-off is never mistaken for a grid. The column shows 6 characters.
 
 ![Stations view: * marks stations that heard you](docs/screenshots/js8_11_stations.png)
 
@@ -86,6 +92,12 @@ waterfall. Tapping a row also shows its callsign and SNR. Multi-frame messages a
 once their last frame arrives. Buffered commands such as `MSG` have their
 checksum verified and removed, as in desktop JS8Call.
 
+**Waterfall:** one row per 0.1 s of audio, drawn relative to the noise
+floor so it works at any audio level. Audio arrives from the radio in
+bursts, so rows are queued and drawn one at a time as each falls due by the
+system clock, 10 a second. (LVGL's own timers run slow and caught up with
+two-row jumps, which showed as a stutter.)
+
 ![Directed view in a QSO: the selected station's untagged reply still shows](docs/screenshots/js8_21_directed_qso.png)
 
 ## Logging
@@ -106,9 +118,14 @@ logs nothing.
 - **What's filled in:** *Sent* is the report you gave them (`SNR -12`), else
   how you heard them; *Rcvd* is the report they gave you (an SNR or a
   heartbeat ack). Start is the first directed message either way; a QSO
-  quiet for 30 minutes starts over. Their grid is from what they sent;
-  yours is from a current GPS fix (6 characters), else APP → QTH. `TX_PWR`
-  is the radio's power.
+  quiet for 30 minutes starts over. Their grid is the most precise one
+  they sent you (anywhere in a message), else the Stations list's; yours
+  is from a current GPS fix (6 characters), else APP → QTH. `TX_PWR` is
+  the radio's power.
+- **Late arrivals:** the popup usually opens on the first 73, often yours.
+  When their last message (`RR73 GRID DN17AB`) comes in with it open, the
+  new report and grid appear in place, where you are in the list stays put,
+  and a grid you typed is kept.
 - **Activations:** with **Activ.: POTA** each entry gets `MY_SIG POTA` and
   `MY_SIG_INFO` (your park), as POTA's log upload wants; **SOTA** adds
   `MY_SOTA_REF`. The reference is the one you last spotted via APRS, or hold
@@ -210,6 +227,7 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [x] ADIF logging with a log prompt, POTA/SOTA activation fields (T5)
 - [ ] An inbox for MSG (T5)
 - [x] GPS-fed grid for APRS spots
+- [x] Waterfall paced by the system clock (no catch-up jumps)
 - [ ] Fast / Turbo / Slow submodes
 
 ## Testing
