@@ -20,20 +20,34 @@ void ui_init(void) {
     keyboard_group = lv_group_create();
     strcpy(params.callsign.x, "K2XYZ");
     strcpy(params.qth.x, "FN42AB");
-    params.js8_hold_offset.x = true; /* the firmware default */
+    params.js8_hold_offset.x = true; /* the firmware defaults */
+    params.js8_hb_interval.x = 30;
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
 void ui_press(int i) { button_data_t *b = stub_page->items[i]; b->press(b); }
 void ui_band_up(void) { lv_event_send(dialog_js8->obj, (lv_event_code_t)EVENT_BAND_UP, NULL); }
 void ui_key(uint32_t key) { lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_KEY, &key); }
 int  ui_running(void) { return dialog_js8->run; }
+int  ui_focus_is_table(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    return f && lv_obj_check_type(f, &lv_table_class);
+}
 
 #include "textarea_window.h"
 
 void ui_compose_append(const char *text) { lv_textarea_add_text(textarea_window_text(), text); }
-const char *ui_compose_text(void) { return textarea_window_get(); }
+const char *ui_compose_text(void) {
+    /* textarea_window keeps its pointer after closing; don't read a dead one. */
+    lv_obj_t *t = textarea_window_text();
+    return (t && lv_obj_is_valid(t)) ? textarea_window_get() : "(no compose window)";
+}
 void ui_compose_enter(void) {
     uint32_t key = LV_KEY_ENTER;
+    lv_event_send(textarea_window_text(), LV_EVENT_KEY, &key);
+}
+/* ESC as the text box sees it (the on-screen keyboard has the focus). */
+void ui_compose_cancel(void) {
+    uint32_t key = LV_KEY_ESC;
     lv_event_send(textarea_window_text(), LV_EVENT_KEY, &key);
 }
 /* Move the selection with MFK steps to the row for `call`, searching down
@@ -50,3 +64,13 @@ void ui_select_row_from(const char *call) {
     printf("[harness] could not select %s\n", call);
 }
 void ui_click_focused(void) { lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_CLICKED, NULL); }
+/* Press the page button until page n ("(JS8 n:4)") is showing. */
+void ui_page(int n) {
+    char want[16];
+    snprintf(want, sizeof(want), "(JS8 %d:", n);
+    for (int i = 0; i < 8; i++) {
+        if (stub_page && stub_page->items[0] && strncmp(stub_page->items[0]->label, want, strlen(want)) == 0) return;
+        ui_press(0);
+    }
+    printf("[harness] could not reach page %d\n", n);
+}

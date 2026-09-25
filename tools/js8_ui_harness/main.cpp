@@ -13,11 +13,14 @@ void ui_press(int i);
 void ui_band_up(void);
 void ui_key(uint32_t key);
 int  ui_running(void);
+int  ui_focus_is_table(void);
 void ui_compose_append(const char *text);
 const char *ui_compose_text(void);
 void ui_compose_enter(void);
+void ui_compose_cancel(void);
 void ui_select_row_from(const char *call);
 void ui_click_focused(void);
+void ui_page(int n);
 extern int stub_tx_frames;
 extern int32_t stub_tx_offset;
 extern uint32_t stub_tx_samples;
@@ -72,13 +75,62 @@ static void pump(int ms) {
     }
 }
 
+static void pump(int ms);
+
 struct Station {
     const char *call, *grid, *to, *text;
     double      offset_hz;
     float       amp;
 };
 
+// Synthesise `band` (one slot per frame, starting at the next slot
+// boundary) and feed it through the dialog's audio callback in real time.
+static void feed_band(const std::vector<Station> &band) {
+    const auto &costas = js8core::protocol::costas(js8core::protocol::CostasType::Original);
+    std::vector<std::vector<std::array<int, js8core::kJs8NumSymbols>>> tones(band.size());
+    std::size_t slots = 0;
+    for (std::size_t i = 0; i < band.size(); i++) {
+        auto frames = vc::build_message_frames(band[i].call, band[i].grid, "", band[i].text, false, false, 0);
+        for (auto &[frame, bits] : frames) {
+            std::array<int, js8core::kJs8NumSymbols> t{};
+            js8core::legacy_encode(bits, costas, frame.c_str(), t.data());
+            tones[i].push_back(t);
+        }
+        slots = std::max(slots, frames.size());
+        printf("[band] %-7s %4.0f Hz  %s\n", band[i].call, band[i].offset_hz, band[i].text);
+    }
+    auto               now  = std::chrono::system_clock::now().time_since_epoch();
+    long long          ms   = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
+    std::size_t        lead = (std::size_t)((15000 - ms % 15000) * RATE / 1000);
+    std::vector<float> audio(lead + slots * 15 * RATE + 3 * RATE, 0.0f);
+    for (std::size_t i = 0; i < band.size(); i++)
+        for (std::size_t k = 0; k < tones[i].size(); k++) {
+            std::size_t start = lead + k * 15 * RATE + RATE / 2;
+            double      phi   = 0;
+            for (int s = 0; s < js8core::kJs8NumSymbols; s++) {
+                double dphi = 2 * M_PI * (band[i].offset_hz + tones[i][k][s] * 6.25) / RATE;
+                for (int j = 0; j < 1764; j++) {
+                    audio[start + s * 1764 + j] += band[i].amp * (float)std::sin(phi);
+                    phi += dphi;
+                }
+            }
+        }
+    std::mt19937                    rng(5);
+    std::normal_distribution<float> noise(0.0f, 0.02f);
+    for (auto &x : audio) x += noise(rng);
+    const std::size_t piece = RATE / 50;
+    auto              t0    = std::chrono::steady_clock::now();
+    for (std::size_t i = 0; i < audio.size(); i += piece) {
+        unsigned n = (unsigned)std::min(piece, audio.size() - i);
+        dialog_audio_samples(n, &audio[i]);
+        auto due = t0 + std::chrono::microseconds((long long)((i + n) * 1e6 / RATE));
+        while (std::chrono::steady_clock::now() < due) pump(5);
+    }
+    pump(1500);
+}
+
 int main() {
+    setvbuf(stdout, nullptr, _IOLBF, 0); // keep the log if something aborts
     lv_init();
     static lv_color_t          buf[W * 60];
     static lv_disp_draw_buf_t  draw_buf;
@@ -174,6 +226,7 @@ int main() {
     screenshot("04b_mfk_select.ppm");
 
     // ---- Transmit: reply to N0XYZ, who called us. Back to "All" first.
+    ui_page(1);
     ui_press(1);
     pump(100);
     ui_select_row_from("N0XYZ");
@@ -197,6 +250,7 @@ int main() {
     screenshot("09_tx_done.ppm");
 
     // A long message, stopped with ESC during its first frame; the next ESC closes.
+    ui_page(1);
     ui_press(3); // Send...
     pump(200);
     ui_compose_append("@ALLCALL TESTING A LONGER MESSAGE FROM THE X6100");
@@ -215,15 +269,13 @@ int main() {
     };
     auto wait_done = [&]() { pump(3500); };
 
-    ui_press(0); // page 2
-    ui_press(0); // page 3
+    ui_page(3);
     ui_press(4); // Show Stations
     pump(300);
     screenshot("11_stations.ppm");
 
     ui_select_row_from("N0XYZ");
-    ui_press(0); // page 1
-    ui_press(0); // page 2
+    ui_page(2);
     ui_press(3); // Query >
     pump(300);
     screenshot("12_query.ppm");
@@ -237,15 +289,16 @@ int main() {
     wait_done();
 
     before = stub_tx_frames;
+    ui_page(2);
     ui_press(2); // Heartbeat
     wait_keyed(before);
     printf("[t3] heartbeat keyed at %d Hz (want 500-999, clear of stations)\n", stub_tx_offset);
     wait_done();
 
-    ui_press(0); // page 3
+    ui_page(3);
     ui_press(3); // Hold: On -> Off
     ui_select_row_from("N0XYZ");
-    ui_press(0); // page 1
+    ui_page(1);
     ui_press(2); // Reply
     pump(200);
     ui_compose_append("73");
@@ -255,6 +308,53 @@ int main() {
     printf("[t3] reply with Hold off keyed at %d Hz (N0XYZ is at 1320)\n", stub_tx_offset);
     wait_done();
     screenshot("14_after_t3.ppm");
+
+    // ---- T4: AUTO, HB, HB ACK. We're on page 1; go to page 4.
+    ui_page(4);
+    before = stub_tx_frames;
+    ui_press(1); // AUTO on
+    ui_press(2); // HB on: first heartbeat at the next chance
+    ui_press(3); // HB ACK on
+    pump(300);
+    screenshot("15_auto_on.ppm");
+    wait_keyed(before);
+    printf("[t4] first automatic heartbeat keyed at %d Hz\n", stub_tx_offset);
+    wait_done();
+
+    // Someone's heartbeat: expect an automatic ack in the HB sub-band.
+    before = stub_tx_frames;
+    feed_band({{"W7XYZ", "DM43", "", "W7XYZ: HEARTBEAT DM43", 1800, 0.04f}});
+    wait_keyed(before);
+    printf("[t4] heartbeat ack keyed at %d Hz (frames %d)\n", stub_tx_offset, stub_tx_frames);
+    screenshot("16_hb_ack.ppm");
+    wait_done();
+
+    // A query to us: expect an automatic SNR reply at our offset, and the
+    // QSO turns HB and HB ACK off.
+    before = stub_tx_frames;
+    feed_band({{"VE7ABC", "CN89", "K2XYZ", "K2XYZ SNR?", 1650, 0.04f}});
+    wait_keyed(before);
+    printf("[t4] SNR? auto-reply keyed at %d Hz (frames %d)\n", stub_tx_offset, stub_tx_frames);
+    screenshot("17_auto_reply.ppm");
+    wait_done();
+
+    // AUTO off: a GRID? query is offered, not sent.
+    ui_page(4);
+    ui_press(1); // AUTO off
+    before = stub_tx_frames;
+    feed_band({{"G0ABC", "IO91", "K2XYZ", "K2XYZ GRID?", 1250, 0.04f}});
+    pump(2000);
+    printf("[t4] after GRID? with AUTO off: frames %d (was %d)\n", stub_tx_frames, before);
+    screenshot("18_offer.ppm");
+    ui_page(1);
+    ui_select_row_from("G0ABC");
+    ui_press(2); // Reply
+    pump(300);
+    printf("[t4] Reply offers: '%s'\n", ui_compose_text());
+    screenshot("19_offer_reply.ppm");
+    ui_compose_cancel();
+    pump(300);
+    printf("[t4] list focused after cancelling: %s\n", ui_focus_is_table() ? "yes" : "no");
 
     // Band change, then close with ESC.
     ui_band_up();

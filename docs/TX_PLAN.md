@@ -4,8 +4,13 @@ Decided for T3 (2026-09-25): query set as listed below; heartbeats carry
 a 4-character grid; Hold offset defaults to On; add a Stations view like
 desktop's Call Activity, where ★ marks stations that heard you.
 
-Status: **T1, T2 and T3 done**: manual transmit, heartbeat, queries and the
-Stations view work end to end in the host UI harness. Nothing has been tested on a radio yet. Decided: TX buttons on page 1, 5 W cap, auto-reply later and opt-in.
+Decided for T4 (2026-09-24): AUTO, HB and HB ACK are separate switches, all
+off by default; a QSO turns HB and HB ACK off until you turn them back on;
+the HB interval is 5–30 min in 1 min steps; INFO/STATUS are edited from
+page 4; with AUTO off, answers are offered on Reply, as on desktop.
+
+Status: **T1–T4 done**: manual transmit, heartbeats, queries, the Stations
+view and auto-reply work end to end in the host UI harness. Nothing has been tested on a radio yet. Decided: TX buttons on page 1, 5 W cap, auto-reply later and opt-in.
 
 ## Principles
 
@@ -128,21 +133,38 @@ takes ("3 frames, 45 s"), and warns above ~6 frames.
 
 ## Auto-reply and heartbeats (off by default)
 
-Same behaviour as desktop JS8Call and the Android port:
+Three switches on page 4, each off by default, as in desktop JS8Call:
 
-| Heard | Reply (queued at your offset) |
-|---|---|
-| `YOU SNR?` / `YOU ?` | `YOU: THEM SNR -12` |
-| `YOU GRID?` | `… GRID FN42AB` |
-| `YOU INFO?` / `STATUS?` | your INFO / STATUS text, if set |
-| `YOU HEARING?` | up to 4 recently heard calls |
-| `YOU AGN?` | your last transmission again |
-| `@HB HEARTBEAT` (if HB acks on) | `YOU: THEM HEARTBEAT SNR -12` |
-| `YOU MSG …` with a good checksum | `ACK`, and the message is kept |
+- **AUTO** answers queries to your call:
 
-Guards: never while you're typing or already queued, never to yourself or to
-a group, at most one auto-reply per station per few minutes, and a TX
-watchdog. The status line shows **AUTO** while auto-reply is on.
+  | Heard | Reply (queued at your offset) |
+  |---|---|
+  | `YOU SNR?` / `YOU ?` | `THEM SNR -12` |
+  | `YOU GRID?` | `THEM GRID FN42AB` |
+  | `YOU INFO?` / `STATUS?` | `THEM INFO …` / `THEM STATUS …`, if you set the text |
+  | `YOU HEARING?` | up to 4 recently heard calls |
+  | `YOU AGN?` | your last transmission again |
+
+  With AUTO off, the answer is *offered* instead: select the station and
+  press Reply, and the keyboard opens with it filled in.
+- **HB** sends a heartbeat every 5–30 min (hold HB, turn the knob, press
+  again). Timing is desktop's: the next slot + 1 s + interval, one slot
+  later a quarter of the time.
+- **HB ACK** answers others' heartbeats with `THEM HEARTBEAT SNR -12` in
+  the heartbeat sub-band. As on desktop it acts only while AUTO and HB are
+  both on.
+
+Guards: never to yourself, a group or @ALLCALL, nothing from low-confidence
+decodes, the same answer to the same station at most every 5 min (heartbeat
+acks: 15 min), and replies that arrive while you type or transmit wait for
+their turn. Any message to you other than a heartbeat ack starts a QSO,
+which turns HB and HB ACK off until you turn them back on. Automatic
+transmissions pause after 60 min without a key press (desktop's idle
+watchdog). The status line shows **AUTO**, **HB 30m next hh:mm**, **ACK**,
+or **AUTO/HB PAUSED (idle)**.
+
+`YOU MSG …` with a good checksum → `ACK` needs somewhere to keep the
+message, so it moved to T5 with the inbox.
 
 Regulatory note: whether unattended replies are allowed, and on which
 frequencies, depends on your licence and country. That's why auto-reply is
@@ -152,8 +174,8 @@ opt-in and always visible.
 
 - **Power cap 5 W** while in JS8, as in the FT8 app (radio setting
   restored on exit). JS8 keys up to ~85 % of the time during long messages.
-- **TX watchdog**: auto-reply and heartbeats stop after N minutes without a
-  key press (JS8Call has the same idea). Default 30 min.
+- **TX watchdog**: auto-reply and heartbeats pause after 60 min without a
+  key press (desktop JS8Call's default).
 - **Message length**: warn above 6 frames and refuse above 20 (5 min of TX).
 - **Callsign and grid required** before anything can be sent (APP → Callsign,
   APP → QTH).
@@ -173,8 +195,8 @@ enum needs a JS8 entry; that's appended, like `ACTION_APP_JS8`.
 | **T1** ✅ | `src/js8` transmitter: text → frames → GFSK audio at the radio rate, slot scheduling, queue, abort. Loopback tests: TX audio into our RX decodes. Frame/time estimates for the keyboard. | Yes, fully |
 | **T2** ✅ | Radio glue: split the FT8 app's TX player into a shared "play with PTT and ALC" routine; JS8 uses it. Reply, Send, CQ, Stop, TX bar, TX rows, TX offset on the main knob. | Mostly (harness), then dummy load |
 | **T3** ✅ | Query list, single heartbeat, Hold offset, Stations view (★ = heard you), messages to you always shown | Harness + on air |
-| **T4** | Auto-reply, HB interval, HB acks, MSG ACK, watchdog | Library tests + on air |
-| **T5** | Logging; later an inbox for stored MSG and QUERY MSGS | |
+| **T4** ✅ | Auto-reply, HB interval, HB acks, watchdog | Library tests + harness, then on air |
+| **T5** | Logging; an inbox for stored MSG (with MSG ACK) and QUERY MSGS | |
 
 ## Checking it on air
 

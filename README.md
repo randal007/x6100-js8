@@ -38,6 +38,10 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | 3 | Test WAV | Decode `/mnt/js8_test.wav` instead of the radio audio: see [test-audio](test-audio). |
 | 3 | **Hold: On/Off** | On (default): replies go out on your own offset. Off: Reply and Query move your offset to the station's first. |
 | 3 | **Show Stations / Messages** | Switch the list to one row per station, like desktop JS8Call's Call Activity. |
+| 4 | **AUTO: Off/On** | Answer SNR?, GRID?, INFO?, STATUS?, HEARING? and AGN? sent to your call. Off (default): the answer is offered on Reply instead. |
+| 4 | **HB: Off/N min** | Send heartbeats every N minutes. Hold it and turn the knob to set 5–30 min; press to finish. |
+| 4 | **HB ACK** | Answer others' heartbeats with how you hear them. Acts only while AUTO and HB are on, as on desktop. |
+| 4 | **Texts…** | Edit what AUTO sends for INFO? and STATUS? (kept in `/mnt/js8_texts.txt`). |
 
 **Who heard you:** in the Stations view, stations that have heard you are
 marked `*` and listed first. That covers anyone who acknowledged your
@@ -57,6 +61,14 @@ waterfall gets a red border. Sent messages appear in the list in blue.
 Power is capped at 5 W, as in the FT8 app, and restored when you leave.
 
 ![Replying: TX bar keyed, sent message in blue](docs/screenshots/js8_08_tx_keying.png)
+
+**Automatic replies and heartbeats** are off until you switch them on, each
+on its own, like desktop JS8Call. A message to you (other than a heartbeat
+ack) turns HB and HB ACK off again, so heartbeats don't cut into a QSO.
+After an hour without touching the radio, automatic transmissions pause
+until you press something. The status line always shows what's on.
+
+![AUTO, HB and HB ACK on: heartbeat queued in the sub-band](docs/screenshots/js8_15_auto_hb.png)
 
 Rows show UTC time, SNR, audio offset and the message. The MFK moves through
 the list and marks the selected station's offset with a green line on the
@@ -108,20 +120,21 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [x] JS8 app on APP 3:3: waterfall, message list, filters, test mode
 - [x] JS8 band presets (DB migration 4)
 - [x] Headless UI harness and test-audio generator
-- [ ] CI image build with JS8 dependencies (workflow updated; first build pending)
+- [x] CI image build with JS8 dependencies (GitHub Actions, manual dispatch)
 - [ ] First boot on a radio: WAV test mode, then on-air RX against desktop JS8Call
 - [ ] Decode timing on the Cortex-A7 on a busy band
 - [x] Transmit, manual: reply, directed messages, free text, CQ, stop ([plan](docs/TX_PLAN.md), phases T1–T2)
 - [ ] Transmit on air: dummy load, then PSK Reporter spots and a desktop JS8Call QSO
 - [x] Heartbeat, query shortcuts, Hold offset, Stations view with "heard you" (T3)
-- [ ] Opt-in auto-reply and heartbeat interval (T4); logging (T5)
-- [ ] Fast / Turbo / Slow submodes, auto-reply, logging
+- [x] Opt-in auto-reply, heartbeat interval, heartbeat acks, idle watchdog (T4)
+- [ ] Logging and an inbox for MSG (T5)
+- [ ] Fast / Turbo / Slow submodes
 
 ## Testing
 
 | What | How |
 |---|---|
-| Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
+| Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign and gap fill, auto-reply rules, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
 | The real UI on a PC | [tools/js8_ui_harness](tools/js8_ui_harness): the actual dialog on stock LVGL with a simulated busy band, in real time, under ASan/UBSan. |
 | On the radio, without RF | [test-audio](test-audio) and the Test WAV button. |
 | Radio compiler | Everything JS8 compiles cleanly with the image's GCC 12.3 (Cortex-A7, NEON) against Boost 1.80. |

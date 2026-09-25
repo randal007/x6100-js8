@@ -54,6 +54,11 @@
 #define WF_VISIBLE       55     /* waterfall rows left uncovered by the list */
 #define TX_BAR_H         30     /* TX status line between waterfall and list */
 #define TX_TEXT_MAX      160    /* longest message the compose window takes */
+#define OFFER_MS         (5 * 60 * 1000) /* how long an offered reply stays on Reply */
+#define TEXT_MAX         64     /* INFO / STATUS */
+#ifndef JS8_TEXTS_PATH
+#define JS8_TEXTS_PATH   "/mnt/js8_texts.txt" /* DATA partition; editable on a PC */
+#endif
 #define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
 #define JS8_SLOT_SEC     15.0f
 #define PSD_INTERVAL_MS  200
@@ -93,6 +98,21 @@ static void        hold_cb(button_data_t *btn);
 static const char *stations_label_getter(void);
 static void        stations_cb(button_data_t *btn);
 static void        query_close(void);
+static const char *auto_label_getter(void);
+static void        auto_cb(button_data_t *btn);
+static const char *hb_label_getter(void);
+static void        hb_cb(button_data_t *btn);
+static void        hb_hold_cb(button_data_t *btn);
+static const char *hb_ack_label_getter(void);
+static void        hb_ack_cb(button_data_t *btn);
+static void        texts_cb(button_data_t *btn);
+static bool        tx_queue_at(const char *text, int offset_hz, bool automatic);
+static void        user_touch(void);
+static void        auto_send(const js8_auto_result_t *r);
+static void        hb_tick(void);
+static void        load_texts(void);
+static void        save_texts(void);
+static void        compose_open(const char *prefill);
 static void        update_tx_bar(void);
 static void        tx_start(void);
 static void        tx_stop_all(void);
@@ -118,6 +138,23 @@ static bool           view_stations;   /* list shows stations, not messages */
 static js8_station_t  st_rows[MAX_ROWS];
 static int            st_count;
 static lv_obj_t      *query_list;      /* Query popup, when open */
+
+/* T4: auto-reply and heartbeats. The switches live in params (js8_auto,
+ * js8_hb, js8_hb_ack, js8_hb_interval), all off by default. */
+static js8_auto_t *autop;
+static int64_t     hb_next_ms;       /* 0: send the first one at the next chance */
+static bool        hb_adjusting;     /* main knob sets the HB interval */
+static char        info_text[TEXT_MAX + 1], status_text[TEXT_MAX + 1];
+static char        last_tx_text[JS8_RX_TEXT_LEN]; /* for AGN? */
+static struct {
+    char    call[JS8_RX_CALL_LEN];
+    char    text[JS8_RX_TEXT_LEN];
+    int64_t ms;
+} offer; /* AUTO off: a reply waiting for Reply, like desktop's outgoing box */
+static js8_auto_result_t pending_auto;       /* arrived while TX was busy */
+static bool              pending_auto_valid;
+static int               edit_target;        /* 0 compose, 1 INFO, 2 STATUS */
+static lv_obj_t         *texts_list;
 
 static lv_obj_t *waterfall;
 static lv_obj_t *finder;
@@ -149,20 +186,21 @@ static uint64_t last_psd_ms;
 static buttons_page_t page_1;
 static buttons_page_t page_2;
 static buttons_page_t page_3;
+static buttons_page_t page_4;
 
-static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:3)", .press = button_next_page_cb, .next = &page_2};
+static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:4)", .press = button_next_page_cb, .next = &page_2};
 static button_data_t btn_show    = {.type = BTN_TEXT_FN, .label_fn = show_label_getter, .press = show_cb};
 static button_data_t btn_reply   = {.type = BTN_TEXT, .label = "Reply", .press = reply_cb};
 static button_data_t btn_send    = {.type = BTN_TEXT, .label = "Send...", .press = send_cb};
 static button_data_t btn_stop_tx = {.type = BTN_TEXT, .label = "Stop TX", .press = stop_tx_cb};
 
-static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:3)", .press = button_next_page_cb, .next = &page_3};
+static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:4)", .press = button_next_page_cb, .next = &page_3};
 static button_data_t btn_cq    = {.type = BTN_TEXT, .label = "CQ", .press = cq_cb};
 static button_data_t btn_hb    = {.type = BTN_TEXT, .label = "Heart-\nbeat", .press = heartbeat_cb};
 static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press = query_cb};
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
-static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:3)", .press = button_next_page_cb, .next = &page_1};
+static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:4)", .press = button_next_page_cb, .next = &page_4};
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
 static button_data_t btn_test_wav  = {.type = BTN_TEXT_FN, .label_fn = test_wav_label_getter, .press = test_wav_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
@@ -171,6 +209,13 @@ static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_
 static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn_stop_tx}};
 static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_clear}};
 static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_test_wav, &btn_hold, &btn_stations}};
+
+static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:4)", .press = button_next_page_cb, .next = &page_1};
+static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
+static button_data_t btn_hbauto = {.type = BTN_TEXT_FN, .label_fn = hb_label_getter, .press = hb_cb, .hold = hb_hold_cb};
+static button_data_t btn_hbackk = {.type = BTN_TEXT_FN, .label_fn = hb_ack_label_getter, .press = hb_ack_cb};
+static button_data_t btn_texts  = {.type = BTN_TEXT, .label = "Texts...", .press = texts_cb};
+static buttons_page_t page_4 = {{&btn_p4, &btn_auto, &btn_hbauto, &btn_hbackk, &btn_texts}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -304,8 +349,11 @@ static int64_t now_wall_ms(void) {
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
+static void handle_incoming(const js8_rx_msg_t *m);
+
 static void add_message(const js8_rx_msg_t *m) {
     js8_stations_add(stations, m, params.callsign.x, now_wall_ms());
+    if (!m->tx) handle_incoming(m);
 
     int slot = hist_head;
     history[slot] = *m;
@@ -555,8 +603,31 @@ static void update_status(void) {
     struct tm tm;
     gmtime_r(&now, &tm);
     bool testing = js8_rx_wav_active(rx);
-    lv_label_set_text_fmt(status, "%s%s  %02d:%02d:%02dZ  last %u  total %u", testing ? "TEST WAV  " : "",
-                          cfg_digital_label_get(), tm.tm_hour, tm.tm_min, tm.tm_sec, cycle_decodes, hist_count);
+
+    /* Always show what may transmit by itself. */
+    char    flags[80] = "";
+    int64_t now_ms    = now_wall_ms();
+    bool    any_auto  = params.js8_auto.x || params.js8_hb.x;
+    if (any_auto && js8_auto_idle(autop, now_ms)) {
+        snprintf(flags, sizeof(flags), "AUTO/HB PAUSED (idle)  ");
+    } else {
+        if (params.js8_auto.x) strcat(flags, "AUTO  ");
+        if (params.js8_hb.x) {
+            char hb[40];
+            if (hb_next_ms > now_ms) {
+                time_t    t = (time_t)(hb_next_ms / 1000);
+                struct tm nt;
+                gmtime_r(&t, &nt);
+                snprintf(hb, sizeof(hb), "HB %um next %02d:%02d  ", params.js8_hb_interval.x, nt.tm_hour, nt.tm_min);
+            } else {
+                snprintf(hb, sizeof(hb), "HB %um  ", params.js8_hb_interval.x);
+            }
+            strcat(flags, hb);
+        }
+        if (params.js8_hb_ack.x && params.js8_auto.x && params.js8_hb.x) strcat(flags, "ACK  ");
+    }
+    lv_label_set_text_fmt(status, "%s%s%s  %02d:%02d:%02dZ  total %u", flags, testing ? "TEST WAV  " : "",
+                          cfg_digital_label_get(), tm.tm_hour, tm.tm_min, tm.tm_sec, hist_count);
 
     /* Playback ends on its own; bring the button label back in step. */
     if (testing != test_wav_shown) {
@@ -706,6 +777,12 @@ static void ui_tx_done(void *arg) {
     if (!completed) add_info_row("TX stopped");
     memset(&tx_status, 0, sizeof(tx_status));
     update_tx_bar();
+
+    /* An auto-reply that arrived while we were sending. */
+    if (pending_auto_valid) {
+        pending_auto_valid = false;
+        auto_send(&pending_auto);
+    }
 }
 
 static void on_tx_done(const char *text, bool completed, void *ctx) {
@@ -738,7 +815,10 @@ static void tx_timer_cb(lv_timer_t *t) {
     update_tx_bar();
     /* Keep the status clock moving; decode cycles, which also refresh it,
      * pause while we transmit. */
-    if (++ticks % 4 == 0) update_status();
+    if (++ticks % 4 == 0) {
+        hb_tick();
+        update_status();
+    }
     if (view_stations && ticks % 20 == 0) rebuild_station_rows(); /* ages */
 }
 
@@ -747,6 +827,14 @@ static void update_tx_bar(void) {
     if (!tx_bar) return;
     char     line[JS8_RX_TEXT_LEN + 64];
     uint16_t offset = params.js8_tx_freq.x;
+
+    if (hb_adjusting && tx_status.state == JS8_TX_IDLE) {
+        snprintf(line, sizeof(line), "HB every %u min   turn the knob (5-30), press HB when done",
+                 params.js8_hb_interval.x);
+        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x5a4a00), 0);
+        lv_label_set_text(tx_bar, line);
+        return;
+    }
 
     switch (tx_status.state) {
     case JS8_TX_WAITING: {
@@ -781,7 +869,25 @@ static void update_tx_bar(void) {
 
 /* Queue `text` at our offset. Returns false (with a message shown) if it
  * can't be sent, e.g. a bad character or something already sending. */
-static bool tx_queue_at(const char *text, int offset_hz) {
+static void qso_started(const char *call);
+
+/* "N0XYZ ..." with a real-looking call first: a directed message. */
+static bool starts_with_call(const char *text, char *call, size_t len) {
+    size_t n = strcspn(text, " ");
+    if (n < 3 || n >= len || text[0] == '@' || strncmp(text, "CQ", 2) == 0) return false;
+    bool letter = false, digit = false;
+    for (size_t i = 0; i < n; i++) {
+        if (text[i] >= 'A' && text[i] <= 'Z') letter = true;
+        else if (text[i] >= '0' && text[i] <= '9') digit = true;
+        else if (text[i] != '/') return false;
+    }
+    if (!letter || !digit) return false;
+    memcpy(call, text, n);
+    call[n] = '\0';
+    return true;
+}
+
+static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
     if (js8_tx_busy(tx)) {
         msg_update_text_fmt("Already sending - Stop TX first");
         return false;
@@ -801,13 +907,19 @@ static bool tx_queue_at(const char *text, int offset_hz) {
         msg_update_text_fmt("JS8: %s", err);
         return false;
     }
-    msg_update_text_fmt("Queued: %d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
+    msg_update_text_fmt("%sQueued: %d frame%s, %.0f s", automatic ? "Auto: " : "", pv.frames,
+                        pv.frames == 1 ? "" : "s", pv.seconds);
+    snprintf(last_tx_text, sizeof(last_tx_text), "%s", text);
+
+    /* A directed message you sent yourself starts a QSO. */
+    char call[JS8_RX_CALL_LEN];
+    if (!automatic && starts_with_call(text, call, sizeof(call))) qso_started(call);
     return true;
 }
 
-/* At our TX offset (the red band). */
+/* At our TX offset (the red band), sent by you. */
 static bool tx_queue(const char *text) {
-    return tx_queue_at(text, params.js8_tx_freq.x);
+    return tx_queue_at(text, params.js8_tx_freq.x, false);
 }
 
 /* Hold off: answer on the other station's offset. Hold on (default): stay
@@ -826,6 +938,17 @@ static void apply_hold(float their_freq) {
 /* Main tuning knob: move the TX offset, as in the FT8 app. The dial
  * frequency stays locked. */
 static void rotary_cb(int32_t diff) {
+    user_touch();
+    if (hb_adjusting) {
+        int v = (int)params.js8_hb_interval.x + (diff > 0 ? 1 : -1);
+        if (v < JS8_HB_MIN_INTERVAL) v = JS8_HB_MIN_INTERVAL;
+        if (v > JS8_HB_MAX_INTERVAL) v = JS8_HB_MAX_INTERVAL;
+        params_uint16_set(&params.js8_hb_interval, (uint16_t)v);
+        if (params.js8_hb.x && hb_next_ms) hb_next_ms = js8_next_heartbeat_ms(now_wall_ms(), v);
+        update_tx_bar();
+        update_status();
+        return;
+    }
     int32_t abs_diff = abs(diff);
     if (abs_diff > 3) diff *= (abs_diff < 6) ? 5 : 10;
 
@@ -856,6 +979,7 @@ static void compose_close(void) {
     composing = false;
     if (table) {
         lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
         lv_group_set_editing(keyboard_group, true);
     }
 }
@@ -863,12 +987,22 @@ static void compose_close(void) {
 /* Same pattern as the FT8 app's keyboard: close here and return true;
  * textarea_window's own close is then a no-op. */
 static bool compose_ok_cb(void) {
+    if (edit_target) {
+        char *dst = edit_target == 1 ? info_text : status_text;
+        snprintf(dst, TEXT_MAX + 1, "%s", textarea_window_get());
+        save_texts();
+        msg_update_text_fmt("%s saved", edit_target == 1 ? "INFO" : "STATUS");
+        edit_target = 0;
+        compose_close();
+        return true;
+    }
     if (!tx_queue(textarea_window_get())) return false; /* keep the window open */
     compose_close();
     return true;
 }
 
 static bool compose_cancel_cb(void) {
+    edit_target = 0;
     compose_close();
     return true;
 }
@@ -887,10 +1021,16 @@ static void compose_open(const char *prefill) {
     lv_textarea_set_accepted_chars(text, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .-+?!\"/@:>");
     lv_textarea_set_max_length(text, TX_TEXT_MAX);
     lv_obj_add_event_cb(text, compose_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    if (edit_target) {
+        lv_textarea_set_max_length(text, TEXT_MAX);
+        lv_obj_remove_event_cb(text, compose_changed_cb);
+    }
     if (prefill && prefill[0]) {
         textarea_window_set(prefill);
     } else {
-        lv_textarea_set_placeholder_text(text, " CALL MESSAGE / @ALLCALL ...");
+        lv_textarea_set_placeholder_text(text, edit_target == 1   ? " INFO, e.g. X6100 5W EFHW"
+                                               : edit_target == 2 ? " STATUS, e.g. PORTABLE QRV"
+                                                                  : " CALL MESSAGE / @ALLCALL ...");
     }
 }
 
@@ -916,10 +1056,14 @@ static void band_cb(lv_event_t *e) {
 
 static void key_cb(lv_event_t *e) {
     uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    user_touch();
 
     switch (key) {
     case LV_KEY_ESC:
-        if (js8_tx_busy(tx)) {
+        if (hb_adjusting) {
+            hb_adjusting = false;
+            update_tx_bar();
+        } else if (js8_tx_busy(tx)) {
             stop_tx_cb(NULL); /* first ESC stops TX; the next one closes */
         } else {
             dialog_destruct();
@@ -1057,6 +1201,13 @@ static void construct_cb(lv_obj_t *parent) {
     base_gain_offset = tx_player_base_gain_offset();
     tx_start();
     if (!stations) stations = js8_stations_create();
+    if (!autop) autop = js8_auto_create();
+    user_touch();
+    load_texts();
+    hb_next_ms         = 0;
+    hb_adjusting       = false;
+    pending_auto_valid = false;
+    memset(&offer, 0, sizeof(offer));
     tx_timer = lv_timer_create(tx_timer_cb, 250, NULL);
     update_tx_bar();
 }
@@ -1071,6 +1222,11 @@ static void destruct_cb(void) {
     }
     compose_close();
     query_close();
+    if (texts_list) {
+        lv_obj_del(texts_list);
+        texts_list = NULL;
+    }
+    hb_adjusting = false;
     radio_set_pwr(param_f_get(cfg_pwr));
 
     rx_stop();
@@ -1098,12 +1254,14 @@ static const char *show_label_getter(void) {
 }
 
 static void show_cb(button_data_t *btn) {
+    user_touch();
     show = (show + 1) % SHOW_COUNT;
     buttons_refresh(btn);
     rebuild_rows();
 }
 
 static void clear_cb(button_data_t *btn) {
+    user_touch();
     (void)btn;
     hist_head = hist_count = 0;
     js8_stations_clear(stations);
@@ -1117,6 +1275,7 @@ static void clear_cb(button_data_t *btn) {
 /* Snap the system clock to the nearest 15 s boundary, for use when you know
  * a transmission just started. Same approach as the FT8 app. */
 static void time_sync_cb(button_data_t *btn) {
+    user_touch();
     (void)btn;
     time_t now   = time(NULL);
     float  drift = fmodf((now % 60) + JS8_SLOT_SEC / 2, JS8_SLOT_SEC) - JS8_SLOT_SEC / 2;
@@ -1136,6 +1295,7 @@ static const char *test_wav_label_getter(void) {
 /* Play TEST_WAV through the decoder instead of the receiver audio, starting
  * at the next slot boundary. tools/js8_wavgen makes suitable files. */
 static void test_wav_cb(button_data_t *btn) {
+    user_touch();
     if (js8_rx_wav_active(rx)) {
         js8_rx_stop_wav(rx);
         add_info_row("Test stopped");
@@ -1154,12 +1314,22 @@ static void test_wav_cb(button_data_t *btn) {
 }
 
 static void reply_cb(button_data_t *btn) {
+    user_touch();
     (void)btn;
     char  call[JS8_RX_CALL_LEN];
     float freq;
     int   snr;
     if (!selected_station(call, sizeof(call), &freq, &snr)) {
         msg_update_text_fmt("Select a station first (MFK)");
+        return;
+    }
+    /* AUTO off and this station asked us something: offer the answer. */
+    if (offer.text[0] && now_wall_ms() - offer.ms < OFFER_MS && strcmp(offer.call, call) == 0) {
+        char text[JS8_RX_TEXT_LEN];
+        snprintf(text, sizeof(text), "%s", offer.text);
+        offer.text[0] = '\0';
+        apply_hold(freq);
+        compose_open(text);
         return;
     }
     char prefill[JS8_RX_CALL_LEN + 2];
@@ -1169,11 +1339,13 @@ static void reply_cb(button_data_t *btn) {
 }
 
 static void send_cb(button_data_t *btn) {
+    user_touch();
     (void)btn;
     compose_open(NULL);
 }
 
 static void stop_tx_cb(button_data_t *btn) {
+    user_touch();
     (void)btn;
     if (!js8_tx_busy(tx)) {
         msg_update_text_fmt("Not sending");
@@ -1185,6 +1357,7 @@ static void stop_tx_cb(button_data_t *btn) {
 
 /* CQ with the 4-character grid, as desktop JS8Call sends it. */
 static void cq_cb(button_data_t *btn) {
+    user_touch();
     (void)btn;
     char text[32];
     snprintf(text, sizeof(text), "CQ CQ CQ %.4s", params.qth.x);
@@ -1194,8 +1367,7 @@ static void cq_cb(button_data_t *btn) {
 /* One heartbeat now, at a free spot in the 500-1000 Hz heartbeat sub-band
  * (desktop's rule: clear of anything heard in the last 30 s). Our chat
  * offset (the red band) doesn't move. */
-static void heartbeat_cb(button_data_t *btn) {
-    (void)btn;
+static int free_hb_offset(void) {
     static js8_station_t heard[MAX_ROWS];
     float                offsets[MAX_ROWS];
     int64_t              times[MAX_ROWS];
@@ -1205,10 +1377,19 @@ static void heartbeat_cb(button_data_t *btn) {
         offsets[i] = heard[i].freq_hz;
         times[i]   = heard[i].heard_ms;
     }
-    int  offset = js8_heartbeat_offset(offsets, times, (unsigned)n, now);
+    return js8_heartbeat_offset(offsets, times, (unsigned)n, now);
+}
+
+static bool send_heartbeat(bool automatic) {
     char text[48];
     js8_heartbeat_text(params.callsign.x, params.qth.x, text, sizeof(text));
-    tx_queue_at(text, offset);
+    return tx_queue_at(text, free_hb_offset(), automatic);
+}
+
+static void heartbeat_cb(button_data_t *btn) {
+    user_touch();
+    (void)btn;
+    send_heartbeat(false);
 }
 
 static const char *hold_label_getter(void) {
@@ -1216,6 +1397,7 @@ static const char *hold_label_getter(void) {
 }
 
 static void hold_cb(button_data_t *btn) {
+    user_touch();
     params_bool_set(&params.js8_hold_offset, !params.js8_hold_offset.x);
     buttons_refresh(btn);
     msg_update_text_fmt(params.js8_hold_offset.x ? "Replies stay on your offset" : "Replies move to their offset");
@@ -1226,6 +1408,7 @@ static const char *stations_label_getter(void) {
 }
 
 static void stations_cb(button_data_t *btn) {
+    user_touch();
     view_stations = !view_stations;
     buttons_refresh(btn);
     rebuild_rows();
@@ -1291,6 +1474,7 @@ static void query_key_cb(lv_event_t *e) {
 /* One-press messages for the selected station: MFK to move, press or tap
  * to send, ESC to close. */
 static void query_cb(button_data_t *btn) {
+    user_touch();
     (void)btn;
     if (query_list || composing) return;
     char  call[JS8_RX_CALL_LEN];
@@ -1334,4 +1518,255 @@ bool dialog_js8_selected_call(char *call, unsigned len) {
     float freq;
     int   snr;
     return table && selected_station(call, len, &freq, &snr);
+}
+
+/* ---- T4: auto-reply, heartbeats ---------------------------------------- */
+
+/* Any key, button or knob: resets the idle watchdog. */
+static void user_touch(void) {
+    js8_auto_user_activity(autop, now_wall_ms());
+}
+
+/* Recently heard calls, most recent first, for HEARING?. */
+static unsigned heard_calls(const char **out, unsigned max) {
+    static js8_station_t list[MAX_ROWS];
+    int                  n = js8_stations_list(stations, now_wall_ms(), list, MAX_ROWS);
+    /* js8_stations_list puts stations that heard us first; re-sort by time. */
+    for (int i = 1; i < n; i++)
+        for (int j = i; j > 0 && list[j].heard_ms > list[j - 1].heard_ms; j--) {
+            js8_station_t t = list[j];
+            list[j]         = list[j - 1];
+            list[j - 1]     = t;
+        }
+    unsigned k = 0;
+    for (int i = 0; i < n && k < max; i++) out[k++] = list[i].call;
+    return k;
+}
+
+static void auto_send(const js8_auto_result_t *r) {
+    int64_t now = now_wall_ms();
+    /* The switches may have changed while it waited. */
+    bool allowed = r->hb_ack ? (params.js8_auto.x && params.js8_hb.x && params.js8_hb_ack.x) : params.js8_auto.x;
+    if (!allowed || js8_auto_idle(autop, now)) return;
+
+    if (js8_tx_busy(tx) || composing || query_list || texts_list) {
+        pending_auto       = *r; /* newest wins */
+        pending_auto_valid = true;
+        return;
+    }
+    int offset = r->hb_ack ? free_hb_offset() : params.js8_tx_freq.x;
+    LV_LOG_USER("JS8 auto: '%s' at %d Hz", r->text, offset);
+    if (tx_queue_at(r->text, offset, true)) {
+        js8_auto_sent(autop, r, now);
+        add_info_row("Auto: %s", r->text);
+    }
+}
+
+/* Desktop pauses heartbeats during a QSO; here they switch off until you
+ * turn them back on (the user's choice). */
+static void qso_started(const char *call) {
+    if (!params.js8_hb.x && !params.js8_hb_ack.x) return;
+    params_bool_set(&params.js8_hb, false);
+    params_bool_set(&params.js8_hb_ack, false);
+    hb_next_ms   = 0;
+    hb_adjusting = false;
+    if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
+    if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
+    msg_update_text_fmt("Heartbeats off: QSO with %s", call);
+    add_info_row("HB and HB ACK off: QSO with %s", call);
+    update_status();
+}
+
+static void handle_incoming(const js8_rx_msg_t *m) {
+    if (js8_starts_qso(m)) qso_started(m->from);
+
+    const char *heard[16];
+    unsigned    n = heard_calls(heard, 16);
+
+    js8_auto_settings_t st = {
+        .autoreply = params.js8_auto.x,
+        .heartbeat = params.js8_hb.x,
+        .hb_ack    = params.js8_hb_ack.x,
+        .my_call   = params.callsign.x,
+        .my_grid   = params.qth.x,
+        .info      = info_text,
+        .status    = status_text,
+    };
+    js8_auto_result_t r;
+    js8_auto_consider(autop, m, &st, heard, n, last_tx_text, now_wall_ms(), &r);
+
+    switch (r.action) {
+    case JS8_AUTO_SEND:
+        auto_send(&r);
+        break;
+    case JS8_AUTO_OFFER:
+        snprintf(offer.call, sizeof(offer.call), "%s", r.to);
+        snprintf(offer.text, sizeof(offer.text), "%s", r.text);
+        offer.ms = now_wall_ms();
+        msg_update_text_fmt("%s asked %s - select it and press Reply to answer", r.to, r.command);
+        add_info_row("%s asked %s: Reply sends \"%s\"", r.to, r.command, r.text);
+        break;
+    default:
+        break;
+    }
+}
+
+/* Once a second: send a heartbeat when one is due. */
+static void hb_tick(void) {
+    if (!params.js8_hb.x) {
+        hb_next_ms = 0;
+        return;
+    }
+    int64_t now = now_wall_ms();
+    if (js8_auto_idle(autop, now)) return;
+    if (hb_next_ms == 0) hb_next_ms = now; /* first one at the next chance */
+    if (now < hb_next_ms - 5000) return;   /* desktop prepares it 5 s early */
+    if (js8_tx_busy(tx) || composing || query_list || texts_list || !params.callsign.x[0]) return;
+    LV_LOG_USER("JS8 auto: heartbeat (due %lld)", (long long)hb_next_ms);
+    if (send_heartbeat(true)) {
+        hb_next_ms = js8_next_heartbeat_ms(now, params.js8_hb_interval.x);
+        update_status();
+    }
+}
+
+static const char *auto_label_getter(void) {
+    return params.js8_auto.x ? "AUTO:\nOn" : "AUTO:\nOff";
+}
+
+static void auto_cb(button_data_t *btn) {
+    user_touch();
+    params_bool_set(&params.js8_auto, !params.js8_auto.x);
+    buttons_refresh(btn);
+    if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
+    msg_update_text_fmt(params.js8_auto.x ? "AUTO on: answers SNR? GRID? INFO? STATUS? HEARING? AGN?"
+                                          : "AUTO off: answers are offered on Reply");
+    update_status();
+}
+
+static const char *hb_label_getter(void) {
+    static char buf[24];
+    if (!params.js8_hb.x) return "HB:\nOff";
+    snprintf(buf, sizeof(buf), "HB:\n%u min", params.js8_hb_interval.x);
+    return buf;
+}
+
+static void hb_cb(button_data_t *btn) {
+    user_touch();
+    if (hb_adjusting) { /* press again to finish setting the interval */
+        hb_adjusting = false;
+        buttons_refresh(btn);
+        update_tx_bar();
+        return;
+    }
+    params_bool_set(&params.js8_hb, !params.js8_hb.x);
+    hb_next_ms = 0;
+    buttons_refresh(btn);
+    if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
+    if (params.js8_hb.x) {
+        msg_update_text_fmt("HB on: every %u min (hold HB to change)", params.js8_hb_interval.x);
+    } else {
+        msg_update_text_fmt("HB off");
+    }
+    update_status();
+}
+
+static void hb_hold_cb(button_data_t *btn) {
+    user_touch();
+    hb_adjusting = true;
+    buttons_refresh(btn);
+    update_tx_bar();
+}
+
+static const char *hb_ack_label_getter(void) {
+    if (!params.js8_hb_ack.x) return "HB ACK:\nOff";
+    return (params.js8_auto.x && params.js8_hb.x) ? "HB ACK:\nOn" : "HB ACK:\nOn (idle)";
+}
+
+static void hb_ack_cb(button_data_t *btn) {
+    user_touch();
+    params_bool_set(&params.js8_hb_ack, !params.js8_hb_ack.x);
+    buttons_refresh(btn);
+    if (params.js8_hb_ack.x && !(params.js8_auto.x && params.js8_hb.x)) {
+        msg_update_text_fmt("HB ACK acts only while AUTO and HB are on");
+    }
+    update_status();
+}
+
+/* ---- INFO / STATUS texts -------------------------------------------- */
+
+static void load_texts(void) {
+    info_text[0] = status_text[0] = '\0';
+    FILE *f = fopen(JS8_TEXTS_PATH, "r");
+    if (!f) return;
+    char line[TEXT_MAX + 16];
+    while (fgets(line, sizeof(line), f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (strncmp(line, "INFO=", 5) == 0) snprintf(info_text, sizeof(info_text), "%s", line + 5);
+        if (strncmp(line, "STATUS=", 7) == 0) snprintf(status_text, sizeof(status_text), "%s", line + 7);
+    }
+    fclose(f);
+}
+
+static void save_texts(void) {
+    FILE *f = fopen(JS8_TEXTS_PATH, "w");
+    if (!f) {
+        msg_update_text_fmt("Can't write %s", JS8_TEXTS_PATH);
+        return;
+    }
+    fprintf(f, "INFO=%s\nSTATUS=%s\n", info_text, status_text);
+    fclose(f);
+}
+
+static void texts_close(void) {
+    if (!texts_list) return;
+    lv_obj_del_async(texts_list);
+    texts_list = NULL;
+    if (table && !composing) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+static void texts_item_cb(lv_event_t *e) {
+    int which = (int)(intptr_t)lv_event_get_user_data(e);
+    texts_close();
+    edit_target = which;
+    compose_open(which == 1 ? info_text : status_text);
+}
+
+static void texts_key_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    if (key == LV_KEY_ESC) texts_close();
+    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
+    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+}
+
+/* INFO and STATUS: what AUTO sends for INFO? and STATUS?. */
+static void texts_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (texts_list || query_list || composing) return;
+    lv_group_remove_obj(table);
+    texts_list = lv_list_create(dialog.obj);
+    lv_obj_set_size(texts_list, 520, 170);
+    lv_obj_align(texts_list, LV_ALIGN_TOP_RIGHT, -20, 18);
+    lv_obj_set_style_text_font(texts_list, &sony_24, 0);
+    lv_obj_set_style_bg_color(texts_list, lv_color_hex(0x202020), 0);
+    lv_list_add_text(texts_list, "Sent by AUTO for INFO? / STATUS?");
+
+    for (int i = 1; i <= 2; i++) {
+        char        label[TEXT_MAX + 16];
+        const char *v = i == 1 ? info_text : status_text;
+        snprintf(label, sizeof(label), "%s: %s", i == 1 ? "INFO" : "STATUS", v[0] ? v : "(not set)");
+        lv_obj_t *b = lv_list_add_btn(texts_list, NULL, label);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x303030), 0);
+        lv_obj_set_style_bg_color(b, lv_color_hex(0x1830a0), LV_STATE_FOCUSED);
+        lv_obj_set_style_text_color(b, lv_color_white(), 0);
+        lv_obj_add_event_cb(b, texts_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(b, texts_key_cb, LV_EVENT_KEY, NULL);
+        lv_group_add_obj(keyboard_group, b);
+        if (i == 1) lv_group_focus_obj(b);
+    }
+    lv_group_set_editing(keyboard_group, false);
 }
