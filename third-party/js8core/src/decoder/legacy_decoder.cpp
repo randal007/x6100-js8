@@ -1115,17 +1115,24 @@ namespace
     {
         // Data members
 
-        std::array<float, Mode::NFFT1>                                                nuttal;
-        std::array<std::array<std::array<std::complex<float>, Mode::NDOWNSPS>, 7>, 3> csyncs;
-        alignas(64) std::array<std::complex<float>, Mode::NDOWNSPS>                   csymb;
-        alignas(64) std::array<std::complex<float>, Mode::NMAX>                       filter;
-        alignas(64) std::array<std::complex<float>, Mode::NMAX>                       cfilt;
-        alignas(64) std::array<std::complex<float>, Mode::NDFFT1 / 2 + 1>             ds_cx;
-        alignas(64) std::array<std::complex<float>, Mode::NFFT1  / 2 + 1>             sd;
-        alignas(64) std::array<std::complex<float>, NP>                               cd0;
-        std::array<float, Mode::NMAX>                                                 dd;
-        std::array<std::array<float, Mode::NHSYM>, Mode::NSPS>                        s;
-        std::array<float, Mode::NSPS>                                                 savg;
+        // All arrays are value-initialised ({}). The decoder reads some of
+        // them before writing them, relying on the zero-initialisation that
+        // static storage gave the original instances. Heap-constructed
+        // instances need it spelled out: zeroing the storage before
+        // construction is not enough, as GCC's lifetime DSE may delete that
+        // memset(). (Local patch, see UPSTREAM.md.)
+
+        std::array<float, Mode::NFFT1>                                                nuttal{};
+        std::array<std::array<std::array<std::complex<float>, Mode::NDOWNSPS>, 7>, 3> csyncs{};
+        alignas(64) std::array<std::complex<float>, Mode::NDOWNSPS>                   csymb{};
+        alignas(64) std::array<std::complex<float>, Mode::NMAX>                       filter{};
+        alignas(64) std::array<std::complex<float>, Mode::NMAX>                       cfilt{};
+        alignas(64) std::array<std::complex<float>, Mode::NDFFT1 / 2 + 1>             ds_cx{};
+        alignas(64) std::array<std::complex<float>, Mode::NFFT1  / 2 + 1>             sd{};
+        alignas(64) std::array<std::complex<float>, NP>                               cd0{};
+        std::array<float, Mode::NMAX>                                                 dd{};
+        std::array<std::array<float, Mode::NHSYM>, Mode::NSPS>                        s{};
+        std::array<float, Mode::NSPS>                                                 savg{};
         FFTWPlanManager                                                               plans;
         SyncIndex                                                                     sync;
 

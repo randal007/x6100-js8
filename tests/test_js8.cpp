@@ -19,6 +19,8 @@
 
 #include <chrono>
 #include <cmath>
+#include <complex>
+#include <cstring>
 #include <condition_variable>
 #include <mutex>
 #include <random>
