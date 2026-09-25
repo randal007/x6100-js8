@@ -155,7 +155,11 @@ Like desktop JS8Call's notifications and highlight words. Page 6's
   `/mnt/js8_texts.txt`, so they can be edited on a PC too.
 - The beep is a short 1 kHz tone through the speaker, at most one alert
   every 3 s. It never sounds while transmitting (the speaker path carries
-  the TX audio then). **Test beep** plays it.
+  the TX audio then). **Test beep** plays it. The beep plays in the
+  background and stops at once if a transmission starts.
+- Builds with commit 9496041 (the first with alerts) up to 35f3797 froze
+  the screen on any beep, Test beep included; turn **Beep** off on those
+  builds. Fixed in b47b7b1.
 
 | The Alerts list | An alert word and a call in purple |
 |---|---|
