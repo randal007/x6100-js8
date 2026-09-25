@@ -49,8 +49,20 @@ Each one is its own commit on top of the pristine import, so
    failure depends on exact heap history, so there is no reliable
    regression test. The investigation is in the commit message.
 
-All five are candidates to send upstream. Patch 5 matters to upstream
-only if they ever move decoders off static storage.
+6. **Callsign validation matches desktop.** `is_valid_callsign()` was a
+   simplified rewrite that accepted almost any short word ("JUST",
+   "HELLO", "THE") as a callsign. Desktop JS8Call requires a letter-digit
+   pair, or a real compound call or @group. One visible effect:
+   `build_message_frames()` took the first word of free text for a
+   recipient, so forced identification never happened and free text went
+   out without the sender's callsign, where desktop prepends it. This is a
+   straight port of desktop's `isValidCallsign()` and
+   `isValidCompoundCallsign()`. The upstream varicode round-trip test
+   still passes (31/31).
+
+All six are candidates to send upstream. Patch 5 matters to upstream only
+if they ever move decoders off static storage; patch 6 affects them
+today.
 
 A related cost of upstream's approach, for the record: five `static
 thread_local` decoders reserve about 31 MB of address space in every thread

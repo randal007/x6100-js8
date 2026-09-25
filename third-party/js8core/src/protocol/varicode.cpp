@@ -775,19 +775,57 @@ bool is_command_autoreply(std::string const& cmd) {
   return false;
 }
 
+// Port of desktop JS8Call's Varicode::isValidCallsign() and
+// isValidCompoundCallsign() (local patch 6). The earlier version here accepted
+// any short alphanumeric word ("JUST", "HELLO") as a callsign; desktop requires
+// a letter-digit pair so ordinary words aren't mistaken for callsigns.
+namespace {
+bool has_letter_digit_pair(std::string const& s) {
+  for (std::size_t i = 1; i < s.size(); ++i) {
+    bool a = std::isdigit((unsigned char)s[i - 1]), b = std::isdigit((unsigned char)s[i]);
+    bool la = std::isupper((unsigned char)s[i - 1]), lb = std::isupper((unsigned char)s[i]);
+    if ((a && lb) || (la && b)) return true;
+  }
+  return false;
+}
+
+bool is_valid_compound_callsign(std::string const& callsign) {
+  // Compound calls cannot be > 9 characters after removing the slashes.
+  auto slashes = std::count(callsign.begin(), callsign.end(), '/');
+  if ((long)callsign.size() - slashes > 9) return false;
+
+  // Valid when it is: an actual compound call (containing /) whose prefix is
+  // not a base call; a group call (@...); or longer than two characters with
+  // a letter-digit pair, so arbitrary short words aren't coded as callsigns.
+  if (auto index = callsign.find('/'); index != std::string::npos) {
+    return kBaseCalls.find(callsign.substr(0, index)) == kBaseCalls.end();
+  }
+  if (!callsign.empty() && callsign.front() == '@') return true;
+  return callsign.size() > 2 && has_letter_digit_pair(callsign);
+}
+}  // namespace
+
 bool is_valid_callsign(std::string const& callsign, bool* p_is_compound) {
   if (kBaseCalls.find(callsign) != kBaseCalls.end()) {
     if (p_is_compound) *p_is_compound = false;
     return true;
   }
-  static const std::regex re(R"(([@]?|\b)([A-Z0-9\/@][A-Z0-9\/]{0,2}[\/]?[A-Z0-9\/]{0,3}[\/]?[A-Z0-9\/]{0,3})\b)");
-  bool match = std::regex_match(callsign, re);
-  if (p_is_compound) {
-    auto slash = callsign.rfind('/');
-    // /P is represented by the portable bit in a normal directed frame.
-    *p_is_compound = slash != std::string::npos && callsign.substr(slash) != "/P";
+
+  static const std::regex base_re(R"(\b(([0-9A-Z])?([0-9A-Z])([0-9])([A-Z])?([A-Z])?([A-Z])?)([/][P])?\b)");
+  if (std::regex_match(callsign, base_re)) {
+    if (p_is_compound) *p_is_compound = false;
+    return callsign.size() > 2 && has_letter_digit_pair(callsign);
   }
-  return match;
+
+  static const std::regex compound_re(R"((?:[@]?|\b)([A-Z0-9\/@][A-Z0-9\/]{0,2}[\/]?[A-Z0-9\/]{0,3}[\/]?[A-Z0-9\/]{0,3})\b)");
+  if (std::regex_match(callsign, compound_re)) {
+    bool valid = is_valid_compound_callsign(callsign);
+    if (p_is_compound) *p_is_compound = valid;
+    return valid;
+  }
+
+  if (p_is_compound) *p_is_compound = false;
+  return false;
 }
 
 bool is_compound_callsign(std::string const& callsign) {
