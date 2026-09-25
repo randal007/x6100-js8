@@ -125,6 +125,57 @@ bool js8_clock_correction(const float *dt, unsigned n, float *correction_s);
  * out-of-range position or length. */
 bool js8_latlon_to_grid(double lat, double lon, int chars, char *out, unsigned size);
 
+/* ---- QSO log --------------------------------------------------------- */
+
+/* The QSO with one station, from the directed traffic seen so far. */
+typedef struct {
+    char    call[JS8_RX_CALL_LEN];
+    char    grid[8];      /* one they sent us, or "" */
+    int64_t start_ms;     /* first directed message either way */
+    bool    has_sent_snr, has_rcvd_snr, has_heard_snr;
+    int16_t sent_snr;     /* report we gave them */
+    int16_t rcvd_snr;     /* report they gave us */
+    int16_t heard_snr;    /* how we last heard them */
+    bool    two_way;      /* both sides sent something (HB acks don't count) */
+} js8_qso_t;
+
+typedef struct js8_qsos js8_qsos_t;
+
+js8_qsos_t *js8_qsos_create(void);
+void        js8_qsos_destroy(js8_qsos_t *q);
+/* A received message / one of ours as it goes out ("MYCALL: TO ..."). Both
+ * return true, with the call in `ended`, when the message ends a two-way
+ * QSO (73 or SK) that hasn't been offered for logging yet. */
+bool js8_qsos_received(js8_qsos_t *q, const js8_rx_msg_t *msg, const char *my_call, int64_t now_ms, char *ended,
+                       unsigned ended_len);
+bool js8_qsos_sent(js8_qsos_t *q, const char *text, const char *my_call, int64_t now_ms, char *ended,
+                   unsigned ended_len);
+bool js8_qsos_get(js8_qsos_t *q, const char *call, int64_t now_ms, js8_qso_t *out);
+void js8_qsos_logged(js8_qsos_t *q, const char *call);
+void js8_qsos_clear(js8_qsos_t *q);
+
+/* One log entry; empty strings and tx_pwr_w 0 are left out. */
+typedef struct {
+    char     call[JS8_RX_CALL_LEN];
+    char     grid[12];
+    char     name[64];
+    char     comment[128];
+    char     rst_sent[8], rst_rcvd[8];
+    int64_t  on_ms, off_ms;
+    uint64_t freq_hz;     /* dial + audio offset */
+    char     my_call[JS8_RX_CALL_LEN];
+    char     my_grid[12];
+    float    tx_pwr_w;
+    char     pota_ref[16]; /* MY_SIG POTA + MY_SIG_INFO */
+    char     sota_ref[24]; /* MY_SOTA_REF */
+} js8_log_entry_t;
+
+/* Append to an ADIF file in desktop JS8Call's format (MODE MFSK, SUBMODE
+ * JS8), with a header if the file is new. False with a message in err. */
+bool js8_log_append(const char *path, const js8_log_entry_t *e, char *err, unsigned err_len);
+/* "40m", or "" outside the bands. */
+const char *js8_log_band(uint64_t freq_hz);
+
 #define JS8_HB_MIN_INTERVAL     5
 #define JS8_HB_MAX_INTERVAL     30
 #define JS8_HB_DEFAULT_INTERVAL 30

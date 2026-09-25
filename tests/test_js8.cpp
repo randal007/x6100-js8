@@ -11,6 +11,9 @@
 #include "classify.hpp"
 #include "receiver.hpp"
 #include "js8_ops.h"
+#include "qsolog.hpp"
+
+#include <unistd.h>
 #include "tx.hpp"
 #include "render.hpp"
 #include "resampler.hpp"
@@ -1154,4 +1157,173 @@ TEST_CASE("heartbeat timing follows desktop's scheduleHeartbeat", "[js8][t4]") {
     auto lo = next_heartbeat_ms(now, 1, rng), hi = next_heartbeat_ms(now, 99, rng);
     CHECK(lo - now < 6 * 60'000 + 20'000);
     CHECK(hi - now > 29 * 60'000);
+}
+
+// ---- QSO log ---------------------------------------------------------------
+
+TEST_CASE("a two-way QSO ending in 73 is offered for logging once", "[js8][log]") {
+    QsoTracker t;
+    const std::string me = "VE7NHW";
+    CHECK_FALSE(t.sent("VE7NHW: N7EAL SNR -12", me, 1000));
+    CHECK_FALSE(t.received("N7EAL", "N7EAL: VE7NHW SNR -08 TNX", true, -11, me, 16000));
+    CHECK_FALSE(t.received("N7EAL", "N7EAL: VE7NHW GRID DN17", true, -9, me, 31000));
+    auto ended = t.sent("VE7NHW: N7EAL TU 73!", me, 46000);
+    REQUIRE(ended);
+    CHECK(*ended == "N7EAL");
+    CHECK_FALSE(t.received("N7EAL", "N7EAL: VE7NHW 73 SK", true, -9, me, 61000)); // once
+
+    auto q = t.get("N7EAL", 62000);
+    REQUIRE(q);
+    CHECK(q->start_ms == 1000);
+    CHECK(q->sent_snr == -12);
+    CHECK(q->rcvd_snr == -8);
+    CHECK(q->heard_snr == -9);
+    CHECK(q->grid == "DN17");
+
+    t.logged("N7EAL");
+    CHECK_FALSE(t.get("N7EAL", 62000));
+}
+
+TEST_CASE("heartbeat acks and one-way traffic aren't QSOs", "[js8][log]") {
+    QsoTracker t;
+    const std::string me = "VE7NHW";
+    // They ack our heartbeat, we ack theirs: reports, but no QSO.
+    CHECK_FALSE(t.received("KK6WVY", "KK6WVY: VE7NHW HEARTBEAT SNR -23", true, -20, me, 0));
+    CHECK_FALSE(t.sent("VE7NHW: KK6WVY HEARTBEAT SNR -20", me, 15000));
+    CHECK_FALSE(t.received("KK6WVY", "KK6WVY: VE7NHW 73", true, -20, me, 30000)); // we never sent
+    auto q = t.get("KK6WVY", 30000);
+    REQUIRE(q);
+    CHECK(q->rcvd_snr == -23);
+    CHECK(q->sent_snr == -20);
+    CHECK_FALSE(q->we_sent);
+
+    // Groups, our own call and other people's QSOs are ignored.
+    CHECK_FALSE(t.sent("VE7NHW: @ALLCALL CQ CQ CN89 73", me, 0));
+    CHECK_FALSE(t.received("W1ABC", "W1ABC: K2XYZ 73", false, -5, me, 0));
+    CHECK_FALSE(t.get("W1ABC", 0));
+    CHECK_FALSE(t.get("@ALLCALL", 0));
+}
+
+TEST_CASE("QSOs match base calls and expire", "[js8][log]") {
+    QsoTracker t;
+    const std::string me = "VE7NHW";
+    t.sent("VE7NHW: VA7XYZ/P HELLO", me, 0);
+    CHECK(t.received("VA7XYZ", "VA7XYZ: VE7NHW RR SK", true, -3, me, 15000));
+    auto q = t.get("VA7XYZ/P", 15000);
+    REQUIRE(q);
+    CHECK(q->call == "VA7XYZ");
+
+    // Half an hour later it's a new QSO.
+    std::int64_t later = 15000 + QsoTracker::EXPIRE_MS + 1;
+    CHECK_FALSE(t.get("VA7XYZ", later));
+    t.sent("VE7NHW: VA7XYZ HI AGAIN", me, later);
+    q = t.get("VA7XYZ", later);
+    REQUIRE(q);
+    CHECK(q->start_ms == later);
+    CHECK_FALSE(q->they_sent);
+    CHECK_FALSE(q->offered);
+}
+
+TEST_CASE("ADIF records are desktop JS8Call's plus power and POTA/SOTA", "[js8][log]") {
+    LogEntry e;
+    e.call     = "N7EAL";
+    e.grid     = "DN17";
+    e.rst_sent = format_snr(-12);
+    e.rst_rcvd = format_snr(5);
+    e.on_ms    = 1790000000000LL;          // 2026-09-21 14:13:20 UTC
+    e.off_ms   = 1790000000000LL + 125000; // 14:15:25
+    e.freq_hz  = 7078000 + 1500;
+    e.my_call  = e.op_call = "VE7NHW";
+    e.my_grid  = "CN89KG";
+    e.comment  = "FIRST X6100 JS8";
+    e.tx_pwr_w = 5;
+    e.pota_ref = "CA-1234";
+    CHECK(adif_record(e) ==
+          "<call:5>N7EAL <gridsquare:4>DN17 <mode:4>MFSK <submode:3>JS8 <rst_sent:3>-12 <rst_rcvd:3>+05 "
+          "<qso_date:8>20260921 <time_on:6>141320 <qso_date_off:8>20260921 <time_off:6>141525 <band:3>40m "
+          "<freq:8>7.079500 <station_callsign:6>VE7NHW <my_gridsquare:6>CN89KG <comment:15>FIRST X6100 JS8 "
+          "<operator:6>VE7NHW <tx_pwr:1>5 <my_sig:4>POTA <my_sig_info:7>CA-1234 <eor>\n");
+
+    LogEntry s = e;
+    s.pota_ref.clear();
+    s.sota_ref = "VE7/LM-001";
+    s.grid.clear();
+    s.comment  = "two\nlines";
+    auto r     = adif_record(s);
+    CHECK(r.find("<my_sota_ref:10>VE7/LM-001 <eor>") != std::string::npos);
+    CHECK(r.find("my_sig") == std::string::npos);
+    CHECK(r.find("gridsquare:") == r.find("my_gridsquare:") + 3); // only ours
+    CHECK(r.find("<comment:9>two lines") != std::string::npos);
+}
+
+TEST_CASE("the ADIF file gets one header", "[js8][log]") {
+    char path[] = "/tmp/js8_log_test_XXXXXX";
+    int  fd     = mkstemp(path);
+    REQUIRE(fd >= 0);
+    close(fd);
+    LogEntry e;
+    e.call = "N7EAL";
+    e.on_ms = e.off_ms = 1790000000000LL;
+    e.freq_hz          = 14078000;
+    std::string err;
+    REQUIRE(adif_append(path, e, err));
+    e.call = "KN6OEH";
+    REQUIRE(adif_append(path, e, err));
+
+    FILE *f = fopen(path, "r");
+    REQUIRE(f);
+    std::string all;
+    char        buf[512];
+    while (fgets(buf, sizeof(buf), f)) all += buf;
+    fclose(f);
+    unlink(path);
+    CHECK(all.rfind("X6100 JS8 log", 0) == 0);
+    CHECK(all.find("<eoh>") == all.rfind("<eoh>"));
+    CHECK(all.find("<call:5>N7EAL") < all.find("<call:6>KN6OEH"));
+    CHECK(all.find("<band:3>20m") != std::string::npos);
+
+    CHECK_FALSE(adif_append("/nonexistent/dir/log.adi", e, err));
+    CHECK(err.find("can't open") == 0);
+}
+
+TEST_CASE("ADIF bands", "[js8][log]") {
+    CHECK(adif_band(1842000) == "160m");
+    CHECK(adif_band(3578000) == "80m");
+    CHECK(adif_band(5357000) == "60m");
+    CHECK(adif_band(7078000) == "40m");
+    CHECK(adif_band(10130000) == "30m");
+    CHECK(adif_band(14078000) == "20m");
+    CHECK(adif_band(18104000) == "17m");
+    CHECK(adif_band(21078000) == "15m");
+    CHECK(adif_band(24922000) == "12m");
+    CHECK(adif_band(28078000) == "10m");
+    CHECK(adif_band(50318000) == "6m");
+    CHECK(adif_band(9000000).empty());
+    CHECK(format_snr(0) == "+00");
+    CHECK(format_snr(-3) == "-03");
+}
+
+TEST_CASE("the QSO log C API", "[js8][log]") {
+    js8_qsos_t *q = js8_qsos_create();
+    REQUIRE(q);
+    char ended[JS8_RX_CALL_LEN] = "";
+    CHECK_FALSE(js8_qsos_sent(q, "K2XYZ: N0XYZ HELLO", "K2XYZ", 0, ended, sizeof(ended)));
+    js8_rx_msg_t m{};
+    snprintf(m.from, sizeof(m.from), "N0XYZ");
+    snprintf(m.text, sizeof(m.text), "N0XYZ: K2XYZ SNR +03 73");
+    m.to_me = true;
+    m.snr   = -7;
+    CHECK(js8_qsos_received(q, &m, "K2XYZ", 15000, ended, sizeof(ended)));
+    CHECK(std::string(ended) == "N0XYZ");
+    js8_qso_t out;
+    REQUIRE(js8_qsos_get(q, "N0XYZ", 15000, &out));
+    CHECK(out.two_way);
+    CHECK(out.has_rcvd_snr);
+    CHECK(out.rcvd_snr == 3);
+    CHECK_FALSE(out.has_sent_snr);
+    CHECK(out.heard_snr == -7);
+    js8_qsos_logged(q, "N0XYZ");
+    CHECK_FALSE(js8_qsos_get(q, "N0XYZ", 15000, &out));
+    CHECK(std::string(js8_log_band(7078000)) == "40m");
+    js8_qsos_destroy(q);
 }

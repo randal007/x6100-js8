@@ -12,6 +12,7 @@ add_library(JS8 STATIC
     commands.cpp
     stations.cpp
     autoreply.cpp
+    qsolog.cpp
     js8_ops.cpp
     js8_rx.cpp
 )

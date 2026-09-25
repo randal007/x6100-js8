@@ -27,6 +27,8 @@ void ui_compose_cancel(void);
 void ui_select_row_from(const char *call);
 void ui_click_focused(void);
 void ui_page(int n);
+void ui_hold(int i);
+void ui_compose_clear(void);
 extern int stub_tx_frames;
 extern int32_t stub_tx_offset;
 extern uint32_t stub_tx_samples;
@@ -44,6 +46,7 @@ extern int16_t stub_tx_peak;
 #include <random>
 #include <string>
 #include <thread>
+#include <unistd.h>
 #include <vector>
 
 namespace vc = js8core::protocol::varicode;
@@ -277,6 +280,120 @@ int main() {
         ui_click_focused();
         pump(300);
         printf("[aprs] after Close: %s\n", ui_focus_desc());
+        return 0;
+    }
+    if (getenv("ONLY_LOG")) {
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        auto show_log = [&]() {
+            FILE *f = fopen(JS8_LOG_PATH, "r");
+            if (!f) {
+                printf("[log] no log file\n");
+                return;
+            }
+            char line[1024];
+            while (fgets(line, sizeof(line), f)) printf("[log file] %s", line);
+            fclose(f);
+        };
+        unlink(JS8_LOG_PATH);
+        pump(300);
+        // N0XYZ calls us, we answer with a report, they send theirs and 73.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+        ui_page(1);
+        ui_press(3); // Send...
+        pump(200);
+        ui_compose_append("N0XYZ SNR -10");
+        ui_compose_enter();
+        wait_tx();
+        printf("[log] before 73, list focused: %s (want yes: no prompt yet)\n", ui_focus_is_table() ? "yes" : "no");
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ SNR -08 TNX 73", 1320, 0.05f}});
+        pump(300);
+        printf("[log] prompt focused '%s' (want Save to log)\n", ui_focused_text());
+        screenshot("25_log_prompt.ppm");
+
+        // Comment: Save, Grid, Name, Comment.
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
+        printf("[log] item 4: '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[log] editing comment, focus: %s\n", ui_focus_desc());
+        ui_compose_append("FIRST JS8 TEST");
+        ui_compose_enter();
+        pump(300);
+        printf("[log] back in the log popup, focused '%s'\n", ui_focused_text());
+        ui_key(LV_KEY_LEFT);
+        printf("[log] one step back: '%s' (want Cancel)\n", ui_focused_text());
+        ui_key(LV_KEY_RIGHT);
+        screenshot("26_log_comment.ppm");
+        ui_click_focused(); // Save to log
+        pump(300);
+        printf("[log] after Save, list focused: %s\n", ui_focus_is_table() ? "yes" : "no");
+        show_log();
+
+        // Their 73 again: no second prompt.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ 73 SK", 1320, 0.05f}});
+        printf("[log] second 73, list focused: %s (want yes)\n", ui_focus_is_table() ? "yes" : "no");
+
+        // Stations view: N0XYZ is in the log (green).
+        ui_page(3);
+        ui_press(3);
+        pump(300);
+        screenshot("27_log_worked.ppm");
+        ui_press(3);
+        pump(300);
+
+        // Activating a park: POTA with no park yet, set it by holding.
+        ui_page(5);
+        printf("[log] page 5: %s | %s | %s | %s\n", ui_button_label(1), ui_button_label(2), ui_button_label(3),
+               ui_button_label(4));
+        ui_press(3);
+        pump(200);
+        printf("[log] activation: '%s'\n", ui_button_label(3));
+        ui_hold(3);
+        pump(300);
+        printf("[log] editing park '%s', focus: %s\n", ui_compose_text(), ui_focus_desc());
+        ui_compose_clear();
+        ui_compose_append("CA-1234");
+        ui_compose_enter();
+        pump(300);
+        printf("[log] activation: '%s', list focused: %s\n", ui_button_label(3), ui_focus_is_table() ? "yes" : "no");
+
+        // Log QSO by hand for the selected station.
+        ui_select_row_from("N0XYZ");
+        ui_press(2);
+        pump(300);
+        printf("[log] Log QSO focused '%s'\n", ui_focused_text());
+        screenshot("28_log_pota.ppm");
+        ui_press(1); // another button only closes it
+        pump(300);
+        printf("[log] APRS > with the log open, list focused: %s\n", ui_focus_is_table() ? "yes" : "no");
+        ui_press(2);
+        pump(300);
+        ui_click_focused(); // Save
+        pump(300);
+        show_log();
+
+        ui_press(4);
+        printf("[log] prompt: '%s'\n", ui_button_label(4));
+        ui_press(4);
+        ui_press(3); // SOTA
+        ui_press(3); // Off
+        printf("[log] activation: '%s'\n", ui_button_label(3));
+
+        // GEN with the log open: popups are deleted with the dialog.
+        ui_press(2);
+        pump(300);
+        dialog_destruct();
+        pump(300);
+        printf("[log] closed with the log open: running=%d\n", ui_running());
         return 0;
     }
     if (getenv("ONLY_QSOFREQ")) {

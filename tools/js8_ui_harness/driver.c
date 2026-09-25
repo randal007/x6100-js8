@@ -22,6 +22,8 @@ void ui_init(void) {
     strcpy(params.qth.x, "FN42AB");
     params.js8_hold_offset.x = false; /* the firmware defaults */
     params.js8_hb_interval.x = 30;
+    params.js8_log_prompt.x  = true;
+    params.js8_log_activation.x = 0;
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
 void ui_press(int i) {
@@ -58,6 +60,11 @@ const char *ui_focused_text(void) {
     return lv_list_get_btn_text(lv_obj_get_parent(f), f);
 }
 void ui_rotary(int32_t diff) { dialog_js8->rotary_cb(diff); }
+/* Long-press of a bottom button. */
+void ui_hold(int i) {
+    button_data_t *b = stub_page->items[i];
+    if (b && b->hold) b->hold(b);
+}
 const char *ui_button_label(int i) {
     button_data_t *b = stub_page->items[i];
     return b->type == BTN_TEXT_FN ? b->label_fn() : b->label;
@@ -73,6 +80,7 @@ int  ui_focus_is_table(void) {
 #include "textarea_window.h"
 
 void ui_compose_append(const char *text) { lv_textarea_add_text(textarea_window_text(), text); }
+void ui_compose_clear(void) { lv_textarea_set_text(textarea_window_text(), ""); }
 const char *ui_compose_text(void) {
     /* textarea_window keeps its pointer after closing; don't read a dead one. */
     lv_obj_t *t = textarea_window_text();

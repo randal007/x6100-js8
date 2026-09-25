@@ -129,3 +129,36 @@ bool gps_last_fix(double *lat, double *lon, int *age_s) {
     *age_s = 5;
     return true;
 }
+void params_uint8_set(params_uint8_t *var, uint8_t x) { var->x = x; }
+
+/* The radio's QSO database: remembers calls saved this run. */
+#include "qso_log.h"
+static char worked_calls[32][32];
+static int  worked_n;
+char *util_canonize_callsign(const char *call, bool strip_slashes) {
+    (void)strip_slashes;
+    return strdup(call);
+}
+qso_log_band_t qso_log_freq_to_band(uint64_t freq_hz) { return freq_hz >= 7000000 && freq_hz <= 7300000 ? BAND_40M : BAND_OTHER; }
+qso_log_record_t qso_log_record_create(const char *local_call, const char *remote_call, time_t qso_time,
+                                       qso_log_mode_t mode, int rsts, int rstr, uint64_t freq_hz, const char *name,
+                                       const char *qth, const char *local_grid, const char *remote_grid) {
+    (void)local_call; (void)qso_time; (void)mode; (void)name; (void)qth; (void)local_grid; (void)remote_grid;
+    qso_log_record_t r = {0};
+    snprintf(r.remote_call, sizeof(r.remote_call), "%s", remote_call);
+    r.rsts = rsts;
+    r.rstr = rstr;
+    r.freq_mhz = freq_hz / 1e6f;
+    return r;
+}
+int qso_log_record_save(qso_log_record_t qso) {
+    printf("[qso_log] save %s rsts %d rstr %d %.6f MHz\n", qso.remote_call, qso.rsts, qso.rstr, qso.freq_mhz);
+    if (worked_n < 32) snprintf(worked_calls[worked_n++], 32, "%s", qso.remote_call);
+    return 0;
+}
+qso_log_search_worked_t qso_log_search_worked(const char *callsign, qso_log_mode_t mode, qso_log_band_t band) {
+    (void)mode; (void)band;
+    for (int i = 0; i < worked_n; i++)
+        if (strcmp(worked_calls[i], callsign) == 0) return SEARCH_WORKED_SAME_MODE;
+    return SEARCH_WORKED_NO;
+}

@@ -130,6 +130,8 @@ typedef struct {
     params_bool_t       js8_hb;
     params_bool_t       js8_hb_ack;
     params_uint16_t     js8_hb_interval;
+    params_bool_t       js8_log_prompt;  /* offer to log when a QSO ends */
+    params_uint8_t      js8_log_activation; /* 0 off, 1 POTA, 2 SOTA */
     params_str_t        ft8_cq_modifier;
 
     // FT8 gain offset for different radios/bands/modes

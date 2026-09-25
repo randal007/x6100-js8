@@ -10,6 +10,7 @@
 #include "autoreply.hpp"
 #include "classify.hpp"
 #include "commands.hpp"
+#include "qsolog.hpp"
 #include "stations.hpp"
 
 #include <algorithm>
@@ -219,4 +220,92 @@ extern "C" bool js8_latlon_to_grid(double lat, double lon, int chars, char *out,
     }
     out[chars] = '\0';
     return true;
+}
+
+// ---- QSO log ------------------------------------------------------------
+
+struct js8_qsos {
+    QsoTracker tracker;
+};
+
+extern "C" js8_qsos_t *js8_qsos_create(void) {
+    return new (std::nothrow) js8_qsos;
+}
+
+extern "C" void js8_qsos_destroy(js8_qsos_t *q) {
+    delete q;
+}
+
+static bool offer(const std::optional<std::string> &call, char *ended, unsigned ended_len) {
+    if (!call) return false;
+    copy_str(ended, ended_len, *call);
+    return true;
+}
+
+extern "C" bool js8_qsos_received(js8_qsos_t *q, const js8_rx_msg_t *msg, const char *my_call, int64_t now_ms,
+                                  char *ended, unsigned ended_len) {
+    if (!q || !msg || msg->tx || msg->low_confidence || !my_call) return false;
+    return offer(q->tracker.received(msg->from, msg->text, msg->to_me, msg->snr, my_call, now_ms), ended, ended_len);
+}
+
+extern "C" bool js8_qsos_sent(js8_qsos_t *q, const char *text, const char *my_call, int64_t now_ms, char *ended,
+                              unsigned ended_len) {
+    if (!q || !text || !my_call) return false;
+    return offer(q->tracker.sent(text, my_call, now_ms), ended, ended_len);
+}
+
+extern "C" bool js8_qsos_get(js8_qsos_t *q, const char *call, int64_t now_ms, js8_qso_t *out) {
+    if (!q || !call || !out) return false;
+    auto qso = q->tracker.get(call, now_ms);
+    if (!qso) return false;
+    std::memset(out, 0, sizeof(*out));
+    copy_str(out->call, sizeof(out->call), qso->call);
+    copy_str(out->grid, sizeof(out->grid), qso->grid);
+    out->start_ms      = qso->start_ms;
+    out->has_sent_snr  = qso->sent_snr.has_value();
+    out->sent_snr      = (int16_t)qso->sent_snr.value_or(0);
+    out->has_rcvd_snr  = qso->rcvd_snr.has_value();
+    out->rcvd_snr      = (int16_t)qso->rcvd_snr.value_or(0);
+    out->has_heard_snr = qso->heard_snr.has_value();
+    out->heard_snr     = (int16_t)qso->heard_snr.value_or(0);
+    out->two_way       = qso->we_sent && qso->they_sent;
+    return true;
+}
+
+extern "C" void js8_qsos_logged(js8_qsos_t *q, const char *call) {
+    if (q && call) q->tracker.logged(call);
+}
+
+extern "C" void js8_qsos_clear(js8_qsos_t *q) {
+    if (q) q->tracker.clear();
+}
+
+extern "C" bool js8_log_append(const char *path, const js8_log_entry_t *e, char *err, unsigned err_len) {
+    if (!path || !e) return false;
+    LogEntry le;
+    le.call     = e->call;
+    le.grid     = e->grid;
+    le.name     = e->name;
+    le.comment  = e->comment;
+    le.rst_sent = e->rst_sent;
+    le.rst_rcvd = e->rst_rcvd;
+    le.on_ms    = e->on_ms;
+    le.off_ms   = e->off_ms;
+    le.freq_hz  = e->freq_hz;
+    le.my_call  = e->my_call;
+    le.op_call  = e->my_call;
+    le.my_grid  = e->my_grid;
+    le.tx_pwr_w = e->tx_pwr_w;
+    le.pota_ref = e->pota_ref;
+    le.sota_ref = e->sota_ref;
+    std::string msg;
+    if (adif_append(path, le, msg)) return true;
+    copy_str(err, err_len, msg);
+    return false;
+}
+
+extern "C" const char *js8_log_band(uint64_t freq_hz) {
+    static thread_local std::string band;
+    band = adif_band(freq_hz);
+    return band.c_str();
 }

@@ -15,6 +15,7 @@
 #include "js8/js8_tx.h"
 #include "js8/js8_ops.h"
 #include "qth/qth.h"
+#include "qso_log.h"
 
 #include "audio.h"
 #include "buttons.h"
@@ -62,6 +63,9 @@
 #define TEXT_MAX         64     /* INFO / STATUS */
 #ifndef JS8_TEXTS_PATH
 #define JS8_TEXTS_PATH   "/mnt/js8_texts.txt" /* DATA partition; editable on a PC */
+#endif
+#ifndef JS8_LOG_PATH
+#define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
 #define JS8_WIDTH_HZ     50     /* 8 tones x 6.25 Hz, JS8 Normal */
 #define JS8_SLOT_SEC     15.0f
@@ -136,6 +140,16 @@ static bool        popup_guard(void);
 static void        js8_next_page_cb(button_data_t *btn);
 static void        texts_close(void);
 static bool        aprs_prepare(const char *in, char *out, size_t size);
+static bool        any_popup(void);
+static void        log_cb(button_data_t *btn);
+static void        log_close(void);
+static void        log_offer(const char *call);
+static void        log_list_open(void);
+static const char *act_label_getter(void);
+static void        act_cb(button_data_t *btn);
+static void        act_hold_cb(button_data_t *btn);
+static const char *prompt_label_getter(void);
+static void        prompt_cb(button_data_t *btn);
 
 /* ---- State (UI thread unless noted) ------------------------------------ */
 
@@ -161,6 +175,11 @@ static js8_station_t  st_rows[MAX_ROWS];
 static int            st_count;
 static lv_obj_t      *query_list;      /* Query popup, when open */
 static lv_obj_t      *aprs_list;       /* APRS popup, when open */
+static lv_obj_t      *log_list;        /* Log QSO popup, when open */
+static bool           st_worked[MAX_ROWS]; /* in the log already (st_rows) */
+static js8_qsos_t    *qsos;            /* QSOs, for the log */
+static js8_log_entry_t log_entry;      /* the entry the Log popup shows */
+static char           log_pending[JS8_RX_CALL_LEN]; /* a QSO that ended, not logged yet */
 
 /* T4: auto-reply and heartbeats. The switches live in params (js8_auto,
  * js8_hb, js8_hb_ack, js8_hb_interval), all off by default. */
@@ -178,7 +197,7 @@ static struct {
 } offer; /* AUTO off: a reply waiting for Reply, like desktop's outgoing box */
 static js8_auto_result_t pending_auto;       /* arrived while TX was busy */
 static bool              pending_auto_valid;
-static int               edit_target;        /* 0 compose, 1 INFO, 2 STATUS */
+static int               edit_target;        /* 0 compose, else an edit_t */
 static lv_obj_t         *texts_list;
 
 static lv_obj_t *waterfall;
@@ -188,6 +207,20 @@ static lv_obj_t *status;
 
 static int32_t filter_low, filter_high;
 static show_t  show = SHOW_NO_HB;
+
+/* What the compose window is editing (edit_target). */
+typedef enum {
+    EDIT_INFO = 1,
+    EDIT_STATUS,
+    EDIT_LOG_GRID, /* the Log popup's fields, then back to it */
+    EDIT_LOG_NAME,
+    EDIT_LOG_NOTE,
+    EDIT_POTA_REF, /* your park / summit for the log */
+    EDIT_SOTA_REF,
+    EDIT_COUNT,
+} edit_t;
+
+static void log_edit_done(const char *value);
 
 /* Message history, a ring, so the list can be rebuilt when the filter
  * changes. row_hist[] maps a table row to its history slot (-1 = info row). */
@@ -252,7 +285,10 @@ static buttons_page_t page_4 = {{&btn_p4, &btn_auto, &btn_hbauto, &btn_hbackk, &
 
 static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:5)", .press = js8_next_page_cb, .next = &page_1};
 static button_data_t  btn_aprs      = {.type = BTN_TEXT, .label = "APRS >", .press = aprs_cb};
-static buttons_page_t page_5        = {{&btn_p5, &btn_aprs}};
+static button_data_t  btn_log       = {.type = BTN_TEXT, .label = "Log QSO", .press = log_cb};
+static button_data_t  btn_act       = {.type = BTN_TEXT_FN, .label_fn = act_label_getter, .press = act_cb, .hold = act_hold_cb};
+static button_data_t  btn_prompt    = {.type = BTN_TEXT_FN, .label_fn = prompt_label_getter, .press = prompt_cb};
+static buttons_page_t page_5        = {{&btn_p5, &btn_aprs, &btn_log, &btn_act, &btn_prompt}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -400,6 +436,8 @@ static void add_message(const js8_rx_msg_t *m) {
         sync_head          = (sync_head + 1) % SYNC_DTS;
     }
     if (!m->tx) handle_incoming(m);
+    char ended[JS8_RX_CALL_LEN];
+    if (!m->tx && js8_qsos_received(qsos, m, params.callsign.x, now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
 
     int slot = hist_head;
     history[slot] = *m;
@@ -510,6 +548,7 @@ static void rebuild_station_rows(void) {
 
     int keep_row = 0;
     for (int i = 0; i < st_count; i++) {
+        st_worked[i] = qso_log_search_worked(st_rows[i].call, MODE_JS8, qso_log_freq_to_band(cparam_i_get(cfg_fg_freq))) > 0;
         if (keep[0] && strcmp(st_rows[i].call, keep) == 0) keep_row = rows;
         append_row(" ", (int16_t)i); /* drawn by table_draw_end_cb() */
     }
@@ -586,10 +625,15 @@ static void table_draw_end_cb(lv_event_t *e) {
     area.y2 -= lv_obj_get_style_pad_bottom(obj, LV_PART_ITEMS);
     lv_coord_t x0 = dsc->draw_area->x1 + lv_obj_get_style_pad_left(obj, LV_PART_ITEMS);
 
+    /* Calls already in the log in green, like desktop's worked-before tick. */
+    lv_draw_label_dsc_t worked = *dsc->label_dsc;
+    worked.color               = lv_color_hex(0x80ff80);
+
     for (size_t i = 0; i < sizeof(cols) / sizeof(cols[0]); i++) {
         area.x1 = x0 + cols[i].x;
         area.x2 = (i + 1 < sizeof(cols) / sizeof(cols[0])) ? x0 + cols[i + 1].x - 6 : dsc->draw_area->x2;
-        lv_draw_label(dsc->draw_ctx, dsc->label_dsc, &area, (const char *)&f + cols[i].field, NULL);
+        bool green = cols[i].field == offsetof(station_fields_t, call) && st_worked[h];
+        lv_draw_label(dsc->draw_ctx, green ? &worked : dsc->label_dsc, &area, (const char *)&f + cols[i].field, NULL);
     }
 }
 
@@ -868,6 +912,8 @@ static void ui_tx_status(void *arg) {
         m.freq_hz      = st->offset_hz;
         snprintf(m.text, sizeof(m.text), "%s", tx_preview[0] ? tx_preview : st->text);
         add_message(&m);
+        char ended[JS8_RX_CALL_LEN];
+        if (js8_qsos_sent(qsos, m.text, params.callsign.x, now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
     }
     tx_status = *st;
     update_tx_bar();
@@ -1096,6 +1142,10 @@ static void compose_close(void) {
 /* Same pattern as the FT8 app's keyboard: close here and return true;
  * textarea_window's own close is then a no-op. */
 static bool compose_ok_cb(void) {
+    if (edit_target >= EDIT_LOG_GRID) {
+        log_edit_done(textarea_window_get());
+        return true;
+    }
     if (edit_target) {
         char *dst = edit_target == 1 ? info_text : status_text;
         snprintf(dst, TEXT_MAX + 1, "%s", textarea_window_get());
@@ -1113,6 +1163,10 @@ static bool compose_ok_cb(void) {
 }
 
 static bool compose_cancel_cb(void) {
+    if (edit_target >= EDIT_LOG_GRID) {
+        log_edit_done(NULL);
+        return true;
+    }
     edit_target = 0;
     compose_close();
     return true;
@@ -1133,15 +1187,26 @@ static void compose_open(const char *prefill) {
     lv_textarea_set_max_length(text, TX_TEXT_MAX);
     lv_obj_add_event_cb(text, compose_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     if (edit_target) {
-        lv_textarea_set_max_length(text, TEXT_MAX);
+        lv_textarea_set_max_length(text, edit_target == EDIT_LOG_GRID   ? 10
+                                         : edit_target == EDIT_POTA_REF ? sizeof(last_pota) - 1
+                                         : edit_target == EDIT_SOTA_REF ? sizeof(last_sota) - 1
+                                                                        : TEXT_MAX);
         lv_obj_remove_event_cb(text, compose_changed_cb);
     }
     if (prefill && prefill[0]) {
         textarea_window_set(prefill);
     } else {
-        lv_textarea_set_placeholder_text(text, edit_target == 1   ? " INFO, e.g. X6100 5W EFHW"
-                                               : edit_target == 2 ? " STATUS, e.g. PORTABLE QRV"
-                                                                  : " CALL MESSAGE / @ALLCALL ...");
+        static const char *const placeholders[EDIT_COUNT] = {
+            [0]             = " CALL MESSAGE / @ALLCALL ...",
+            [EDIT_INFO]     = " INFO, e.g. X6100 5W EFHW",
+            [EDIT_STATUS]   = " STATUS, e.g. PORTABLE QRV",
+            [EDIT_LOG_GRID] = " Their grid, e.g. DN17",
+            [EDIT_LOG_NAME] = " Their name",
+            [EDIT_LOG_NOTE] = " Comment for the log",
+            [EDIT_POTA_REF] = " Your park, e.g. CA-1234",
+            [EDIT_SOTA_REF] = " Your summit, e.g. VE7/LM-001",
+        };
+        lv_textarea_set_placeholder_text(text, placeholders[edit_target]);
     }
 }
 
@@ -1322,6 +1387,7 @@ static void construct_cb(lv_obj_t *parent) {
     base_gain_offset = tx_player_base_gain_offset();
     tx_start();
     if (!stations) stations = js8_stations_create();
+    if (!qsos) qsos = js8_qsos_create();
     if (!autop) autop = js8_auto_create();
     user_touch();
     load_texts();
@@ -1361,6 +1427,10 @@ static void destruct_cb(void) {
     if (texts_list) {
         lv_obj_del(texts_list);
         texts_list = NULL;
+    }
+    if (log_list) {
+        lv_obj_del(log_list);
+        log_list = NULL;
     }
     hb_adjusting = false;
     radio_set_pwr(param_f_get(cfg_pwr));
@@ -1639,20 +1709,22 @@ static void query_key_cb(lv_event_t *e) {
  * happens, or it's left behind with its buttons still holding the knob.
  * Any other bottom button just closes it; press again to do the thing. */
 static bool popup_guard(void) {
-    if (!query_list && !texts_list && !aprs_list) return false;
+    if (!any_popup()) return false;
     query_close();
     texts_close();
     aprs_close();
+    log_close();
     msg_update_text_fmt("List closed");
     return true;
 }
 
 /* Changing page closes a list too (then changes page). */
 static void js8_next_page_cb(button_data_t *btn) {
-    if (query_list || texts_list || aprs_list) {
+    if (any_popup()) {
         query_close();
         texts_close();
         aprs_close();
+        log_close();
     }
     button_next_page_cb(btn);
 }
@@ -1764,7 +1836,7 @@ static void auto_send(const js8_auto_result_t *r) {
     bool allowed = r->hb_ack ? (params.js8_auto.x && params.js8_hb.x && params.js8_hb_ack.x) : params.js8_auto.x;
     if (!allowed || js8_auto_idle(autop, now)) return;
 
-    if (js8_tx_busy(tx) || composing || query_list || texts_list || aprs_list) {
+    if (js8_tx_busy(tx) || composing || any_popup()) {
         pending_auto       = *r; /* newest wins */
         pending_auto_valid = true;
         return;
@@ -1842,7 +1914,7 @@ static void hb_tick(void) {
         update_status();
     }
     if (now < hb_next_ms - 5000) return;   /* desktop prepares it 5 s early */
-    if (js8_tx_busy(tx) || composing || query_list || texts_list || aprs_list || !params.callsign.x[0]) return;
+    if (js8_tx_busy(tx) || composing || any_popup() || !params.callsign.x[0]) return;
     LV_LOG_USER("JS8 auto: heartbeat (due %lld)", (long long)hb_next_ms);
     if (send_heartbeat(true)) {
         hb_next_ms = js8_next_heartbeat_ms(now, params.js8_hb_interval.x);
@@ -2275,4 +2347,319 @@ static void aprs_cb(button_data_t *btn) {
     lv_group_add_obj(keyboard_group, close);
     lv_group_set_editing(keyboard_group, false);
     lv_group_focus_obj(first);
+}
+
+/* ---- Log QSO ----------------------------------------------------------- */
+
+/* Like desktop JS8Call's Log QSO: the entry is filled in from the QSO and
+ * goes to JS8_LOG_PATH (ADIF, on the SD card's DATA partition) and to the
+ * radio's QSO database, which marks worked stations. A two-way QSO that
+ * ends with 73 or SK opens it by itself (Log prompt), and nothing is
+ * logged without Save. */
+
+static bool any_popup(void) {
+    return query_list || texts_list || aprs_list || log_list;
+}
+
+static bool find_station(const char *call, js8_station_t *out) {
+    static js8_station_t list[MAX_ROWS];
+    int                  n = js8_stations_list(stations, now_wall_ms(), list, MAX_ROWS);
+    for (int i = 0; i < n; i++) {
+        if (strcmp(list[i].call, call) == 0) {
+            *out = list[i];
+            return true;
+        }
+    }
+    return false;
+}
+
+/* 6-character grid from a current GPS fix (portable), else the QTH setting. */
+static void my_log_grid(char *out, size_t size) {
+    double lat, lon;
+    int    age;
+    if (gps_last_fix(&lat, &lon, &age) && age <= 120 && js8_latlon_to_grid(lat, lon, 6, out, size)) return;
+    snprintf(out, size, "%s", params.qth.x);
+}
+
+static void log_prepare(const char *call) {
+    int64_t       now = now_wall_ms();
+    js8_qso_t     q;
+    js8_station_t st;
+    bool          have_q  = js8_qsos_get(qsos, call, now, &q);
+    bool          have_st = find_station(call, &st);
+
+    memset(&log_entry, 0, sizeof(log_entry));
+    snprintf(log_entry.call, sizeof(log_entry.call), "%s", have_q ? q.call : call);
+    snprintf(log_entry.grid, sizeof(log_entry.grid), "%s", have_q && q.grid[0] ? q.grid : have_st ? st.grid : "");
+
+    /* Sent: the report we gave them, else how we heard them. */
+    if (have_q && q.has_sent_snr) snprintf(log_entry.rst_sent, sizeof(log_entry.rst_sent), "%+03d", q.sent_snr);
+    else if (have_q && q.has_heard_snr) snprintf(log_entry.rst_sent, sizeof(log_entry.rst_sent), "%+03d", q.heard_snr);
+    else if (have_st) snprintf(log_entry.rst_sent, sizeof(log_entry.rst_sent), "%+03d", st.snr);
+    if (have_q && q.has_rcvd_snr) snprintf(log_entry.rst_rcvd, sizeof(log_entry.rst_rcvd), "%+03d", q.rcvd_snr);
+    else if (have_st && st.has_reported_snr) snprintf(log_entry.rst_rcvd, sizeof(log_entry.rst_rcvd), "%+03d", st.reported_snr);
+
+    log_entry.on_ms   = have_q ? q.start_ms : now;
+    log_entry.off_ms  = now;
+    log_entry.freq_hz = (uint64_t)cparam_i_get(cfg_fg_freq) + params.js8_tx_freq.x;
+    snprintf(log_entry.my_call, sizeof(log_entry.my_call), "%s", params.callsign.x);
+    my_log_grid(log_entry.my_grid, sizeof(log_entry.my_grid));
+    float pwr          = param_f_get(cfg_pwr);
+    log_entry.tx_pwr_w = pwr > TX_PLAYER_MAX_PWR_W ? TX_PLAYER_MAX_PWR_W : pwr;
+    if (params.js8_log_activation.x == 1) snprintf(log_entry.pota_ref, sizeof(log_entry.pota_ref), "%s", last_pota);
+    if (params.js8_log_activation.x == 2) snprintf(log_entry.sota_ref, sizeof(log_entry.sota_ref), "%s", last_sota);
+}
+
+static void log_close(void) {
+    if (!log_list) return;
+    lv_obj_del_async(log_list); /* often called from one of its buttons */
+    log_list = NULL;
+    if (table && !composing) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+static void log_save(void) {
+    if (!log_entry.call[0] || !log_entry.my_call[0]) {
+        msg_update_text_fmt("Nothing to log");
+        return;
+    }
+    log_entry.off_ms = now_wall_ms();
+    char err[96];
+    if (!js8_log_append(JS8_LOG_PATH, &log_entry, err, sizeof(err))) {
+        msg_update_text_fmt("Not logged: %s", err);
+        return;
+    }
+    /* The radio's QSO database too: worked-before marks here and in FT8. */
+    char            *canon = util_canonize_callsign(log_entry.call, false);
+    qso_log_record_t rec   = qso_log_record_create(
+        log_entry.my_call, canon ? canon : log_entry.call, (time_t)(log_entry.on_ms / 1000), MODE_JS8,
+        atoi(log_entry.rst_sent), atoi(log_entry.rst_rcvd), log_entry.freq_hz, log_entry.name[0] ? log_entry.name : NULL,
+        NULL, log_entry.my_grid, log_entry.grid);
+    free(canon);
+    qso_log_record_save(rec);
+
+    js8_qsos_logged(qsos, log_entry.call);
+    if (strcmp(log_pending, log_entry.call) == 0) log_pending[0] = '\0';
+    const char *band = js8_log_band(log_entry.freq_hz);
+    msg_update_text_fmt("Logged %s%s%s", log_entry.call, band[0] ? " on " : "", band);
+    add_info_row("Logged %s %s %s/%s%s%s", log_entry.call, band, log_entry.rst_sent[0] ? log_entry.rst_sent : "-",
+                 log_entry.rst_rcvd[0] ? log_entry.rst_rcvd : "-", log_entry.pota_ref[0] ? " POTA " : "",
+                 log_entry.pota_ref[0] ? log_entry.pota_ref : log_entry.sota_ref);
+    if (view_stations) rebuild_station_rows();
+}
+
+typedef enum { LOG_SAVE, LOG_GRID, LOG_NAME, LOG_NOTE, LOG_CANCEL } log_item_t;
+
+static void log_item_cb(lv_event_t *e) {
+    log_item_t item = (log_item_t)(intptr_t)lv_event_get_user_data(e);
+    if (item == LOG_SAVE || item == LOG_CANCEL) {
+        if (item == LOG_SAVE) log_save();
+        else log_pending[0] = '\0';
+        log_close();
+        return;
+    }
+    /* A field: into the keyboard, then back here (see texts_item_cb). */
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(log_list); i++) lv_group_remove_obj(lv_obj_get_child(log_list, i));
+    lv_obj_del_async(log_list);
+    log_list    = NULL;
+    edit_target = item == LOG_GRID ? EDIT_LOG_GRID : item == LOG_NAME ? EDIT_LOG_NAME : EDIT_LOG_NOTE;
+    compose_open(item == LOG_GRID ? log_entry.grid : item == LOG_NAME ? log_entry.name : log_entry.comment);
+    lv_group_set_editing(keyboard_group, true);
+}
+
+static void log_key_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    if (key == LV_KEY_ESC) log_close();
+    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
+    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+}
+
+static lv_obj_t *log_add(log_item_t item, const char *label) {
+    lv_obj_t *b = list_add_item(log_list, label);
+    lv_obj_add_event_cb(b, log_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)item);
+    lv_obj_add_event_cb(b, log_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, b);
+    return b;
+}
+
+static void log_list_open(void) {
+    lv_group_remove_obj(table);
+    log_list = lv_list_create(dialog.obj);
+    lv_obj_set_size(log_list, 560, WF_HEIGHT - 10);
+    lv_obj_align(log_list, LV_ALIGN_TOP_RIGHT, -20, 18);
+    lv_obj_set_style_text_font(log_list, &sony_24, 0);
+    lv_obj_set_style_bg_color(log_list, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_border_color(log_list, lv_color_white(), 0);
+
+    char      line[160], on[8], off[8];
+    time_t    t_on = (time_t)(log_entry.on_ms / 1000), t_off = (time_t)(log_entry.off_ms / 1000);
+    struct tm tm;
+    strftime(on, sizeof(on), "%H:%M", gmtime_r(&t_on, &tm));
+    strftime(off, sizeof(off), "%H:%M", gmtime_r(&t_off, &tm));
+    snprintf(line, sizeof(line), "Log %s  %s  %s-%s UTC", log_entry.call, js8_log_band(log_entry.freq_hz), on, off);
+    lv_obj_t *t = lv_list_add_text(log_list, line);
+    lv_obj_set_style_text_font(t, &sony_22, 0);
+    snprintf(line, sizeof(line), "Sent %s  Rcvd %s  %.3f MHz  %.0f W", log_entry.rst_sent[0] ? log_entry.rst_sent : "-",
+             log_entry.rst_rcvd[0] ? log_entry.rst_rcvd : "-", log_entry.freq_hz / 1e6, log_entry.tx_pwr_w);
+    t = lv_list_add_text(log_list, line);
+    lv_obj_set_style_text_font(t, &sony_22, 0);
+
+    lv_obj_t *save = log_add(LOG_SAVE, "Save to log");
+    lv_obj_set_style_text_color(save, lv_color_hex(0x80ff80), 0);
+    snprintf(line, sizeof(line), "Grid: %s", log_entry.grid[0] ? log_entry.grid : "(none)");
+    log_add(LOG_GRID, line);
+    snprintf(line, sizeof(line), "Name: %s", log_entry.name[0] ? log_entry.name : "(none)");
+    log_add(LOG_NAME, line);
+    snprintf(line, sizeof(line), "Comment: %s", log_entry.comment[0] ? log_entry.comment : "(none)");
+    log_add(LOG_NOTE, line);
+    if (log_entry.pota_ref[0] || log_entry.sota_ref[0]) {
+        snprintf(line, sizeof(line), "Activating %s %s", log_entry.pota_ref[0] ? "POTA" : "SOTA",
+                 log_entry.pota_ref[0] ? log_entry.pota_ref : log_entry.sota_ref);
+        t = lv_list_add_text(log_list, line);
+        lv_obj_set_style_text_font(t, &sony_22, 0);
+    }
+    lv_obj_t *cancel = log_add(LOG_CANCEL, "Cancel");
+    lv_obj_set_style_text_color(cancel, lv_color_hex(0xffc040), 0);
+    lv_group_set_editing(keyboard_group, false);
+    lv_group_focus_obj(save);
+}
+
+/* Back from the keyboard: keep the value (NULL: cancelled), reopen. */
+static void log_edit_done(const char *text) {
+    /* Copy first: closing the window frees the text. */
+    char  buf[TEXT_MAX + 1];
+    char *value = NULL;
+    if (text) value = strncpy(buf, text, TEXT_MAX), buf[TEXT_MAX] = '\0', buf;
+    int target  = edit_target;
+    edit_target = 0;
+    compose_close();
+    if (value) {
+        switch (target) {
+        case EDIT_LOG_GRID:
+            snprintf(log_entry.grid, sizeof(log_entry.grid), "%s", value);
+            break;
+        case EDIT_LOG_NAME:
+            snprintf(log_entry.name, sizeof(log_entry.name), "%s", value);
+            break;
+        case EDIT_LOG_NOTE:
+            snprintf(log_entry.comment, sizeof(log_entry.comment), "%s", value);
+            break;
+        case EDIT_POTA_REF:
+            snprintf(last_pota, sizeof(last_pota), "%s", value);
+            save_texts();
+            break;
+        case EDIT_SOTA_REF:
+            snprintf(last_sota, sizeof(last_sota), "%s", value);
+            save_texts();
+            break;
+        }
+    }
+    if (target == EDIT_POTA_REF || target == EDIT_SOTA_REF) {
+        if (btn_act.disp_btn) buttons_refresh(&btn_act);
+        return;
+    }
+    log_list_open();
+}
+
+static void log_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (log_list) { /* Log QSO again closes it */
+        log_close();
+        return;
+    }
+    if (popup_guard()) return;
+    if (composing) return;
+    if (!params.callsign.x[0]) {
+        msg_update_text_fmt("Set your callsign first: APP > Callsign");
+        return;
+    }
+    /* A QSO that just ended, else the selected station. */
+    char  call[JS8_RX_CALL_LEN];
+    float freq;
+    int   snr;
+    if (log_pending[0]) snprintf(call, sizeof(call), "%s", log_pending);
+    else if (!selected_station(call, sizeof(call), &freq, &snr)) {
+        msg_update_text_fmt("Select a station first (MFK)");
+        return;
+    }
+    log_prepare(call);
+    log_list_open();
+}
+
+/* A two-way QSO ended with 73 / SK. */
+static void log_offer(const char *call) {
+    snprintf(log_pending, sizeof(log_pending), "%s", call);
+    if (!params.js8_log_prompt.x) {
+        add_info_row("QSO with %s ended: Log QSO (page 5) to log it", call);
+        return;
+    }
+    if (composing || any_popup()) {
+        msg_update_text_fmt("QSO with %s ended: Log QSO (page 5) to log it", call);
+        add_info_row("QSO with %s ended: Log QSO (page 5) to log it", call);
+        return;
+    }
+    log_prepare(call);
+    log_list_open();
+    msg_update_text_fmt("QSO with %s ended - Save to log?", call);
+}
+
+static const char *prompt_label_getter(void) {
+    return params.js8_log_prompt.x ? "Log\nprompt: On" : "Log\nprompt: Off";
+}
+
+static void prompt_cb(button_data_t *btn) {
+    user_touch();
+    if (popup_guard()) return;
+    params_bool_set(&params.js8_log_prompt, !params.js8_log_prompt.x);
+    buttons_refresh(btn);
+    msg_update_text_fmt(params.js8_log_prompt.x ? "Offer to log when a QSO ends with 73 or SK"
+                                                : "No log prompt: use Log QSO");
+}
+
+/* Activating a park or summit: MY_SIG / MY_SOTA_REF in the log. The
+ * reference is the one last spotted via APRS, or set by holding this. */
+static const char *act_label_getter(void) {
+    static char label[40];
+    switch (params.js8_log_activation.x) {
+    case 1:
+        snprintf(label, sizeof(label), "POTA\n%s", last_pota[0] ? last_pota : "(hold: set)");
+        break;
+    case 2:
+        snprintf(label, sizeof(label), "SOTA\n%s", last_sota[0] ? last_sota : "(hold: set)");
+        break;
+    default:
+        snprintf(label, sizeof(label), "Activ.:\nOff");
+        break;
+    }
+    return label;
+}
+
+static void act_cb(button_data_t *btn) {
+    user_touch();
+    if (popup_guard()) return;
+    uint8_t v = (params.js8_log_activation.x + 1) % 3;
+    params_uint8_set(&params.js8_log_activation, v);
+    buttons_refresh(btn);
+    const char *ref = v == 1 ? last_pota : last_sota;
+    if (v == 0) msg_update_text_fmt("Not activating: no park or summit in the log");
+    else if (!ref[0]) msg_update_text_fmt("Hold this button to set your %s", v == 1 ? "park" : "summit");
+    else msg_update_text_fmt("Logging as %s %s (hold to change)", v == 1 ? "POTA" : "SOTA", ref);
+}
+
+static void act_hold_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (popup_guard() || composing) return;
+    uint8_t v = params.js8_log_activation.x;
+    if (v == 0) {
+        msg_update_text_fmt("Press to choose POTA or SOTA first");
+        return;
+    }
+    edit_target = v == 1 ? EDIT_POTA_REF : EDIT_SOTA_REF;
+    compose_open(v == 1 ? last_pota : last_sota);
+    lv_group_set_editing(keyboard_group, true);
 }

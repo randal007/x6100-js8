@@ -77,6 +77,8 @@ params_t params = {
     .js8_hb                 = { .x = false,     .name = "js8_hb" },
     .js8_hb_ack             = { .x = false,     .name = "js8_hb_ack" },
     .js8_hb_interval        = { .x = 30,        .name = "js8_hb_interval" },
+    .js8_log_prompt         = { .x = true,      .name = "js8_log_prompt" },
+    .js8_log_activation     = { .x = 0, .min = 0, .max = 2, .name = "js8_log_activation" },
     .ft8_output_gain_offset = { .x = 0.0f,      .name = "ft8_output_gain_offset" },
     .ft8_cq_modifier        = { .x = "",        .name = "ft8_cq_modifier"},
 
@@ -239,6 +241,8 @@ static bool params_load() {
         if (params_load_bool(&params.js8_hb, name, i)) continue;
         if (params_load_bool(&params.js8_hb_ack, name, i)) continue;
         if (params_load_uint16(&params.js8_hb_interval, name, i)) continue;
+        if (params_load_bool(&params.js8_log_prompt, name, i)) continue;
+        if (params_load_uint8(&params.js8_log_activation, name, i)) continue;
         if (params_load_bool(&params.mag_info, name, i)) continue;
         if (params_load_bool(&params.mag_alc, name, i)) continue;
         if (params_load_uint8(&params.spectrum_beta, name, i)) continue;
@@ -362,6 +366,8 @@ static void params_save() {
     params_save_bool(&params.js8_hb);
     params_save_bool(&params.js8_hb_ack);
     params_save_uint16(&params.js8_hb_interval);
+    params_save_bool(&params.js8_log_prompt);
+    params_save_uint8(&params.js8_log_activation);
     params_save_bool(&params.mag_info);
     params_save_bool(&params.mag_alc);
     params_save_uint8(&params.spectrum_beta);

@@ -48,6 +48,9 @@ keys step through JS8Call's standard dial frequencies) and starts decoding.
 | 4 | **HB ACK** | Answer others' heartbeats with how you hear them. Acts only while AUTO and HB are on, as on desktop. |
 | 4 | **Texts…** | Edit what AUTO sends for INFO? and STATUS? (kept in `/mnt/js8_texts.txt`). |
 | 5 | **APRS >** | APRS through JS8 gateways: grid spot, GPS position spot, POTA, SOTA, SMS, email, Winlink. See [APRS](#aprs). |
+| 5 | **Log QSO** | Log the QSO that just ended, or the selected station, to `/mnt/js8call_log.adi`. See [Logging](#logging). |
+| 5 | **Activ.: Off / POTA / SOTA** | Activating a park or summit: adds it to every log entry. Hold to type the reference. |
+| 5 | **Log prompt: On/Off** | On (default): the Log popup opens by itself when a QSO ends with 73 or SK. |
 
 **Who heard you:** in the Stations view, stations that have heard you are
 marked `*` and listed first. That covers anyone who acknowledged your
@@ -85,6 +88,38 @@ checksum verified and removed, as in desktop JS8Call.
 
 ![Directed view in a QSO: the selected station's untagged reply still shows](docs/screenshots/js8_21_directed_qso.png)
 
+## Logging
+
+Like desktop JS8Call's Log QSO, but filled in for you. The **Log** popup shows
+the call, band, UTC start and end, reports, frequency and power. **Save to
+log** writes the entry; Grid, Name and Comment open the keyboard; Cancel
+logs nothing.
+
+- **The file:** `/mnt/js8call_log.adi`, i.e. `js8call_log.adi` on the SD
+  card's DATA partition, readable on a PC. It uses desktop JS8Call's ADIF
+  fields (`MODE MFSK`, `SUBMODE JS8`, dial + offset as `FREQ`), so loggers
+  that import desktop logs take it as is. FT8 keeps its own `ft_log.adi`.
+- **When it asks:** after a two-way QSO (both sides sent something, heartbeat
+  acks don't count) ends with `73` or `SK` either way. It asks once per QSO,
+  and never logs by itself. With **Log prompt: Off**, or if you're typing,
+  the list shows "QSO with … ended" and **Log QSO** picks it up.
+- **What's filled in:** *Sent* is the report you gave them (`SNR -12`), else
+  how you heard them; *Rcvd* is the report they gave you (an SNR or a
+  heartbeat ack). Start is the first directed message either way; a QSO
+  quiet for 30 minutes starts over. Their grid is from what they sent;
+  yours is from a current GPS fix (6 characters), else APP → QTH. `TX_PWR`
+  is the radio's power.
+- **Activations:** with **Activ.: POTA** each entry gets `MY_SIG POTA` and
+  `MY_SIG_INFO` (your park), as POTA's log upload wants; **SOTA** adds
+  `MY_SOTA_REF`. The reference is the one you last spotted via APRS, or hold
+  the button to type it.
+- **Worked before:** saved QSOs also go to the radio's QSO database, and the
+  Stations view shows calls you've logged in green.
+
+| The Log popup after a QSO | Stations: N0XYZ logged |
+|---|---|
+| ![Log popup](docs/screenshots/js8_26_log.png) | ![Worked station in green](docs/screenshots/js8_27_log_worked.png) |
+
 ## APRS
 
 Desktop JS8Call stations with "spot to APRS" enabled forward `@APRSIS`
@@ -113,7 +148,7 @@ cursor where you type.
   APRSLink) come back over APRS, not JS8.
 - With a GPS plugged into the radio, **Spot GPS position** sends a
   10-character grid; gateways accept grids of any length.
-- While a list (Query, Texts…, APRS) is open, the other bottom buttons only
+- While a list (Query, Texts…, APRS, Log) is open, the other bottom buttons only
   close it, so it can't be left behind; press again to do the thing.
 
 | APRS list | POTA spot, typing the park |
@@ -172,7 +207,8 @@ the Android port's core was chosen over porting desktop JS8Call.
 - [x] Heartbeat, query shortcuts, Hold offset, Stations view with "heard you" (T3)
 - [x] Opt-in auto-reply, heartbeat interval, heartbeat acks, idle watchdog (T4)
 - [x] Time Sync from decode DTs, APRS page (grid, POTA, SOTA, SMS, email, Winlink)
-- [ ] Logging and an inbox for MSG (T5)
+- [x] ADIF logging with a log prompt, POTA/SOTA activation fields (T5)
+- [ ] An inbox for MSG (T5)
 - [x] GPS-fed grid for APRS spots
 - [ ] Fast / Turbo / Slow submodes
 
@@ -180,7 +216,7 @@ the Android port's core was chosen over porting desktop JS8Call.
 
 | What | How |
 |---|---|
-| Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign and gap fill, auto-reply rules, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
+| Library unit + end-to-end tests | `tests/test_js8.cpp` (Catch2): resampler image rejection, rendering and assembly of frames made by JS8Call's encoder, the Android port's assembly tests, checksums, clock realign and gap fill, auto-reply rules, QSO tracking and ADIF records, and 11025 Hz audio → decoded message. `[.slow]` adds real-time WAV test mode. |
 | The real UI on a PC | [tools/js8_ui_harness](tools/js8_ui_harness): the actual dialog on stock LVGL with a simulated busy band, in real time, under ASan/UBSan. |
 | On the radio, without RF | [test-audio](test-audio) (the Test WAV button was removed once on-air receive worked; the library's WAV mode remains). |
 | Radio compiler | Everything JS8 compiles cleanly with the image's GCC 12.3 (Cortex-A7, NEON) against Boost 1.80. |
