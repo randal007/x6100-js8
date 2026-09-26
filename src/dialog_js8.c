@@ -100,6 +100,11 @@
  * back when the app closes. */
 #define JS8_FILTER_LOW   200
 #define JS8_FILTER_HIGH  3000
+/* The TX filter while the app is open: the radio's own default, so it
+ * only changes anything if yours was set narrower (for voice). JS8 never
+ * sends below 500 Hz; the top must pass a signal up to 3000 Hz. */
+#define JS8_TX_FILTER_LOW  160
+#define JS8_TX_FILTER_HIGH 3000
 
 #define HISTORY          300    /* messages kept for re-filtering */
 #define MAX_ROWS         200    /* rows shown before trimming to KEEP_ROWS */
@@ -1819,7 +1824,7 @@ static void construct_cb(lv_obj_t *parent) {
     /* The TX filter too, so a signal up to 3000 Hz goes out whole. Only the
      * radio is told: the setting itself is untouched, so a power loss here
      * can't leave it changed. */
-    radio_set_tx_filter(JS8_FILTER_LOW, JS8_FILTER_HIGH);
+    radio_set_tx_filter(JS8_TX_FILTER_LOW, JS8_TX_FILTER_HIGH);
 
     filter_low  = cparam_i_get(cfg_cur_filter_low);
     filter_high = cparam_i_get(cfg_cur_filter_high);

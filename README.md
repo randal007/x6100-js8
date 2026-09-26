@@ -92,8 +92,9 @@ the image you used before.
 3. **Open JS8:** APP → page 3 → **JS8**. The radio tunes the nearest JS8
    frequency; the **band keys** step through JS8Call's standard frequencies
    (160 m to 6 m), or GhostNet's, or you can type your own (**Freq**, page
-   6). While JS8 is open the receive and transmit filters are 200–3000 Hz
-   and power is capped at 5 W; all go back when you leave.
+   6). While JS8 is open the receive filter is 200–3000 Hz, the transmit
+   filter 160–3000 Hz (the radio's default) and power is capped at 5 W;
+   all go back when you leave.
 4. **Answer someone:** turn the **MFK** to select their row, then **HW
    CPY?** (page 1) for the usual reply to a CQ, **Reply** (page 2) to type,
    or **Query >** (page 1) for the one-press messages.
@@ -419,6 +420,7 @@ Done for beta 3 so far:
 - [x] Alert beeps through the speaker (the radio is switched to play them, as
   for its voice prompts; JS8 hears about a second of silence meanwhile) -
   needs a check on the radio
+- [x] TX filter 160–3000 Hz while JS8 is open: the radio's own default
 - [x] Smoother waterfall: 15 rows a second (as the main screen's), each
   drawn on time, for less work than 10 were
 
