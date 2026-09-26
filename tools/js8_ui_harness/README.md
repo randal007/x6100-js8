@@ -30,3 +30,19 @@ with the wall clock and re-snaps its decode windows when they disagree, as
 it must on the radio, so feeding faster than real time breaks decoding by
 design. (The library tests in `tests/test_js8.cpp` switch that guard off to
 run faster.)
+
+## Waterfall measurements
+
+Build without sanitizers for timings
+(`cmake -S . -B build-perf -DCMAKE_BUILD_TYPE=Release -DHARNESS_SANITIZE=OFF`).
+
+- `ONLY_WFPERF=1`: fills the list, then adds waterfall rows as fast as they
+  render, with a full-screen draw buffer and the radio's flush path
+  (queue copy, 90° rotation, framebuffer copy), and prints the cost per row
+  split into add / render / flush, with parts of the screen hidden to show
+  their share. `WFPERF_PROFILE=full|bare` runs one case for 4000 rows, for
+  a gprof build (`-pg`).
+- `ONLY_WFTIME=1`: live audio; records when each new row reaches the screen
+  and prints the spread of the intervals (how even the scroll is).
+- `ONLY_WFRING=1`: the waterfall widget's ring buffer against a plain model,
+  pixel by pixel as drawn (run it in the ASan build).

@@ -419,12 +419,13 @@ Done for beta 3 so far:
 - [x] Alert beeps through the speaker (the radio is switched to play them, as
   for its voice prompts; JS8 hears about a second of silence meanwhile) -
   needs a check on the radio
+- [x] Smoother waterfall: 15 rows a second (as the main screen's), each
+  drawn on time, for less work than 10 were
 
 Still to do:
 
 - [ ] A power loss with JS8 open no longer leaves the USB filter at
   200–3000 Hz
-- [ ] Smoother waterfall
 - [ ] Performance: profile the app and spread the work over the radio's
   four cores (the screen drawing and the JS8 decoder each lean on one core
   today)

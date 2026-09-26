@@ -78,10 +78,10 @@
 #endif
 #define SYNC_WINDOW_MS   120000 /* Time Sync uses decodes from the last 2 min */
 #define SYNC_DTS         32
-#define WF_ROWS_PER_SEC  10     /* waterfall rows per second of audio */
+#define WF_ROWS_PER_SEC  15     /* waterfall rows per second of audio, as the main screen's */
 #define WF_ROW_SAMPLES   (SAMPLE_RATE / WF_ROWS_PER_SEC)
 #define WF_QUEUE         16     /* rows waiting to be drawn (jitter buffer) */
-#define WF_TICK_MS       10     /* how often the drawing timer looks at the clock */
+#define WF_TICK_MS       5      /* how often the drawing timer looks at the clock */
 #define HB_ADJUST_MS     8000   /* setting the HB interval ends after this idle */
 #define ALERT_COLOR      0x6a2ca0 /* rows matching an alert word */
 /* params.js8_alerts bits: what beeps (alert words always highlight). */
@@ -383,7 +383,7 @@ static float     *wf_queue[WF_QUEUE];
 static uint16_t   wf_queue_size[WF_QUEUE];
 static unsigned   wf_q_head, wf_q_count;
 static lv_timer_t *wf_timer;
-static int64_t    wf_due_ms;   /* when the next row should be drawn (monotonic) */
+static int64_t    wf_due_us;   /* when the next row should be drawn (monotonic) */
 static float    wf_floor_db;   /* smoothed noise floor (receiver thread) */
 static bool     wf_floor_set;
 
@@ -1069,26 +1069,32 @@ static int64_t now_mono_ms(void) {
     return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
 }
 
-/* At most one row per tick, each when it's due by the clock. Rows come a
- * little faster than 10 a second (1102 samples at 11025 Hz, and the audio
- * clock isn't the CPU's), so a queue that builds up is drained by drawing
- * slightly faster, never by a jump. */
+/* At most one row per tick, each when it's due by the clock. Rows are made
+ * per 735 samples at 11025 Hz and the audio clock isn't the CPU's, so a
+ * queue that builds up is drained by drawing slightly faster, never by a
+ * jump. */
 static void wf_timer_cb(lv_timer_t *t) {
     (void)t;
     if (!wf_q_count) return;
-    int64_t now    = now_mono_ms();
-    int     period = 1000 / WF_ROWS_PER_SEC;
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    int64_t now    = (int64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+    int64_t period = 1000000 / WF_ROWS_PER_SEC;
     if (wf_q_count > 6) period = period * 3 / 4;
     else if (wf_q_count > 3) period = period * 19 / 20;
     /* After a pause (no audio while transmitting) start again now. */
-    if (now - wf_due_ms > period) wf_due_ms = now;
-    if (now < wf_due_ms) return;
+    if (now - wf_due_us > period) wf_due_us = now;
+    if (now < wf_due_us) return;
 
     lv_waterfall_add_data(waterfall, wf_queue[wf_q_head], wf_queue_size[wf_q_head]);
     free(wf_queue[wf_q_head]);
     wf_q_head = (wf_q_head + 1) % WF_QUEUE;
     wf_q_count--;
-    wf_due_ms += period;
+    wf_due_us += period;
+    /* On the screen now, not at LVGL's next refresh: that comes every
+     * 33 ms by a tick that runs slow, so rows landed 66-134 ms apart
+     * instead of evenly. */
+    lv_refr_now(NULL);
 }
 
 static int cmp_float(const void *a, const void *b) {
@@ -1107,10 +1113,18 @@ static void wf_emit_row(void) {
     if (high_bin > nfft) high_bin = nfft;
     if (low_bin >= high_bin) return;
 
-    wf_data_t d = {.size = (uint16_t)(high_bin - low_bin)};
-    d.psd       = malloc(d.size * sizeof(float));
+    /* One value per pixel: the strongest of the bins under it, so a narrow
+     * signal between two pixels' centres doesn't flicker. */
+    uint32_t  bins = high_bin - low_bin;
+    wf_data_t d    = {.size = WIDTH};
+    d.psd          = malloc(d.size * sizeof(float));
     if (!d.psd) return;
-    memcpy(d.psd, &psd[low_bin], d.size * sizeof(float));
+    for (uint32_t x = 0; x < WIDTH; x++) {
+        uint32_t b0 = low_bin + x * bins / WIDTH, b1 = low_bin + (x + 1) * bins / WIDTH;
+        float    v  = psd[b0];
+        for (uint32_t b = b0 + 1; b < b1; b++) v = psd[b] > v ? psd[b] : v;
+        d.psd[x] = v;
+    }
 
     /* Noise floor: the 30th percentile of the row, smoothed over ~2 s. */
     float *sorted = malloc(d.size * sizeof(float));
@@ -1161,8 +1175,12 @@ static void on_audio(const float *samples, unsigned n, void *ctx) {
 /* ---- Receiver lifecycle ----------------------------------------------- */
 
 static void rx_start(void) {
-    int span = filter_high - filter_low;
-    nfft     = (uint16_t)(span > 0 ? WIDTH * SAMPLE_RATE / span : 4096);
+    /* At least a bin per pixel, rounded up to a power of two: FFTW is
+     * several times faster at 4096 than at 3035 (= 5 x 607). */
+    int      span = filter_high - filter_low;
+    unsigned want = span > 0 ? WIDTH * SAMPLE_RATE / span : 4096;
+    nfft          = 256;
+    while (nfft < want && nfft < 8192) nfft *= 2;
     /* Step at most half a row, so every row gets at least one transform. */
     unsigned step = nfft / 2 < WF_ROW_SAMPLES / 2 ? nfft / 2 : WF_ROW_SAMPLES / 2;
     sg           = spgramf_create(nfft, LIQUID_WINDOW_HANN, nfft, step);
@@ -1806,18 +1824,31 @@ static void construct_cb(lv_obj_t *parent) {
     filter_low  = cparam_i_get(cfg_cur_filter_low);
     filter_high = cparam_i_get(cfg_cur_filter_high);
 
-    /* Waterfall */
+    /* Waterfall, in an opaque black box. LVGL 8.3's lv_img never reports
+     * that it covers what's behind it (its cover check reads the event
+     * parameter as a clip area), so every row redrew the dialog's
+     * background image under the waterfall: 1 MB read from file line by
+     * line and alpha-blended, most of the cost of a row. A plain opaque
+     * object does cover, and drawing starts there, as for the main
+     * screen's waterfall. */
+    lv_obj_t *wf_box = lv_obj_create(dialog.obj);
+    lv_obj_remove_style_all(wf_box);
+    lv_obj_set_style_bg_color(wf_box, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(wf_box, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(wf_box, WIDTH, WF_HEIGHT);
+    lv_obj_set_pos(wf_box, 13, 13);
 
-    waterfall = lv_waterfall_create(dialog.obj);
+    waterfall = lv_waterfall_create(wf_box);
     lv_obj_add_style(waterfall, &waterfall_style, 0);
     lv_obj_clear_flag(waterfall, LV_OBJ_FLAG_SCROLLABLE);
     lv_waterfall_set_palette(waterfall, (lv_color_t *)wf_palette, 256);
     lv_waterfall_set_size(waterfall, WIDTH, WF_HEIGHT);
     lv_waterfall_set_min(waterfall, WF_MIN_DB);
     lv_waterfall_set_max(waterfall, WF_MAX_DB);
-    wf_due_ms = 0;
+    wf_due_us = 0;
     wf_timer  = lv_timer_create(wf_timer_cb, WF_TICK_MS, NULL);
-    lv_obj_set_pos(waterfall, 13, 13);
+    lv_obj_set_pos(waterfall, 0, 0);
 
     /* Finder marks the offset of the selected message. */
 

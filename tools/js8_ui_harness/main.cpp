@@ -4,6 +4,8 @@
 // through the dialog's audio callback. Screenshots are written as PPM.
 
 #include "lvgl/lvgl.h"
+#include "widgets/lv_waterfall.h"
+#include "widgets/lv_finder.h"
 extern "C" {
 void dialog_destruct(void);
 void dialog_audio_samples(unsigned int n, float *samples);
@@ -53,6 +55,7 @@ extern int16_t stub_tx_peak;
 #include "js8core/protocol/costas.hpp"
 #include "js8core/protocol/varicode.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -68,7 +71,62 @@ namespace vc = js8core::protocol::varicode;
 static constexpr int W = 800, H = 480, RATE = 11025;
 static std::vector<uint32_t> fb(W *H);
 
+// ONLY_WFPERF: the radio's flush path, timed: fbdev.c copies each area into
+// a queue, rotates it 90 degrees (the panel is portrait) and copies it into
+// the framebuffer. perf_rotate picks the rotation under test.
+static bool                  perf_mode;
+static int                   perf_rotate; // 0: fbdev.c's rotate_sw, 1: tiled
+static double                perf_flush_ms;
+static long                  perf_flush_px;
+static std::vector<uint32_t> perf_queue(W *H), perf_rot(W *H), perf_fb(W *H);
+
+static void rotate_naive(const uint32_t *src, uint32_t src_w, uint32_t src_h, uint32_t *dst) {
+    uint32_t dst_w = src_h;
+    for (size_t src_y = 0; src_y < src_h; src_y++)
+        for (size_t src_x = 0; src_x < src_w; src_x++) dst[(src_w - src_x - 1) * dst_w + src_y] = src[src_y * src_w + src_x];
+}
+
+static void rotate_tiled(const uint32_t *src, uint32_t src_w, uint32_t src_h, uint32_t *dst) {
+    const uint32_t T     = 16;
+    uint32_t       dst_w = src_h;
+    for (uint32_t by = 0; by < src_h; by += T)
+        for (uint32_t bx = 0; bx < src_w; bx += T) {
+            uint32_t ey = by + T < src_h ? by + T : src_h, ex = bx + T < src_w ? bx + T : src_w;
+            for (uint32_t x = bx; x < ex; x++) {
+                uint32_t *d = dst + (src_w - x - 1) * dst_w;
+                for (uint32_t y = by; y < ey; y++) d[y] = src[y * src_w + x];
+            }
+        }
+}
+
+static double now_ms_f() {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+// ONLY_WFTIME: when each waterfall row reaches the screen (a flush that
+// includes the waterfall's top line).
+static bool                wftime_mode;
+static std::vector<double> wftime_stamps;
+
 static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *a, lv_color_t *px) {
+    uint32_t w = a->x2 - a->x1 + 1, h = a->y2 - a->y1 + 1;
+    if (wftime_mode && a->x1 <= 30 && a->x2 >= 770 && a->y1 <= 79 && a->y2 >= 79) {
+        /* a new row on top: the top line's pixels changed */
+        static uint64_t last_sig;
+        uint64_t        sig = 1469598103934665603ull;
+        for (int x = 30; x < 770; x += 23) sig = (sig ^ px[(79 - a->y1) * w + (x - a->x1)].full) * 1099511628211ull;
+        if (sig != last_sig) wftime_stamps.push_back(now_ms_f());
+        last_sig = sig;
+    }
+    if (perf_mode) {
+        double t0 = now_ms_f();
+        memcpy(perf_queue.data(), px, w * h * 4);
+        (perf_rotate ? rotate_tiled : rotate_naive)(perf_queue.data(), w, h, perf_rot.data());
+        const uint32_t *r = perf_rot.data();
+        for (uint32_t y = 0; y < w; y++, r += h) memcpy(&perf_fb[(800 - a->x2 + y) % H * W + a->y1], r, h * 4);
+        perf_flush_ms += now_ms_f() - t0;
+        perf_flush_px += (long)w * h;
+    }
     for (int y = a->y1; y <= a->y2; y++)
         for (int x = a->x1; x <= a->x2; x++) fb[y * W + x] = (px++)->full;
     lv_disp_flush_ready(drv);
@@ -177,12 +235,86 @@ static void feed_speeds(const std::vector<x6100::js8::TestStation> &band) {
     pump(2000);
 }
 
+static lv_obj_t *find_obj(lv_obj_t *o, const lv_obj_class_t *cls) {
+    if (lv_obj_check_type(o, cls)) return o;
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(o); i++)
+        if (lv_obj_t *f = find_obj(lv_obj_get_child(o, i), cls)) return f;
+    return nullptr;
+}
+
+struct Stat {
+    std::vector<double> v;
+    void                add(double x) { v.push_back(x); }
+    double              mean() const {
+        double s = 0;
+        for (double x : v) s += x;
+        return v.empty() ? 0 : s / v.size();
+    }
+    double pct(double p) const {
+        auto c = v;
+        std::sort(c.begin(), c.end());
+        return c.empty() ? 0 : c[(size_t)(p * (c.size() - 1))];
+    }
+};
+
+// One waterfall row after another as fast as possible, each rendered and
+// flushed like the radio does; `strip` > 0 invalidates only that many top
+// rows instead of the widget's whole-object invalidate.
+static void wf_bench(const char *name, int frames, int strip = 0) {
+    lv_obj_t *wf = find_obj(lv_scr_act(), &lv_waterfall_class);
+    if (!wf) return;
+    std::vector<float>                    row(776);
+    std::mt19937                          rng(1);
+    std::uniform_real_distribution<float> u(0, 30);
+    Stat                                  add, render, flush, px;
+    lv_refr_now(NULL);
+    for (int i = 0; i < frames; i++) {
+        for (auto &x : row) x = u(rng);
+        double t0 = now_ms_f();
+        lv_waterfall_add_data(wf, row.data(), (uint16_t)row.size());
+        double t1 = now_ms_f();
+        if (strip) {
+            /* the widget invalidated all of itself: start over with just the strip */
+            lv_disp_t *d = lv_disp_get_default();
+            d->inv_p     = 0;
+            lv_area_t a;
+            lv_obj_get_coords(wf, &a);
+            a.y2 = a.y1 + strip - 1;
+            _lv_inv_area(d, &a);
+        }
+        if (i == 0) {
+            lv_disp_t *d = lv_disp_get_default();
+            lv_area_t  c;
+            lv_obj_get_coords(wf, &c);
+            printf("[wfperf]   waterfall %d,%d-%d,%d; %u invalid area(s):", c.x1, c.y1, c.x2, c.y2, (unsigned)d->inv_p);
+            for (unsigned k = 0; k < d->inv_p; k++)
+                printf(" %d,%d-%d,%d%s", d->inv_areas[k].x1, d->inv_areas[k].y1, d->inv_areas[k].x2, d->inv_areas[k].y2,
+                       d->inv_area_joined[k] ? "(joined)" : "");
+            printf("\n");
+        }
+        perf_flush_ms = 0;
+        perf_flush_px = 0;
+        lv_refr_now(NULL);
+        double t2 = now_ms_f();
+        add.add(t1 - t0);
+        render.add(t2 - t1 - perf_flush_ms);
+        flush.add(perf_flush_ms);
+        px.add((double)perf_flush_px);
+    }
+    printf("[wfperf] %-34s add %.2f ms  render %.2f ms (p95 %.2f)  flush %.2f ms  px %.0f  total %.2f ms/row\n", name,
+           add.mean(), render.mean(), render.pct(0.95), flush.mean(), px.mean(),
+           add.mean() + render.mean() + flush.mean());
+}
+
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0); // keep the log if something aborts
     lv_init();
     static lv_color_t          buf[W * 60];
+    static lv_color_t          full_buf[W * H]; // the radio's: one full-screen buffer
     static lv_disp_draw_buf_t  draw_buf;
-    lv_disp_draw_buf_init(&draw_buf, buf, nullptr, W * 60);
+    perf_mode = getenv("ONLY_WFPERF") != nullptr;
+    if (perf_mode) lv_disp_draw_buf_init(&draw_buf, full_buf, nullptr, W * H);
+    else lv_disp_draw_buf_init(&draw_buf, buf, nullptr, W * 60);
     static lv_disp_drv_t drv;
     lv_disp_drv_init(&drv);
     drv.hor_res  = W;
@@ -225,6 +357,130 @@ int main() {
         dialog_destruct(); // what GEN does
         pump(500);
         printf("[gen] closed with the %s list open: running=%d (survived)\n", which, ui_running());
+        return 0;
+    }
+    if (getenv("ONLY_WFRING")) {
+        // The waterfall widget's ring buffer against a plain model, as drawn.
+        const int  WW = 13, HH = 7;
+        lv_obj_t  *box = lv_obj_create(lv_scr_act());
+        lv_obj_remove_style_all(box);
+        lv_obj_set_style_bg_color(box, lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(box, LV_OPA_COVER, 0);
+        lv_obj_set_pos(box, 100, 100);
+        lv_obj_set_size(box, WW, HH);
+        lv_obj_t         *wf = lv_waterfall_create(box);
+        static lv_color_t pal[256];
+        for (int i = 0; i < 256; i++) pal[i] = lv_color_make(i, 255 - i, (i * 7) & 255);
+        lv_waterfall_set_palette(wf, pal, 256);
+        lv_waterfall_set_size(wf, WW, HH);
+        lv_waterfall_set_min(wf, 0);
+        lv_waterfall_set_max(wf, 255);
+        lv_obj_set_pos(wf, 0, 0);
+        std::vector<std::vector<int>> model; // newest first
+        int                           bad = 0, checks = 0;
+        auto                          check = [&](int step) {
+            lv_refr_now(NULL);
+            lv_area_t c;
+            lv_obj_get_coords(wf, &c);
+            for (int y = 0; y < HH; y++)
+                for (int x = 0; x < WW; x++) {
+                    uint32_t got  = fb[(c.y1 + y) * W + c.x1 + x] & 0xffffff;
+                    uint32_t want = y < (int)model.size() ? lv_color_to32(pal[model[y][x]]) & 0xffffff : 0;
+                    checks++;
+                    if (got != want && bad++ < 5)
+                        printf("[wfring] step %d pixel %d,%d: %06x want %06x\n", step, x, y, got, want);
+                }
+        };
+        for (int r = 0; r < 40; r++) {
+            std::vector<float> d(WW);
+            std::vector<int>   ids(WW);
+            for (int x = 0; x < WW; x++) {
+                ids[x] = (r * 31 + x * 17 + 5) % 256;
+                d[x]   = ids[x] + 0.5f;
+            }
+            lv_waterfall_add_data(wf, d.data(), WW);
+            model.insert(model.begin(), ids);
+            if ((int)model.size() > HH) model.pop_back();
+            check(r);
+            if (r == 20) {
+                lv_waterfall_clear_data(wf);
+                model.clear();
+                check(r);
+            }
+        }
+        printf("[wfring] %d pixels checked, %d wrong\n", checks, bad);
+        lv_obj_del(box);
+        lv_refr_now(NULL);
+        return 0;
+    }
+    if (getenv("ONLY_WFTIME")) {
+        // Row presentation times with live audio: how even is the scroll?
+        pump(300);
+        wftime_mode = true;
+        feed_band({{"W1ABC", "FN42", "", "@POTA ACTIVATING CA-1234", 1300, 0.05f},
+                   {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1800, 0.05f}});
+        wftime_mode = false;
+        Stat   iv;
+        double prev = 0;
+        for (double t : wftime_stamps) {
+            if (prev) iv.add(t - prev);
+            prev = t;
+        }
+        double m = iv.mean(), var = 0;
+        for (double x : iv.v) var += (x - m) * (x - m);
+        int off = 0; // steps more than 20% away from the mean interval
+        for (double x : iv.v) off += fabs(x - m) > 0.2 * m;
+        printf("[wftime] %zu rows: interval mean %.1f ms, sd %.1f, min %.1f, p5 %.1f, p95 %.1f, max %.1f; %d uneven (>20%%)\n",
+               iv.v.size() + 1, m, sqrt(var / iv.v.size()), iv.pct(0), iv.pct(0.05), iv.pct(0.95), iv.pct(1), off);
+        return 0;
+    }
+    if (getenv("ONLY_WFPERF")) {
+        // A full list over the waterfall, then rows as fast as they render.
+        pump(300);
+        feed_band({{"W1ABC", "FN42", "", "@POTA ACTIVATING CA-1234", 1300, 0.05f},
+                   {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1800, 0.05f},
+                   {"VE7ABC", "CN89", "", "K2XYZ HELLO THERE", 900, 0.05f},
+                   {"N0XYZ", "EN34", "", "CQ CQ CQ EN34", 1500, 0.05f},
+                   {"KK7RFI", "DN17", "", "@HB HEARTBEAT DN17", 2200, 0.05f},
+                   {"W7ABC", "CN85", "", "K2XYZ SNR -05", 2600, 0.05f}});
+        ui_page(2);
+        ui_press(1); // Show: Directed
+        ui_press(1); // All
+        pump(500);
+        screenshot("wfperf_before.ppm");
+        lv_obj_t *table = find_obj(lv_scr_act(), &lv_table_class);
+        if (getenv("WFPERF_PROFILE")) { // one case, long enough for a profile
+            if (!strcmp(getenv("WFPERF_PROFILE"), "bare")) {
+                lv_obj_add_flag(table, LV_OBJ_FLAG_HIDDEN);
+                lv_obj_add_flag(find_obj(lv_scr_act(), &lv_finder_class), LV_OBJ_FLAG_HIDDEN);
+            }
+            wf_bench(getenv("WFPERF_PROFILE"), 4000);
+            return 0;
+        }
+        wf_bench("as now (whole waterfall redrawn)", 300);
+        perf_rotate = 1;
+        wf_bench("  + tiled rotation", 300);
+        perf_rotate = 0;
+        lv_obj_add_flag(table, LV_OBJ_FLAG_HIDDEN);
+        wf_bench("list hidden (its share)", 300);
+        lv_obj_t *finder = find_obj(lv_scr_act(), &lv_finder_class);
+        lv_obj_add_flag(finder, LV_OBJ_FLAG_HIDDEN);
+        wf_bench("list + finder hidden", 300);
+        lv_obj_t *wf  = find_obj(lv_scr_act(), &lv_waterfall_class);
+        std::vector<lv_obj_t *> kids;
+        for (uint32_t i = 0; i < lv_obj_get_child_cnt(wf); i++)
+            if (!lv_obj_has_flag(lv_obj_get_child(wf, i), LV_OBJ_FLAG_HIDDEN)) kids.push_back(lv_obj_get_child(wf, i));
+        for (auto k : kids) lv_obj_add_flag(k, LV_OBJ_FLAG_HIDDEN);
+        printf("[wfperf] waterfall children hidden: %zu (plus the finder)\n", kids.size());
+        wf_bench("list + all waterfall children hidden", 300);
+        lv_obj_t *par = lv_obj_get_parent(wf);
+        printf("[wfperf] siblings over the waterfall: %u\n", (unsigned)lv_obj_get_child_cnt(par));
+        for (auto k : kids) lv_obj_clear_flag(k, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(finder, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(table, LV_OBJ_FLAG_HIDDEN);
+        wf_bench("only the uncovered strip (55 rows)", 300, 55);
+        perf_rotate = 1;
+        wf_bench("  + tiled rotation", 300, 55);
         return 0;
     }
     if (getenv("ONLY_APRS")) {
