@@ -325,6 +325,8 @@ All on the **DATA** partition, readable on a PC:
 
 - [ ] GhostNet frequencies in the band list
 - [ ] Custom frequency option on page 6
+- [ ] POTA and SOTA spots with a frequency and mode you choose (e.g. your SSB
+  activation), not only the JS8 frequency
 - [ ] Send up to 3000 Hz (now 2500 Hz)
 - [ ] HW CPY? and Clear swapped between pages 1 and 2
 - [ ] Stations list kept when changing band (cleared only when the app closes)
