@@ -30,6 +30,7 @@ us), other stations' traffic, and a CQ sent at Turbo speed (`T`).*
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
 - [Known issues in beta 1](#known-issues-in-beta-1)
+- [Coming in beta 2](#coming-in-beta-2)
 - [Credits](#credits)
 - [For developers](#for-developers)
 
@@ -315,9 +316,17 @@ All on the **DATA** partition, readable on a PC:
 - **Transmitting stops at 2500 Hz** (minus the signal's width). Decoding
   covers 200–3000 Hz; sending up to 3000 Hz comes in beta 2.
 
-**Planned for beta 2:** the fixes above, HW CPY? and Clear swapped
-between pages 1 and 2, the Stations list kept across band changes, the
-GhostNet frequencies, and a custom frequency option on page 6.
+## Coming in beta 2
+
+- [ ] GhostNet frequencies in the band list
+- [ ] Custom frequency option on page 6
+- [ ] Send up to 3000 Hz (now 2500 Hz)
+- [ ] HW CPY? and Clear swapped between pages 1 and 2
+- [ ] Stations list kept when changing band (cleared only when the app closes)
+- [ ] ESC in a keyboard only closes the keyboard
+- [ ] Test beep audible through the speaker
+- [ ] Smoother waterfall
+- [ ] Long messages tested on the air
 
 ## Credits
 
