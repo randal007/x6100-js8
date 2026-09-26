@@ -30,6 +30,7 @@
 #include "msg.h"
 #include "params/params.h"
 #include "radio.h"
+#include "keypad.h"
 #include "scheduler.h"
 #include "styles.h"
 #include "textarea_window.h"
@@ -105,6 +106,7 @@
 #define KEEP_ROWS        150
 #define AUTO_CQ_MS       60000 /* auto CQ: a minute after our last TX ends (desktop's shortest repeat) */
 #define READ_PAUSE_MS    30000 /* list follows new rows again this long after the last MFK move */
+#define HOLD_MS          500      /* a button held this long is a hold (1 s elsewhere) */
 #define CUSTOM_MIN_HZ    1800000  /* custom dial frequency: 160m ... */
 #define CUSTOM_MAX_HZ    54000000 /* ... to the top of 6m */
 
@@ -1830,6 +1832,7 @@ static void construct_cb(lv_obj_t *parent) {
     add_info_row("%s", where_label());
 
     main_screen_lock_ab(true);
+    keypad_set_long_time(HOLD_MS); /* page back, auto CQ etc. without the long wait */
     main_screen_lock_mode(true);
     main_screen_lock_freq(true);
     main_screen_lock_band(true);
@@ -1932,6 +1935,7 @@ static void destruct_cb(void) {
 
     main_screen_lock_mode(false);
     main_screen_lock_ab(false);
+    keypad_set_long_time(0);
     main_screen_lock_freq(false);
     main_screen_lock_band(false);
 

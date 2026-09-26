@@ -229,3 +229,4 @@ int audio_play(int16_t *buf, size_t samples) {
     return 0;
 }
 void audio_play_wait(void) { printf("[audio] drained\n"); }
+void keypad_set_long_time(uint32_t ms) { printf("[keypad] hold time %u ms\n", (unsigned)ms); }
