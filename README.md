@@ -335,6 +335,12 @@ All on the **DATA** partition, readable on a PC:
 - [ ] APRS tested on the air: POTA and SOTA spots, SMS, email and Winlink
   (so far only **Spot my grid** is confirmed working)
 
+**Later (beta 2 or after):**
+
+- [ ] Performance: profile the app and spread the work over the radio's
+  four cores (the screen drawing and the JS8 decoder each lean on one core
+  today)
+
 ## Bug reports and feature requests
 
 This is a beta: reports from testing are very welcome.
