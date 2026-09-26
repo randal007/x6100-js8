@@ -29,6 +29,7 @@
 #include "info.h"
 #include "dialog_swrscan.h"
 #include "cw.h"
+#include "audio.h"
 #include "pubsub_ids.h"
 
 /*********************
@@ -414,6 +415,10 @@ void radio_set_ptt(bool tx) {
 
 void radio_set_modem(bool tx) {
     WITH_RADIO_LOCK(x6100_control_modem_set(tx));
+}
+
+void radio_speaker_play(bool on) {
+    WITH_RADIO_LOCK(audio_set_play_mode(on ? AUDIO_PLAY_ON : AUDIO_PLAY_OFF));
 }
 
 void radio_set_line_in(uint8_t d) {

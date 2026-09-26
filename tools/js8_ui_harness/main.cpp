@@ -728,6 +728,9 @@ int main() {
         ui_press(1); // -> All
         pump(300);
         screenshot("33_alert_rows.ppm");
+        printf("[alerts] decoded through the beeps: W1ABC %d, K9DEF %d, VE7ABC %d, N0XYZ %d\n",
+               ui_list_has("@POTA ACTIVATING CA-1234"), ui_list_has("HEARTBEAT EN52"), ui_list_has("HEARTBEAT CN89"),
+               ui_list_has("CQ CQ CQ EN34"));
         ui_page(3);
         ui_press(3); // Stations
         pump(300);

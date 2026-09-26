@@ -207,6 +207,7 @@ static void        beacon_changed_cb(lv_event_t *e);
 static const char *where_label(void);
 static void        alert_check(js8_rx_msg_t *m, bool new_station);
 static void        alert_beep(int count);
+static void        beep_log_level(void);
 static const char *speed_label_getter(void);
 static void        speed_cb(button_data_t *btn);
 static void        speed_hold_cb(button_data_t *btn);
@@ -242,6 +243,13 @@ static atomic_bool keyed;              /* a frame is on the air (TX thread) */
 /* Held while an alert beep plays; tx_play takes it after setting keyed, so
  * a beep stops within one part and never goes out with our TX audio. */
 static pthread_mutex_t speaker_lock = PTHREAD_MUTEX_INITIALIZER;
+/* While the speaker plays a beep the base doesn't send us the receiver:
+ * the decoder gets silence instead (same length, so its clock stays in
+ * step) and the waterfall pauses. On from speaker-on until beep_guard_end
+ * (monotonic ms), a little after speaker-off, for the capture latency. */
+static atomic_bool     beep_guard;
+static _Atomic int64_t beep_guard_end;
+static _Atomic int64_t beep_guard_sq, beep_guard_n; /* capture level during it (log) */
 static atomic_int  tx_offset_active;   /* offset of the message being sent */
 static bool        composing;          /* compose window open */
 
@@ -1123,10 +1131,22 @@ static void on_audio(const float *samples, unsigned n, void *ctx) {
     (void)ctx;
     if (!sg) return;
 
-    /* One row per WF_ROW_SAMPLES of audio, however the audio is chunked. */
+    /* One row per WF_ROW_SAMPLES of audio, however the audio is chunked.
+     * Exact zeros are the beep guard's silence (real audio never is): the
+     * waterfall pauses over them instead of drawing a dark band. */
     while (n) {
         unsigned take = WF_ROW_SAMPLES - wf_row_fill;
         if (take > n) take = n;
+        for (unsigned i = 0; i < take; i++) {
+            if (samples[i] == 0.0f) {
+                take = i;
+                break;
+            }
+        }
+        if (!take) { /* a run of guard silence: skip it */
+            while (n && *samples == 0.0f) samples++, n--;
+            continue;
+        }
         spgramf_write(sg, (float *)samples, take);
         samples += take;
         n -= take;
@@ -1175,8 +1195,29 @@ static void rx_stop(void) {
     psd = NULL;
 }
 
+static float beep_level_before_db = -200.0f; /* receiver level, smoothed (beep log) */
+
+static bool beep_guard_active(void) {
+    return atomic_load(&beep_guard) || now_mono_ms() < atomic_load(&beep_guard_end);
+}
+
 static void audio_cb(unsigned int n, float *samples) {
     if (atomic_load(&keyed)) return; /* our own TX, or nothing useful */
+    if (beep_guard_active()) {
+        static const float silence[512];
+        double             sq = 0;
+        for (unsigned i = 0; i < n; i++) sq += (double)samples[i] * samples[i];
+        atomic_fetch_add(&beep_guard_sq, (int64_t)(sq * 1e9));
+        atomic_fetch_add(&beep_guard_n, n);
+        for (unsigned at = 0; at < n; at += 512) js8_rx_feed(rx, silence, n - at < 512 ? n - at : 512);
+        return;
+    }
+    if (n) {
+        double sq = 0;
+        for (unsigned i = 0; i < n; i++) sq += (double)samples[i] * samples[i];
+        float db             = (float)(10.0 * log10(sq / n + 1e-24));
+        beep_level_before_db = beep_level_before_db < -150.0f ? db : 0.9f * beep_level_before_db + 0.1f * db;
+    }
     js8_rx_feed(rx, samples, n);
 }
 
@@ -1197,8 +1238,9 @@ static bool tx_play(int16_t *samples, unsigned n, int index, int count, void *ct
     atomic_store(&keyed, true);
     struct timespec until; /* a beep stops within one part; never hang TX on it */
     clock_gettime(CLOCK_REALTIME, &until);
-    until.tv_sec += 1;
+    until.tv_sec += 2;
     if (pthread_mutex_timedlock(&speaker_lock, &until) == 0) pthread_mutex_unlock(&speaker_lock);
+    else radio_speaker_play(false); /* never key with the speaker path switched */
     /* Per frame, so a power change made while the app is open counts. */
     base_gain_offset = tx_player_base_gain_offset();
     bool done = tx_player_play(samples, n, atomic_load(&tx_offset_active), base_gain_offset, tx_abort_check, NULL);
@@ -2645,6 +2687,7 @@ static void handle_incoming(const js8_rx_msg_t *m) {
 
 /* Once a second: send a heartbeat when one is due. */
 static void hb_tick(void) {
+    beep_log_level();
     if (hb_adjusting && now_wall_ms() - hb_adjust_ms > HB_ADJUST_MS) hb_adjust_end();
     /* An automatic reply put off by a list or the keyboard: send it once
      * they close (after a transmission, ui_tx_done does the same). */
@@ -4094,37 +4137,78 @@ static void inbox_cb(button_data_t *btn) {
 /* Like desktop JS8Call's notifications and highlight words: a beep through
  * the speaker for what's switched on in the Alerts list, and rows matching
  * an alert word (calls or words you type) in purple. Never while
- * transmitting: the speaker path is the TX audio path then. */
+ * transmitting: the speaker path is the TX audio path then.
+ *
+ * The base unit plays this app's audio on the speaker only in its play
+ * mode (radio_speaker_play, as voice prompts and the recorder use it);
+ * without it the beep went nowhere. In play mode the audio the base sends
+ * us isn't the receiver's, so the beep is kept short and beep_guard feeds
+ * the decoder silence meanwhile. */
 
 #define BEEP_HZ       1000
 #define BEEP_MS       120
 #define BEEP_GAP_MS   100
+#define BEEP_LEAD_MS  50   /* silence first: the base switches to play mode */
+#define BEEP_TAIL_MS  300  /* guard after speaker-off: capture latency */
+#define BEEP_AMPL     13000 /* about -8 dBFS */
 #define BEEP_EVERY_MS 3000 /* at most one alert sound per 3 s */
 
 static int64_t beep_last_ms;
 
-enum { BEEP_TONE = AUDIO_PLAY_RATE * BEEP_MS / 1000, BEEP_GAP = AUDIO_PLAY_RATE * BEEP_GAP_MS / 1000 };
+enum {
+    BEEP_TONE = AUDIO_PLAY_RATE * BEEP_MS / 1000,
+    BEEP_GAP  = AUDIO_PLAY_RATE * BEEP_GAP_MS / 1000,
+    BEEP_LEAD = AUDIO_PLAY_RATE * BEEP_LEAD_MS / 1000,
+};
 static int16_t         beep_buf[BEEP_TONE + BEEP_GAP];
+static int16_t         beep_lead[BEEP_LEAD];
 static int             beep_count;
 static atomic_bool     beeping;
 
 /* Beep thread: audio_play() waits for room in the stream, so it can't run
  * on the LVGL thread, and it only ever gets small parts (like tx_player):
  * one call with the whole beep never finds room and hangs forever. */
+/* audio_play() in parts of at most 2048 samples: a bigger write never finds
+ * room in the stream and hangs. Stops early if TX keys. */
+static void beep_play(const int16_t *buf, size_t n) {
+    for (size_t at = 0; at < n && !atomic_load(&keyed);) {
+        size_t part = LV_MIN(2048, n - at);
+        audio_play((int16_t *)buf + at, part);
+        at += part;
+    }
+}
+
 static void *beep_thread(void *arg) {
     (void)arg;
     pthread_mutex_lock(&speaker_lock);
-    for (int i = 0; i < beep_count && !atomic_load(&keyed); i++) {
-        for (size_t at = 0; at < BEEP_TONE + BEEP_GAP && !atomic_load(&keyed);) {
-            size_t part = LV_MIN(1024 * 2, BEEP_TONE + BEEP_GAP - at);
-            audio_play(beep_buf + at, part);
-            at += part;
-        }
-    }
+    if (atomic_load(&keyed)) goto out;
+    /* The receiver's level just before, for the log. */
+    atomic_store(&beep_guard_sq, 0);
+    atomic_store(&beep_guard_n, 0);
+    atomic_store(&beep_guard, true);
+    radio_speaker_play(true);
+    beep_play(beep_lead, BEEP_LEAD);
+    for (int i = 0; i < beep_count; i++) beep_play(beep_buf, BEEP_TONE + BEEP_GAP);
     audio_play_wait();
+    radio_speaker_play(false);
+    atomic_store(&beep_guard_end, now_mono_ms() + BEEP_TAIL_MS);
+    atomic_store(&beep_guard, false);
+out:
     pthread_mutex_unlock(&speaker_lock);
     atomic_store(&beeping, false);
     return NULL;
+}
+
+/* Once the guard is over: what the capture carried while the speaker
+ * played, against the receiver just before (tells whether play mode
+ * really cuts the receiver on this base). */
+static void beep_log_level(void) {
+    int64_t n = atomic_load(&beep_guard_n);
+    if (!n || beep_guard_active()) return;
+    double rms = sqrt((double)atomic_load(&beep_guard_sq) / 1e9 / (double)n);
+    LV_LOG_USER("JS8 beep: capture %.1f dBFS during the beep (%lld samples), %.1f dBFS before",
+                20.0 * log10(rms + 1e-12), (long long)n, beep_level_before_db);
+    atomic_store(&beep_guard_n, 0);
 }
 
 static void alert_beep(int count) {
@@ -4142,7 +4226,7 @@ static void alert_beep(int count) {
             float env = 1.0f;
             if (i < ramp) env = (float)i / ramp;
             if (i > BEEP_TONE - ramp) env = (float)(BEEP_TONE - i) / ramp;
-            beep_buf[i] = (int16_t)(8000.0f * env * sinf(2.0f * (float)M_PI * BEEP_HZ * i / AUDIO_PLAY_RATE));
+            beep_buf[i] = (int16_t)(BEEP_AMPL * env * sinf(2.0f * (float)M_PI * BEEP_HZ * i / AUDIO_PLAY_RATE));
         }
         made = true;
     }

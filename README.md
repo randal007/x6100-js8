@@ -416,10 +416,12 @@ Done for beta 3 so far:
 - [x] A heartbeat sent by hand restarts the HB timer
 - [x] Shorter position beacons with a message (6 frames down to 4–5), with a live frame count
 - [x] Spot form: one Frequency row (keyboard; empty = the JS8 dial)
+- [x] Alert beeps through the speaker (the radio is switched to play them, as
+  for its voice prompts; JS8 hears about a second of silence meanwhile) -
+  needs a check on the radio
 
 Still to do:
 
-- [ ] Test beep audible through the speaker
 - [ ] A power loss with JS8 open no longer leaves the USB filter at
   200–3000 Hz
 - [ ] Smoother waterfall

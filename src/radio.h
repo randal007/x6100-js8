@@ -70,6 +70,10 @@ void radio_stop_swrscan();
 void radio_poweroff();
 void radio_set_ptt(bool tx);
 void radio_set_modem(bool tx);
+/* The base plays this app's audio on the speaker (as voice prompts and the
+ * recorder do) - and while it does, the audio it sends us isn't the
+ * receiver's. Off puts the mics back. */
+void radio_speaker_play(bool on);
 
 void radio_set_line_in(uint8_t d);
 void radio_set_line_out(uint8_t d);

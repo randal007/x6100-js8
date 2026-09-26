@@ -226,7 +226,12 @@ int audio_play(int16_t *buf, size_t samples) {
         abort();
     }
     printf("[audio] beep %zu samples\n", samples);
+    usleep(samples * 1000000ull / 44100); /* in real time, as the radio plays it */
     return 0;
 }
-void audio_play_wait(void) { printf("[audio] drained\n"); }
+void audio_play_wait(void) {
+    usleep(150000); /* what's still in the stream */
+    printf("[audio] drained\n");
+}
 void keypad_set_long_time(uint32_t ms) { printf("[keypad] hold time %u ms\n", (unsigned)ms); }
+void radio_speaker_play(bool on) { printf("[radio] speaker play %s\n", on ? "on" : "off"); }
