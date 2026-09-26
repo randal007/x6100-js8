@@ -163,7 +163,7 @@ to go back a page. In JS8 a hold is half a second.
 | Page | Button | Does |
 |---|---|---|
 | 1 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
-| 1 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. |
+| 1 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. With HB on, the automatic ones count again from this one. |
 | 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). |
@@ -313,10 +313,13 @@ Nothing reaches APRS unless a gateway station hears you; replies come back
 over APRS, not JS8. APRS text is limited to 67 characters.
 
 **Position with a message:** Spot my grid and Spot GPS position open a
-text box. Press Enter on it empty for the plain position beacon, or type a
-message first (up to 43 characters, e.g. `MADE IT TO CAMP`): it goes as an
-APRS position report with your message as its comment, shown with your
-position on aprs.fi. (JS8's `GRID` command can't carry a message, so this
+text box. Press Enter on it empty for the plain position beacon (2 frames),
+or type a message first (up to 43 characters, e.g. `MADE IT TO CAMP`): it
+goes as an APRS position report with your message as its comment, shown
+with your position on aprs.fi. The position is rounded to about 185 m,
+which keeps it short: one or two words (`MADE IT`, `ARRIVED SAFE`) take 4
+frames, about 20 letters 5. The line above the keyboard shows the frame
+count as you type. (JS8's `GRID` command can't carry a message, so this
 one goes as a raw APRS packet through `CMD`.) ESC sends nothing.
 
 So far only the plain **Spot my grid** has been confirmed on the air; the
@@ -331,10 +334,11 @@ through the gateways.
 The top line shows exactly what will be sent. Everything is remembered
 for next time.
 
-- **Frequency:** the JS8 dial you're on, or one you type (**Type a
-  frequency…**, in kHz like `7185`, or MHz like `144.2` for VHF). Press
-  **Frequency** to switch between the two. Use it to spot your SSB or CW
-  run while JS8 carries the spot.
+- **Frequency:** the JS8 dial you're on, or one you type. Press it: the
+  keyboard opens with your last one filled in. Enter a frequency (kHz like
+  `7185`, or MHz like `144.2` for VHF) to spot that, or clear it and press
+  Enter to spot the JS8 dial again. Use it to spot your SSB or CW run while
+  JS8 carries the spot.
 - **Mode:** press to step through DATA, SSB, CW, FM, AM and FT8 (POTA) or
   DV (SOTA). JS8 is DATA.
 - **Comment:** optional. With none, a spot of the JS8 dial says `JS8`.
@@ -403,6 +407,17 @@ After the first on-air QSOs:
   way to the end.
 
 ## Coming next
+
+Done for beta 3 so far:
+
+- [x] A hold is half a second (was one)
+- [x] CQ page first: pages 1 and 2 swapped
+- [x] Auto CQ interval set with the knob (1–30 min), like HB
+- [x] A heartbeat sent by hand restarts the HB timer
+- [x] Shorter position beacons with a message (6 frames down to 4–5), with a live frame count
+- [x] Spot form: one Frequency row (keyboard; empty = the JS8 dial)
+
+Still to do:
 
 - [ ] Test beep audible through the speaker
 - [ ] A power loss with JS8 open no longer leaves the USB filter at

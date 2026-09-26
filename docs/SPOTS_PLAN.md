@@ -60,8 +60,8 @@ Beta 1's APRS hint said `VE-1234`; the form now warns about K-/VE- refs.
 - SOTA → APRS2SOTA (the user registers with it):
   `@APRSIS CMD :APRS2SOTA:VE7/LM-001 7.078 DATA VE7NHW JS8`.
 - APRS > POTA spot / SOTA spot open a form (like Log QSO): Send spot,
-  Park/Summit, Frequency (JS8 dial or the last typed, press to switch),
-  Type a frequency..., Mode (DATA SSB CW FM AM + FT8 for POTA / DV for
+  Park/Summit, Frequency (press: keyboard with the last typed one; a
+  number spots it, empty = the JS8 dial), Mode (DATA SSB CW FM AM + FT8 for POTA / DV for
   SOTA), Comment ("JS8" automatically when spotting the JS8 dial with
   none typed), Close. A preview line shows the message. Remembered in
   js8_texts.txt: POTA=, SOTA=, SPOTMODE=, SPOTHZ=, SPOTTYPED=, SPOTNOTE=.
