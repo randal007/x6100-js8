@@ -107,7 +107,7 @@ marks the selected station.
 **Selecting a station:** turn the **MFK** onto one of their rows. They
 stay selected while new messages arrive: their rows get a green bar at
 the left, the TX bar says `selected: CALL`, and the green line follows
-them if they move. Only another MFK move (or **Clear**, or a band change)
+them if they move. Only another MFK move (or **Clear**, or a change of band or frequency)
 changes it. The list keeps showing the newest lines; if you scroll up to
 read, it goes back to following them 30 s after you last turned the MFK.
 
@@ -159,8 +159,8 @@ to go back a page.
 | 1 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). |
 | 1 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 1 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
-| 1 | **Clear** | Clear the list and this band's Stations list. |
-| 2 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then one every minute (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band, or leave it alone for an hour. |
+| 1 | **Clear** | Clear the list and this frequency's Stations list. |
+| 2 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then one every minute (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
 | 2 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. |
 | 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
 | 2 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
@@ -362,6 +362,8 @@ Still to do:
 - [ ] POTA and SOTA spots with a frequency and mode you choose (e.g. your SSB
   activation), not only the JS8 frequency
 - [ ] Test beep audible through the speaker
+- [ ] A power loss with JS8 open no longer leaves the USB filter at
+  200–3000 Hz
 - [ ] Smoother waterfall
 - [ ] Long messages tested on the air
 - [ ] APRS tested on the air: POTA and SOTA spots, SMS, email and Winlink
