@@ -34,6 +34,7 @@ void ui_compose_clear(void);
 void ui_indevs_init(void);
 int  ui_kb_select_ok(void);
 void ui_usb_init(void);
+bool dialog_js8_selected_call(char *call, unsigned len);
 void ui_usb_event(uint32_t key, int value);
 void ui_mfk_turn(int32_t diff);
 void ui_mfk_set(bool down);
@@ -786,6 +787,55 @@ int main() {
         screenshot("39_partial_done.ppm");
         return 0;
     }
+    if (getenv("ONLY_AUTOCQ")) {
+        // 2. Auto CQ: hold CQ; a CQ a minute until someone answers.
+        pump(300);
+        ui_page(2);
+        ui_hold(1);
+        pump(300);
+        printf("[autocq] after hold: '%s', CQ rows %d (want 1)\n", ui_button_label(1), ui_list_count("CQ CQ CQ"));
+        pump(20000);
+        printf("[autocq] 20 s later: '%s'\n", ui_button_label(1));
+        for (int i = 0; i < 60 && ui_list_count("CQ CQ CQ") < 2; i++) pump(1000);
+        printf("[autocq] the next one: CQ rows %d (want 2)\n", ui_list_count("CQ CQ CQ"));
+        screenshot("u02_autocq.ppm");
+        // Someone answers: auto CQ off.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+        printf("[autocq] after N0XYZ answered: '%s' (want CQ), info row %d\n", ui_button_label(1),
+               ui_list_has("Auto CQ off: N0XYZ answered"));
+        // Press CQ goes back to manual.
+        for (int i = 0; i < 40; i++) pump(500); // let any TX finish
+        ui_hold(1);
+        pump(300);
+        ui_press(1);
+        pump(300);
+        printf("[autocq] hold then press: '%s' (want CQ), info row %d\n", ui_button_label(1),
+               ui_list_has("Auto CQ off: manual"));
+        return 0;
+    }
+    if (getenv("ONLY_COMPOSE")) {
+        // 7. Pre-typing a reply while their long message is still arriving.
+        stub_usb_kbd = getenv("USB") ? 1 : 0;
+        pump(300);
+        std::vector<Station> st = {
+            {"N0XYZ", "EN34", "K2XYZ",
+             "K2XYZ GOOD EVENING THE WEATHER HERE IS TURNING TO FALL AND I HOPE THE BUGS ARE FEW 73", 1320, 0.05f}};
+        feed_band({{"W1ABC", "FN42", "", "@ALLCALL CQ CQ FN42", 1800, 0.05f},
+                   {"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+        ui_select_row_from("N0XYZ");
+        ui_page(1);
+        ui_press(2); // Reply
+        pump(200);
+        ui_compose_append("THANKS FOR THE");
+        feed_band(st, 0, 3);
+        screenshot(stub_usb_kbd ? "u07_compose_usb.ppm" : "u07_compose_kb.ppm");
+        feed_band(st, 3);
+        screenshot(stub_usb_kbd ? "u07_compose_usb_done.ppm" : "u07_compose_kb_done.ppm");
+        ui_compose_cancel();
+        pump(300);
+        screenshot("u07_after.ppm");
+        return 0;
+    }
     if (getenv("ONLY_QSOFREQ")) {
         // Directed view also shows whatever is on the selected station's frequency.
         pump(300);
@@ -951,6 +1001,24 @@ int main() {
         printf("[log-usb] after Enter: logged %d (want 0), focused '%s' (want Name: ROBERT)\n", lf != NULL,
                ui_focused_text());
         if (lf) fclose(lf);
+
+        // 4. The selected station stays selected while new rows arrive.
+        ui_page(1);
+        ui_select_row_from("N0XYZ");
+        ui_page(2);
+        ui_press(1); // our CQ: a new row below theirs
+        pump(300);
+        feed_band({{"W1ABC", "FN42", "", "@ALLCALL CQ CQ FN42", 1800, 0.05f}});
+        char selc[32] = "";
+        dialog_js8_selected_call(selc, sizeof(selc));
+        printf("[sel] after our CQ and W1ABC's: selected '%s' (want N0XYZ)\n", selc);
+        screenshot("u04_selected.ppm");
+        ui_page(1);
+        ui_press(2); // Reply
+        pump(200);
+        printf("[sel] Reply prefill '%s' (want N0XYZ )\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(200);
 
         // 9. Fast typing on a USB keyboard: each key goes down before the
         // previous one is up. Once all queued at once, once as they come.

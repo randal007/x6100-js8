@@ -7,6 +7,19 @@ harness and then on the radio.
 Suggested order: 1, 3, 5, 6, 4, 7, 2. Auto CQ (2) comes last because it
 builds on 1 and 4.
 
+## Status (2026-09-26): all done, tested in the UI harness, not yet on the radio
+
+| # | Result |
+|---|---|
+| 1 | Done. |
+| 2 | Done, with VE7NHW's choice: a **fixed 1-minute** interval (start to start), no knob; the first CQ goes at once. Off on an answer, a press of CQ, a reply you send, Stop TX, band change, 1 h idle. |
+| 3 | Done. |
+| 4 | Done as planned: `sel_call` separate from the cursor, green bar, `selected:` in the TX bar. |
+| 5, 6 | Same root cause, found with real input devices in the harness: **LVGL 8.3's indev reset** (the keyboard window deletes the focused object mid-press) sets the press time to 0, so the still-held key counts as a long press and **repeats every 100 ms** into the next focused object: the list (ESC → stop TX, then close) or the Log's Save (Enter from a USB keyboard). Fix: `lv_indev_wait_release()` in `textarea_window`. The Log also reopens on the edited field. |
+| 7 | Done: growing rows keep the list scrolled to the end; while typing, the text box moves to the top of the screen and, with the on-screen keyboard, the list moves up into the space above it (no separate strip needed). |
+| 8 | Added: Show *No HB* hides SNR reports (`classify()` → `snr_report`). |
+| 9 | Added: USB keyboard lost keys. LVGL's keypad ignores a press while another key is down (fast typing overlaps keys): `src/kbd_rollover.c` releases the old key first. Lowercase was also dropped by the text boxes; now typed as capitals. |
+
 ---
 
 ## 1. CQ switches heartbeats off
@@ -75,8 +88,7 @@ appears. Radio: HB on, CQ, and no heartbeat after the interval.
     call CQ for hours;
   - the app closes.
 
-**Open question for VE7NHW.** Is 3 minutes right as the default, and should
-the first CQ go out at once?
+**Decided:** fixed 1-minute interval, first CQ at once (see Status).
 
 **Test.** Unit test for the due-time rule. Harness: hold CQ, the countdown,
 and a directed message stopping it. Radio: on air.
@@ -238,6 +250,5 @@ as frames arrive. Radio: pre-type during a live long message.
 
 ## Also noticed
 
-- WB8PLB's long message at 04:38:43 ended mid-word ("…NOT LOOKING
-  FORWARD T") with no "…". Either a frame was lost or the assembler closed
-  it early. Look at the log for that time before deciding if it's a bug.
+- WB8PLB's long message at 04:38:43 ended mid-word. VE7NHW: not a bug to
+  chase; the app was being closed by the ESC bug around then.

@@ -103,12 +103,26 @@ the image you used before.
 transmit (turn the **main tuning knob** to move it); the **green line**
 marks the selected station.
 
+**Selecting a station:** turn the **MFK** onto one of their rows. They
+stay selected while new messages arrive: their rows get a green bar at
+the left, the TX bar says `selected: CALL`, and the green line follows
+them if they move. Only another MFK move (or **Clear**, or a band change)
+changes it. The list keeps showing the newest lines; if you scroll up to
+read, it goes back to following them 30 s after you last turned the MFK.
+
 **Status line** (top right): what's switched on (`AUTO`, `HB 10m next
 00:14`, `ACK`, `MSG 1 NEW`), the band, UTC time and how many messages
 have been decoded.
 
 **TX bar:** your offset and speed, then the countdown ("starts in 9 s
-(1/3)"). It turns red while you're on the air.
+(1/3)"), the selected station and `auto CQ` when it's on. It turns red
+while you're on the air.
+
+**Typing** (Reply, Send…): the text box sits at the top of the screen and
+the list stays in view, following the other station's message as it
+grows, so you can type your answer while they're still sending. With the
+on-screen keyboard the list moves up into the space above it. A USB
+keyboard works too; lowercase is typed as capitals.
 
 **The list** shows UTC time, SNR, audio offset, the speed if not Normal
 (`F`, `T`, `S`) and the message:
@@ -136,7 +150,8 @@ mistaken for a grid.
 
 ## The buttons
 
-The first button on each row turns the page (`JS8 1:6` … `6:6`).
+The first button on each row turns the page (`JS8 1:6` … `6:6`); hold it
+to go back a page.
 
 | Page | Button | Does |
 |---|---|---|
@@ -144,7 +159,7 @@ The first button on each row turns the page (`JS8 1:6` … `6:6`).
 | 1 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 1 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
-| 2 | **CQ** | `CQ CQ CQ <grid>`. |
+| 2 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then one every minute (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band, or leave it alone for an hour. |
 | 2 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. |
 | 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
 | 2 | **Clear** | Clear the list and the station list. |
@@ -310,8 +325,13 @@ All on the **DATA** partition, readable on a PC:
 
 - **Type in capitals.** The keyboard's lowercase (`abc`) letters are
   ignored in messages.
-- **ESC in the Reply keyboard leaves the app** instead of just closing the
-  keyboard. Finish or clear what you typed rather than pressing ESC.
+- **ESC in any text box leaves the app** instead of just closing the
+  box. Finish or clear what you typed rather than pressing ESC.
+- **A USB keyboard drops letters** when you type fast, and **Enter in a
+  Log QSO field logs the QSO** straight away: type the name etc. with the
+  on-screen keyboard, or fill the fields before the last one.
+- **The selected station can change by itself** when a new line arrives
+  under it: check the green line before pressing Reply.
 - **Test beep may be silent** on some radios (no freeze).
 - The **waterfall** scrolls a little less smoothly than the main X6100
   waterfall.
@@ -323,6 +343,19 @@ All on the **DATA** partition, readable on a PC:
 
 ## Coming in beta 2
 
+Done so far (after the first on-air QSOs):
+
+- [x] ESC closes only the text box, not the app
+- [x] USB keyboard: no lost letters; lowercase typed as capitals
+- [x] Log QSO: Enter in a field only saves that field
+- [x] The selected station stays selected (green bar, `selected:` in the TX bar)
+- [x] The list follows new lines, and stays in view while you type a reply
+- [x] CQ switches heartbeats off; hold CQ for auto CQ every minute
+- [x] Hold the page button to go back a page
+- [x] Show *No HB* also hides SNR reports
+
+Still to do:
+
 - [ ] GhostNet frequencies in the band list
 - [ ] Custom frequency option on page 6
 - [ ] POTA and SOTA spots with a frequency and mode you choose (e.g. your SSB
@@ -330,7 +363,6 @@ All on the **DATA** partition, readable on a PC:
 - [ ] Send up to 3000 Hz (now 2500 Hz)
 - [ ] HW CPY? and Clear swapped between pages 1 and 2
 - [ ] Stations list kept when changing band (cleared only when the app closes)
-- [ ] ESC in a keyboard only closes the keyboard
 - [ ] Test beep audible through the speaker
 - [ ] Smoother waterfall
 - [ ] Long messages tested on the air
