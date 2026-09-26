@@ -824,6 +824,23 @@ int main() {
         pump(200);
         return 0;
     }
+    if (getenv("ONLY_URGENT")) {
+        // Beta 2 urgent fixes (docs/BETA2_URGENT_PLAN.md), one block each.
+        pump(300);
+
+        // 1. CQ switches heartbeats off.
+        ui_page(4);
+        ui_press(2); // HB on (into the knob interval setting)
+        ui_press(2); // done setting
+        printf("[cq-hb] HB before CQ: '%s'\n", ui_button_label(2));
+        ui_page(2);
+        ui_press(1); // CQ
+        pump(200);
+        ui_page(4);
+        printf("[cq-hb] HB after CQ: '%s' (want HB:\nOff)\n", ui_button_label(2));
+        printf("[cq-hb] info row shown=%d (want 1)\n", ui_list_has("HB and HB ACK off: CQ"));
+        return 0;
+    }
     if (getenv("ONLY_TEXTS")) {
         // Page 4 -> Texts... -> INFO: the keyboard must get the focus.
         pump(300);

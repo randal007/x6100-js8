@@ -1213,6 +1213,7 @@ static void update_tx_bar(void) {
 /* Queue `text` at our offset. Returns false (with a message shown) if it
  * can't be sent, e.g. a bad character or something already sending. */
 static void qso_started(const char *call);
+static void hb_pause(const char *why);
 
 /* "N0XYZ ..." with a real-looking call first: a directed message. */
 static bool starts_with_call(const char *text, char *call, size_t len) {
@@ -1839,7 +1840,7 @@ static void cq_cb(button_data_t *btn) {
     (void)btn;
     char text[32];
     snprintf(text, sizeof(text), "CQ CQ CQ %.4s", params.qth.x);
-    tx_queue(text);
+    if (tx_queue(text)) hb_pause("CQ");
 }
 
 /* One heartbeat now, at a free spot in the 500-1000 Hz heartbeat sub-band
@@ -2143,8 +2144,9 @@ static void auto_send(const js8_auto_result_t *r) {
 }
 
 /* Desktop pauses heartbeats during a QSO; here they switch off until you
- * turn them back on (the user's choice). */
-static void qso_started(const char *call) {
+ * turn them back on (the user's choice). A CQ does the same: its answers
+ * start a QSO. */
+static void hb_pause(const char *why) {
     if (!params.js8_hb.x && !params.js8_hb_ack.x) return;
     params_bool_set(&params.js8_hb, false);
     params_bool_set(&params.js8_hb_ack, false);
@@ -2152,9 +2154,15 @@ static void qso_started(const char *call) {
     hb_adjusting = false;
     if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
-    msg_update_text_fmt("Heartbeats off: QSO with %s", call);
-    add_info_row("HB and HB ACK off: QSO with %s", call);
+    msg_update_text_fmt("Heartbeats off: %s", why);
+    add_info_row("HB and HB ACK off: %s", why);
     update_status();
+}
+
+static void qso_started(const char *call) {
+    char why[JS8_RX_CALL_LEN + 12];
+    snprintf(why, sizeof(why), "QSO with %s", call);
+    hb_pause(why);
 }
 
 static void handle_incoming(const js8_rx_msg_t *m) {
