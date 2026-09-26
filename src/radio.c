@@ -386,6 +386,15 @@ void radio_set_tx_filter(uint16_t low, uint16_t high) {
     radio_unlock();
 }
 
+void radio_set_rx_dsp_off(bool off) {
+    radio_lock();
+    x6100_control_nr_set(!off && param_i_get(cfg_nr));
+    x6100_control_nb_set(!off && param_i_get(cfg_nb));
+    x6100_control_dnf_set(!off && param_i_get(cfg_dnf));
+    x6100_control_dnf_update_set(!off && param_i_get(cfg_dnf_auto));
+    radio_unlock();
+}
+
 x6100_vfo_t radio_toggle_vfo() {
     x6100_vfo_t new_vfo = (param_i_get(cfg_band_current_vfo) == X6100_VFO_A) ? X6100_VFO_B : X6100_VFO_A;
 

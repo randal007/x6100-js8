@@ -1825,6 +1825,10 @@ static void construct_cb(lv_obj_t *parent) {
      * radio is told: the setting itself is untouched, so a power loss here
      * can't leave it changed. */
     radio_set_tx_filter(JS8_TX_FILTER_LOW, JS8_TX_FILTER_HIGH);
+    /* The base applies noise reduction, the noise blanker and the notches in
+     * DIGI modes too, and they damage JS8's tones (the auto-notch goes for
+     * exactly such steady tones). Off while the app is open, radio only. */
+    radio_set_rx_dsp_off(true);
 
     filter_low  = cparam_i_get(cfg_cur_filter_low);
     filter_high = cparam_i_get(cfg_cur_filter_high);
@@ -2033,6 +2037,7 @@ static void destruct_cb(void) {
         cparam_i_set(cfg_cur_filter_high, saved_filter_high);
         cparam_i_set(cfg_cur_filter_low, saved_filter_low);
         radio_set_tx_filter(param_i_get(cfg_tx_filter_low), param_i_get(cfg_tx_filter_high));
+        radio_set_rx_dsp_off(false);
         filter_saved = false;
     }
     mem_load(MEM_BACKUP_ID);

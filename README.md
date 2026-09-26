@@ -93,8 +93,9 @@ the image you used before.
    frequency; the **band keys** step through JS8Call's standard frequencies
    (160 m to 6 m), or GhostNet's, or you can type your own (**Freq**, page
    6). While JS8 is open the receive filter is 200–3000 Hz, the transmit
-   filter 160–3000 Hz (the radio's default) and power is capped at 5 W;
-   all go back when you leave.
+   filter 160–3000 Hz (the radio's default), noise reduction, the noise
+   blanker and the notch filters are off, and power is capped at 5 W; all
+   go back when you leave.
 4. **Answer someone:** turn the **MFK** to select their row, then **HW
    CPY?** (page 1) for the usual reply to a CQ, **Reply** (page 2) to type,
    or **Query >** (page 1) for the one-press messages.
@@ -421,6 +422,8 @@ Done for beta 3 so far:
   for its voice prompts; JS8 hears about a second of silence meanwhile) -
   needs a check on the radio
 - [x] TX filter 160–3000 Hz while JS8 is open: the radio's own default
+- [x] Noise reduction, noise blanker and notch filters off while JS8 is open
+  (the radio applies them in DIGI modes too); yours come back when you leave
 - [x] Smoother waterfall: 15 rows a second (as the main screen's), each
   drawn on time, for less work than 10 were
 

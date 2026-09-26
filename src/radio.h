@@ -59,6 +59,10 @@ void radio_change_mute();
 void radio_set_pwr(float d);
 /* Radio only, not saved: settings keep cfg_tx_filter_low/high. */
 void radio_set_tx_filter(uint16_t low, uint16_t high);
+/* Noise reduction, noise blanker, notch and auto-notch off (the base
+ * applies them in every mode, DIGI included), or back to the settings.
+ * Radio only, not saved. */
+void radio_set_rx_dsp_off(bool off);
 
 void radio_set_charger(bool on);
 

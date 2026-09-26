@@ -234,4 +234,5 @@ void audio_play_wait(void) {
     printf("[audio] drained\n");
 }
 void keypad_set_long_time(uint32_t ms) { printf("[keypad] hold time %u ms\n", (unsigned)ms); }
+void radio_set_rx_dsp_off(bool off) { printf("[radio] NR/NB/notches %s\n", off ? "off" : "back to the settings"); }
 void radio_speaker_play(bool on) { printf("[radio] speaker play %s\n", on ? "on" : "off"); }
