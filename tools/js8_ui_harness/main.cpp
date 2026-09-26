@@ -312,6 +312,7 @@ int main() {
 
         ui_press(1);
         pump(200);
+        screenshot("24b_aprs_top.ppm"); // the list at the top, with what was sent behind it
         ui_key(LV_KEY_LEFT);
         printf("[aprs] one step back: '%s'\n", ui_focused_text());
         screenshot("24_aprs_list.ppm");
