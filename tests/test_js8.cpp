@@ -155,7 +155,9 @@ TEST_CASE("APRS gateway commands survive encoding", "[js8][render][aprs]") {
                           "@APRSIS CMD :EMAIL-2  :TEST@EXAMPLE.COM HELLO{01}",
                           "@APRSIS CMD :POTAGW   :VE7NHW CA-1234 7078 JS8 QRV",
                           "@APRSIS CMD :APRS2SOTA:VE7/LM-001 7.078 DATA VE7NHW QRV",
-                          "@APRSIS CMD :WLNK-1   :SP TEST@EXAMPLE.COM SUBJECT"}) {
+                          "@APRSIS CMD :WLNK-1   :SP TEST@EXAMPLE.COM SUBJECT",
+                          "@APRSIS CMD :APSPOT   :! POTA CA-1234 7.078 DATA JS8",
+                          "@APRSIS CMD =4916.25N/12305.00WGMADE IT TO CAMP"}) {
         INFO(m);
         // CMD carries a 3-character checksum after the text, like MSG.
         CHECK(roundtrip("VE7NHW", "", m).rfind(std::string("VE7NHW: ") + m, 0) == 0);

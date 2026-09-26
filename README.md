@@ -4,9 +4,12 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 
-> **Beta 1.** In daily use on the air: heartbeats acknowledged, queries
-> answered, QSOs and messages with desktop JS8Call stations, all four
-> speeds decoding. Please report what you find. Nothing transmits by itself
+> **Beta 2.** In daily use on the air since beta 1: heartbeats acknowledged,
+> queries answered, QSOs and messages with desktop JS8Call stations, all
+> four speeds decoding. Beta 2 fixes what the first on-air QSOs found and
+> adds GhostNet and custom frequencies, a POTA/SOTA spot form and position
+> beacons with a message ([New in beta 2](#new-in-beta-2)). Please report
+> what you find. Nothing transmits by itself
 > when the app opens; automatic replies and heartbeats are switches you
 > turn on.
 
@@ -29,8 +32,9 @@ us), other stations' traffic, and a CQ sent at Turbo speed (`T`).*
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
-- [Known issues in beta 1](#known-issues-in-beta-1)
-- [Coming in beta 2](#coming-in-beta-2)
+- [New in beta 2](#new-in-beta-2)
+- [Known issues in beta 2](#known-issues-in-beta-2)
+- [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
 - [For developers](#for-developers)
@@ -52,15 +56,17 @@ us), other stations' traffic, and a CQ sent at Turbo speed (`T`).*
   and POTA/SOTA activation fields.
 - **Alerts:** a beep for messages, CQs or new stations, and alert words
   (calls or words you choose) highlighted in purple.
-- **APRS through JS8 gateways:** grid and GPS position spots, POTA and
-  SOTA spots, SMS, email and Winlink.
+- **APRS through JS8 gateways:** grid and GPS position beacons (with an
+  optional message, e.g. `MADE IT TO CAMP`), POTA and SOTA spots on any
+  frequency and mode, SMS, email and Winlink.
+- **JS8Call's, GhostNet's or your own frequencies** on the band keys.
 - **Time Sync** from the decodes, and a Stations view of who is on and who
   heard you.
 
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta1.img.zip` from the Assets.
+   download `sdcard.js8-beta2.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works.
 3. Put the card in the radio and switch on. The first start creates the
@@ -295,8 +301,8 @@ JS8Spotter do):
 
 | Item | Sends | You type |
 |---|---|---|
-| Spot my grid | `@APRSIS GRID CN89LH` | nothing |
-| Spot GPS position | `@APRSIS GRID CN89KG12AB` | nothing (needs a GPS on the radio) |
+| Spot my grid | `@APRSIS GRID CN89LH`, or with a message `@APRSIS CMD =4916.25N/12305.00WGMADE IT TO CAMP` | a message, or just Enter |
+| Spot GPS position | the same from your GPS fix: `@APRSIS GRID CN89KG12AB` or a position with the message | a message, or just Enter (needs a GPS on the radio) |
 | POTA spot | `@APRSIS CMD :APSPOT   :! POTA CA-1234 7.078 DATA JS8` | nothing: a [spot form](#pota-and-sota-spots) |
 | SOTA spot | `@APRSIS CMD :APRS2SOTA:VE7/LM-001 7.078 DATA CALL JS8` | nothing: a [spot form](#pota-and-sota-spots) |
 | SMS text | `@APRSIS CMD :SMS      :@6045551234 message` | number and message ([NA7Q's gateway](https://na7q.com/sms-gateway/), opt-in needed) |
@@ -306,9 +312,17 @@ JS8Spotter do):
 Nothing reaches APRS unless a gateway station hears you; replies come back
 over APRS, not JS8. APRS text is limited to 67 characters.
 
-In beta 1 only **Spot my grid** has been confirmed on the air; the other
-items follow desktop JS8Call's and JS8Spotter's formats but still need
-testing through the gateways.
+**Position with a message:** Spot my grid and Spot GPS position open a
+text box. Press Enter on it empty for the plain position beacon, or type a
+message first (up to 43 characters, e.g. `MADE IT TO CAMP`): it goes as an
+APRS position report with your message as its comment, shown with your
+position on aprs.fi. (JS8's `GRID` command can't carry a message, so this
+one goes as a raw APRS packet through `CMD`.) ESC sends nothing.
+
+So far only the plain **Spot my grid** has been confirmed on the air; the
+other items follow desktop JS8Call's, JS8Spotter's and the gateways' own
+formats (and survive JS8 encoding in our tests) but still need testing
+through the gateways.
 
 ### POTA and SOTA spots
 
@@ -354,54 +368,46 @@ All on the **DATA** partition, readable on a PC:
 | `params.db`, `qso_log.db` | the radio's settings and QSO database |
 | `incoming_log.adi` | put an ADIF log here to import it (worked-before marks) at the next start |
 
-## Known issues in beta 1
+## New in beta 2
 
-- **Type in capitals.** The keyboard's lowercase (`abc`) letters are
-  ignored in messages.
-- **ESC in any text box leaves the app** instead of just closing the
-  box. Finish or clear what you typed rather than pressing ESC.
-- **A USB keyboard drops letters** when you type fast, and **Enter in a
-  Log QSO field logs the QSO** straight away: type the name etc. with the
-  on-screen keyboard, or fill the fields before the last one.
-- **The selected station can change by itself** when a new line arrives
-  under it: check the green line before pressing Reply.
+After the first on-air QSOs:
+
+- ESC closes only the text box, not the app
+- USB keyboard: no lost letters; lowercase typed as capitals
+- Log QSO: Enter in a field only saves that field
+- The selected station stays selected (green bar, `selected:` in the TX bar)
+- The list follows new lines, and stays in view while you type a reply
+- CQ switches heartbeats off; **hold CQ for auto CQ**, a minute after each CQ ends
+- Hold the page button to go back a page
+- Show *No HB* also hides SNR reports
+- Clear on page 1, HW CPY? on page 2
+- Send up to 3000 Hz (the TX filter is set to 200–3000 Hz while JS8 is open)
+- Each frequency keeps its own Stations list (emptied when JS8 opens)
+- **GhostNet** frequencies and a **custom frequency** (**Freq**, page 6)
+- **POTA and SOTA spot form** with the frequency and mode you choose (POTA
+  now goes through APSPOT, as POTAGW no longer answers)
+- **Position beacons with a message** (Spot my grid / GPS position)
+
+## Known issues in beta 2
+
 - **Test beep may be silent** on some radios (no freeze).
 - The **waterfall** scrolls a little less smoothly than the main X6100
   waterfall.
 - If the radio loses power while JS8 is open, the USB filter stays at
-  200–3000 Hz (leaving the app normally puts yours back).
+  200–3000 Hz (leaving the app normally puts yours back). The TX filter
+  isn't affected.
+- **APRS:** only the plain grid spot is confirmed on the air so far. POTA
+  and SOTA spots, position messages, SMS, email and Winlink are new or
+  untested through the gateways: reports welcome.
+- Long messages have been seen arriving live, but not yet watched all the
+  way to the end.
 
-## Coming in beta 2
-
-Done so far (after the first on-air QSOs):
-
-- [x] ESC closes only the text box, not the app
-- [x] USB keyboard: no lost letters; lowercase typed as capitals
-- [x] Log QSO: Enter in a field only saves that field
-- [x] The selected station stays selected (green bar, `selected:` in the TX bar)
-- [x] The list follows new lines, and stays in view while you type a reply
-- [x] CQ switches heartbeats off; hold CQ for auto CQ, a minute after each CQ ends
-- [x] Hold the page button to go back a page
-- [x] Show *No HB* also hides SNR reports
-- [x] Clear on page 1, HW CPY? on page 2
-- [x] Send up to 3000 Hz (the TX filter is set to 200–3000 Hz while JS8 is open)
-- [x] Each frequency keeps its own Stations list (emptied when JS8 opens)
-- [x] GhostNet frequencies and a custom frequency (**Freq**, page 6)
-- [x] POTA and SOTA spots with the frequency and mode you choose (a spot
-  form; POTA now goes through APSPOT, as POTAGW no longer answers)
-
-Still to do:
+## Coming next
 
 - [ ] Test beep audible through the speaker
 - [ ] A power loss with JS8 open no longer leaves the USB filter at
   200–3000 Hz
 - [ ] Smoother waterfall
-- [ ] Long messages tested on the air
-- [ ] APRS tested on the air: POTA and SOTA spots, SMS, email and Winlink
-  (so far only **Spot my grid** is confirmed working)
-
-**Later (beta 2 or after):**
-
 - [ ] Performance: profile the app and spread the work over the radio's
   four cores (the screen drawing and the JS8 decoder each lean on one core
   today)
@@ -412,7 +418,7 @@ This is a beta: reports from testing are very welcome.
 
 - **Bugs and problems:** open an issue in
   [Issues](https://github.com/randal007/x6100-js8/issues). Please say which
-  release you're running (e.g. `js8-beta1`), the band and speed, what you
+  release you're running (e.g. `js8-beta2`), the band and speed, what you
   did, what you expected and what happened. A photo or screenshot of the
   radio's screen helps, and so does the `app_logs` folder from the SD card's
   DATA partition if the app closed or froze.

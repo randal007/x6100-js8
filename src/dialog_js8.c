@@ -194,6 +194,8 @@ static bool        spot_sota; /* the spot form is for SOTA, else POTA */
 static bool        spot_parse_freq(const char *text, int32_t *out);
 static void        spot_show(bool sota, spot_item_t focus);
 static void        spot_close(void);
+static void        aprs_beacon(bool gps, const char *message);
+#define APRS_COMMENT_MAX 43 /* an APRS position report's comment */
 static const char *where_label(void);
 static void        alert_check(js8_rx_msg_t *m, bool new_station);
 static void        alert_beep(int count);
@@ -325,6 +327,8 @@ typedef enum {
     EDIT_SPOT_REF,    /* the spot form's fields, then back to it */
     EDIT_SPOT_FREQ,
     EDIT_SPOT_NOTE,
+    EDIT_BEACON_GRID, /* optional message, then Spot my grid */
+    EDIT_BEACON_GPS,  /* optional message, then Spot GPS position */
     EDIT_COUNT,
 } edit_t;
 
@@ -1559,6 +1563,7 @@ static void compose_open(const char *prefill) {
                                          : edit_target == EDIT_SPOT_REF ? (spot_sota ? sizeof(last_sota) : sizeof(last_pota)) - 1
                                          : edit_target == EDIT_SPOT_FREQ ? 10
                                          : edit_target == EDIT_SPOT_NOTE ? sizeof(spot_note) - 1
+                                         : edit_target >= EDIT_BEACON_GRID ? APRS_COMMENT_MAX
                                                                         : TEXT_MAX);
         if (edit_target == EDIT_FREQ || edit_target == EDIT_SPOT_FREQ)
             lv_textarea_set_accepted_chars(text, "0123456789.");
@@ -1581,6 +1586,8 @@ static void compose_open(const char *prefill) {
             [EDIT_SPOT_REF] = " Park CA-1234 / summit VE7/LM-001",
             [EDIT_SPOT_FREQ] = " kHz, e.g. 7185 (or MHz, 144.2)",
             [EDIT_SPOT_NOTE] = " Comment, e.g. QRT or CQ",
+            [EDIT_BEACON_GRID] = " Message (optional) - Enter sends",
+            [EDIT_BEACON_GPS] = " Message (optional) - Enter sends",
         };
         lv_textarea_set_placeholder_text(text, placeholders[edit_target]);
     }
@@ -2778,6 +2785,7 @@ static void texts_cb(button_data_t *btn) {
  * "@APRSIS CMD :<addressee padded to 9>:<text>"; APRS allows 67 characters
  * of text. The gateway sends you as your plain callsign (no SSID). */
 #define APRS_CMD      "@APRSIS CMD :"
+#define APRS_CMD_RAW  "@APRSIS CMD " /* any APRS packet body, e.g. a position */
 #define APRS_TEXT_MAX 67
 
 typedef enum {
@@ -2860,42 +2868,80 @@ static void aprs_compose(const char *head, const char *tail) {
     if (composing) lv_textarea_set_cursor_pos(textarea_window_text(), (int32_t)strlen(head));
 }
 
-static void aprs_send_grid(void) {
-    char grid[8];
-    snprintf(grid, sizeof(grid), "%.6s", params.qth.x);
-    if (strlen(grid) < 4) {
+/* Your QTH grid (6 characters) and its centre. False, with the reason
+ * shown, if it isn't set. Any out-pointer may be NULL. */
+static bool aprs_grid(char grid[8], double *lat, double *lon) {
+    char g[8];
+    snprintf(g, sizeof(g), "%.6s", params.qth.x);
+    if (strlen(g) < 4) {
         msg_update_text_fmt("Set your grid first: APP > QTH");
-        return;
+        return false;
     }
-    char text[32];
-    snprintf(text, sizeof(text), "@APRSIS GRID %s", grid);
-    if (tx_queue(text)) add_info_row("APRS: spotting %s at %s", params.callsign.x, grid);
+    if (grid) memcpy(grid, g, sizeof(g));
+    if (lat && lon) qth_str_to_pos(g, lat, lon);
+    return true;
 }
 
 /* From the firmware's gps.c (gpsd): the latest fix and its age. */
 bool gps_last_fix(double *lat, double *lon, int *age_s);
 
-/* A GPS on the radio: spot a 10-character grid (about 20 x 35 m); APRS
- * gateways turn grids of any length into a position. */
-static void aprs_send_gps(void) {
+/* A current GPS fix, and its 10-character grid (about 20 x 35 m). False,
+ * with the reason shown, if there is none. */
+static bool aprs_gps(char grid[12], double *lat_out, double *lon_out) {
     double lat, lon;
     int    age;
     if (!gps_last_fix(&lat, &lon, &age)) {
         msg_update_text_fmt("No GPS fix: plug in a GPS and wait for a fix (APP > GPS shows it)");
-        return;
+        return false;
     }
     if (age > 120) {
         msg_update_text_fmt("No current GPS fix (last one %d min ago)", age / 60);
-        return;
+        return false;
     }
-    char grid[12];
-    if (!js8_latlon_to_grid(lat, lon, 10, grid, sizeof(grid))) {
+    char g[12];
+    if (!js8_latlon_to_grid(lat, lon, 10, g, sizeof(g))) {
         msg_update_text_fmt("GPS position out of range");
+        return false;
+    }
+    if (grid) memcpy(grid, g, sizeof(g));
+    if (lat_out) *lat_out = lat;
+    if (lon_out) *lon_out = lon;
+    return true;
+}
+
+/* An APRS position report: "=4916.50N/12305.10WG" + comment. "/G" is the
+ * grid-square symbol, the one JS8Call's own grid spots use. */
+static void aprs_position(double lat, double lon, const char *comment, char *out, size_t size) {
+    double alat = fabs(lat), alon = fabs(lon);
+    int    lat_d = (int)alat, lon_d = (int)alon;
+    double lat_m = (alat - lat_d) * 60.0, lon_m = (alon - lon_d) * 60.0;
+    if (lat_m >= 59.995) lat_d++, lat_m = 0; /* don't print 60.00 */
+    if (lon_m >= 59.995) lon_d++, lon_m = 0;
+    snprintf(out, size, "=%02d%05.2f%c/%03d%05.2f%cG%s", lat_d, lat_m, lat < 0 ? 'S' : 'N', lon_d, lon_m,
+             lon < 0 ? 'W' : 'E', comment);
+}
+
+/* Spot my grid / GPS position. No message: "@APRSIS GRID <grid>" as
+ * desktop JS8Call sends it (the gateway adds frequency and SNR). With one:
+ * the GRID command can't carry it, so a position report with the message
+ * as its comment goes through CMD (the gateway passes it on as it is). */
+static void aprs_beacon(bool gps, const char *message) {
+    char   grid[12];
+    double lat, lon;
+    if (gps ? !aprs_gps(grid, &lat, &lon) : !aprs_grid(grid, &lat, &lon)) return;
+    while (*message == ' ') message++;
+    char text[96];
+    if (!*message) {
+        snprintf(text, sizeof(text), "@APRSIS GRID %s", grid);
+        if (tx_queue(text))
+            add_info_row("APRS: spotting %s at %s%s", params.callsign.x, grid, gps ? " (GPS)" : "");
         return;
     }
-    char text[40];
-    snprintf(text, sizeof(text), "@APRSIS GRID %s", grid);
-    if (tx_queue(text)) add_info_row("APRS: spotting %s at %s (GPS %.5f, %.5f)", params.callsign.x, grid, lat, lon);
+    char pos[80];
+    aprs_position(lat, lon, message, pos, sizeof(pos));
+    snprintf(text, sizeof(text), APRS_CMD_RAW "%s", pos);
+    if (tx_queue(text))
+        add_info_row("APRS: position %s (%s%s) with \"%s\"", params.callsign.x, grid, gps ? ", GPS" : "", message);
 }
 
 static void aprs_close(void) {
@@ -2920,10 +2966,13 @@ static void aprs_item_cb(lv_event_t *e) {
 
     switch (item) {
     case APRS_GRID:
-        aprs_send_grid();
-        break;
     case APRS_GPS:
-        aprs_send_gps();
+        /* A message to go with it, or just Enter. GPS: a fix first, so
+         * nothing is typed for nothing. */
+        if (item == APRS_GRID ? !aprs_grid(NULL, NULL, NULL) : !aprs_gps(NULL, NULL, NULL)) break;
+        edit_target = item == APRS_GRID ? EDIT_BEACON_GRID : EDIT_BEACON_GPS;
+        compose_open(NULL);
+        msg_update_text_fmt("A message to go with your position (optional), then Enter");
         break;
     case APRS_POTA:
     case APRS_SOTA:
@@ -3514,7 +3563,15 @@ static void log_edit_done(const char *text) {
             snprintf(spot_note, sizeof(spot_note), "%s", value);
             save_texts();
             break;
+        case EDIT_BEACON_GRID:
+        case EDIT_BEACON_GPS:
+            aprs_beacon(target == EDIT_BEACON_GPS, value);
+            return;
         }
+    }
+    if (target >= EDIT_BEACON_GRID) { /* cancelled: nothing sent */
+        msg_update_text_fmt("Position not sent");
+        return;
     }
     if (target == EDIT_FREQ) return; /* cancelled */
     if (target >= EDIT_SPOT_REF) { /* back on the field just edited */

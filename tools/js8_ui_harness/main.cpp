@@ -243,9 +243,22 @@ int main() {
         ui_page(5);
         ui_press(1); // APRS >
         pump(200);
-        ui_click_focused(); // Spot my grid (first item)
+        ui_click_focused(); // Spot my grid (first item): a message box
+        pump(300);
+        printf("[aprs] beacon box: '%s' focus %s\n", ui_compose_text(), ui_focus_desc());
+        ui_compose_enter(); // no message: just the grid
         wait_tx();
         printf("[aprs] grid spot sent: %d\n", ui_list_has("@APRSIS GRID FN42"));
+
+        // With a message: a position report carrying it.
+        ui_press(1);
+        pump(200);
+        ui_click_focused();
+        pump(300);
+        ui_compose_append("MADE IT TO CAMP");
+        ui_compose_enter();
+        wait_tx();
+        printf("[aprs] grid + message sent: %d\n", ui_list_has("@APRSIS CMD =4203.75N/07157.50WGMADE IT TO CAMP"));
 
         // Spot GPS position (second item): no fix -> message only.
         ui_press(1);
@@ -259,8 +272,28 @@ int main() {
         pump(200);
         ui_key(LV_KEY_RIGHT);
         ui_click_focused();
+        pump(300);
+        ui_compose_enter();
         wait_tx();
         printf("[aprs] GPS spot sent: %d (want @APRSIS GRID CN89KG + 4)\n", ui_list_has("@APRSIS GRID CN89KG"));
+        ui_press(1);
+        pump(200);
+        ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        pump(300);
+        ui_compose_append("made it to camp"); // typed in lower case
+        ui_compose_enter();
+        wait_tx();
+        printf("[aprs] GPS + message sent: %d\n", ui_list_has("@APRSIS CMD =4916.96N/12307.24WGMADE IT TO CAMP"));
+        // Cancel: nothing goes.
+        int frames = stub_tx_frames;
+        ui_press(1);
+        pump(200);
+        ui_click_focused();
+        pump(300);
+        ui_compose_cancel();
+        pump(2000);
+        printf("[aprs] cancelled beacon, nothing sent: %d\n", stub_tx_frames == frames);
 
         // A list stays exclusive: another bottom button only closes it.
         ui_press(1);
