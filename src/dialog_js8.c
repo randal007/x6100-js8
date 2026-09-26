@@ -105,6 +105,8 @@
 #define KEEP_ROWS        150
 #define AUTO_CQ_MS       60000 /* auto CQ: one a minute, start to start (desktop's shortest repeat) */
 #define READ_PAUSE_MS    30000 /* list follows new rows again this long after the last MFK move */
+#define CUSTOM_MIN_HZ    1800000  /* custom dial frequency: 160m ... */
+#define CUSTOM_MAX_HZ    54000000 /* ... to the top of 6m */
 
 typedef enum {
     SHOW_ALL,       /* everything, heartbeats included */
@@ -181,6 +183,13 @@ static void        held_received(const js8_rx_msg_t *m);
 static void        msg_compose(const char *call, const char *kind);
 static void        alerts_cb(button_data_t *btn);
 static void        alerts_close(void);
+static const char *freq_label_getter(void);
+static void        freq_cb(button_data_t *btn);
+static void        freq_close(void);
+static void        freq_show(void);
+static void        tune_custom(const char *khz);
+static bool        parse_custom(const char *text, int32_t *out);
+static const char *where_label(void);
 static void        alert_check(js8_rx_msg_t *m, bool new_station);
 static void        alert_beep(int count);
 static const char *speed_label_getter(void);
@@ -223,13 +232,15 @@ static bool        composing;          /* compose window open */
 
 static js8_stations_t *stations;       /* who we've heard, who heard us: this band's */
 
-/* One Stations list per band: going back to a band brings its list back.
- * All are emptied when JS8 opens. */
+/* One Stations list per dial frequency (7.078 and GhostNet's 7.107 are
+ * different nets): going back brings its list back. All are emptied when
+ * JS8 opens. */
 #define BAND_LISTS 16
 static struct {
-    qso_log_band_t  band;
+    int32_t         dial_khz;
     js8_stations_t *list;
 } band_lists[BAND_LISTS];
+static int band_lists_next; /* slot reused when all are taken */
 static bool           view_stations;   /* list shows stations, not messages */
 static js8_station_t  st_rows[MAX_ROWS];
 static int            st_count;
@@ -238,6 +249,7 @@ static lv_obj_t      *aprs_list;       /* APRS popup, when open */
 static lv_obj_t      *log_list;        /* Log QSO popup, when open */
 static lv_obj_t      *inbox_list;      /* Inbox popup (list or one message), when open */
 static lv_obj_t      *alerts_list;     /* Alerts popup, when open */
+static lv_obj_t      *freq_list;       /* Freq popup, when open */
 static char           alert_words[128]; /* "VE7ABC @POTA SOTA", ALERTS= in JS8_TEXTS_PATH */
 static bool           st_alert[MAX_ROWS]; /* st_rows matching an alert word */
 static js8_inbox_t   *inbox;           /* MSGs to us, JS8_INBOX_PATH */
@@ -298,6 +310,7 @@ typedef enum {
     EDIT_POTA_REF, /* your park / summit for the log */
     EDIT_SOTA_REF,
     EDIT_ALERT_WORDS, /* then back to the Alerts popup */
+    EDIT_FREQ,        /* custom dial frequency, kHz */
     EDIT_COUNT,
 } edit_t;
 
@@ -386,7 +399,8 @@ static button_data_t  btn_p6        = {.type = BTN_TEXT, .label = "(JS8 6:6)", .
 static button_data_t  btn_alerts    = {.type = BTN_TEXT, .label = "Alerts >", .press = alerts_cb};
 static button_data_t  btn_speed     = {.type = BTN_TEXT_FN, .label_fn = speed_label_getter, .press = speed_cb, .hold = speed_hold_cb};
 static button_data_t  btn_decode    = {.type = BTN_TEXT_FN, .label_fn = decode_label_getter, .press = decode_cb};
-static buttons_page_t page_6        = {{&btn_p6, &btn_alerts, &btn_speed, &btn_decode}};
+static button_data_t  btn_freq      = {.type = BTN_TEXT_FN, .label_fn = freq_label_getter, .press = freq_cb};
+static buttons_page_t page_6        = {{&btn_p6, &btn_alerts, &btn_speed, &btn_decode, &btn_freq}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -967,7 +981,7 @@ static void update_status(void) {
         strcat(flags, m);
     }
     lv_label_set_text_fmt(status, "%s%s%s  %02d:%02d:%02dZ  total %u", flags, testing ? "TEST WAV  " : "",
-                          cfg_digital_label_get(), tm.tm_hour, tm.tm_min, tm.tm_sec, hist_count);
+                          where_label(), tm.tm_hour, tm.tm_min, tm.tm_sec, hist_count);
 }
 
 static void ui_cycle_done(void *arg) {
@@ -1461,6 +1475,7 @@ static void compose_close(void) {
 /* Same pattern as the FT8 app's keyboard: close here and return true;
  * textarea_window's own close is then a no-op. */
 static bool compose_ok_cb(void) {
+    if (edit_target == EDIT_FREQ && !parse_custom(textarea_window_get(), NULL)) return false;
     if (edit_target >= EDIT_LOG_GRID) {
         log_edit_done(textarea_window_get());
         return true;
@@ -1519,7 +1534,9 @@ static void compose_open(const char *prefill) {
                                          : edit_target == EDIT_POTA_REF ? sizeof(last_pota) - 1
                                          : edit_target == EDIT_SOTA_REF ? sizeof(last_sota) - 1
                                          : edit_target == EDIT_ALERT_WORDS ? sizeof(alert_words) - 1
+                                         : edit_target == EDIT_FREQ ? 9
                                                                         : TEXT_MAX);
+        if (edit_target == EDIT_FREQ) lv_textarea_set_accepted_chars(text, "0123456789.");
         lv_obj_remove_event_cb(text, compose_changed_cb);
     }
     if (prefill && prefill[0]) {
@@ -1535,6 +1552,7 @@ static void compose_open(const char *prefill) {
             [EDIT_POTA_REF] = " Your park, e.g. CA-1234",
             [EDIT_SOTA_REF] = " Your summit, e.g. VE7/LM-001",
             [EDIT_ALERT_WORDS] = " Calls or words, e.g. VE7ABC @POTA SOTA",
+            [EDIT_FREQ]     = " Dial frequency in kHz, e.g. 7107",
         };
         lv_textarea_set_placeholder_text(text, placeholders[edit_target]);
     }
@@ -1542,29 +1560,55 @@ static void compose_open(const char *prefill) {
 
 /* ---- Band and screen -------------------------------------------------- */
 
-static void load_band(int8_t dir) {
-    if (cfg_digital_load(dir, CFG_DIG_TYPE_JS8)) {
-        msg_update_text_fmt("%s", cfg_digital_label_get());
-    }
+/* "7107.5" from 7107500 Hz: kHz, decimals only when needed. */
+static void format_khz(int32_t hz, char *buf, size_t size) {
+    snprintf(buf, size, "%d.%03d", (int)(hz / 1000), (int)(hz % 1000));
+    char *end = buf + strlen(buf) - 1;
+    while (*end == '0') *end-- = '\0';
+    if (*end == '.') *end = '\0';
+}
+
+/* What the top bar and the info rows call where we are. */
+static const char *where_label(void) {
+    static char buf[32];
+    if (!params.js8_custom_on.x) return cfg_digital_label_get();
+    char khz[16];
+    format_khz(params.js8_custom_hz.x, khz, sizeof(khz));
+    snprintf(buf, sizeof(buf), "JS8 %s kHz", khz);
+    return buf;
+}
+
+/* The presets the band keys step through: JS8Call's or GhostNet's. False
+ * past either end of the list (nothing changes). */
+static bool load_band(int8_t dir) {
+    cfg_digital_type_t set = params.js8_ghostnet.x ? CFG_DIG_TYPE_JS8_GHOSTNET : CFG_DIG_TYPE_JS8;
+    if (!cfg_digital_load(dir, set)) return false;
+    msg_update_text_fmt("%s", cfg_digital_label_get());
+    return true;
 }
 
 static js8_stations_t *stations_for_band(void) {
-    qso_log_band_t band = qso_log_freq_to_band(cparam_i_get(cfg_fg_freq));
+    int32_t khz = cparam_i_get(cfg_fg_freq) / 1000;
     for (int i = 0; i < BAND_LISTS; i++) {
-        if (band_lists[i].list && band_lists[i].band == band) return band_lists[i].list;
+        if (band_lists[i].list && band_lists[i].dial_khz == khz) return band_lists[i].list;
     }
     for (int i = 0; i < BAND_LISTS; i++) {
         if (!band_lists[i].list) {
-            band_lists[i].band = band;
-            band_lists[i].list = js8_stations_create();
+            band_lists[i].dial_khz = khz;
+            band_lists[i].list     = js8_stations_create();
             return band_lists[i].list;
         }
     }
-    return band_lists[0].list; /* more slots than bands: never */
+    /* Many custom frequencies: reuse the slots in turn. */
+    int i = band_lists_next;
+    band_lists_next = (band_lists_next + 1) % BAND_LISTS;
+    js8_stations_clear(band_lists[i].list);
+    band_lists[i].dial_khz = khz;
+    return band_lists[i].list;
 }
 
-static void band_cb(lv_event_t *e) {
-    load_band(lv_event_get_code(e) == EVENT_BAND_UP ? 1 : -1);
+/* After any change of dial frequency. */
+static void retuned(void) {
     auto_cq_stop("band changed");
 
     js8_rx_clear(rx);
@@ -1573,8 +1617,19 @@ static void band_cb(lv_event_t *e) {
     wf_queue_clear();
     clear_selection();
     if (view_stations) rebuild_rows();
-    add_info_row("%s", cfg_digital_label_get());
+    add_info_row("%s", where_label());
+    if (btn_freq.disp_btn) buttons_refresh(&btn_freq);
     update_status();
+}
+
+/* Band keys leave a custom frequency for the preset list. */
+static void band_cb(lv_event_t *e) {
+    if (!load_band(lv_event_get_code(e) == EVENT_BAND_UP ? 1 : -1)) {
+        msg_update_text_fmt("End of the %s list", params.js8_ghostnet.x ? "GhostNet" : "JS8");
+        return;
+    }
+    if (params.js8_custom_on.x) params_bool_set(&params.js8_custom_on, false);
+    retuned();
 }
 
 static void key_cb(lv_event_t *e) {
@@ -1623,7 +1678,13 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_add_event_cb(dialog.obj, band_cb, EVENT_BAND_DOWN, NULL);
 
     mem_save(MEM_BACKUP_ID);
-    load_band(0);
+    load_band(0); /* also sets the mode */
+    if (params.js8_custom_on.x) {
+        if (params.js8_custom_hz.x >= CUSTOM_MIN_HZ && params.js8_custom_hz.x <= CUSTOM_MAX_HZ)
+            cparam_i_set(cfg_fg_freq, params.js8_custom_hz.x);
+        else
+            params_bool_set(&params.js8_custom_on, false);
+    }
 
     /* 200-3000 Hz while JS8 is open. High first: each edge is validated
      * against the other. */
@@ -1731,7 +1792,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_group_set_editing(keyboard_group, true);
 
     rebuild_rows();
-    add_info_row("%s", cfg_digital_label_get());
+    add_info_row("%s", where_label());
 
     main_screen_lock_ab(true);
     main_screen_lock_mode(true);
@@ -1807,6 +1868,10 @@ static void destruct_cb(void) {
     if (alerts_list) {
         lv_obj_del(alerts_list);
         alerts_list = NULL;
+    }
+    if (freq_list) {
+        lv_obj_del(freq_list);
+        freq_list = NULL;
     }
     hb_adjusting = false;
     radio_set_pwr(param_f_get(cfg_pwr));
@@ -2187,6 +2252,7 @@ static void close_popups(void) {
     log_close();
     inbox_close();
     alerts_close();
+    freq_close();
 }
 
 /* One-press messages for the selected station: MFK to move, press or tap
@@ -2917,7 +2983,7 @@ static void aprs_cb(button_data_t *btn) {
  * logged without Save. */
 
 static bool any_popup(void) {
-    return query_list || texts_list || aprs_list || log_list || inbox_list || alerts_list;
+    return query_list || texts_list || aprs_list || log_list || inbox_list || alerts_list || freq_list;
 }
 
 static bool find_station(const char *call, js8_station_t *out) {
@@ -3147,8 +3213,12 @@ static void log_edit_done(const char *text) {
             save_texts();
             if (view_stations) rebuild_station_rows();
             break;
+        case EDIT_FREQ:
+            tune_custom(value);
+            return;
         }
     }
+    if (target == EDIT_FREQ) return; /* cancelled */
     if (target == EDIT_ALERT_WORDS) {
         alerts_show();
         return;
@@ -3862,4 +3932,172 @@ static void decode_cb(button_data_t *btn) {
     buttons_refresh(btn);
     if (params.js8_rx_all.x) msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Slow)");
     else msg_update_text_fmt("Decoding %s only", js8_speed_name(cur_speed()));
+}
+
+/* ---- Frequency: JS8Call's, GhostNet's, or your own ---------------------- */
+
+/* The band keys step through JS8Call's usual dial frequencies, or with
+ * GhostNet on through GhostNet's (3.575, 7.107, 14.107 MHz). A custom
+ * frequency is remembered; the band keys leave it for the preset list. */
+
+typedef enum {
+    FQ_JS8,
+    FQ_GHOSTNET,
+    FQ_CUSTOM,
+    FQ_CLOSE,
+} freq_item_t;
+
+static const char *freq_label_getter(void) {
+    static char buf[32];
+    if (params.js8_custom_on.x) {
+        char khz[16];
+        format_khz(params.js8_custom_hz.x, khz, sizeof(khz));
+        snprintf(buf, sizeof(buf), "Freq:\n%s", khz);
+        return buf;
+    }
+    return params.js8_ghostnet.x ? "Freq:\nGhostNet" : "Freq:\nJS8";
+}
+
+static void freq_close(void) {
+    if (!freq_list) return;
+    lv_obj_del_async(freq_list); /* often called from one of its buttons */
+    freq_list = NULL;
+    if (table && !composing) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+/* To the closest preset of the chosen list. */
+static void use_presets(bool ghostnet) {
+    if (js8_tx_busy(tx)) {
+        msg_update_text_fmt("Not while sending - Stop TX first");
+        return;
+    }
+    params_bool_set(&params.js8_ghostnet, ghostnet);
+    params_bool_set(&params.js8_custom_on, false);
+    load_band(0);
+    retuned();
+}
+
+/* From the keyboard: kHz ("7107.5"), or MHz when under 100 ("7.1075").
+ * False, with the reason shown, keeps the keyboard open to fix it. */
+static bool parse_custom(const char *text, int32_t *out) {
+    char  *end;
+    double v = strtod(text, &end);
+    if (end == text || v <= 0) {
+        msg_update_text_fmt("Type the dial frequency in kHz, e.g. 7107");
+        return false;
+    }
+    int32_t hz = (int32_t)(v < 100 ? v * 1e6 + 0.5 : v * 1e3 + 0.5);
+    if (hz < CUSTOM_MIN_HZ || hz > CUSTOM_MAX_HZ) {
+        msg_update_text_fmt("Out of range: 1800 - 54000 kHz");
+        return false;
+    }
+    if (js8_tx_busy(tx)) {
+        msg_update_text_fmt("Not while sending - Stop TX first");
+        return false;
+    }
+    if (out) *out = hz;
+    return true;
+}
+
+static void tune_custom(const char *text) {
+    int32_t hz;
+    if (!parse_custom(text, &hz)) return;
+    params_int32_set(&params.js8_custom_hz, hz);
+    params_bool_set(&params.js8_custom_on, true);
+    cparam_i_set(cfg_fg_freq, hz);
+    retuned();
+    msg_update_text_fmt("%s", where_label());
+}
+
+static void freq_item_cb(lv_event_t *e) {
+    freq_item_t item = (freq_item_t)(intptr_t)lv_event_get_user_data(e);
+    switch (item) {
+    case FQ_JS8:
+    case FQ_GHOSTNET:
+        freq_close();
+        use_presets(item == FQ_GHOSTNET);
+        return;
+    case FQ_CUSTOM: {
+        /* Into the keyboard with the last one filled in. */
+        for (uint32_t i = 0; i < lv_obj_get_child_cnt(freq_list); i++)
+            lv_group_remove_obj(lv_obj_get_child(freq_list, i));
+        lv_obj_del_async(freq_list);
+        freq_list = NULL;
+        char khz[16] = "";
+        if (params.js8_custom_hz.x) format_khz(params.js8_custom_hz.x, khz, sizeof(khz));
+        edit_target = EDIT_FREQ;
+        compose_open(khz);
+        lv_group_set_editing(keyboard_group, true);
+        msg_update_text_fmt("Dial frequency in kHz, then Enter");
+        return;
+    }
+    case FQ_CLOSE:
+        freq_close();
+        return;
+    }
+}
+
+static void freq_key_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    if (key == LV_KEY_ESC) freq_close();
+    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
+    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+}
+
+static lv_obj_t *freq_add(freq_item_t item, const char *label) {
+    lv_obj_t *b = list_add_item(freq_list, label);
+    lv_obj_add_event_cb(b, freq_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)item);
+    lv_obj_add_event_cb(b, freq_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, b);
+    lv_label_set_long_mode(lv_obj_get_child(b, 0), LV_LABEL_LONG_DOT);
+    return b;
+}
+
+static void freq_show(void) {
+    lv_group_remove_obj(table);
+    freq_list = lv_list_create(dialog.obj);
+    lv_obj_set_size(freq_list, 560, WF_HEIGHT - 10);
+    lv_obj_align(freq_list, LV_ALIGN_TOP_RIGHT, -20, 18);
+    lv_obj_set_style_text_font(freq_list, &sony_24, 0);
+    lv_obj_set_style_bg_color(freq_list, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_border_color(freq_list, lv_color_white(), 0);
+    char line[64];
+    snprintf(line, sizeof(line), "Now: %s", where_label());
+    lv_obj_t *t = lv_list_add_text(freq_list, line);
+    lv_obj_set_style_text_font(t, &sony_22, 0);
+
+    bool      custom = params.js8_custom_on.x, ghost = params.js8_ghostnet.x;
+    lv_obj_t *js8    = freq_add(FQ_JS8, "JS8Call frequencies (7.078, 14.078...)");
+    lv_obj_t *gn     = freq_add(FQ_GHOSTNET, "GhostNet (3.575, 7.107, 14.107)");
+    char      khz[16];
+    if (params.js8_custom_hz.x) {
+        format_khz(params.js8_custom_hz.x, khz, sizeof(khz));
+        snprintf(line, sizeof(line), "Custom kHz... (last %s)", khz);
+    } else {
+        snprintf(line, sizeof(line), "Custom kHz...");
+    }
+    lv_obj_t *cu    = freq_add(FQ_CUSTOM, line);
+    lv_obj_t *close = freq_add(FQ_CLOSE, "Close");
+    lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
+    /* The one in use stands out and has the knob. */
+    lv_obj_t *cur = custom ? cu : ghost ? gn : js8;
+    lv_obj_set_style_text_color(cur, lv_color_hex(0x60ff60), 0);
+    lv_group_set_editing(keyboard_group, false);
+    lv_group_focus_obj(cur);
+}
+
+static void freq_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (freq_list) { /* Freq again closes it */
+        freq_close();
+        return;
+    }
+    if (popup_guard()) return;
+    if (composing) return;
+    freq_show();
 }

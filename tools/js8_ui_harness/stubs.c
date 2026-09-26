@@ -27,27 +27,55 @@ static int               dummy_low, dummy_high, dummy_fg;
 ComputedParamInt        *cfg_cur_filter_low  = (ComputedParamInt *)&dummy_low;
 ComputedParamInt        *cfg_cur_filter_high = (ComputedParamInt *)&dummy_high;
 ComputedParamInt        *cfg_fg_freq         = (ComputedParamInt *)&dummy_fg; /* dial, Hz */
-static int         band = 2; /* 20m */
-static const int   band_freqs[] = {7078000, 10130000, 14078000, 18104000};
+/* The dial: a preset (see presets[] below) or any frequency set. */
+static int dial_hz = 14078000;
 /* The radio's filter: 100-2900 Hz (a typical USB setting) until the app sets it. */
 static int32_t filter_low = 100, filter_high = 2900;
 int32_t cparam_i_get(const ComputedParamInt *p) {
-    if (p == cfg_fg_freq) return band_freqs[band];
+    if (p == cfg_fg_freq) return dial_hz;
     return p == cfg_cur_filter_low ? filter_low : filter_high;
 }
 void cparam_i_set(ComputedParamInt *p, int32_t v) {
+    if (p == cfg_fg_freq) {
+        dial_hz = v;
+        printf("[radio] dial %d Hz\n", v);
+        return;
+    }
     if (p == cfg_cur_filter_low) filter_low = v;
     else if (p == cfg_cur_filter_high) filter_high = v;
     printf("[radio] filter %d-%d Hz\n", filter_low, filter_high);
 }
 
-static const char *band_labels[] = {"JS8 40m", "JS8 30m", "JS8 20m", "JS8 17m"};
+/* The same lookups as DigitalModesTable: next above, closest, next below. */
+static const struct {
+    const char *label;
+    int         hz, type;
+} presets[] = {
+    {"JS8 40m", 7078000, CFG_DIG_TYPE_JS8},
+    {"JS8 30m", 10130000, CFG_DIG_TYPE_JS8},
+    {"JS8 20m", 14078000, CFG_DIG_TYPE_JS8},
+    {"JS8 17m", 18104000, CFG_DIG_TYPE_JS8},
+    {"GhostNet 80m", 3575000, CFG_DIG_TYPE_JS8_GHOSTNET},
+    {"GhostNet 40m", 7107000, CFG_DIG_TYPE_JS8_GHOSTNET},
+    {"GhostNet 20m", 14107000, CFG_DIG_TYPE_JS8_GHOSTNET},
+};
+static const char *preset_label = "JS8 20m";
 bool cfg_digital_load(int8_t dir, cfg_digital_type_t type) {
-    if (type != CFG_DIG_TYPE_JS8) fprintf(stderr, "STUB: wrong digital type %d\n", type);
-    band = (band + dir + 4) % 4;
+    int best = -1;
+    for (int i = 0; i < (int)(sizeof(presets) / sizeof(presets[0])); i++) {
+        if (presets[i].type != (int)type) continue;
+        int f = presets[i].hz;
+        if (dir > 0 && f > dial_hz && (best < 0 || f < presets[best].hz)) best = i;
+        if (dir < 0 && f < dial_hz && (best < 0 || f > presets[best].hz)) best = i;
+        if (dir == 0 && (best < 0 || abs(f - dial_hz) < abs(presets[best].hz - dial_hz))) best = i;
+    }
+    if (best < 0) return false;
+    dial_hz      = presets[best].hz;
+    preset_label = presets[best].label;
     return true;
 }
-const char *cfg_digital_label_get(void) { return band_labels[band]; }
+const char *cfg_digital_label_get(void) { return preset_label; }
+int         stub_dial_hz(void) { return dial_hz; }
 
 /* Buttons: remember the loaded page so the driver can press them. */
 buttons_page_t *stub_page;
@@ -107,6 +135,7 @@ void  radio_set_tx_filter(uint16_t low, uint16_t high) { printf("[radio] TX filt
 int   stub_usb_kbd;                                                /* a USB keyboard is plugged in */
 bool  keyboard_ready() { return stub_usb_kbd; }                   /* else show the on-screen keyboard */
 void  params_uint16_set(params_uint16_t *var, uint16_t x) { var->x = x; }
+void  params_int32_set(params_int32_t *var, int32_t x) { var->x = x; }
 
 float tx_player_base_gain_offset(void) { return -9.4f; }
 

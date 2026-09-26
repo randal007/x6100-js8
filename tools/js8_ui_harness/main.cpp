@@ -13,6 +13,7 @@ void ui_open(void);
 void ui_press(int i);
 void ui_band_up(void);
 void ui_band_down(void);
+int  stub_dial_hz(void);
 void ui_key(uint32_t key);
 int  ui_running(void);
 int  ui_focus_is_table(void);
@@ -634,6 +635,77 @@ int main() {
         ui_key(LV_KEY_ESC);
         pump(300);
         printf("[alerts] ESC closed it: list focused %s\n", ui_focus_is_table() ? "yes" : "no");
+        return 0;
+    }
+    if (getenv("ONLY_FREQ")) {
+        // Page 6 Freq: JS8Call's presets, GhostNet's, or a custom frequency.
+        pump(300);
+        ui_page(6);
+        printf("[freq] button: '%s' dial %d\n", ui_button_label(4), stub_dial_hz());
+        ui_press(4);
+        pump(200);
+        printf("[freq] popup: %d, focused '%s'\n", ui_popup_has("GhostNet (3.575"), ui_focused_text());
+        screenshot("45_freq_popup.ppm");
+        ui_key(LV_KEY_RIGHT);
+        printf("[freq] on '%s'\n", ui_focused_text());
+        ui_click_focused(); // GhostNet
+        pump(300);
+        printf("[freq] GhostNet: '%s' dial %d (want 14107000)\n", ui_button_label(4), stub_dial_hz());
+        ui_band_down();
+        pump(100);
+        printf("[freq] band down: dial %d (want 7107000)\n", stub_dial_hz());
+        ui_band_down();
+        ui_band_down(); // nothing below 3.575
+        pump(100);
+        printf("[freq] bottom: dial %d (want 3575000)\n", stub_dial_hz());
+        ui_band_up();
+        pump(100);
+
+        // Custom: the keyboard, kHz.
+        ui_press(4);
+        pump(200);
+        printf("[freq] focused '%s' (want GhostNet, the one in use)\n", ui_focused_text());
+        ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // Custom kHz...
+        pump(200);
+        ui_compose_clear();
+        ui_compose_append("7110.5");
+        ui_compose_enter();
+        pump(300);
+        printf("[freq] custom: '%s' dial %d (want 7110500), list focus %d\n", ui_button_label(4), stub_dial_hz(),
+               ui_focus_is_table());
+        printf("[freq] info row: %d\n", ui_list_has("JS8 7110.5 kHz"));
+        screenshot("46_freq_custom.ppm");
+
+        // Out of range: nothing changes.
+        ui_press(4);
+        pump(200);
+        // Focus starts on Custom, the one in use.
+        printf("[freq] on '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        printf("[freq] prefilled: '%s' (want 7110.5)\n", ui_compose_text());
+        ui_compose_clear();
+        ui_compose_append("99999");
+        ui_compose_enter();
+        pump(300);
+        printf("[freq] out of range kept: dial %d (want 7110500), keyboard still open: '%s'\n", stub_dial_hz(),
+               ui_compose_text());
+        ui_compose_cancel();
+        pump(200);
+
+        // Band keys leave the custom frequency for the preset list (GhostNet).
+        ui_band_up();
+        pump(200);
+        printf("[freq] band up from custom: '%s' dial %d (want 14107000)\n", ui_button_label(4), stub_dial_hz());
+
+        // Back to JS8Call's list: the closest one.
+        ui_press(4);
+        pump(200);
+        ui_key(LV_KEY_LEFT);
+        ui_click_focused();
+        pump(300);
+        printf("[freq] JS8: '%s' dial %d (want 14078000)\n", ui_button_label(4), stub_dial_hz());
         return 0;
     }
     if (getenv("ONLY_BANDS")) {

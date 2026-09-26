@@ -85,10 +85,11 @@ the image you used before.
    timing and saves it to the radio's clock chip.
 3. **Open JS8:** APP → page 3 → **JS8**. The radio tunes the nearest JS8
    frequency; the **band keys** step through JS8Call's standard frequencies
-   (160 m to 6 m). While JS8 is open the receive filter is 200–3000 Hz and
-   power is capped at 5 W; both go back when you leave.
+   (160 m to 6 m), or GhostNet's, or you can type your own (**Freq**, page
+   6). While JS8 is open the receive and transmit filters are 200–3000 Hz
+   and power is capped at 5 W; all go back when you leave.
 4. **Answer someone:** turn the **MFK** to select their row, then **HW
-   CPY?** (page 1) for the usual reply to a CQ, **Reply** to type, or
+   CPY?** (page 2) for the usual reply to a CQ, **Reply** to type, or
    **Query >** (page 2) for the one-press messages.
 5. **Stop sending:** **ESC** or press the **top knob**. The next ESC
    leaves the app.
@@ -165,7 +166,7 @@ to go back a page.
 | 2 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 3 | **Time Sync** | Set the clock from the last 2 minutes of decodes (needs 3 or more). |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
-| 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each band has its own Stations list: change band and back, and it's still there. All are emptied when JS8 opens. |
+| 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. All are emptied when JS8 opens. |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new*. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
 | 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. |
@@ -178,6 +179,7 @@ to go back a page.
 | 6 | **Alerts >** | [Alerts](#alerts): beeps and alert words. |
 | 6 | **Speed** | The [speed](#speeds) you send at. Press to cycle; hold to match the selected station. |
 | 6 | **Decode: All speeds / My speed** | Decode every speed (default), or only yours. |
+| 6 | **Freq: JS8 / GhostNet / kHz** | Which frequencies the band keys step through: **JS8Call's** (7.078, 14.078 …) or **GhostNet's** (3.575, 7.107, 14.107 MHz), tuning the closest one. Or **Custom kHz…**: type a dial frequency (e.g. `7107.5`; the last one is filled in). The band keys go from a custom frequency back to the list. |
 
 While a list is open (Query, Texts…, APRS, Log, Inbox, Alerts), any other
 button just closes it; press again to do the thing. ESC closes lists too.
@@ -352,12 +354,11 @@ Done so far (after the first on-air QSOs):
 - [x] Show *No HB* also hides SNR reports
 - [x] Clear on page 1, HW CPY? on page 2
 - [x] Send up to 3000 Hz (the TX filter is set to 200–3000 Hz while JS8 is open)
-- [x] Each band keeps its own Stations list (emptied when JS8 opens)
+- [x] Each frequency keeps its own Stations list (emptied when JS8 opens)
+- [x] GhostNet frequencies and a custom frequency (**Freq**, page 6)
 
 Still to do:
 
-- [ ] GhostNet frequencies in the band list
-- [ ] Custom frequency option on page 6
 - [ ] POTA and SOTA spots with a frequency and mode you choose (e.g. your SSB
   activation), not only the JS8 frequency
 - [ ] Test beep audible through the speaker

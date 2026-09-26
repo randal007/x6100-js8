@@ -82,6 +82,9 @@ params_t params = {
     .js8_alerts             = { .x = 7, .min = 0, .max = 31, .name = "js8_alerts" }, /* beep, to me, inbox */
     .js8_speed              = { .x = 0, .min = 0, .max = 3, .name = "js8_speed" },   /* Normal */
     .js8_rx_all             = { .x = true,      .name = "js8_rx_all" },
+    .js8_ghostnet           = { .x = false,     .name = "js8_ghostnet" },
+    .js8_custom_on          = { .x = false,     .name = "js8_custom_on" },
+    .js8_custom_hz          = { .x = 0,         .name = "js8_custom_hz" },
     .ft8_output_gain_offset = { .x = 0.0f,      .name = "ft8_output_gain_offset" },
     .ft8_cq_modifier        = { .x = "",        .name = "ft8_cq_modifier"},
 
@@ -137,6 +140,15 @@ static bool params_load_uint8(params_uint8_t *var, const char *name, const int32
 }
 
 static bool params_load_uint16(params_uint16_t *var, const char *name, const int32_t x) {
+    if (strcmp(name, var->name) == 0) {
+        var->x = x;
+        return true;
+    }
+
+    return false;
+}
+
+static bool params_load_int32(params_int32_t *var, const char *name, const int32_t x) {
     if (strcmp(name, var->name) == 0) {
         var->x = x;
         return true;
@@ -249,6 +261,9 @@ static bool params_load() {
         if (params_load_uint8(&params.js8_alerts, name, i)) continue;
         if (params_load_uint8(&params.js8_speed, name, i)) continue;
         if (params_load_bool(&params.js8_rx_all, name, i)) continue;
+        if (params_load_bool(&params.js8_ghostnet, name, i)) continue;
+        if (params_load_bool(&params.js8_custom_on, name, i)) continue;
+        if (params_load_int32(&params.js8_custom_hz, name, i)) continue;
         if (params_load_bool(&params.mag_info, name, i)) continue;
         if (params_load_bool(&params.mag_alc, name, i)) continue;
         if (params_load_uint8(&params.spectrum_beta, name, i)) continue;
@@ -297,6 +312,12 @@ static void params_save_uint8(params_uint8_t *var) {
 }
 
 static void params_save_uint16(params_uint16_t *var) {
+    if (var->dirty) {
+        params_write_int(var->name, var->x, &var->dirty);
+    }
+}
+
+static void params_save_int32(params_int32_t *var) {
     if (var->dirty) {
         params_write_int(var->name, var->x, &var->dirty);
     }
@@ -377,6 +398,9 @@ static void params_save() {
     params_save_uint8(&params.js8_alerts);
     params_save_uint8(&params.js8_speed);
     params_save_bool(&params.js8_rx_all);
+    params_save_bool(&params.js8_ghostnet);
+    params_save_bool(&params.js8_custom_on);
+    params_save_int32(&params.js8_custom_hz);
     params_save_bool(&params.mag_info);
     params_save_bool(&params.mag_alc);
     params_save_uint8(&params.spectrum_beta);
@@ -539,6 +563,12 @@ void params_uint16_set(params_uint16_t *var, uint16_t x) {
     if (var->voice) {
         voice_say_int(var->voice, var->x);
     }
+}
+
+void params_int32_set(params_int32_t *var, int32_t x) {
+    params_lock();
+    var->x = x;
+    params_unlock(&var->dirty);
 }
 
 void params_float_set(params_float_t *var, float x) {

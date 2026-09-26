@@ -134,12 +134,40 @@ static int _4_add_js8_presets() {
     return 0;
 }
 
+/* GhostNet's JS8 nets (s2underground/GhostNet, version 1.5): 7.107 MHz is
+ * the main one, 14.107 and 3.575 MHz the others. */
+static int _5_add_ghostnet_presets() {
+    int rc;
+    char *query;
+    rc = asprintf(&query,
+        "INSERT OR IGNORE INTO digital_modes(label, freq, mode, type) "
+        "SELECT column1, column2, 3, %u FROM (VALUES "
+            "('GhostNet 80m', 3575000),"
+            "('GhostNet 40m', 7107000),"
+            "('GhostNet 20m', 14107000)"
+        ")",
+        CFG_DIG_TYPE_JS8_GHOSTNET
+    );
+    if (rc == -1) {
+        printf("Cannot allocate SQL query\n");
+        return 1;
+    }
+    rc = sqlite3_exec(db, query, NULL, NULL, NULL);
+    free(query);
+    if (rc != SQLITE_OK) {
+        printf("Cannot add GhostNet presets: %s\n", sqlite3_errmsg(db));
+        return 1;
+    }
+    return 0;
+}
+
 static int (*migrations[])() = {
     _0_init_migrations,
     _1_create_ftx_table,
     _2_update_atu_freq,
     _3_update_spectrum_peak_hold,
     _4_add_js8_presets,
+    _5_add_ghostnet_presets,
 };
 
 int migrations_apply(void) {

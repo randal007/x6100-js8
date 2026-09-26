@@ -135,6 +135,9 @@ typedef struct {
     params_uint8_t      js8_alerts;      /* JS8_ALERT_* bits in dialog_js8.c */
     params_uint8_t      js8_speed;       /* js8_speed_t we transmit at */
     params_bool_t       js8_rx_all;      /* decode every speed (desktop's multi-decoder) */
+    params_bool_t       js8_ghostnet;    /* band keys step through GhostNet's frequencies */
+    params_bool_t       js8_custom_on;   /* tuned to js8_custom_hz, not a preset */
+    params_int32_t      js8_custom_hz;   /* last custom dial frequency, 0 = none */
     params_str_t        ft8_cq_modifier;
 
     // FT8 gain offset for different radios/bands/modes
@@ -239,6 +242,7 @@ void params_init();
 void params_bool_set(params_bool_t *var, bool x);
 void params_uint8_set(params_uint8_t *var, uint8_t x);
 void params_uint16_set(params_uint16_t *var, uint16_t x);
+void params_int32_set(params_int32_t *var, int32_t x);
 void params_str_set(params_str_t *var, const char *x);
 void params_float_set(params_float_t *var, float x);
 
