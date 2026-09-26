@@ -158,11 +158,11 @@ to go back a page.
 | 1 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). |
 | 1 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 1 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
-| 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
+| 1 | **Clear** | Clear the list and the station list. |
 | 2 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then one every minute (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band, or leave it alone for an hour. |
 | 2 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. |
 | 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
-| 2 | **Clear** | Clear the list and the station list. |
+| 2 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 3 | **Time Sync** | Set the clock from the last 2 minutes of decodes (needs 3 or more). |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
 | 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. |
@@ -353,6 +353,7 @@ Done so far (after the first on-air QSOs):
 - [x] CQ switches heartbeats off; hold CQ for auto CQ every minute
 - [x] Hold the page button to go back a page
 - [x] Show *No HB* also hides SNR reports
+- [x] Clear on page 1, HW CPY? on page 2
 
 Still to do:
 
@@ -361,7 +362,6 @@ Still to do:
 - [ ] POTA and SOTA spots with a frequency and mode you choose (e.g. your SSB
   activation), not only the JS8 frequency
 - [ ] Send up to 3000 Hz (now 2500 Hz)
-- [ ] HW CPY? and Clear swapped between pages 1 and 2
 - [ ] Stations list kept when changing band (cleared only when the app closes)
 - [ ] Test beep audible through the speaker
 - [ ] Smoother waterfall

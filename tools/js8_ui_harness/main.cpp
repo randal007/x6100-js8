@@ -760,10 +760,10 @@ int main() {
         pump(300);
         printf("[held] inbox closed: %d\n", ui_focus_is_table());
 
-        // HW CPY? on page 1 to the selected station.
+        // HW CPY? on page 2 to the selected station.
         ui_select_row_from("W1ABC");
-        ui_page(1);
-        printf("[held] page 1 button 4: '%s'\n", ui_button_label(4));
+        ui_page(2);
+        printf("[held] page 2 button 4: '%s'\n", ui_button_label(4));
         ui_press(4);
         wait_tx();
         printf("[held] HW CPY? sent: %d\n", ui_list_has("W1ABC HW CPY?"));
