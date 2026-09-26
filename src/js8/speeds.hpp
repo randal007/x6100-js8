@@ -33,8 +33,9 @@ struct Speed {
     double tone_spacing_hz() const { return 12000.0 / symbol_samples; }
     int    bandwidth_hz() const { return 8 * 12000 / symbol_samples; }
     int    period_ms() const { return period_s * 1000; }
-    /// Highest audio offset whose signal stays below 2500 Hz.
-    int max_offset_hz() const { return 2500 - bandwidth_hz(); }
+    /// Highest audio offset whose signal stays below 3000 Hz, the top of
+    /// the filters the app sets while open.
+    int max_offset_hz() const { return 3000 - bandwidth_hz(); }
     /// Seconds of audio in one frame (79 symbols).
     double frame_seconds() const { return 79 * symbol_seconds(); }
 };

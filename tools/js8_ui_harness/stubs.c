@@ -96,7 +96,13 @@ void event_send(lv_obj_t *obj, lv_event_code_t code, void *param) { lv_event_sen
 static int dummy_pwr;
 ParamFloat *cfg_pwr = (ParamFloat *)&dummy_pwr;
 float param_f_get(const ParamFloat *p) { (void)p; return 10.0f; }  /* radio set to 10 W */
+/* The saved TX filter (settings defaults 160-3000 Hz). */
+static int dummy_txf_low, dummy_txf_high;
+ParamInt  *cfg_tx_filter_low  = (ParamInt *)&dummy_txf_low;
+ParamInt  *cfg_tx_filter_high = (ParamInt *)&dummy_txf_high;
+int32_t    param_i_get(const ParamInt *p) { return p == cfg_tx_filter_low ? 160 : 3000; }
 void  radio_set_pwr(float w) { printf("[radio] power %.0f W\n", w); }
+void  radio_set_tx_filter(uint16_t low, uint16_t high) { printf("[radio] TX filter %u-%u Hz\n", low, high); }
 int   stub_usb_kbd;                                                /* a USB keyboard is plugged in */
 bool  keyboard_ready() { return stub_usb_kbd; }                   /* else show the on-screen keyboard */
 void  params_uint16_set(params_uint16_t *var, uint16_t x) { var->x = x; }

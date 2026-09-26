@@ -681,7 +681,7 @@ int main() {
         ui_press(2); // Heartbeat in Turbo: refused
         pump(200);
 
-        // Top offset follows the speed: Turbo 2340 Hz.
+        // Top offset follows the speed: Turbo 2840 Hz (3000 - 160).
         ui_rotary(2000);
         ui_rotary(2000);
         pump(100);
@@ -700,7 +700,7 @@ int main() {
         ui_press(1); // CQ
         wait_tx();
         printf("[speed] Fast frame: %u samples (want %d)\n", stub_tx_samples, 79 * 4410);
-        printf("[speed] our row: %d (offset kept at Turbo's 2340 limit)\n", ui_list_has("TX 2340 F"));
+        printf("[speed] our row: %d (offset kept at Turbo's 2840 limit)\n", ui_list_has("TX 2840 F"));
         screenshot("37_speed_tx.ppm");
 
         ui_page(6);

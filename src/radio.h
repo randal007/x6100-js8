@@ -57,6 +57,8 @@ bool radio_change_spmode(int16_t df);
 void radio_change_mute();
 
 void radio_set_pwr(float d);
+/* Radio only, not saved: settings keep cfg_tx_filter_low/high. */
+void radio_set_tx_filter(uint16_t low, uint16_t high);
 
 void radio_set_charger(bool on);
 

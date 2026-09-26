@@ -1609,6 +1609,10 @@ static void construct_cb(lv_obj_t *parent) {
     filter_saved      = true;
     cparam_i_set(cfg_cur_filter_high, JS8_FILTER_HIGH);
     cparam_i_set(cfg_cur_filter_low, JS8_FILTER_LOW);
+    /* The TX filter too, so a signal up to 3000 Hz goes out whole. Only the
+     * radio is told: the setting itself is untouched, so a power loss here
+     * can't leave it changed. */
+    radio_set_tx_filter(JS8_FILTER_LOW, JS8_FILTER_HIGH);
 
     filter_low  = cparam_i_get(cfg_cur_filter_low);
     filter_high = cparam_i_get(cfg_cur_filter_high);
@@ -1791,6 +1795,7 @@ static void destruct_cb(void) {
     if (filter_saved) {
         cparam_i_set(cfg_cur_filter_high, saved_filter_high);
         cparam_i_set(cfg_cur_filter_low, saved_filter_low);
+        radio_set_tx_filter(param_i_get(cfg_tx_filter_low), param_i_get(cfg_tx_filter_high));
         filter_saved = false;
     }
     mem_load(MEM_BACKUP_ID);
@@ -3771,7 +3776,7 @@ static void set_speed(js8_speed_t s) {
         return;
     }
     params_uint8_set(&params.js8_speed, (uint8_t)s);
-    /* The offset must leave room for the wider signal below 2500 Hz. */
+    /* The offset must leave room for the wider signal below 3000 Hz. */
     int max = js8_speed_max_offset_hz(s);
     if (params.js8_tx_freq.x > max) params_uint16_set(&params.js8_tx_freq, (uint16_t)max);
     js8_rx_set_qso_offset(rx, params.js8_tx_freq.x);

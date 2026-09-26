@@ -923,7 +923,7 @@ TEST_CASE("Transmitter rejects out-of-range offsets", "[js8][tx]") {
     auto        plan = plan_message("W1ABC", "FN42", "K2XYZ SNR?");
     std::string why;
     CHECK_FALSE(tx.send(plan, 300, &why));
-    CHECK_FALSE(tx.send(plan, 2480, &why));
+    CHECK_FALSE(tx.send(plan, 2980, &why));
     CHECK(why.find("offset") != std::string::npos);
 }
 
@@ -1616,10 +1616,10 @@ TEST_CASE("the speed table matches desktop JS8Call's JS8Submode.cpp", "[js8][spe
         bool        hb, original;
     };
     const Want want[] = {
-        {JS8_SPEED_NORMAL, 0, 50, 15, 500, 10, 2450, 6.25, true, true},
-        {JS8_SPEED_FAST, 1, 80, 10, 200, 16, 2420, 10.0, true, false},
-        {JS8_SPEED_TURBO, 2, 160, 6, 100, 32, 2340, 20.0, false, false},
-        {JS8_SPEED_SLOW, 4, 25, 30, 500, 10, 2475, 3.125, true, false},
+        {JS8_SPEED_NORMAL, 0, 50, 15, 500, 10, 2950, 6.25, true, true},
+        {JS8_SPEED_FAST, 1, 80, 10, 200, 16, 2920, 10.0, true, false},
+        {JS8_SPEED_TURBO, 2, 160, 6, 100, 32, 2840, 20.0, false, false},
+        {JS8_SPEED_SLOW, 4, 25, 30, 500, 10, 2975, 3.125, true, false},
     };
     for (auto &w : want) {
         const Speed &sp = speed(w.id);
@@ -1715,17 +1715,17 @@ TEST_CASE("Transmitter uses the plan's speed for slots and offsets", "[js8][spee
     auto plan = plan_message("W1ABC", "FN42", "K2XYZ HELLO FROM THE FAST TRANSMITTER", JS8_SPEED_FAST);
     REQUIRE(plan.frames.size() >= 3);
     std::string why;
-    CHECK_FALSE(tx.send(plan, 2430, &why)); // above Fast's 2420 Hz
+    CHECK_FALSE(tx.send(plan, 2930, &why)); // above Fast's 2920 Hz
     CHECK(why.find("Fast") != std::string::npos);
-    REQUIRE(tx.send(plan, 2420, &why));
+    REQUIRE(tx.send(plan, 2920, &why));
     for (int i = 0; i < 200 && !done; i++) std::this_thread::sleep_for(std::chrono::milliseconds(5));
     REQUIRE(done);
     REQUIRE(starts.size() == plan.frames.size());
     CHECK(starts[0] % 10'000 == 200);
     for (std::size_t i = 1; i < starts.size(); i++) CHECK(starts[i] - starts[i - 1] == 10'000);
 
-    // Turbo's top is 2340 Hz; Slow's 2475 Hz.
-    CHECK_FALSE(tx.send(plan_message("W1ABC", "FN42", "K2XYZ SNR?", JS8_SPEED_TURBO), 2341, &why));
+    // Turbo's top is 2840 Hz; Slow's 2975 Hz.
+    CHECK_FALSE(tx.send(plan_message("W1ABC", "FN42", "K2XYZ SNR?", JS8_SPEED_TURBO), 2841, &why));
     while (tx.busy()) std::this_thread::sleep_for(std::chrono::milliseconds(5));
 }
 

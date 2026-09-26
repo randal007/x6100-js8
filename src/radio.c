@@ -378,6 +378,13 @@ void radio_set_pwr(float d) {
     WITH_RADIO_LOCK(x6100_control_txpwr_set(d));
 }
 
+void radio_set_tx_filter(uint16_t low, uint16_t high) {
+    radio_lock();
+    x6100_control_tx_filter_low_set(low);
+    x6100_control_tx_filter_high_set(high);
+    radio_unlock();
+}
+
 x6100_vfo_t radio_toggle_vfo() {
     x6100_vfo_t new_vfo = (param_i_get(cfg_band_current_vfo) == X6100_VFO_A) ? X6100_VFO_B : X6100_VFO_A;
 

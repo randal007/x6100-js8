@@ -189,7 +189,7 @@ button just closes it; press again to do the thing. ESC closes lists too.
 ## Transmitting
 
 - **Offset:** the main tuning knob moves your TX offset (the red band),
-  500 Hz up to where the signal would pass 2500 Hz. The dial frequency
+  500 Hz up to where the signal would pass 3000 Hz. The dial frequency
   stays locked. With **Hold: Off**, replying moves your offset to theirs.
 - **Power** is capped at 5 W while JS8 is open, as in the FT8 app. The
   level is learned and shared with FT8.
@@ -338,8 +338,6 @@ All on the **DATA** partition, readable on a PC:
 - **Changing band clears the Stations list.**
 - If the radio loses power while JS8 is open, the USB filter stays at
   200–3000 Hz (leaving the app normally puts yours back).
-- **Transmitting stops at 2500 Hz** (minus the signal's width). Decoding
-  covers 200–3000 Hz; sending up to 3000 Hz comes in beta 2.
 
 ## Coming in beta 2
 
@@ -354,6 +352,7 @@ Done so far (after the first on-air QSOs):
 - [x] Hold the page button to go back a page
 - [x] Show *No HB* also hides SNR reports
 - [x] Clear on page 1, HW CPY? on page 2
+- [x] Send up to 3000 Hz (the TX filter is set to 200–3000 Hz while JS8 is open)
 
 Still to do:
 
@@ -361,7 +360,6 @@ Still to do:
 - [ ] Custom frequency option on page 6
 - [ ] POTA and SOTA spots with a frequency and mode you choose (e.g. your SSB
   activation), not only the JS8 frequency
-- [ ] Send up to 3000 Hz (now 2500 Hz)
 - [ ] Stations list kept when changing band (cleared only when the app closes)
 - [ ] Test beep audible through the speaker
 - [ ] Smoother waterfall

@@ -27,7 +27,7 @@ char        js8_speed_letter(js8_speed_t s);    /* 'N', 'F', 'T', 'S' */
 int         js8_speed_bandwidth_hz(js8_speed_t s);
 int         js8_speed_period_s(js8_speed_t s);  /* slot length */
 int         js8_speed_rx_threshold_hz(js8_speed_t s); /* "same station" offset window */
-int         js8_speed_max_offset_hz(js8_speed_t s);   /* keeps the signal below 2500 Hz */
+int         js8_speed_max_offset_hz(js8_speed_t s);   /* keeps the signal below 3000 Hz */
 bool        js8_speed_heartbeats(js8_speed_t s);      /* false in Turbo, as on desktop */
 int         js8_speed_rx_mask(js8_speed_t s);         /* JS8_SUBMODE_* bit for js8_rx_create */
 int         js8_speed_submode(js8_speed_t s);         /* desktop's numbering: 0, 1, 2, 4 */
