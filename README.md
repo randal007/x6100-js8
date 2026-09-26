@@ -304,13 +304,20 @@ All on the **DATA** partition, readable on a PC:
 
 - **Type in capitals.** The keyboard's lowercase (`abc`) letters are
   ignored in messages.
-- **BACK in the keyboard leaves the app**; use ESC to close the keyboard.
+- **ESC in the Reply keyboard leaves the app** instead of just closing the
+  keyboard. Finish or clear what you typed rather than pressing ESC.
 - **Test beep may be silent** on some radios (no freeze).
 - The **waterfall** scrolls a little less smoothly than the main X6100
   waterfall.
 - **Changing band clears the Stations list.**
 - If the radio loses power while JS8 is open, the USB filter stays at
   200–3000 Hz (leaving the app normally puts yours back).
+- **Transmitting stops at 2500 Hz** (minus the signal's width). Decoding
+  covers 200–3000 Hz; sending up to 3000 Hz comes in beta 2.
+
+**Planned for beta 2:** the fixes above, HW CPY? and Clear swapped
+between pages 1 and 2, the Stations list kept across band changes, the
+GhostNet frequencies, and a custom frequency option on page 6.
 
 ## Credits
 
