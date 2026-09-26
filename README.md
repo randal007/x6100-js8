@@ -31,6 +31,7 @@ us), other stations' traffic, and a CQ sent at Turbo speed (`T`).*
 - [Files on the SD card](#files-on-the-sd-card)
 - [Known issues in beta 1](#known-issues-in-beta-1)
 - [Coming in beta 2](#coming-in-beta-2)
+- [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
 - [For developers](#for-developers)
 
@@ -333,6 +334,19 @@ All on the **DATA** partition, readable on a PC:
 - [ ] Long messages tested on the air
 - [ ] APRS tested on the air: POTA and SOTA spots, SMS, email and Winlink
   (so far only **Spot my grid** is confirmed working)
+
+## Bug reports and feature requests
+
+This is a beta: reports from testing are very welcome.
+
+- **Bugs and problems:** open an issue in
+  [Issues](https://github.com/randal007/x6100-js8/issues). Please say which
+  release you're running (e.g. `js8-beta1`), the band and speed, what you
+  did, what you expected and what happened. A photo or screenshot of the
+  radio's screen helps, and so does the `app_logs` folder from the SD card's
+  DATA partition if the app closed or froze.
+- **Feature requests and ideas:** start a thread in
+  [Discussions](https://github.com/randal007/x6100-js8/discussions).
 
 ## Credits
 
