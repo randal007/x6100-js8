@@ -158,6 +158,7 @@ static void        aprs_cb(button_data_t *btn);
 static void        aprs_close(void);
 static bool        popup_guard(void);
 static void        js8_next_page_cb(button_data_t *btn);
+static void        js8_prev_page_cb(button_data_t *btn);
 static void        texts_close(void);
 static bool        aprs_prepare(const char *in, char *out, size_t size);
 static bool        any_popup(void);
@@ -320,19 +321,19 @@ static buttons_page_t page_4;
 static buttons_page_t page_5;
 static buttons_page_t page_6;
 
-static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:6)", .press = js8_next_page_cb, .next = &page_2};
+static button_data_t btn_p1      = {.type = BTN_TEXT, .label = "(JS8 1:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_2, .prev = &page_6};
 static button_data_t btn_show    = {.type = BTN_TEXT_FN, .label_fn = show_label_getter, .press = show_cb};
 static button_data_t btn_reply   = {.type = BTN_TEXT, .label = "Reply", .press = reply_cb};
 static button_data_t btn_send    = {.type = BTN_TEXT, .label = "Send...", .press = send_cb};
 static button_data_t btn_hw_cpy  = {.type = BTN_TEXT, .label = "HW CPY?", .press = hw_cpy_cb};
 
-static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:6)", .press = js8_next_page_cb, .next = &page_3};
+static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_3, .prev = &page_1};
 static button_data_t btn_cq    = {.type = BTN_TEXT, .label = "CQ", .press = cq_cb};
 static button_data_t btn_hb    = {.type = BTN_TEXT, .label = "Heart-\nbeat", .press = heartbeat_cb};
 static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press = query_cb};
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
-static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:6)", .press = js8_next_page_cb, .next = &page_4};
+static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_4, .prev = &page_2};
 static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
@@ -342,21 +343,21 @@ static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn
 static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_clear}};
 static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations, &btn_inbox}};
 
-static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:6)", .press = js8_next_page_cb, .next = &page_5};
+static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_5, .prev = &page_3};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
 static button_data_t btn_hbauto = {.type = BTN_TEXT_FN, .label_fn = hb_label_getter, .press = hb_cb, .hold = hb_hold_cb};
 static button_data_t btn_hbackk = {.type = BTN_TEXT_FN, .label_fn = hb_ack_label_getter, .press = hb_ack_cb};
 static button_data_t btn_texts  = {.type = BTN_TEXT, .label = "Texts...", .press = texts_cb};
 static buttons_page_t page_4 = {{&btn_p4, &btn_auto, &btn_hbauto, &btn_hbackk, &btn_texts}};
 
-static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:6)", .press = js8_next_page_cb, .next = &page_6};
+static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_6, .prev = &page_4};
 static button_data_t  btn_aprs      = {.type = BTN_TEXT, .label = "APRS >", .press = aprs_cb};
 static button_data_t  btn_log       = {.type = BTN_TEXT, .label = "Log QSO", .press = log_cb};
 static button_data_t  btn_act       = {.type = BTN_TEXT_FN, .label_fn = act_label_getter, .press = act_cb, .hold = act_hold_cb};
 static button_data_t  btn_prompt    = {.type = BTN_TEXT_FN, .label_fn = prompt_label_getter, .press = prompt_cb};
 static buttons_page_t page_5        = {{&btn_p5, &btn_aprs, &btn_log, &btn_act, &btn_prompt}};
 
-static button_data_t  btn_p6        = {.type = BTN_TEXT, .label = "(JS8 6:6)", .press = js8_next_page_cb, .next = &page_1};
+static button_data_t  btn_p6        = {.type = BTN_TEXT, .label = "(JS8 6:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_1, .prev = &page_5};
 static button_data_t  btn_alerts    = {.type = BTN_TEXT, .label = "Alerts >", .press = alerts_cb};
 static button_data_t  btn_speed     = {.type = BTN_TEXT_FN, .label_fn = speed_label_getter, .press = speed_cb, .hold = speed_hold_cb};
 static button_data_t  btn_decode    = {.type = BTN_TEXT_FN, .label_fn = decode_label_getter, .press = decode_cb};
@@ -1957,6 +1958,17 @@ static void query_key_cb(lv_event_t *e) {
     }
 }
 
+/* Every list popup that's open. */
+static void close_popups(void) {
+    if (!any_popup()) return;
+    query_close();
+    texts_close();
+    aprs_close();
+    log_close();
+    inbox_close();
+    alerts_close();
+}
+
 /* One-press messages for the selected station: MFK to move, press or tap
  * to send, ESC to close. */
 /* A list popup (Query, Texts..., APRS) must close before anything else
@@ -1964,27 +1976,21 @@ static void query_key_cb(lv_event_t *e) {
  * Any other bottom button just closes it; press again to do the thing. */
 static bool popup_guard(void) {
     if (!any_popup()) return false;
-    query_close();
-    texts_close();
-    aprs_close();
-    log_close();
-    inbox_close();
-    alerts_close();
+    close_popups();
     msg_update_text_fmt("List closed");
     return true;
 }
 
 /* Changing page closes a list too (then changes page). */
 static void js8_next_page_cb(button_data_t *btn) {
-    if (any_popup()) {
-        query_close();
-        texts_close();
-        aprs_close();
-        log_close();
-        inbox_close();
-        alerts_close();
-    }
+    close_popups();
     button_next_page_cb(btn);
+}
+
+/* Holding the page button goes back one, as on the main screen. */
+static void js8_prev_page_cb(button_data_t *btn) {
+    close_popups();
+    button_prev_page_cb(btn);
 }
 
 /* Scroll a list to the focused item in one step: the default animated

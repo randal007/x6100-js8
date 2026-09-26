@@ -839,6 +839,22 @@ int main() {
         ui_page(4);
         printf("[cq-hb] HB after CQ: '%s' (want HB:\nOff)\n", ui_button_label(2));
         printf("[cq-hb] info row shown=%d (want 1)\n", ui_list_has("HB and HB ACK off: CQ"));
+
+        // 3. Holding the page button goes back a page.
+        ui_page(1);
+        ui_hold(0);
+        printf("[page] hold on 1 -> '%s' (want (JS8 6:6))\n", ui_button_label(0));
+        ui_hold(0);
+        printf("[page] hold on 6 -> '%s' (want (JS8 5:6))\n", ui_button_label(0));
+        ui_press(0);
+        printf("[page] press on 5 -> '%s' (want (JS8 6:6))\n", ui_button_label(0));
+        ui_page(2);
+        ui_press(3); // Query > opens a list
+        pump(200);
+        ui_hold(0);
+        pump(200);
+        printf("[page] hold with a list open -> '%s' (want (JS8 1:6)), list closed: %s\n", ui_button_label(0),
+               ui_focus_is_table() ? "yes" : "no");
         return 0;
     }
     if (getenv("ONLY_TEXTS")) {

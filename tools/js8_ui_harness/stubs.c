@@ -57,6 +57,7 @@ void            buttons_refresh(button_data_t *d) {
     if (d->type == BTN_TEXT_FN) printf("[button] %s\n", d->label_fn());
 }
 void button_next_page_cb(button_data_t *d) { stub_page = d->next; }
+void button_prev_page_cb(button_data_t *d) { stub_page = d->prev; }
 
 void knobs_display(bool v) { (void)v; }
 void waterfall_refresh_period_set(uint8_t k) { (void)k; }
