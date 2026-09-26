@@ -57,6 +57,7 @@ js8_rx_msg_t to_c(const RxFrame &f, const std::string &my_call) {
 
     auto mc    = classify(f.text, my_call);
     m.heartbeat = mc.heartbeat;
+    m.snr_report = mc.snr_report;
     m.cq        = mc.cq;
     m.to_me     = mc.to_me;
     m.to_group  = mc.to_group;

@@ -106,7 +106,7 @@
 
 typedef enum {
     SHOW_ALL,       /* everything, heartbeats included */
-    SHOW_NO_HB,     /* everything except heartbeats */
+    SHOW_NO_HB,     /* everything except heartbeats and SNR reports */
     SHOW_DIRECTED,  /* to me, or to a group (not HB/CQ) */
     SHOW_COUNT,
 } show_t;
@@ -385,7 +385,8 @@ static bool passes_filter(const js8_rx_msg_t *m) {
     if (m->tx) return true;
     switch (show) {
     case SHOW_ALL:      return true;
-    case SHOW_NO_HB:    return !m->heartbeat || m->to_me; /* e.g. HB acks to us */
+    /* SNR reports go with heartbeats: mostly answers to them. */
+    case SHOW_NO_HB:    return !(m->heartbeat || m->snr_report) || m->to_me; /* e.g. HB acks to us */
     case SHOW_DIRECTED:
         /* Also everything on the selected station's frequency: in a long
          * QSO they often stop putting your call in. */

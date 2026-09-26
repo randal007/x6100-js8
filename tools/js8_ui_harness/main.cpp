@@ -884,6 +884,19 @@ int main() {
         printf("[page] hold with a list open -> '%s' (want (JS8 1:6)), list closed: %s\n", ui_button_label(0),
                ui_focus_is_table() ? "yes" : "no");
 
+        // 8. Show: No HB hides SNR reports too (mostly heartbeat answers).
+        if (!getenv("SKIP_SNR")) {
+            ui_page(1);
+            feed_band({{"W1ABC", "FN42", "N0XYZ", "N0XYZ SNR -12", 1500, 0.05f}});
+            printf("[snr] No HB: report shown=%d (want 0), label '%s'\n", ui_list_has("SNR -12"), ui_button_label(1));
+            ui_press(1); // No HB -> Directed
+            ui_press(1); // Directed -> All
+            pump(200);
+            printf("[snr] All: report shown=%d (want 1)\n", ui_list_has("SNR -12"));
+            ui_press(1); // back to No HB
+            pump(200);
+        }
+
         // 6. ESC in a text box closes only the text box.
         if (!getenv("SKIP_ESC")) {
         ui_page(1);

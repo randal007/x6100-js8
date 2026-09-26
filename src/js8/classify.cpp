@@ -73,6 +73,8 @@ MessageClass classify(const std::string &text, const std::string &my_call) {
         mc.to = first;
     }
 
+    if (!mc.to.empty() && !mc.to_group && tokens.size() > 2 && tokens[1] == "SNR") mc.snr_report = true;
+
     if (!my_call.empty() && !mc.to.empty() && !mc.to_group)
         mc.to_me = base_callsign(mc.to) == base_callsign(my_call);
 

@@ -38,6 +38,7 @@ typedef struct {
     uint8_t submode;  /* 0 Normal, 1 Fast, 2 Turbo, 4 Slow */
     bool    low_confidence;
     bool    heartbeat;
+    bool    snr_report; /* "CALL SNR -12", mostly answers to heartbeats */
     bool    cq;
     bool    to_me;
     bool    to_group;

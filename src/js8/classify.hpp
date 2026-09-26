@@ -15,6 +15,7 @@ struct MessageClass {
     std::string from;          ///< sender, if the text starts "CALL: "
     std::string to;            ///< first token after the sender: callsign or @GROUP
     bool        heartbeat = false;
+    bool        snr_report = false; ///< "CALL SNR -12": an answer to a heartbeat or SNR?
     bool        cq        = false;
     bool        to_me     = false; ///< addressed to my_call (or its base call)
     bool        to_group  = false; ///< addressed to an @GROUP (including @ALLCALL)

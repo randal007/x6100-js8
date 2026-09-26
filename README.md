@@ -140,7 +140,7 @@ The first button on each row turns the page (`JS8 1:6` … `6:6`).
 
 | Page | Button | Does |
 |---|---|---|
-| 1 | **Show: No HB / Directed / All** | Filter the list. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). |
+| 1 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). |
 | 1 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 1 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |

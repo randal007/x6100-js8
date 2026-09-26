@@ -306,6 +306,13 @@ TEST_CASE("classify recognises heartbeats, CQs and messages to me", "[js8][class
     auto dm = classify("W1ABC: K2XYZ SNR?", "k2xyz");
     CHECK(dm.to_me);
     CHECK(dm.to == "K2XYZ");
+    CHECK_FALSE(dm.snr_report); // a question, not a report
+
+    // SNR reports (mostly answers to heartbeats), hidden with the heartbeats.
+    CHECK(classify("W1ABC: N0XYZ SNR -12", "K2XYZ").snr_report);
+    CHECK(classify("W1ABC: K2XYZ SNR +03", "K2XYZ").snr_report);
+    CHECK_FALSE(classify("W1ABC: @ALLCALL SNR -12", "K2XYZ").snr_report);
+    CHECK_FALSE(classify("W1ABC: N0XYZ HELLO SNR -12", "K2XYZ").snr_report);
 
     // Portable and prefixed forms of my call still count as me.
     CHECK(classify("W1ABC: K2XYZ/P HELLO", "K2XYZ").to_me);
