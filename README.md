@@ -158,11 +158,11 @@ mistaken for a grid.
 ## The buttons
 
 The first button on each row turns the page (`JS8 1:6` … `6:6`); hold it
-to go back a page.
+to go back a page. In JS8 a hold is half a second.
 
 | Page | Button | Does |
 |---|---|---|
-| 1 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then another a minute after each one ends (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
+| 1 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
 | 1 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. |
 | 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |

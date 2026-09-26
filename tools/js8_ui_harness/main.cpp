@@ -996,19 +996,24 @@ int main() {
         ui_page(1);
         ui_hold(1);
         pump(300);
-        printf("[autocq] after hold: '%s', CQ rows %d (its row comes with its slot)\n", ui_button_label(1), ui_list_count("CQ CQ CQ"));
-        printf("[autocq] while it goes: '%s' (want sending)\n", ui_button_label(1));
-        // The minute counts from the END of the CQ, not from when it was queued.
+        printf("[autocq] after hold: '%s' (want CQ: knob < 1 min >)\n", ui_button_label(1));
+        ui_rotary(1); // 2 min
+        pump(100);
+        printf("[autocq] knob: '%s' (want < 2 min >)\n", ui_button_label(1));
+        ui_press(1); // done setting, auto CQ keeps going
+        pump(300);
+        printf("[autocq] after press: '%s' (want sending)\n", ui_button_label(1));
+        // The interval counts from the END of the CQ, not from when it was queued.
         for (int i = 0; i < 90 && strstr(ui_button_label(1), "sending"); i++) pump(1000);
         struct timespec t0, t1;
         clock_gettime(CLOCK_MONOTONIC, &t0);
         int frames = stub_tx_frames;
         pump(1500);
-        printf("[autocq] just after it ended: '%s' (want ~59 s)\n", ui_button_label(1));
-        for (int i = 0; i < 1000 && stub_tx_frames == frames; i++) pump(100);
+        printf("[autocq] just after it ended: '%s' (want ~1:59)\n", ui_button_label(1));
+        for (int i = 0; i < 1800 && stub_tx_frames == frames; i++) pump(100);
         clock_gettime(CLOCK_MONOTONIC, &t1);
         double gap = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
-        printf("[autocq] end of CQ to next CQ on air: %.1f s (want 60-75: a minute, then the next slot)\n", gap);
+        printf("[autocq] end of CQ to next CQ on air: %.1f s (want 120-135: 2 min, then the next slot)\n", gap);
         printf("[autocq] the next one: CQ rows %d (want 2)\n", ui_list_count("CQ CQ CQ"));
         screenshot("u02_autocq.ppm");
         // Someone answers: auto CQ off.
@@ -1019,9 +1024,18 @@ int main() {
         for (int i = 0; i < 40; i++) pump(500); // let any TX finish
         ui_hold(1);
         pump(300);
-        ui_press(1);
+        printf("[autocq] hold again: '%s' (want < 2 min >: remembered)\n", ui_button_label(1));
+        ui_press(1); // done setting
         pump(300);
-        printf("[autocq] hold then press: '%s' (want CQ), info row %d\n", ui_button_label(1),
+        ui_hold(1); // auto CQ on: hold sets the interval again
+        pump(300);
+        printf("[autocq] hold while on: '%s' (want knob)\n", ui_button_label(1));
+        ui_key(LV_KEY_ESC); // ESC ends setting, auto CQ stays on
+        pump(300);
+        printf("[autocq] after ESC: running %d\n", strstr(ui_button_label(1), "CQ auto") != NULL);
+        ui_press(1); // stop
+        pump(300);
+        printf("[autocq] then press: '%s' (want CQ), info row %d\n", ui_button_label(1),
                ui_list_has("Auto CQ off: manual"));
         return 0;
     }

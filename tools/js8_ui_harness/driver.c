@@ -23,6 +23,7 @@ void ui_init(void) {
     strcpy(params.qth.x, "FN42AB");
     params.js8_hold_offset.x = false; /* the firmware defaults */
     params.js8_hb_interval.x = 30;
+    params.js8_cq_interval.x = 1;
     params.js8_log_prompt.x  = true;
     params.js8_log_activation.x = 0;
     params.js8_alerts.x = 7;

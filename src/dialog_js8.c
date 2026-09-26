@@ -104,7 +104,8 @@
 #define HISTORY          300    /* messages kept for re-filtering */
 #define MAX_ROWS         200    /* rows shown before trimming to KEEP_ROWS */
 #define KEEP_ROWS        150
-#define AUTO_CQ_MS       60000 /* auto CQ: a minute after our last TX ends (desktop's shortest repeat) */
+#define CQ_MIN_INTERVAL  1      /* auto CQ: minutes after our last TX ends (desktop's shortest: 1) */
+#define CQ_MAX_INTERVAL  30
 #define READ_PAUSE_MS    30000 /* list follows new rows again this long after the last MFK move */
 #define HOLD_MS          500      /* a button held this long is a hold (1 s elsewhere) */
 #define CUSTOM_MIN_HZ    1800000  /* custom dial frequency: 160m ... */
@@ -133,6 +134,9 @@ static void        stop_tx_cb(button_data_t *btn);
 static void        hw_cpy_cb(button_data_t *btn);
 static void        cq_cb(button_data_t *btn);
 static const char *cq_label_getter(void);
+static int64_t     cq_interval_ms(void);
+static void        cq_adjust_end(void);
+static void        cq_adjust_turn(int32_t diff);
 static void        cq_hold_cb(button_data_t *btn);
 static void        auto_cq_stop(const char *why);
 static void        auto_cq_tick(void);
@@ -280,10 +284,13 @@ static lv_obj_t      *log_grid_btn;    /* the popup's Grid item */
  * js8_hb, js8_hb_ack, js8_hb_interval), all off by default. */
 static js8_auto_t *autop;
 static int64_t     hb_next_ms;       /* 0: send the first one at the next chance */
-static bool        auto_cq;          /* hold CQ: a CQ every AUTO_CQ_MS until answered */
+static bool        auto_cq;          /* hold CQ: a CQ every js8_cq_interval min until answered */
 static int64_t     auto_cq_next_ms;
+static int64_t     auto_cq_from_ms;  /* the interval counts from here: our last TX's end */
 static bool        hb_adjusting;     /* main knob sets the HB interval */
 static int64_t     hb_adjust_ms;     /* last knob turn while adjusting */
+static bool        cq_adjusting;     /* main knob sets the auto CQ interval */
+static int64_t     cq_adjust_ms;
 static char        info_text[TEXT_MAX + 1], status_text[TEXT_MAX + 1];
 static char        last_pota[16], last_sota[24]; /* last park / summit spotted via APRS */
 /* The spot form (APRS > POTA/SOTA spot), remembered in JS8_TEXTS_PATH. */
@@ -1238,7 +1245,8 @@ static void ui_tx_done(void *arg) {
     /* Auto CQ counts its minute from the end of what we sent, as desktop
      * restarts its CQ timer after any transmission. */
     if (auto_cq) {
-        auto_cq_next_ms = now_wall_ms() + AUTO_CQ_MS;
+        auto_cq_from_ms = now_wall_ms();
+        auto_cq_next_ms = auto_cq_from_ms + cq_interval_ms();
         if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
     }
 
@@ -1293,6 +1301,13 @@ static void update_tx_bar(void) {
     char     line[JS8_RX_TEXT_LEN + 64];
     uint16_t offset = params.js8_tx_freq.x;
 
+    if (cq_adjusting && tx_status.state == JS8_TX_IDLE) {
+        snprintf(line, sizeof(line), "Auto CQ %u min after each CQ: turn the knob (%d-%d), press CQ when done",
+                 params.js8_cq_interval.x, CQ_MIN_INTERVAL, CQ_MAX_INTERVAL);
+        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x5a4a00), 0);
+        lv_label_set_text(tx_bar, line);
+        return;
+    }
     if (hb_adjusting && tx_status.state == JS8_TX_IDLE) {
         snprintf(line, sizeof(line), "HB every %u min: turn the knob (5-30), press HB when done",
                  params.js8_hb_interval.x);
@@ -1413,6 +1428,10 @@ static void apply_hold(float their_freq) {
  * frequency stays locked. */
 static void rotary_cb(int32_t diff) {
     user_touch();
+    if (cq_adjusting) {
+        cq_adjust_turn(diff);
+        return;
+    }
     if (hb_adjusting) {
         int v = (int)params.js8_hb_interval.x + (diff > 0 ? 1 : -1);
         if (v < JS8_HB_MIN_INTERVAL) v = JS8_HB_MIN_INTERVAL;
@@ -1677,7 +1696,9 @@ static void key_cb(lv_event_t *e) {
     case LV_KEY_ESC:
         LV_LOG_USER("JS8 ESC on the list: tick %u composing %d popup %d tx %d", (unsigned)lv_tick_get(), composing,
                     any_popup(), js8_tx_busy(tx));
-        if (hb_adjusting) {
+        if (cq_adjusting) {
+            cq_adjust_end();
+        } else if (hb_adjusting) {
             hb_adjusting = false;
             update_tx_bar();
         } else if (js8_tx_busy(tx)) {
@@ -2106,21 +2127,68 @@ static bool send_cq(bool automatic) {
     return true;
 }
 
+static int64_t cq_interval_ms(void) {
+    unsigned m = params.js8_cq_interval.x;
+    if (m < CQ_MIN_INTERVAL || m > CQ_MAX_INTERVAL) m = CQ_MIN_INTERVAL;
+    return (int64_t)m * 60000;
+}
+
 static const char *cq_label_getter(void) {
     static char buf[24];
+    if (cq_adjusting) {
+        snprintf(buf, sizeof(buf), "CQ: knob\n< %u min >", params.js8_cq_interval.x);
+        return buf;
+    }
     if (!auto_cq) return "CQ";
-    int secs = (int)((auto_cq_next_ms - now_wall_ms() + 999) / 1000);
     if (js8_tx_busy(tx)) return "CQ auto:\nsending";
+    int secs = (int)((auto_cq_next_ms - now_wall_ms() + 999) / 1000);
     if (secs < 1) return "CQ auto:\nnow";
-    snprintf(buf, sizeof(buf), "CQ auto:\n%d s", secs);
+    if (secs < 60) snprintf(buf, sizeof(buf), "CQ auto:\n%d s", secs);
+    else snprintf(buf, sizeof(buf), "CQ auto:\n%d:%02d", secs / 60, secs % 60);
     return buf;
 }
 
-/* Press: one CQ; with auto CQ on, back to manual (auto off). */
+/* Setting the auto CQ interval with the main knob, as for HB: press CQ
+ * (or wait) to finish. */
+static void cq_adjust_start(void) {
+    hb_adjusting = false;
+    cq_adjusting = true;
+    cq_adjust_ms = now_wall_ms();
+    if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
+    if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
+    update_tx_bar();
+}
+
+static void cq_adjust_end(void) {
+    if (!cq_adjusting) return;
+    cq_adjusting = false;
+    if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
+    update_tx_bar();
+    if (auto_cq) msg_update_text_fmt("Auto CQ %u min after each CQ (press CQ to stop)", params.js8_cq_interval.x);
+}
+
+/* Knob turn while setting it: the next CQ moves with it. */
+static void cq_adjust_turn(int32_t diff) {
+    int v = (int)params.js8_cq_interval.x + (diff > 0 ? 1 : -1);
+    if (v < CQ_MIN_INTERVAL) v = CQ_MIN_INTERVAL;
+    if (v > CQ_MAX_INTERVAL) v = CQ_MAX_INTERVAL;
+    params_uint16_set(&params.js8_cq_interval, (uint16_t)v);
+    cq_adjust_ms = now_wall_ms();
+    if (auto_cq && !js8_tx_busy(tx)) auto_cq_next_ms = auto_cq_from_ms + cq_interval_ms();
+    if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
+    update_tx_bar();
+}
+
+/* Press: one CQ; while setting the interval, done; with auto CQ on, back
+ * to manual (auto off). */
 static void cq_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
     (void)btn;
+    if (cq_adjusting) {
+        cq_adjust_end();
+        return;
+    }
     if (auto_cq) {
         auto_cq_stop("manual");
         return;
@@ -2128,30 +2196,34 @@ static void cq_cb(button_data_t *btn) {
     send_cq(false);
 }
 
-/* Hold: auto CQ - one now, then one a minute after each ends, until
- * someone answers, you press CQ, reply to someone, stop TX or change band. */
+/* Hold: auto CQ - one now, then one js8_cq_interval minutes after each
+ * ends, until someone answers, you press CQ, reply to someone, stop TX or
+ * change band. The knob sets the interval straight away; holding CQ while
+ * auto CQ runs sets it again. */
 static void cq_hold_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
-    if (auto_cq) return;
-    /* Busy sending: the first CQ right after. Otherwise one now; the
-     * minute starts when it ends (ui_tx_done). */
-    int64_t next = now_wall_ms();
-    if (!js8_tx_busy(tx)) {
-        if (!send_cq(false)) return;
-        next += AUTO_CQ_MS;
+    if (auto_cq) {
+        cq_adjust_start();
+        return;
     }
+    /* Busy sending: the first CQ right after. Otherwise one now; the
+     * interval starts when it ends (ui_tx_done). */
+    int64_t now = now_wall_ms();
+    if (!js8_tx_busy(tx) && !send_cq(false)) return;
     auto_cq         = true;
-    auto_cq_next_ms = next;
+    auto_cq_from_ms = now;
+    auto_cq_next_ms = js8_tx_busy(tx) ? now + cq_interval_ms() : now;
     buttons_refresh(btn);
-    msg_update_text_fmt("Auto CQ on: a minute after each CQ, until answered (press CQ to stop)");
     add_info_row("Auto CQ on");
-    update_tx_bar();
+    cq_adjust_start();
+    msg_update_text_fmt("Auto CQ on: turn the knob to set the minutes, press CQ when done");
 }
 
 static void auto_cq_stop(const char *why) {
     if (!auto_cq) return;
-    auto_cq = false;
+    auto_cq      = false;
+    cq_adjusting = false;
     if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
     msg_update_text_fmt("Auto CQ off: %s", why);
     add_info_row("Auto CQ off: %s", why);
@@ -2160,6 +2232,7 @@ static void auto_cq_stop(const char *why) {
 
 /* Once a second: the next CQ when it's due (and the button's countdown). */
 static void auto_cq_tick(void) {
+    if (cq_adjusting && now_wall_ms() - cq_adjust_ms > HB_ADJUST_MS) cq_adjust_end();
     if (!auto_cq) return;
     int64_t now = now_wall_ms();
     if (js8_auto_idle(autop, now)) {
@@ -2169,7 +2242,8 @@ static void auto_cq_tick(void) {
     if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
     if (now < auto_cq_next_ms || js8_tx_busy(tx) || composing || any_popup()) return;
     if (send_cq(true)) {
-        auto_cq_next_ms = now + AUTO_CQ_MS; /* restarted when it ends */
+        auto_cq_from_ms = now;
+        auto_cq_next_ms = now + cq_interval_ms(); /* restarted when it ends */
     } else {
         auto_cq_stop("could not send");
     }
@@ -2617,6 +2691,7 @@ static const char *hb_label_getter(void) {
 /* Off -> On, straight into setting the interval with the knob; press
  * again (or wait) to finish; press once more to turn heartbeats off. */
 static void hb_adjust_start(button_data_t *btn) {
+    if (cq_adjusting) cq_adjust_end();
     hb_adjusting    = true;
     hb_adjust_ms    = now_wall_ms();
     buttons_refresh(btn);
