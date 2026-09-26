@@ -31,7 +31,13 @@ void ui_hold(int i);
 int  ui_list_count(const char *text);
 int  ui_popup_has(const char *text);
 void ui_compose_clear(void);
+void ui_indevs_init(void);
+int  ui_kb_select_ok(void);
+void ui_mfk_turn(int32_t diff);
+void ui_mfk_set(bool down);
+void ui_keypad_set(uint32_t key, bool down);
 extern int stub_tx_frames;
+extern int stub_usb_kbd;
 extern int32_t stub_tx_offset;
 extern uint32_t stub_tx_samples;
 extern int16_t stub_tx_peak;
@@ -378,9 +384,11 @@ int main() {
         ui_compose_append("FIRST JS8 TEST");
         ui_compose_enter();
         pump(300);
-        printf("[log] back in the log popup, focused '%s'\n", ui_focused_text());
+        printf("[log] back in the log popup, focused '%s' (want Comment: FIRST JS8 TEST)\n", ui_focused_text());
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_LEFT);
+        printf("[log] three steps back: '%s' (want Save to log)\n", ui_focused_text());
         ui_key(LV_KEY_LEFT);
-        printf("[log] one step back: '%s' (want Cancel)\n", ui_focused_text());
+        printf("[log] one more: '%s' (want Cancel)\n", ui_focused_text());
         ui_key(LV_KEY_RIGHT);
         screenshot("26_log_comment.ppm");
         ui_click_focused(); // Save to log
@@ -826,6 +834,24 @@ int main() {
     }
     if (getenv("ONLY_URGENT")) {
         // Beta 2 urgent fixes (docs/BETA2_URGENT_PLAN.md), one block each.
+        ui_indevs_init();
+        // Real knob presses: held for `ms`, then released.
+        auto mfk_click = [](int ms = 150) {
+            ui_mfk_set(true);
+            pump(ms);
+            ui_mfk_set(false);
+            pump(150);
+        };
+        auto mfk_turn = [](int steps) {
+            ui_mfk_turn(steps);
+            pump(100);
+        };
+        auto esc = [](int ms = 150) {
+            ui_keypad_set(LV_KEY_ESC, true);
+            pump(ms);
+            ui_keypad_set(LV_KEY_ESC, false);
+            pump(150);
+        };
         pump(300);
 
         // 1. CQ switches heartbeats off.
@@ -855,6 +881,62 @@ int main() {
         pump(200);
         printf("[page] hold with a list open -> '%s' (want (JS8 1:6)), list closed: %s\n", ui_button_label(0),
                ui_focus_is_table() ? "yes" : "no");
+
+        // 6. ESC in a text box closes only the text box.
+        if (!getenv("SKIP_ESC")) {
+        ui_page(1);
+        ui_press(3); // Send...
+        pump(200);
+        printf("[esc] Send... open, focus: %s\n", ui_focus_desc());
+        esc();
+        printf("[esc] after ESC: running %d (want 1), focus: %s (want message list)\n", ui_running(), ui_focus_desc());
+        if (!ui_running()) return 0;
+        ui_press(3);
+        pump(200);
+        esc(1400); // a long press, past LVGL's 1 s long-press time
+        printf("[esc] after a long ESC: running %d (want 1), focus: %s\n", ui_running(), ui_focus_desc());
+        if (!ui_running()) return 0;
+        }
+
+        // 5. Log QSO: Enter in the Name field doesn't log.
+        unlink(JS8_LOG_PATH);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+        ui_select_row_from("N0XYZ");
+        ui_page(5);
+        ui_press(2); // Log QSO
+        pump(200);
+        printf("[log] open, focused '%s'\n", ui_focused_text());
+        mfk_turn(2);
+        printf("[log] after 2 MFK steps: '%s' (want Name: (none))\n", ui_focused_text());
+        mfk_click();
+        printf("[log] after MFK press, focus: %s (want keyboard)\n", ui_focus_desc());
+        ui_compose_append("BOB");
+        printf("[log] OK key found: %d\n", ui_kb_select_ok());
+        mfk_click();
+        pump(300);
+        FILE *lf = fopen(JS8_LOG_PATH, "r");
+        printf("[log] after Enter: logged %d (want 0), focused '%s' (want Name: BOB)\n", lf != NULL,
+               ui_focused_text());
+        if (lf) fclose(lf);
+        screenshot("u05_log_after_name.ppm");
+        // Again with a USB keyboard: no on-screen keyboard, Enter goes to
+        // the text box itself.
+        stub_usb_kbd = 1;
+        for (int i = 0; i < 6 && strncmp(ui_focused_text(), "Name", 4) != 0; i++) mfk_turn(1);
+        printf("[log-usb] on '%s'\n", ui_focused_text());
+        mfk_click();
+        printf("[log-usb] editing, focus: %s (want textarea)\n", ui_focus_desc());
+        ui_compose_clear();
+        ui_compose_append("ROBERT");
+        ui_keypad_set(LV_KEY_ENTER, true);
+        pump(120);
+        ui_keypad_set(LV_KEY_ENTER, false);
+        pump(300);
+        lf = fopen(JS8_LOG_PATH, "r");
+        printf("[log-usb] after Enter: logged %d (want 0), focused '%s' (want Name: ROBERT)\n", lf != NULL,
+               ui_focused_text());
+        if (lf) fclose(lf);
+        stub_usb_kbd = 0;
         return 0;
     }
     if (getenv("ONLY_TEXTS")) {

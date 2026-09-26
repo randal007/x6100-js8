@@ -146,3 +146,58 @@ void ui_page(int n) {
     }
     printf("[harness] could not reach page %d\n", n);
 }
+
+/* Real input devices, as on the radio: the MFK knob is an LVGL encoder
+ * (turn + press) and ESC is the VOL knob's press on a keypad (keypad.c),
+ * both in keyboard_group. Unlike ui_key() these go through LVGL's indev
+ * code, so press and release are separate events, as on the radio. */
+static int32_t  mfk_diff;
+static bool     mfk_down;
+static uint32_t kp_key = LV_KEY_ESC;
+static bool     kp_down;
+
+static void mfk_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+    (void)drv;
+    data->enc_diff = (int16_t)mfk_diff;
+    mfk_diff       = 0;
+    data->state    = mfk_down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+static void kp_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+    (void)drv;
+    data->key   = kp_key;
+    data->state = kp_down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+void ui_indevs_init(void) {
+    static lv_indev_drv_t mfk, kp;
+    lv_indev_drv_init(&mfk);
+    mfk.type    = LV_INDEV_TYPE_ENCODER;
+    mfk.read_cb = mfk_read;
+    lv_indev_set_group(lv_indev_drv_register(&mfk), keyboard_group);
+    lv_indev_drv_init(&kp);
+    kp.type            = LV_INDEV_TYPE_KEYPAD;
+    kp.read_cb         = kp_read;
+    kp.long_press_time = 1000; /* keypad.c */
+    lv_indev_set_group(lv_indev_drv_register(&kp), keyboard_group);
+}
+void ui_mfk_turn(int32_t diff) { mfk_diff += diff; }
+void ui_mfk_set(bool down) { mfk_down = down; }
+void ui_keypad_set(uint32_t key, bool down) {
+    kp_key  = key;
+    kp_down = down;
+}
+/* Put the on-screen keyboard's cursor on its OK (tick) key, as turning
+ * MFK would. Returns 0 if there's no keyboard. */
+int ui_kb_select_ok(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_keyboard_class)) return 0;
+    for (uint16_t i = 0; i < 64; i++) {
+        const char *t = lv_btnmatrix_get_btn_text(f, i);
+        if (t && strcmp(t, LV_SYMBOL_OK) == 0) {
+            lv_btnmatrix_set_selected_btn(f, i);
+            return 1;
+        }
+    }
+    return 0;
+}

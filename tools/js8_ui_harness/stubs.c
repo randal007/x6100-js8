@@ -97,7 +97,8 @@ static int dummy_pwr;
 ParamFloat *cfg_pwr = (ParamFloat *)&dummy_pwr;
 float param_f_get(const ParamFloat *p) { (void)p; return 10.0f; }  /* radio set to 10 W */
 void  radio_set_pwr(float w) { printf("[radio] power %.0f W\n", w); }
-bool  keyboard_ready() { return false; }                          /* show the on-screen keyboard */
+int   stub_usb_kbd;                                                /* a USB keyboard is plugged in */
+bool  keyboard_ready() { return stub_usb_kbd; }                   /* else show the on-screen keyboard */
 void  params_uint16_set(params_uint16_t *var, uint16_t x) { var->x = x; }
 
 float tx_player_base_gain_offset(void) { return -9.4f; }

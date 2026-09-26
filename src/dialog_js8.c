@@ -165,7 +165,7 @@ static bool        any_popup(void);
 static void        log_cb(button_data_t *btn);
 static void        log_close(void);
 static void        log_offer(const char *call);
-static void        log_list_open(void);
+
 static void        log_refresh(void);
 static const char *inbox_label_getter(void);
 static void        inbox_cb(button_data_t *btn);
@@ -279,6 +279,10 @@ typedef enum {
     EDIT_ALERT_WORDS, /* then back to the Alerts popup */
     EDIT_COUNT,
 } edit_t;
+
+/* The Log popup's items. */
+typedef enum { LOG_SAVE, LOG_GRID, LOG_NAME, LOG_NOTE, LOG_CANCEL } log_item_t;
+static void log_list_open(log_item_t focus);
 
 static void log_edit_done(const char *value);
 static void alerts_show(void);
@@ -1441,6 +1445,8 @@ static void key_cb(lv_event_t *e) {
 
     switch (key) {
     case LV_KEY_ESC:
+        LV_LOG_USER("JS8 ESC on the list: tick %u composing %d popup %d tx %d", (unsigned)lv_tick_get(), composing,
+                    any_popup(), js8_tx_busy(tx));
         if (hb_adjusting) {
             hb_adjusting = false;
             update_tx_bar();
@@ -2792,8 +2798,6 @@ static void log_save(void) {
     if (view_stations) rebuild_station_rows();
 }
 
-typedef enum { LOG_SAVE, LOG_GRID, LOG_NAME, LOG_NOTE, LOG_CANCEL } log_item_t;
-
 static void log_item_cb(lv_event_t *e) {
     log_item_t item = (log_item_t)(intptr_t)lv_event_get_user_data(e);
     if (item == LOG_SAVE || item == LOG_CANCEL) {
@@ -2847,7 +2851,8 @@ static void log_refresh(void) {
     }
 }
 
-static void log_list_open(void) {
+/* `focus`: the item to start on - Save, or the field just edited. */
+static void log_list_open(log_item_t focus) {
     lv_group_remove_obj(table);
     log_list = lv_list_create(dialog.obj);
     lv_obj_set_size(log_list, 560, WF_HEIGHT - 10);
@@ -2868,24 +2873,25 @@ static void log_list_open(void) {
     log_reports = lv_list_add_text(log_list, line);
     lv_obj_set_style_text_font(log_reports, &sony_22, 0);
 
-    lv_obj_t *save = log_add(LOG_SAVE, "Save to log");
-    lv_obj_set_style_text_color(save, lv_color_hex(0x80ff80), 0);
+    lv_obj_t *items[LOG_CANCEL + 1];
+    items[LOG_SAVE] = log_add(LOG_SAVE, "Save to log");
+    lv_obj_set_style_text_color(items[LOG_SAVE], lv_color_hex(0x80ff80), 0);
     snprintf(line, sizeof(line), "Grid: %s", log_entry.grid[0] ? log_entry.grid : "(none)");
-    log_grid_btn = log_add(LOG_GRID, line);
+    log_grid_btn = items[LOG_GRID] = log_add(LOG_GRID, line);
     snprintf(line, sizeof(line), "Name: %s", log_entry.name[0] ? log_entry.name : "(none)");
-    log_add(LOG_NAME, line);
+    items[LOG_NAME] = log_add(LOG_NAME, line);
     snprintf(line, sizeof(line), "Comment: %s", log_entry.comment[0] ? log_entry.comment : "(none)");
-    log_add(LOG_NOTE, line);
+    items[LOG_NOTE] = log_add(LOG_NOTE, line);
     if (log_entry.pota_ref[0] || log_entry.sota_ref[0]) {
         snprintf(line, sizeof(line), "Activating %s %s", log_entry.pota_ref[0] ? "POTA" : "SOTA",
                  log_entry.pota_ref[0] ? log_entry.pota_ref : log_entry.sota_ref);
         t = lv_list_add_text(log_list, line);
         lv_obj_set_style_text_font(t, &sony_22, 0);
     }
-    lv_obj_t *cancel = log_add(LOG_CANCEL, "Cancel");
-    lv_obj_set_style_text_color(cancel, lv_color_hex(0xffc040), 0);
+    items[LOG_CANCEL] = log_add(LOG_CANCEL, "Cancel");
+    lv_obj_set_style_text_color(items[LOG_CANCEL], lv_color_hex(0xffc040), 0);
     lv_group_set_editing(keyboard_group, false);
-    lv_group_focus_obj(save);
+    lv_group_focus_obj(items[focus]);
 }
 
 /* Back from the keyboard: keep the value (NULL: cancelled), reopen. */
@@ -2932,7 +2938,8 @@ static void log_edit_done(const char *text) {
         if (btn_act.disp_btn) buttons_refresh(&btn_act);
         return;
     }
-    log_list_open();
+    /* Back on the field just edited: Save is a separate, deliberate step. */
+    log_list_open(target == EDIT_LOG_GRID ? LOG_GRID : target == EDIT_LOG_NAME ? LOG_NAME : LOG_NOTE);
 }
 
 static void log_cb(button_data_t *btn) {
@@ -2958,7 +2965,7 @@ static void log_cb(button_data_t *btn) {
         return;
     }
     log_prepare(call);
-    log_list_open();
+    log_list_open(LOG_SAVE);
 }
 
 /* A two-way QSO ended with 73 / SK. */
@@ -2974,7 +2981,7 @@ static void log_offer(const char *call) {
         return;
     }
     log_prepare(call);
-    log_list_open();
+    log_list_open(LOG_SAVE);
     msg_update_text_fmt("QSO with %s ended - Save to log?", call);
 }
 
