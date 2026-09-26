@@ -195,12 +195,14 @@ static void        freq_close(void);
 static void        freq_show(void);
 static void        tune_custom(const char *khz);
 static bool        parse_custom(const char *text, int32_t *out);
-typedef enum { SP_SEND, SP_REF, SP_FREQ, SP_TYPE_FREQ, SP_MODE, SP_NOTE, SP_CLOSE, SP_COUNT } spot_item_t;
+typedef enum { SP_SEND, SP_REF, SP_FREQ, SP_MODE, SP_NOTE, SP_CLOSE, SP_COUNT } spot_item_t;
 static bool        spot_sota; /* the spot form is for SOTA, else POTA */
 static bool        spot_parse_freq(const char *text, int32_t *out);
+static bool        spot_freq_empty(const char *text);
 static void        spot_show(bool sota, spot_item_t focus);
 static void        spot_close(void);
 static void        aprs_beacon(bool gps, const char *message);
+static void        beacon_changed_cb(lv_event_t *e);
 #define APRS_COMMENT_MAX 43 /* an APRS position report's comment */
 static const char *where_label(void);
 static void        alert_check(js8_rx_msg_t *m, bool new_station);
@@ -1521,7 +1523,9 @@ static void compose_close(void) {
  * textarea_window's own close is then a no-op. */
 static bool compose_ok_cb(void) {
     if (edit_target == EDIT_FREQ && !parse_custom(textarea_window_get(), NULL)) return false;
-    if (edit_target == EDIT_SPOT_FREQ && !spot_parse_freq(textarea_window_get(), NULL)) return false;
+    if (edit_target == EDIT_SPOT_FREQ && !spot_freq_empty(textarea_window_get()) &&
+        !spot_parse_freq(textarea_window_get(), NULL))
+        return false;
     if (edit_target >= EDIT_LOG_GRID) {
         log_edit_done(textarea_window_get());
         return true;
@@ -1589,6 +1593,7 @@ static void compose_open(const char *prefill) {
         if (edit_target == EDIT_FREQ || edit_target == EDIT_SPOT_FREQ)
             lv_textarea_set_accepted_chars(text, "0123456789.");
         lv_obj_remove_event_cb(text, compose_changed_cb);
+        if (edit_target >= EDIT_BEACON_GRID) lv_obj_add_event_cb(text, beacon_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     }
     if (prefill && prefill[0]) {
         textarea_window_set(prefill);
@@ -1605,7 +1610,7 @@ static void compose_open(const char *prefill) {
             [EDIT_ALERT_WORDS] = " Calls or words, e.g. VE7ABC @POTA SOTA",
             [EDIT_FREQ]     = " Dial frequency in kHz, e.g. 7107",
             [EDIT_SPOT_REF] = " Park CA-1234 / summit VE7/LM-001",
-            [EDIT_SPOT_FREQ] = " kHz, e.g. 7185 (or MHz, 144.2)",
+            [EDIT_SPOT_FREQ] = " kHz, e.g. 7185 - empty: the JS8 dial",
             [EDIT_SPOT_NOTE] = " Comment, e.g. QRT or CQ",
             [EDIT_BEACON_GRID] = " Message (optional) - Enter sends",
             [EDIT_BEACON_GPS] = " Message (optional) - Enter sends",
@@ -2275,11 +2280,16 @@ static bool send_heartbeat(bool automatic) {
     return tx_queue_at(text, free_hb_offset(), automatic);
 }
 
+/* One now. With HB on, the automatic ones count again from this one, so
+ * a manual heartbeat isn't followed by an automatic one straight after. */
 static void heartbeat_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
     (void)btn;
-    send_heartbeat(false);
+    if (!send_heartbeat(false) || !params.js8_hb.x) return;
+    hb_next_ms = js8_next_heartbeat_ms(now_wall_ms(), params.js8_hb_interval.x);
+    add_info_row("HB timer restarted: next in %u min", params.js8_hb_interval.x);
+    update_status();
 }
 
 static const char *hold_label_getter(void) {
@@ -2988,39 +2998,64 @@ static bool aprs_gps(char grid[12], double *lat_out, double *lon_out) {
     return true;
 }
 
-/* An APRS position report: "=4916.50N/12305.10WG" + comment. "/G" is the
- * grid-square symbol, the one JS8Call's own grid spots use. */
+/* An APRS position report: "=4916.9 N/12307.2 WG MESSAGE". To about
+ * 185 m: minutes to one decimal, the last digit a space (APRS position
+ * ambiguity), which JS8 sends in far fewer bits than digits; the space
+ * before the message lets JS8's word compression take it whole (6 frames
+ * down to 5 for "MADE IT TO CAMP"). "/G" is the grid-square symbol, the
+ * one JS8Call's own grid spots use. */
 static void aprs_position(double lat, double lon, const char *comment, char *out, size_t size) {
     double alat = fabs(lat), alon = fabs(lon);
     int    lat_d = (int)alat, lon_d = (int)alon;
     double lat_m = (alat - lat_d) * 60.0, lon_m = (alon - lon_d) * 60.0;
-    if (lat_m >= 59.995) lat_d++, lat_m = 0; /* don't print 60.00 */
-    if (lon_m >= 59.995) lon_d++, lon_m = 0;
-    snprintf(out, size, "=%02d%05.2f%c/%03d%05.2f%cG%s", lat_d, lat_m, lat < 0 ? 'S' : 'N', lon_d, lon_m,
+    if (lat_m >= 59.95) lat_d++, lat_m = 0; /* don't print 60.0 */
+    if (lon_m >= 59.95) lon_d++, lon_m = 0;
+    snprintf(out, size, "=%02d%04.1f %c/%03d%04.1f %cG %s", lat_d, lat_m, lat < 0 ? 'S' : 'N', lon_d, lon_m,
              lon < 0 ? 'W' : 'E', comment);
 }
 
-/* Spot my grid / GPS position. No message: "@APRSIS GRID <grid>" as
- * desktop JS8Call sends it (the gateway adds frequency and SNR). With one:
- * the GRID command can't carry it, so a position report with the message
- * as its comment goes through CMD (the gateway passes it on as it is). */
-static void aprs_beacon(bool gps, const char *message) {
-    char   grid[12];
+/* What Spot my grid / GPS position sends. No message: "@APRSIS GRID
+ * <grid>" as desktop JS8Call sends it (the gateway adds frequency and
+ * SNR). With one: the GRID command can't carry it, so a position report
+ * with the message as its comment goes through CMD (the gateway passes it
+ * on as it is). False, with the reason shown, without a position. */
+static bool beacon_text(bool gps, const char *message, char *out, size_t size, char grid[12]) {
     double lat, lon;
-    if (gps ? !aprs_gps(grid, &lat, &lon) : !aprs_grid(grid, &lat, &lon)) return;
+    if (gps ? !aprs_gps(grid, &lat, &lon) : !aprs_grid(grid, &lat, &lon)) return false;
     while (*message == ' ') message++;
-    char text[96];
     if (!*message) {
-        snprintf(text, sizeof(text), "@APRSIS GRID %s", grid);
-        if (tx_queue(text))
-            add_info_row("APRS: spotting %s at %s%s", params.callsign.x, grid, gps ? " (GPS)" : "");
-        return;
+        snprintf(out, size, "@APRSIS GRID %s", grid);
+        return true;
     }
     char pos[80];
     aprs_position(lat, lon, message, pos, sizeof(pos));
-    snprintf(text, sizeof(text), APRS_CMD_RAW "%s", pos);
-    if (tx_queue(text))
+    snprintf(out, size, APRS_CMD_RAW "%s", pos);
+    return true;
+}
+
+static void aprs_beacon(bool gps, const char *message) {
+    char text[112], grid[12];
+    if (!beacon_text(gps, message, text, sizeof(text), grid)) return;
+    while (*message == ' ') message++;
+    if (!tx_queue(text)) return;
+    if (!*message)
+        add_info_row("APRS: spotting %s at %s%s", params.callsign.x, grid, gps ? " (GPS)" : "");
+    else
         add_info_row("APRS: position %s (%s%s) with \"%s\"", params.callsign.x, grid, gps ? ", GPS" : "", message);
+}
+
+/* While typing a beacon message: how long it will be on the air. */
+static void beacon_changed_cb(lv_event_t *e) {
+    (void)e;
+    char text[112], grid[12];
+    if (!beacon_text(edit_target == EDIT_BEACON_GPS, textarea_window_get(), text, sizeof(text), grid)) return;
+    js8_tx_preview_t pv;
+    js8_tx_preview(params.callsign.x, params.qth.x, text, cur_speed(), &pv);
+    if (!pv.ok) return;
+    const char *msg = textarea_window_get();
+    while (*msg == ' ') msg++;
+    if (*msg) msg_update_text_fmt("Position + message: %d frames, %.0f s", pv.frames, pv.seconds);
+    else msg_update_text_fmt("Plain position: %d frames, %.0f s - type a message, or Enter", pv.frames, pv.seconds);
 }
 
 static void aprs_close(void) {
@@ -3051,7 +3086,7 @@ static void aprs_item_cb(lv_event_t *e) {
         if (item == APRS_GRID ? !aprs_grid(NULL, NULL, NULL) : !aprs_gps(NULL, NULL, NULL)) break;
         edit_target = item == APRS_GRID ? EDIT_BEACON_GRID : EDIT_BEACON_GPS;
         compose_open(NULL);
-        msg_update_text_fmt("A message to go with your position (optional), then Enter");
+        beacon_changed_cb(NULL); /* the plain beacon's length, until you type */
         break;
     case APRS_POTA:
     case APRS_SOTA:
@@ -3195,6 +3230,11 @@ static void spot_body(char *out, size_t size) {
                  note);
 }
 
+static bool spot_freq_empty(const char *text) {
+    while (*text == ' ') text++;
+    return !*text;
+}
+
 /* kHz ("7185.5"), or MHz below 1000 ("144.2"); 1.8 MHz to 1.3 GHz. False,
  * with the reason shown, keeps the keyboard open to fix it. */
 static bool spot_parse_freq(const char *text, int32_t *out) {
@@ -3237,9 +3277,6 @@ static void spot_label(spot_item_t item, char *line, size_t size) {
     case SP_FREQ:
         format_mhz(spot_hz(), mhz, sizeof(mhz));
         snprintf(line, size, "Frequency: %s MHz (%s)", mhz, spot_use_typed && spot_typed_hz ? "typed" : "JS8 dial");
-        break;
-    case SP_TYPE_FREQ:
-        snprintf(line, size, "Type a frequency...");
         break;
     case SP_MODE:
         snprintf(line, size, "Mode: %s", spot_mode_now());
@@ -3303,16 +3340,7 @@ static void spot_item_cb(lv_event_t *e) {
         spot_refresh();
         return;
     }
-    case SP_FREQ: /* JS8 dial <-> the typed one; nothing typed yet: type it */
-        if (spot_typed_hz) {
-            spot_use_typed = !spot_use_typed;
-            save_texts();
-            spot_refresh();
-            return;
-        }
-        edit = EDIT_SPOT_FREQ;
-        break;
-    case SP_TYPE_FREQ:
+    case SP_FREQ: /* the keyboard, your last one filled in; empty = the JS8 dial */
         edit = EDIT_SPOT_FREQ;
         break;
     case SP_REF:
@@ -3325,7 +3353,7 @@ static void spot_item_cb(lv_event_t *e) {
         return;
     }
     /* A field: into the keyboard, then back here (see log_item_cb). */
-    char khz[16] = "";
+    char khz[16] = ""; /* the last one typed, even while spotting the dial */
     if (spot_typed_hz) format_khz(spot_typed_hz, khz, sizeof(khz));
     for (uint32_t i = 0; i < lv_obj_get_child_cnt(spot_list); i++) lv_group_remove_obj(lv_obj_get_child(spot_list, i));
     lv_obj_del_async(spot_list);
@@ -3336,7 +3364,7 @@ static void spot_item_cb(lv_event_t *e) {
     if (edit == EDIT_SPOT_REF)
         msg_update_text_fmt(spot_sota ? "Summit, e.g. VE7/LM-001" : "Park, e.g. CA-1234 (POTA uses US- and CA- now, not K- or VE-)");
     else if (edit == EDIT_SPOT_FREQ)
-        msg_update_text_fmt("Frequency you're on, in kHz (e.g. 7185) or MHz for VHF (144.2)");
+        msg_update_text_fmt("Frequency in kHz (7185) or MHz for VHF (144.2); clear it and Enter for the JS8 dial");
     else
         msg_update_text_fmt("Comment (optional; with none, a JS8 dial spot says JS8)");
 }
@@ -3633,9 +3661,9 @@ static void log_edit_done(const char *text) {
             save_texts();
             if (btn_act.disp_btn) buttons_refresh(&btn_act);
             break;
-        case EDIT_SPOT_FREQ:
-            spot_parse_freq(value, &spot_typed_hz);
-            spot_use_typed = true;
+        case EDIT_SPOT_FREQ: /* a frequency: spot it (remembered); empty: the JS8 dial */
+            if (spot_freq_empty(value)) spot_use_typed = false;
+            else spot_use_typed = spot_parse_freq(value, &spot_typed_hz);
             save_texts();
             break;
         case EDIT_SPOT_NOTE:

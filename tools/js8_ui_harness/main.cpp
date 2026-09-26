@@ -258,7 +258,7 @@ int main() {
         ui_compose_append("MADE IT TO CAMP");
         ui_compose_enter();
         wait_tx();
-        printf("[aprs] grid + message sent: %d\n", ui_list_has("@APRSIS CMD =4203.75N/07157.50WGMADE IT TO CAMP"));
+        printf("[aprs] grid + message sent: %d\n", ui_list_has("@APRSIS CMD =4203.8 N/07157.5 WG MADE IT TO CAMP"));
 
         // Spot GPS position (second item): no fix -> message only.
         ui_press(1);
@@ -284,7 +284,7 @@ int main() {
         ui_compose_append("made it to camp"); // typed in lower case
         ui_compose_enter();
         wait_tx();
-        printf("[aprs] GPS + message sent: %d\n", ui_list_has("@APRSIS CMD =4916.96N/12307.24WGMADE IT TO CAMP"));
+        printf("[aprs] GPS + message sent: %d\n", ui_list_has("@APRSIS CMD =4917.0 N/12307.2 WG MADE IT TO CAMP"));
         // Cancel: nothing goes.
         int frames = stub_tx_frames;
         ui_press(1);
@@ -350,21 +350,20 @@ int main() {
         ui_click_focused();
         pump(300);
         printf("[spot] again: focused '%s' (want Send spot)\n", ui_focused_text());
-        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 2; i++) ui_key(LV_KEY_RIGHT);
         printf("[spot] on '%s'\n", ui_focused_text());
-        ui_click_focused(); // Type a frequency...
+        ui_click_focused(); // Frequency -> keyboard
         pump(200);
         ui_compose_append("14285");
         ui_compose_enter();
         pump(300);
         printf("[spot] back on '%s'\n", ui_focused_text());
         ui_key(LV_KEY_RIGHT);
-        ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // Mode: DATA -> SSB
         pump(100);
         printf("[spot] '%s', preview SSB: %d\n", ui_focused_text(), ui_popup_has("APSPOT: ! POTA CA-1234 14.285 SSB"));
         screenshot("24_aprs_pota_ssb.ppm");
-        for (int i = 0; i < 4; i++) ui_key(LV_KEY_LEFT);
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_LEFT);
         ui_click_focused(); // Send spot
         wait_tx();
         printf("[spot] SSB sent: %d, no JS8 comment: %d\n", ui_list_has("APSPOT   :! POTA CA-1234 14.285 SSB"),
@@ -382,15 +381,20 @@ int main() {
         ui_compose_append("VE7/LM-001");
         ui_compose_enter();
         pump(300);
-        // Frequency back to the JS8 dial: DATA, "JS8".
+        // Frequency back to the JS8 dial (clear it, Enter): DATA, "JS8".
         ui_key(LV_KEY_RIGHT);
         ui_click_focused();
-        ui_key(LV_KEY_RIGHT);
+        pump(200);
+        printf("[spot] frequency box: '%s' (want 14285, the last typed)\n", ui_compose_text());
+        ui_compose_clear();
+        ui_compose_enter();
+        pump(300);
+        printf("[spot] back on '%s' (want JS8 dial)\n", ui_focused_text());
         ui_key(LV_KEY_RIGHT);
         for (int i = 0; i < 5; i++) ui_click_focused(); // SSB -> CW FM AM DV DATA
         pump(100);
         printf("[spot] SOTA: '%s'\n", ui_focused_text());
-        for (int i = 0; i < 4; i++) ui_key(LV_KEY_LEFT);
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_LEFT);
         ui_click_focused(); // Send spot
         wait_tx();
         printf("[spot] SOTA sent: %d\n", ui_list_has("APRS2SOTA:VE7/LM-001 14.078 DATA K2XYZ JS8"));
@@ -401,8 +405,8 @@ int main() {
         for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
-        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
-        ui_click_focused(); // Type a frequency...
+        for (int i = 0; i < 2; i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // Frequency
         pump(200);
         ui_compose_clear();
         ui_compose_append("1"); // 1 MHz: below 160m
@@ -1037,6 +1041,17 @@ int main() {
         pump(300);
         printf("[autocq] then press: '%s' (want CQ), info row %d\n", ui_button_label(1),
                ui_list_has("Auto CQ off: manual"));
+
+        // HB on, then a heartbeat by hand: the automatic ones count from it.
+        for (int i = 0; i < 40; i++) pump(500);
+        ui_page(4);
+        ui_press(2); // HB on (and the knob)
+        ui_press(2); // done
+        pump(300);
+        ui_page(1);
+        ui_press(2); // Heartbeat now
+        pump(300);
+        printf("[hb] manual heartbeat restarts the timer: %d\n", ui_list_has("HB timer restarted: next in 30 min"));
         return 0;
     }
     if (getenv("ONLY_COMPOSE")) {
