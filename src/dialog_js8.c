@@ -103,7 +103,7 @@
 #define HISTORY          300    /* messages kept for re-filtering */
 #define MAX_ROWS         200    /* rows shown before trimming to KEEP_ROWS */
 #define KEEP_ROWS        150
-#define AUTO_CQ_MS       60000 /* auto CQ: one a minute, start to start (desktop's shortest repeat) */
+#define AUTO_CQ_MS       60000 /* auto CQ: a minute after our last TX ends (desktop's shortest repeat) */
 #define READ_PAUSE_MS    30000 /* list follows new rows again this long after the last MFK move */
 #define CUSTOM_MIN_HZ    1800000  /* custom dial frequency: 160m ... */
 #define CUSTOM_MAX_HZ    54000000 /* ... to the top of 6m */
@@ -1229,6 +1229,12 @@ static void ui_tx_done(void *arg) {
     if (!completed) add_info_row("TX stopped");
     memset(&tx_status, 0, sizeof(tx_status));
     update_tx_bar();
+    /* Auto CQ counts its minute from the end of what we sent, as desktop
+     * restarts its CQ timer after any transmission. */
+    if (auto_cq) {
+        auto_cq_next_ms = now_wall_ms() + AUTO_CQ_MS;
+        if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
+    }
 
     /* An auto-reply that arrived while we were sending. */
     if (pending_auto_valid) {
@@ -2093,7 +2099,8 @@ static const char *cq_label_getter(void) {
     static char buf[24];
     if (!auto_cq) return "CQ";
     int secs = (int)((auto_cq_next_ms - now_wall_ms() + 999) / 1000);
-    if (secs < 1 || js8_tx_busy(tx)) return "CQ auto:\nnow";
+    if (js8_tx_busy(tx)) return "CQ auto:\nsending";
+    if (secs < 1) return "CQ auto:\nnow";
     snprintf(buf, sizeof(buf), "CQ auto:\n%d s", secs);
     return buf;
 }
@@ -2110,13 +2117,15 @@ static void cq_cb(button_data_t *btn) {
     send_cq(false);
 }
 
-/* Hold: auto CQ - one now, then every minute until someone answers, you
- * press CQ, reply to someone, stop TX or change band. */
+/* Hold: auto CQ - one now, then one a minute after each ends, until
+ * someone answers, you press CQ, reply to someone, stop TX or change band. */
 static void cq_hold_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
     if (auto_cq) return;
-    int64_t next = now_wall_ms(); /* busy sending: the first CQ right after */
+    /* Busy sending: the first CQ right after. Otherwise one now; the
+     * minute starts when it ends (ui_tx_done). */
+    int64_t next = now_wall_ms();
     if (!js8_tx_busy(tx)) {
         if (!send_cq(false)) return;
         next += AUTO_CQ_MS;
@@ -2124,7 +2133,7 @@ static void cq_hold_cb(button_data_t *btn) {
     auto_cq         = true;
     auto_cq_next_ms = next;
     buttons_refresh(btn);
-    msg_update_text_fmt("Auto CQ on: every minute until answered (press CQ to stop)");
+    msg_update_text_fmt("Auto CQ on: a minute after each CQ, until answered (press CQ to stop)");
     add_info_row("Auto CQ on");
     update_tx_bar();
 }
@@ -2149,7 +2158,7 @@ static void auto_cq_tick(void) {
     if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
     if (now < auto_cq_next_ms || js8_tx_busy(tx) || composing || any_popup()) return;
     if (send_cq(true)) {
-        auto_cq_next_ms = now + AUTO_CQ_MS;
+        auto_cq_next_ms = now + AUTO_CQ_MS; /* restarted when it ends */
     } else {
         auto_cq_stop("could not send");
     }

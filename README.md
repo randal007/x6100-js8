@@ -160,7 +160,7 @@ to go back a page.
 | 1 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 1 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 1 | **Clear** | Clear the list and this frequency's Stations list. |
-| 2 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then one every minute (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
+| 2 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then another a minute after each one ends (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
 | 2 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. |
 | 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
 | 2 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
@@ -380,7 +380,7 @@ Done so far (after the first on-air QSOs):
 - [x] Log QSO: Enter in a field only saves that field
 - [x] The selected station stays selected (green bar, `selected:` in the TX bar)
 - [x] The list follows new lines, and stays in view while you type a reply
-- [x] CQ switches heartbeats off; hold CQ for auto CQ every minute
+- [x] CQ switches heartbeats off; hold CQ for auto CQ, a minute after each CQ ends
 - [x] Hold the page button to go back a page
 - [x] Show *No HB* also hides SNR reports
 - [x] Clear on page 1, HW CPY? on page 2

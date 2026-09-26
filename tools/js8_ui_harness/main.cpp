@@ -963,10 +963,19 @@ int main() {
         ui_page(2);
         ui_hold(1);
         pump(300);
-        printf("[autocq] after hold: '%s', CQ rows %d (want 1)\n", ui_button_label(1), ui_list_count("CQ CQ CQ"));
-        pump(20000);
-        printf("[autocq] 20 s later: '%s'\n", ui_button_label(1));
-        for (int i = 0; i < 60 && ui_list_count("CQ CQ CQ") < 2; i++) pump(1000);
+        printf("[autocq] after hold: '%s', CQ rows %d (its row comes with its slot)\n", ui_button_label(1), ui_list_count("CQ CQ CQ"));
+        printf("[autocq] while it goes: '%s' (want sending)\n", ui_button_label(1));
+        // The minute counts from the END of the CQ, not from when it was queued.
+        for (int i = 0; i < 90 && strstr(ui_button_label(1), "sending"); i++) pump(1000);
+        struct timespec t0, t1;
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        int frames = stub_tx_frames;
+        pump(1500);
+        printf("[autocq] just after it ended: '%s' (want ~59 s)\n", ui_button_label(1));
+        for (int i = 0; i < 1000 && stub_tx_frames == frames; i++) pump(100);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        double gap = (t1.tv_sec - t0.tv_sec) + (t1.tv_nsec - t0.tv_nsec) / 1e9;
+        printf("[autocq] end of CQ to next CQ on air: %.1f s (want 60-75: a minute, then the next slot)\n", gap);
         printf("[autocq] the next one: CQ rows %d (want 2)\n", ui_list_count("CQ CQ CQ"));
         screenshot("u02_autocq.ppm");
         // Someone answers: auto CQ off.
