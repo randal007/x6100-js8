@@ -205,6 +205,11 @@ int main() {
         }
         pump(300);
         printf("[gen] %s list open, focused '%s'\n", which, ui_focused_text());
+        {
+            char shot[48];
+            snprintf(shot, sizeof(shot), "gen_%s.ppm", which);
+            screenshot(shot);
+        }
         dialog_destruct(); // what GEN does
         pump(500);
         printf("[gen] closed with the %s list open: running=%d (survived)\n", which, ui_running());
