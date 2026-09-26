@@ -288,6 +288,10 @@ JS8Spotter do):
 Nothing reaches APRS unless a gateway station hears you; replies come back
 over APRS, not JS8. APRS text is limited to 67 characters.
 
+In beta 1 only **Spot my grid** has been confirmed on the air; the other
+items follow desktop JS8Call's and JS8Spotter's formats but still need
+testing through the gateways.
+
 ## Files on the SD card
 
 All on the **DATA** partition, readable on a PC:
@@ -327,6 +331,8 @@ All on the **DATA** partition, readable on a PC:
 - [ ] Test beep audible through the speaker
 - [ ] Smoother waterfall
 - [ ] Long messages tested on the air
+- [ ] APRS tested on the air: POTA and SOTA spots, SMS, email and Winlink
+  (so far only **Spot my grid** is confirmed working)
 
 ## Credits
 
