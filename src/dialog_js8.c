@@ -221,7 +221,15 @@ static pthread_mutex_t speaker_lock = PTHREAD_MUTEX_INITIALIZER;
 static atomic_int  tx_offset_active;   /* offset of the message being sent */
 static bool        composing;          /* compose window open */
 
-static js8_stations_t *stations;       /* who we've heard, who heard us */
+static js8_stations_t *stations;       /* who we've heard, who heard us: this band's */
+
+/* One Stations list per band: going back to a band brings its list back.
+ * All are emptied when JS8 opens. */
+#define BAND_LISTS 16
+static struct {
+    qso_log_band_t  band;
+    js8_stations_t *list;
+} band_lists[BAND_LISTS];
 static bool           view_stations;   /* list shows stations, not messages */
 static js8_station_t  st_rows[MAX_ROWS];
 static int            st_count;
@@ -1540,12 +1548,27 @@ static void load_band(int8_t dir) {
     }
 }
 
+static js8_stations_t *stations_for_band(void) {
+    qso_log_band_t band = qso_log_freq_to_band(cparam_i_get(cfg_fg_freq));
+    for (int i = 0; i < BAND_LISTS; i++) {
+        if (band_lists[i].list && band_lists[i].band == band) return band_lists[i].list;
+    }
+    for (int i = 0; i < BAND_LISTS; i++) {
+        if (!band_lists[i].list) {
+            band_lists[i].band = band;
+            band_lists[i].list = js8_stations_create();
+            return band_lists[i].list;
+        }
+    }
+    return band_lists[0].list; /* more slots than bands: never */
+}
+
 static void band_cb(lv_event_t *e) {
     load_band(lv_event_get_code(e) == EVENT_BAND_UP ? 1 : -1);
     auto_cq_stop("band changed");
 
     js8_rx_clear(rx);
-    js8_stations_clear(stations); /* a different band, different stations */
+    stations = stations_for_band(); /* that band's list, as we left it */
     lv_waterfall_clear_data(waterfall);
     wf_queue_clear();
     clear_selection();
@@ -1726,7 +1749,10 @@ static void construct_cb(lv_obj_t *parent) {
     }
     base_gain_offset = tx_player_base_gain_offset();
     tx_start();
-    if (!stations) stations = js8_stations_create();
+    for (int i = 0; i < BAND_LISTS; i++) {
+        if (band_lists[i].list) js8_stations_clear(band_lists[i].list);
+    }
+    stations = stations_for_band();
     if (!qsos) qsos = js8_qsos_create();
     if (!inbox) inbox = js8_inbox_open(JS8_INBOX_PATH);
     if (!held) held = js8_held_open(JS8_HELD_PATH);

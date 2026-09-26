@@ -158,14 +158,14 @@ to go back a page.
 | 1 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). |
 | 1 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 1 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
-| 1 | **Clear** | Clear the list and the station list. |
+| 1 | **Clear** | Clear the list and this band's Stations list. |
 | 2 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then one every minute (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band, or leave it alone for an hour. |
 | 2 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. |
 | 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
 | 2 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 3 | **Time Sync** | Set the clock from the last 2 minutes of decodes (needs 3 or more). |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
-| 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. |
+| 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each band has its own Stations list: change band and back, and it's still there. All are emptied when JS8 opens. |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new*. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
 | 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. |
@@ -335,7 +335,6 @@ All on the **DATA** partition, readable on a PC:
 - **Test beep may be silent** on some radios (no freeze).
 - The **waterfall** scrolls a little less smoothly than the main X6100
   waterfall.
-- **Changing band clears the Stations list.**
 - If the radio loses power while JS8 is open, the USB filter stays at
   200–3000 Hz (leaving the app normally puts yours back).
 
@@ -353,6 +352,7 @@ Done so far (after the first on-air QSOs):
 - [x] Show *No HB* also hides SNR reports
 - [x] Clear on page 1, HW CPY? on page 2
 - [x] Send up to 3000 Hz (the TX filter is set to 200–3000 Hz while JS8 is open)
+- [x] Each band keeps its own Stations list (emptied when JS8 opens)
 
 Still to do:
 
@@ -360,7 +360,6 @@ Still to do:
 - [ ] Custom frequency option on page 6
 - [ ] POTA and SOTA spots with a frequency and mode you choose (e.g. your SSB
   activation), not only the JS8 frequency
-- [ ] Stations list kept when changing band (cleared only when the app closes)
 - [ ] Test beep audible through the speaker
 - [ ] Smoother waterfall
 - [ ] Long messages tested on the air

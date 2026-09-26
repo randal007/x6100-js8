@@ -12,6 +12,7 @@ void ui_init(void);
 void ui_open(void);
 void ui_press(int i);
 void ui_band_up(void);
+void ui_band_down(void);
 void ui_key(uint32_t key);
 int  ui_running(void);
 int  ui_focus_is_table(void);
@@ -633,6 +634,29 @@ int main() {
         ui_key(LV_KEY_ESC);
         pump(300);
         printf("[alerts] ESC closed it: list focused %s\n", ui_focus_is_table() ? "yes" : "no");
+        return 0;
+    }
+    if (getenv("ONLY_BANDS")) {
+        // Each band keeps its own Stations list.
+        pump(300);
+        feed_speeds({{"W1ABC", "FN42", "CQ CQ CQ FN42", 700, -5, JS8_SPEED_NORMAL},
+                     {"VE7ABC", "CN89", "K2XYZ HELLO", 2000, -5, JS8_SPEED_NORMAL}});
+        ui_page(3);
+        ui_press(3); // Stations
+        pump(300);
+        printf("[bands] 20m heard: %d (want 1)\n", !ui_list_has("No stations heard yet"));
+        screenshot("40_bands_20m.ppm");
+        ui_band_up(); // 17m
+        pump(300);
+        printf("[bands] 17m empty: %d (want 1)\n", ui_list_has("No stations heard yet"));
+        ui_band_down(); // back to 20m
+        pump(300);
+        printf("[bands] 20m back: %d (want 1)\n", !ui_list_has("No stations heard yet"));
+        screenshot("41_bands_20m_again.ppm");
+        ui_page(1);
+        ui_press(4); // Clear: this band only
+        pump(300);
+        printf("[bands] 20m after Clear empty: %d (want 1)\n", ui_list_has("No stations heard yet"));
         return 0;
     }
     if (getenv("ONLY_SPEED")) {

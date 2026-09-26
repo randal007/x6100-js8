@@ -27,10 +27,12 @@ static int               dummy_low, dummy_high, dummy_fg;
 ComputedParamInt        *cfg_cur_filter_low  = (ComputedParamInt *)&dummy_low;
 ComputedParamInt        *cfg_cur_filter_high = (ComputedParamInt *)&dummy_high;
 ComputedParamInt        *cfg_fg_freq         = (ComputedParamInt *)&dummy_fg; /* dial, Hz */
+static int         band = 2; /* 20m */
+static const int   band_freqs[] = {7078000, 10130000, 14078000, 18104000};
 /* The radio's filter: 100-2900 Hz (a typical USB setting) until the app sets it. */
 static int32_t filter_low = 100, filter_high = 2900;
 int32_t cparam_i_get(const ComputedParamInt *p) {
-    if (p == cfg_fg_freq) return 14078000;
+    if (p == cfg_fg_freq) return band_freqs[band];
     return p == cfg_cur_filter_low ? filter_low : filter_high;
 }
 void cparam_i_set(ComputedParamInt *p, int32_t v) {
@@ -40,7 +42,6 @@ void cparam_i_set(ComputedParamInt *p, int32_t v) {
 }
 
 static const char *band_labels[] = {"JS8 40m", "JS8 30m", "JS8 20m", "JS8 17m"};
-static int         band          = 2;
 bool cfg_digital_load(int8_t dir, cfg_digital_type_t type) {
     if (type != CFG_DIG_TYPE_JS8) fprintf(stderr, "STUB: wrong digital type %d\n", type);
     band = (band + dir + 4) % 4;
@@ -154,7 +155,15 @@ char *util_canonize_callsign(const char *call, bool strip_slashes) {
     (void)strip_slashes;
     return strdup(call);
 }
-qso_log_band_t qso_log_freq_to_band(uint64_t freq_hz) { return freq_hz >= 7000000 && freq_hz <= 7300000 ? BAND_40M : BAND_OTHER; }
+qso_log_band_t qso_log_freq_to_band(uint64_t freq_hz) {
+    switch (freq_hz / 1000000) {
+    case 7: return BAND_40M;
+    case 10: return BAND_30M;
+    case 14: return BAND_20M;
+    case 18: return BAND_17M;
+    default: return BAND_OTHER;
+    }
+}
 qso_log_record_t qso_log_record_create(const char *local_call, const char *remote_call, time_t qso_time,
                                        qso_log_mode_t mode, int rsts, int rstr, uint64_t freq_hz, const char *name,
                                        const char *qth, const char *local_grid, const char *remote_grid) {
