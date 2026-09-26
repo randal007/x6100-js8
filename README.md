@@ -95,8 +95,8 @@ the image you used before.
    6). While JS8 is open the receive and transmit filters are 200–3000 Hz
    and power is capped at 5 W; all go back when you leave.
 4. **Answer someone:** turn the **MFK** to select their row, then **HW
-   CPY?** (page 2) for the usual reply to a CQ, **Reply** to type, or
-   **Query >** (page 2) for the one-press messages.
+   CPY?** (page 1) for the usual reply to a CQ, **Reply** (page 2) to type,
+   or **Query >** (page 1) for the one-press messages.
 5. **Stop sending:** **ESC** or press the **top knob**. The next ESC
    leaves the app.
 
@@ -162,14 +162,14 @@ to go back a page.
 
 | Page | Button | Does |
 |---|---|---|
-| 1 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). |
-| 1 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
-| 1 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
-| 1 | **Clear** | Clear the list and this frequency's Stations list. |
-| 2 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then another a minute after each one ends (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
-| 2 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. |
-| 2 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
-| 2 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
+| 1 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, then another a minute after each one ends (the button counts down) until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
+| 1 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. |
+| 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
+| 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
+| 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). |
+| 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
+| 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
+| 2 | **Clear** | Clear the list and this frequency's Stations list. |
 | 3 | **Time Sync** | Set the clock from the last 2 minutes of decodes (needs 3 or more). |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
 | 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. All are emptied when JS8 opens. |

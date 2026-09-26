@@ -397,8 +397,8 @@ static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_labe
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
 static button_data_t btn_inbox     = {.type = BTN_TEXT_FN, .label_fn = inbox_label_getter, .press = inbox_cb};
 
-static buttons_page_t page_1 = {{&btn_p1, &btn_show, &btn_reply, &btn_send, &btn_clear}};
-static buttons_page_t page_2 = {{&btn_p2, &btn_cq, &btn_hb, &btn_query, &btn_hw_cpy}};
+static buttons_page_t page_1 = {{&btn_p1, &btn_cq, &btn_hb, &btn_query, &btn_hw_cpy}};
+static buttons_page_t page_2 = {{&btn_p2, &btn_show, &btn_reply, &btn_send, &btn_clear}};
 static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations, &btn_inbox}};
 
 static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_5, .prev = &page_3};
@@ -2578,7 +2578,7 @@ static void hb_tick(void) {
     int64_t now = now_wall_ms();
     if (js8_auto_idle(autop, now) || !js8_speed_heartbeats(cur_speed())) return;
     /* As on desktop, the first one comes an interval after switching on;
-     * page 2's Heartbeat sends one now. */
+     * page 1's Heartbeat sends one now. */
     if (hb_next_ms == 0) {
         hb_next_ms = js8_next_heartbeat_ms(now, params.js8_hb_interval.x);
         update_status();

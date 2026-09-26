@@ -203,7 +203,7 @@ int main() {
         if (!strcmp(which, "query")) {
             feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
             ui_select_row_from("N0XYZ");
-            ui_page(2);
+            ui_page(1);
             ui_press(3); // Query >
         } else if (!strcmp(which, "alerts")) {
             ui_page(6);
@@ -464,7 +464,7 @@ int main() {
         pump(300);
         // N0XYZ calls us, we answer with a report, they send theirs and 73.
         feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
-        ui_page(1);
+        ui_page(2);
         ui_press(3); // Send...
         pump(200);
         ui_compose_append("N0XYZ SNR -10");
@@ -584,7 +584,7 @@ int main() {
         ui_page(3);
         printf("[inbox] button: '%s' (want Inbox / 1 new)\n", ui_button_label(4));
         ui_select_row_from("N0XYZ");
-        ui_page(1);
+        ui_page(2);
         ui_press(2); // Reply
         pump(200);
         printf("[inbox] Reply offers: '%s' (want N0XYZ ACK)\n", ui_compose_text());
@@ -625,7 +625,7 @@ int main() {
         // They hold a message for us: Reply offers to fetch it.
         feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ YES MSG ID 3", 1320, 0.05f}});
         ui_select_row_from("N0XYZ");
-        ui_page(1);
+        ui_page(2);
         ui_press(2);
         pump(200);
         printf("[inbox] Reply offers: '%s' (want N0XYZ QUERY MSG 3)\n", ui_compose_text());
@@ -633,7 +633,7 @@ int main() {
         pump(300);
 
         // Query list: Any messages?
-        ui_page(2);
+        ui_page(1);
         ui_press(3);
         pump(200);
         for (int i = 0; i < 12; i++) ui_key(LV_KEY_RIGHT);
@@ -719,7 +719,7 @@ int main() {
                    {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1800, 0.05f}});
         feed_band({{"VE7ABC", "CN89", "", "@HB HEARTBEAT CN89", 900, 0.05f}});
         feed_band({{"N0XYZ", "EN34", "", "CQ CQ CQ EN34", 1500, 0.05f}});
-        ui_page(1);
+        ui_page(2);
         ui_press(1); // Show: No HB -> Directed
         ui_press(1); // -> All
         pump(300);
@@ -832,7 +832,7 @@ int main() {
         pump(300);
         printf("[bands] 20m back: %d (want 1)\n", !ui_list_has("No stations heard yet"));
         screenshot("41_bands_20m_again.ppm");
-        ui_page(1);
+        ui_page(2);
         ui_press(4); // Clear: this band only
         pump(300);
         printf("[bands] 20m after Clear empty: %d (want 1)\n", ui_list_has("No stations heard yet"));
@@ -858,7 +858,7 @@ int main() {
                      {"K9DEF", "EN52", "@HB HEARTBEAT EN52", 1100, -5, JS8_SPEED_FAST},
                      {"N0XYZ", "EN34", "CQ CQ CQ EN34", 1500, -5, JS8_SPEED_TURBO},
                      {"VE7ABC", "CN89", "K2XYZ SLOW ONE", 2000, -5, JS8_SPEED_SLOW}});
-        ui_page(1);
+        ui_page(2);
         ui_press(1); // Show: No HB -> Directed
         ui_press(1); // -> All
         pump(300);
@@ -872,7 +872,7 @@ int main() {
 
         // Reply to the Turbo station while on Normal: warned; hold Speed matches.
         ui_select_row_from("N0XYZ");
-        ui_page(1);
+        ui_page(2);
         ui_press(2); // Reply
         pump(200);
         ui_compose_cancel();
@@ -880,7 +880,7 @@ int main() {
         ui_page(6);
         ui_hold(2);
         printf("[speed] after hold: '%s'\n", ui_button_label(2));
-        ui_page(2);
+        ui_page(1);
         ui_press(2); // Heartbeat in Turbo: refused
         pump(200);
 
@@ -899,7 +899,7 @@ int main() {
         pump(200);
 
         // Send at Fast: 10 s slots, 0.1 s symbols -> 79 x 4410 samples at 44.1 kHz.
-        ui_page(2);
+        ui_page(1);
         ui_press(1); // CQ
         wait_tx();
         printf("[speed] Fast frame: %u samples (want %d)\n", stub_tx_samples, 79 * 4410);
@@ -963,10 +963,10 @@ int main() {
         pump(300);
         printf("[held] inbox closed: %d\n", ui_focus_is_table());
 
-        // HW CPY? on page 2 to the selected station.
+        // HW CPY? on page 1 to the selected station.
         ui_select_row_from("W1ABC");
-        ui_page(2);
-        printf("[held] page 2 button 4: '%s'\n", ui_button_label(4));
+        ui_page(1);
+        printf("[held] page 1 button 4: '%s'\n", ui_button_label(4));
         ui_press(4);
         wait_tx();
         printf("[held] HW CPY? sent: %d\n", ui_list_has("W1ABC HW CPY?"));
@@ -993,7 +993,7 @@ int main() {
     if (getenv("ONLY_AUTOCQ")) {
         // 2. Auto CQ: hold CQ; a CQ a minute until someone answers.
         pump(300);
-        ui_page(2);
+        ui_page(1);
         ui_hold(1);
         pump(300);
         printf("[autocq] after hold: '%s', CQ rows %d (its row comes with its slot)\n", ui_button_label(1), ui_list_count("CQ CQ CQ"));
@@ -1035,7 +1035,7 @@ int main() {
         feed_band({{"W1ABC", "FN42", "", "@ALLCALL CQ CQ FN42", 1800, 0.05f},
                    {"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
         ui_select_row_from("N0XYZ");
-        ui_page(1);
+        ui_page(2);
         ui_press(2); // Reply
         pump(200);
         ui_compose_append("THANKS FOR THE");
@@ -1053,7 +1053,7 @@ int main() {
         pump(300);
         feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
         ui_select_row_from("N0XYZ");
-        ui_page(1);
+        ui_page(2);
         ui_press(1); // Show: No HB -> Directed
         pump(300);
         feed_band({{"N0XYZ", "EN34", "", "GOOD COPY HERE", 1320, 0.05f},
@@ -1067,7 +1067,7 @@ int main() {
 
         // Query list: Close is one step back from the first item.
         ui_select_row_from("N0XYZ");
-        ui_page(2);
+        ui_page(1);
         ui_press(3); // Query >
         pump(200);
         printf("[query] open, focused '%s'\n", ui_focused_text());
@@ -1123,7 +1123,7 @@ int main() {
         ui_press(2); // HB on (into the knob interval setting)
         ui_press(2); // done setting
         printf("[cq-hb] HB before CQ: '%s'\n", ui_button_label(2));
-        ui_page(2);
+        ui_page(1);
         ui_press(1); // CQ
         pump(200);
         ui_page(4);
@@ -1131,14 +1131,14 @@ int main() {
         printf("[cq-hb] info row shown=%d (want 1)\n", ui_list_has("HB and HB ACK off: CQ"));
 
         // 3. Holding the page button goes back a page.
-        ui_page(1);
+        ui_page(2);
         ui_hold(0);
         printf("[page] hold on 1 -> '%s' (want (JS8 6:6))\n", ui_button_label(0));
         ui_hold(0);
         printf("[page] hold on 6 -> '%s' (want (JS8 5:6))\n", ui_button_label(0));
         ui_press(0);
         printf("[page] press on 5 -> '%s' (want (JS8 6:6))\n", ui_button_label(0));
-        ui_page(2);
+        ui_page(1);
         ui_press(3); // Query > opens a list
         pump(200);
         ui_hold(0);
@@ -1148,7 +1148,7 @@ int main() {
 
         // 8. Show: No HB hides SNR reports too (mostly heartbeat answers).
         if (!getenv("SKIP_SNR")) {
-            ui_page(1);
+            ui_page(2);
             feed_band({{"W1ABC", "FN42", "N0XYZ", "N0XYZ SNR -12", 1500, 0.05f}});
             printf("[snr] No HB: report shown=%d (want 0), label '%s'\n", ui_list_has("SNR -12"), ui_button_label(1));
             ui_press(1); // No HB -> Directed
@@ -1161,7 +1161,7 @@ int main() {
 
         // 6. ESC in a text box closes only the text box.
         if (!getenv("SKIP_ESC")) {
-        ui_page(1);
+        ui_page(2);
         ui_press(3); // Send...
         pump(200);
         printf("[esc] Send... open, focus: %s\n", ui_focus_desc());
@@ -1215,9 +1215,9 @@ int main() {
         if (lf) fclose(lf);
 
         // 4. The selected station stays selected while new rows arrive.
-        ui_page(1);
-        ui_select_row_from("N0XYZ");
         ui_page(2);
+        ui_select_row_from("N0XYZ");
+        ui_page(1);
         ui_press(1); // our CQ: a new row below theirs
         pump(300);
         feed_band({{"W1ABC", "FN42", "", "@ALLCALL CQ CQ FN42", 1800, 0.05f}});
@@ -1225,7 +1225,7 @@ int main() {
         dialog_js8_selected_call(selc, sizeof(selc));
         printf("[sel] after our CQ and W1ABC's: selected '%s' (want N0XYZ)\n", selc);
         screenshot("u04_selected.ppm");
-        ui_page(1);
+        ui_page(2);
         ui_press(2); // Reply
         pump(200);
         printf("[sel] Reply prefill '%s' (want N0XYZ )\n", ui_compose_text());
@@ -1237,7 +1237,7 @@ int main() {
         ui_usb_init();
         ui_press(0); // leave the log
         pump(200);
-        ui_page(1);
+        ui_page(2);
         auto type_rolled = [](const char *text, int gap_ms) {
             for (const char *p = text; *p; p++) {
                 bool same = p > text && p[-1] == *p; // one key can't go down twice
@@ -1267,7 +1267,7 @@ int main() {
     if (getenv("ONLY_TEXTS")) {
         // Page 4 -> Texts... -> INFO: the keyboard must get the focus.
         pump(300);
-        ui_page(1);
+        ui_page(2);
         ui_press(3); // Send...
         pump(300);
         printf("[texts] Send... compose (works on the radio), focus: %s\n", ui_focus_desc());
@@ -1299,11 +1299,11 @@ int main() {
     screenshot("01_open.ppm");
 
     // Hold starts Off (the default); the scenarios below were written for
-    // On, so switch it (page 3, button 2) and back to page 1.
+    // On, so switch it (page 3, button 2) and back to page 2.
     ui_page(3);
     printf("[hold] default: '%s'\n", ui_button_label(2));
     ui_press(2);
-    ui_page(1);
+    ui_page(2);
 
     // Stations sharing the band; multi-frame ones overlap in time.
     std::vector<Station> stations = {
@@ -1383,7 +1383,7 @@ int main() {
     screenshot("04b_mfk_select.ppm");
 
     // ---- Transmit: reply to N0XYZ, who called us. Back to "All" first.
-    ui_page(1);
+    ui_page(2);
     ui_press(1);
     pump(100);
     ui_select_row_from("N0XYZ");
@@ -1407,7 +1407,7 @@ int main() {
     screenshot("09_tx_done.ppm");
 
     // A long message, stopped with ESC during its first frame; the next ESC closes.
-    ui_page(1);
+    ui_page(2);
     ui_press(3); // Send...
     pump(200);
     ui_compose_append("@ALLCALL TESTING A LONGER MESSAGE FROM THE X6100");
@@ -1419,7 +1419,7 @@ int main() {
     printf("[tx] after ESC during TX: running=%d frames keyed=%d\n", ui_running(), stub_tx_frames);
     screenshot("10_tx_stopped.ppm");
 
-    // ---- T3. We're on page 1. Pages cycle 1 -> 2 -> 3 -> 1.
+    // ---- T3. We're on page 2. Pages cycle 1 -> 2 -> 3 -> 1.
     auto wait_keyed = [&](int before) {
         for (int i = 0; i < 180 && stub_tx_frames == before; i++) pump(100);
         pump(300);
@@ -1432,7 +1432,7 @@ int main() {
     screenshot("11_stations.ppm");
 
     ui_select_row_from("N0XYZ");
-    ui_page(2);
+    ui_page(1);
     ui_press(3); // Query >
     pump(300);
     screenshot("12_query.ppm");
@@ -1446,7 +1446,7 @@ int main() {
     wait_done();
 
     before = stub_tx_frames;
-    ui_page(2);
+    ui_page(1);
     ui_press(2); // Heartbeat
     wait_keyed(before);
     printf("[t3] heartbeat keyed at %d Hz (want 500-999, clear of stations)\n", stub_tx_offset);
@@ -1455,7 +1455,7 @@ int main() {
     ui_page(3);
     ui_press(2); // Hold: On -> Off
     ui_select_row_from("N0XYZ");
-    ui_page(1);
+    ui_page(2);
     ui_press(2); // Reply
     pump(200);
     ui_compose_append("73");
@@ -1466,7 +1466,7 @@ int main() {
     wait_done();
     screenshot("14_after_t3.ppm");
 
-    // ---- T4: AUTO, HB, HB ACK. We're on page 1; go to page 4.
+    // ---- T4: AUTO, HB, HB ACK. We're on page 2; go to page 4.
     ui_page(4);
     before = stub_tx_frames;
     ui_press(1); // AUTO on
@@ -1511,7 +1511,7 @@ int main() {
     pump(2000);
     printf("[t4] after GRID? with AUTO off: frames %d (was %d)\n", stub_tx_frames, before);
     screenshot("18_offer.ppm");
-    ui_page(1);
+    ui_page(2);
     ui_select_row_from("G0ABC");
     ui_press(2); // Reply
     pump(300);
