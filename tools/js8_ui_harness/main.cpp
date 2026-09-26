@@ -194,6 +194,7 @@ int main() {
     ui_init();
     if (getenv("ONLY_INBOX")) unlink(JS8_INBOX_PATH); // before the dialog loads it
     if (getenv("ONLY_HELD")) unlink(JS8_HELD_PATH);
+    if (getenv("ONLY_APRS")) unlink(JS8_TEXTS_PATH); // no park or spot settings yet
     ui_open();
     if (getenv("ONLY_GEN")) {
         // GEN / APP on the radio close the app with a list popup open.
@@ -291,23 +292,96 @@ int main() {
         pump(200);
         ui_key(LV_KEY_RIGHT);
         ui_key(LV_KEY_RIGHT);
-        ui_click_focused(); // POTA spot
+        ui_click_focused(); // POTA spot: the form
         pump(300);
-        printf("[aprs] POTA prefill: '%s'\n", ui_compose_text());
-        ui_compose_append("VE-1234");
-        printf("[aprs] POTA typed:   '%s'\n", ui_compose_text());
-        screenshot("23_aprs_pota.ppm");
+        printf("[spot] form: %d, focused '%s' (want Park, none yet)\n", ui_popup_has("POTA spot via APSPOT"),
+               ui_focused_text());
+        ui_click_focused(); // Park -> keyboard
+        pump(200);
+        ui_compose_append("CA-1234");
         ui_compose_enter();
+        pump(300);
+        printf("[spot] back on '%s'\n", ui_focused_text());
+        printf("[spot] preview: %d\n", ui_popup_has("APSPOT: ! POTA CA-1234 14.078 DATA JS8"));
+        screenshot("23_aprs_pota.ppm");
+        ui_key(LV_KEY_LEFT);
+        ui_click_focused(); // Send spot
         wait_tx();
+        printf("[spot] POTA sent: %d\n", ui_list_has("APSPOT   :! POTA CA-1234 14.078 DATA JS8"));
+
+        // Again: the park is remembered, focus on Send. Your SSB run instead.
         ui_press(1);
         pump(200);
         ui_key(LV_KEY_RIGHT);
         ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
-        printf("[aprs] POTA again (remembers park): '%s'\n", ui_compose_text());
+        printf("[spot] again: focused '%s' (want Send spot)\n", ui_focused_text());
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
+        printf("[spot] on '%s'\n", ui_focused_text());
+        ui_click_focused(); // Type a frequency...
+        pump(200);
+        ui_compose_append("14285");
+        ui_compose_enter();
+        pump(300);
+        printf("[spot] back on '%s'\n", ui_focused_text());
+        ui_key(LV_KEY_RIGHT);
+        ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // Mode: DATA -> SSB
+        pump(100);
+        printf("[spot] '%s', preview SSB: %d\n", ui_focused_text(), ui_popup_has("APSPOT: ! POTA CA-1234 14.285 SSB"));
+        screenshot("24_aprs_pota_ssb.ppm");
+        for (int i = 0; i < 4; i++) ui_key(LV_KEY_LEFT);
+        ui_click_focused(); // Send spot
+        wait_tx();
+        printf("[spot] SSB sent: %d, no JS8 comment: %d\n", ui_list_has("APSPOT   :! POTA CA-1234 14.285 SSB"),
+               !ui_list_has("14.285 SSB JS8"));
+
+        // SOTA: its own summit, the same frequency and mode.
+        ui_press(1);
+        pump(200);
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // SOTA spot
+        pump(300);
+        printf("[spot] SOTA form: %d, focused '%s'\n", ui_popup_has("SOTA spot via APRS2SOTA"), ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        ui_compose_append("VE7/LM-001");
+        ui_compose_enter();
+        pump(300);
+        // Frequency back to the JS8 dial: DATA, "JS8".
+        ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        ui_key(LV_KEY_RIGHT);
+        ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 5; i++) ui_click_focused(); // SSB -> CW FM AM DV DATA
+        pump(100);
+        printf("[spot] SOTA: '%s'\n", ui_focused_text());
+        for (int i = 0; i < 4; i++) ui_key(LV_KEY_LEFT);
+        ui_click_focused(); // Send spot
+        wait_tx();
+        printf("[spot] SOTA sent: %d\n", ui_list_has("APRS2SOTA:VE7/LM-001 14.078 DATA K2XYZ JS8"));
+
+        // A bad frequency keeps the keyboard open.
+        ui_press(1);
+        pump(200);
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        pump(300);
+        for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // Type a frequency...
+        pump(200);
+        ui_compose_clear();
+        ui_compose_append("1"); // 1 MHz: below 160m
+        ui_compose_enter();
+        pump(200);
+        printf("[spot] bad frequency, keyboard open: '%s'\n", ui_compose_text());
         ui_compose_cancel();
         pump(300);
+        printf("[spot] cancelled, back on '%s'\n", ui_focused_text());
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        printf("[spot] ESC closed it: %d\n", ui_focus_is_table());
 
         ui_press(1);
         pump(200);

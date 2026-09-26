@@ -297,8 +297,8 @@ JS8Spotter do):
 |---|---|---|
 | Spot my grid | `@APRSIS GRID CN89LH` | nothing |
 | Spot GPS position | `@APRSIS GRID CN89KG12AB` | nothing (needs a GPS on the radio) |
-| POTA spot | `@APRSIS CMD :POTAGW   :CALL PARK 7078 JS8` | the park |
-| SOTA spot | `@APRSIS CMD :APRS2SOTA:SUMMIT 7.078 DATA CALL` | the summit ([APRS2SOTA](https://www.sotaspots.co.uk/Aprs2Sota_Info.php) registration needed) |
+| POTA spot | `@APRSIS CMD :APSPOT   :! POTA CA-1234 7.078 DATA JS8` | nothing: a [spot form](#pota-and-sota-spots) |
+| SOTA spot | `@APRSIS CMD :APRS2SOTA:VE7/LM-001 7.078 DATA CALL JS8` | nothing: a [spot form](#pota-and-sota-spots) |
 | SMS text | `@APRSIS CMD :SMS      :@6045551234 message` | number and message ([NA7Q's gateway](https://na7q.com/sms-gateway/), opt-in needed) |
 | Email | `@APRSIS CMD :EMAIL-2  :address message` | address and message |
 | Winlink: start / text / send | `SP address subject`, a line of text, `/EX` | [APRSLink](https://winlink.org/APRSLink)'s three steps |
@@ -310,6 +310,37 @@ In beta 1 only **Spot my grid** has been confirmed on the air; the other
 items follow desktop JS8Call's and JS8Spotter's formats but still need
 testing through the gateways.
 
+### POTA and SOTA spots
+
+**POTA spot** and **SOTA spot** open a small form: **Send spot**, your
+**Park** or **Summit**, the **Frequency**, **Mode** and a **Comment**.
+The top line shows exactly what will be sent. Everything is remembered
+for next time.
+
+- **Frequency:** the JS8 dial you're on, or one you type (**Type a
+  frequency…**, in kHz like `7185`, or MHz like `144.2` for VHF). Press
+  **Frequency** to switch between the two. Use it to spot your SSB or CW
+  run while JS8 carries the spot.
+- **Mode:** press to step through DATA, SSB, CW, FM, AM and FT8 (POTA) or
+  DV (SOTA). JS8 is DATA.
+- **Comment:** optional. With none, a spot of the JS8 dial says `JS8`.
+
+Where they go:
+
+- **POTA → [APSPOT](https://apspot.radio/getting-started/)**, which posts
+  the spot to **pota.app** if you have a pota.app account. Park numbers
+  are `CA-1234` / `US-1234` now (not `VE-` / `K-`). A comment containing
+  the word `TEST` is checked but not posted, handy for a first try.
+- **SOTA → [APRS2SOTA](https://www.sotaspots.co.uk/Aprs2Sota_Info.php)**,
+  which posts to SOTAwatch. You must register first: email its operator
+  your name and callsign (see its page).
+
+A JS8Call station with APRS spotting on has to hear you, and the
+gateway's reply ("Spotted", or what went wrong) goes to your callsign on
+APRS, not back over JS8. Check the spot on pota.app / SOTAwatch, or your
+messages on [aprs.fi](https://aprs.fi) or findu.com. More in
+[docs/SPOTS_PLAN.md](docs/SPOTS_PLAN.md).
+
 ## Files on the SD card
 
 All on the **DATA** partition, readable on a PC:
@@ -319,7 +350,7 @@ All on the **DATA** partition, readable on a PC:
 | `js8call_log.adi` | your JS8 log (ADIF) |
 | `js8_inbox.txt` | Inbox messages, one per line |
 | `js8_held.txt` | messages held for other stations |
-| `js8_texts.txt` | INFO, STATUS, last POTA/SOTA references, alert words |
+| `js8_texts.txt` | INFO, STATUS, last POTA/SOTA references, spot frequency/mode/comment, alert words |
 | `params.db`, `qso_log.db` | the radio's settings and QSO database |
 | `incoming_log.adi` | put an ADIF log here to import it (worked-before marks) at the next start |
 
@@ -356,11 +387,11 @@ Done so far (after the first on-air QSOs):
 - [x] Send up to 3000 Hz (the TX filter is set to 200–3000 Hz while JS8 is open)
 - [x] Each frequency keeps its own Stations list (emptied when JS8 opens)
 - [x] GhostNet frequencies and a custom frequency (**Freq**, page 6)
+- [x] POTA and SOTA spots with the frequency and mode you choose (a spot
+  form; POTA now goes through APSPOT, as POTAGW no longer answers)
 
 Still to do:
 
-- [ ] POTA and SOTA spots with a frequency and mode you choose (e.g. your SSB
-  activation), not only the JS8 frequency
 - [ ] Test beep audible through the speaker
 - [ ] A power loss with JS8 open no longer leaves the USB filter at
   200–3000 Hz

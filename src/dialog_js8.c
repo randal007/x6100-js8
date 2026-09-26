@@ -189,6 +189,11 @@ static void        freq_close(void);
 static void        freq_show(void);
 static void        tune_custom(const char *khz);
 static bool        parse_custom(const char *text, int32_t *out);
+typedef enum { SP_SEND, SP_REF, SP_FREQ, SP_TYPE_FREQ, SP_MODE, SP_NOTE, SP_CLOSE, SP_COUNT } spot_item_t;
+static bool        spot_sota; /* the spot form is for SOTA, else POTA */
+static bool        spot_parse_freq(const char *text, int32_t *out);
+static void        spot_show(bool sota, spot_item_t focus);
+static void        spot_close(void);
 static const char *where_label(void);
 static void        alert_check(js8_rx_msg_t *m, bool new_station);
 static void        alert_beep(int count);
@@ -250,6 +255,7 @@ static lv_obj_t      *log_list;        /* Log QSO popup, when open */
 static lv_obj_t      *inbox_list;      /* Inbox popup (list or one message), when open */
 static lv_obj_t      *alerts_list;     /* Alerts popup, when open */
 static lv_obj_t      *freq_list;       /* Freq popup, when open */
+static lv_obj_t      *spot_list;       /* POTA / SOTA spot form, when open */
 static char           alert_words[128]; /* "VE7ABC @POTA SOTA", ALERTS= in JS8_TEXTS_PATH */
 static bool           st_alert[MAX_ROWS]; /* st_rows matching an alert word */
 static js8_inbox_t   *inbox;           /* MSGs to us, JS8_INBOX_PATH */
@@ -276,6 +282,11 @@ static bool        hb_adjusting;     /* main knob sets the HB interval */
 static int64_t     hb_adjust_ms;     /* last knob turn while adjusting */
 static char        info_text[TEXT_MAX + 1], status_text[TEXT_MAX + 1];
 static char        last_pota[16], last_sota[24]; /* last park / summit spotted via APRS */
+/* The spot form (APRS > POTA/SOTA spot), remembered in JS8_TEXTS_PATH. */
+static char        spot_mode[8] = "DATA";
+static int32_t     spot_typed_hz;  /* last frequency typed in the form, 0 = none */
+static bool        spot_use_typed; /* spot that one, not the JS8 dial */
+static char        spot_note[32];
 static char        last_tx_text[JS8_RX_TEXT_LEN]; /* for AGN? */
 static struct {
     char    call[JS8_RX_CALL_LEN];
@@ -311,6 +322,9 @@ typedef enum {
     EDIT_SOTA_REF,
     EDIT_ALERT_WORDS, /* then back to the Alerts popup */
     EDIT_FREQ,        /* custom dial frequency, kHz */
+    EDIT_SPOT_REF,    /* the spot form's fields, then back to it */
+    EDIT_SPOT_FREQ,
+    EDIT_SPOT_NOTE,
     EDIT_COUNT,
 } edit_t;
 
@@ -1476,6 +1490,7 @@ static void compose_close(void) {
  * textarea_window's own close is then a no-op. */
 static bool compose_ok_cb(void) {
     if (edit_target == EDIT_FREQ && !parse_custom(textarea_window_get(), NULL)) return false;
+    if (edit_target == EDIT_SPOT_FREQ && !spot_parse_freq(textarea_window_get(), NULL)) return false;
     if (edit_target >= EDIT_LOG_GRID) {
         log_edit_done(textarea_window_get());
         return true;
@@ -1535,8 +1550,12 @@ static void compose_open(const char *prefill) {
                                          : edit_target == EDIT_SOTA_REF ? sizeof(last_sota) - 1
                                          : edit_target == EDIT_ALERT_WORDS ? sizeof(alert_words) - 1
                                          : edit_target == EDIT_FREQ ? 9
+                                         : edit_target == EDIT_SPOT_REF ? (spot_sota ? sizeof(last_sota) : sizeof(last_pota)) - 1
+                                         : edit_target == EDIT_SPOT_FREQ ? 10
+                                         : edit_target == EDIT_SPOT_NOTE ? sizeof(spot_note) - 1
                                                                         : TEXT_MAX);
-        if (edit_target == EDIT_FREQ) lv_textarea_set_accepted_chars(text, "0123456789.");
+        if (edit_target == EDIT_FREQ || edit_target == EDIT_SPOT_FREQ)
+            lv_textarea_set_accepted_chars(text, "0123456789.");
         lv_obj_remove_event_cb(text, compose_changed_cb);
     }
     if (prefill && prefill[0]) {
@@ -1553,6 +1572,9 @@ static void compose_open(const char *prefill) {
             [EDIT_SOTA_REF] = " Your summit, e.g. VE7/LM-001",
             [EDIT_ALERT_WORDS] = " Calls or words, e.g. VE7ABC @POTA SOTA",
             [EDIT_FREQ]     = " Dial frequency in kHz, e.g. 7107",
+            [EDIT_SPOT_REF] = " Park CA-1234 / summit VE7/LM-001",
+            [EDIT_SPOT_FREQ] = " kHz, e.g. 7185 (or MHz, 144.2)",
+            [EDIT_SPOT_NOTE] = " Comment, e.g. QRT or CQ",
         };
         lv_textarea_set_placeholder_text(text, placeholders[edit_target]);
     }
@@ -1872,6 +1894,10 @@ static void destruct_cb(void) {
     if (freq_list) {
         lv_obj_del(freq_list);
         freq_list = NULL;
+    }
+    if (spot_list) {
+        lv_obj_del(spot_list);
+        spot_list = NULL;
     }
     hb_adjusting = false;
     radio_set_pwr(param_f_get(cfg_pwr));
@@ -2253,6 +2279,7 @@ static void close_popups(void) {
     inbox_close();
     alerts_close();
     freq_close();
+    spot_close();
 }
 
 /* One-press messages for the selected station: MFK to move, press or tap
@@ -2628,7 +2655,7 @@ static void hb_ack_cb(button_data_t *btn) {
 /* ---- INFO / STATUS texts -------------------------------------------- */
 
 static void load_texts(void) {
-    info_text[0] = status_text[0] = last_pota[0] = last_sota[0] = alert_words[0] = '\0';
+    info_text[0] = status_text[0] = last_pota[0] = last_sota[0] = alert_words[0] = spot_note[0] = '\0';
     FILE *f = fopen(JS8_TEXTS_PATH, "r");
     if (!f) return;
     char line[sizeof(alert_words) + 16];
@@ -2639,7 +2666,12 @@ static void load_texts(void) {
         if (strncmp(line, "POTA=", 5) == 0) snprintf(last_pota, sizeof(last_pota), "%s", line + 5);
         if (strncmp(line, "SOTA=", 5) == 0) snprintf(last_sota, sizeof(last_sota), "%s", line + 5);
         if (strncmp(line, "ALERTS=", 7) == 0) js8_alert_words_normalise(line + 7, alert_words, sizeof(alert_words));
+        if (strncmp(line, "SPOTMODE=", 9) == 0 && line[9]) snprintf(spot_mode, sizeof(spot_mode), "%s", line + 9);
+        if (strncmp(line, "SPOTHZ=", 7) == 0) spot_typed_hz = atoi(line + 7);
+        if (strncmp(line, "SPOTTYPED=", 10) == 0) spot_use_typed = atoi(line + 10) != 0;
+        if (strncmp(line, "SPOTNOTE=", 9) == 0) snprintf(spot_note, sizeof(spot_note), "%s", line + 9);
     }
+    if (!spot_typed_hz) spot_use_typed = false;
     fclose(f);
 }
 
@@ -2651,6 +2683,8 @@ static void save_texts(void) {
     }
     fprintf(f, "INFO=%s\nSTATUS=%s\nPOTA=%s\nSOTA=%s\nALERTS=%s\n", info_text, status_text, last_pota, last_sota,
             alert_words);
+    fprintf(f, "SPOTMODE=%s\nSPOTHZ=%d\nSPOTTYPED=%d\nSPOTNOTE=%s\n", spot_mode, (int)spot_typed_hz, spot_use_typed ? 1 : 0,
+            spot_note);
     fclose(f);
 }
 
@@ -2792,13 +2826,17 @@ static bool aprs_prepare(const char *in, char *out, size_t size) {
         return false;
     }
 
-    /* "CALL PARK FREQ MODE ..." / "SUMMIT FREQ MODE ..." */
-    char w1[24] = "", w2[24] = "";
-    sscanf(body, "%23s %23s", w1, w2);
-    if (!strcmp(to, "POTAGW") && w2[0]) {
+    /* "! POTA PARK MHZ MODE ..." / "SUMMIT FREQ MODE ..." / old POTAGW "CALL PARK KHZ MODE ..." */
+    char w1[24] = "", w2[24] = "", w3[24] = "";
+    sscanf(body, "%23s %23s %23s", w1, w2, w3);
+    if (!strcmp(to, "APSPOT") && !strcmp(w1, "!") && w3[0] && (!strcmp(w2, "POTA") || !strcmp(w2, "SOTA"))) {
+        if (w2[0] == 'P') snprintf(last_pota, sizeof(last_pota), "%s", w3);
+        else snprintf(last_sota, sizeof(last_sota), "%s", w3);
+        save_texts();
+    } else if (!strcmp(to, "POTAGW") && w2[0]) {
         snprintf(last_pota, sizeof(last_pota), "%s", w2);
         save_texts();
-    } else if (!strcmp(to, "APRS2SOTA") && w1[0]) {
+    } else if ((!strcmp(to, "APRS2SOTA") || !strcmp(to, "SOTA")) && w1[0]) {
         snprintf(last_sota, sizeof(last_sota), "%s", w1);
         save_texts();
     }
@@ -2871,8 +2909,6 @@ static void aprs_item_cb(lv_event_t *e) {
     lv_obj_del_async(aprs_list);
     aprs_list = NULL;
 
-    uint64_t dial = (uint64_t)cparam_i_get(cfg_fg_freq);
-    char     head[TX_TEXT_MAX + 1], tail[48];
     switch (item) {
     case APRS_GRID:
         aprs_send_grid();
@@ -2881,17 +2917,9 @@ static void aprs_item_cb(lv_event_t *e) {
         aprs_send_gps();
         break;
     case APRS_POTA:
-        snprintf(head, sizeof(head), APRS_CMD "POTAGW   :%s %s", params.callsign.x, last_pota);
-        snprintf(tail, sizeof(tail), " %llu JS8", (unsigned long long)(dial / 1000));
-        aprs_compose(head, tail);
-        msg_update_text_fmt("POTA: type the park, e.g. VE-1234");
-        break;
     case APRS_SOTA:
-        snprintf(head, sizeof(head), APRS_CMD "APRS2SOTA:%s", last_sota);
-        snprintf(tail, sizeof(tail), " %.3f DATA %s", dial / 1e6, params.callsign.x);
-        aprs_compose(head, tail);
-        msg_update_text_fmt("SOTA: type the summit, e.g. VE7/LM-001 (APRS2SOTA registration needed)");
-        break;
+        spot_show(item == APRS_SOTA, (item == APRS_SOTA ? last_sota : last_pota)[0] ? SP_SEND : SP_REF);
+        return;
     case APRS_SMS:
         aprs_compose(APRS_CMD "SMS      :@", "");
         msg_update_text_fmt("SMS (NA7Q gateway): 10-digit number, space, message");
@@ -2974,6 +3002,252 @@ static void aprs_cb(button_data_t *btn) {
     lv_group_focus_obj(first);
 }
 
+/* ---- POTA / SOTA spot form (docs/SPOTS_PLAN.md) ------------------------ */
+
+/* POTA goes to APSPOT, which posts to pota.app (needs a pota.app account);
+ * SOTA to APRS2SOTA (needs registering with sotaspots.co.uk). Both take
+ * MHz. The frequency is the JS8 dial, or one you typed (your SSB run),
+ * each remembered with the mode and comment. Gateway replies come back
+ * over APRS only: the radio never sees them. */
+
+static const char *const spot_modes_pota[] = {"DATA", "SSB", "CW", "FM", "AM", "FT8"}; /* APSPOT's */
+static const char *const spot_modes_sota[] = {"DATA", "SSB", "CW", "FM", "AM", "DV"};  /* APRS2SOTA's */
+#define SPOT_MODES 6
+
+static lv_obj_t *spot_items[SP_COUNT];
+static lv_obj_t *spot_preview;
+
+static const char *const *spot_modes(void) {
+    return spot_sota ? spot_modes_sota : spot_modes_pota;
+}
+
+/* The mode to send: the remembered one if this gateway takes it. */
+static const char *spot_mode_now(void) {
+    for (int i = 0; i < SPOT_MODES; i++)
+        if (!strcmp(spot_modes()[i], spot_mode)) return spot_modes()[i];
+    return "DATA";
+}
+
+static int32_t spot_hz(void) {
+    return spot_use_typed && spot_typed_hz ? spot_typed_hz : cparam_i_get(cfg_fg_freq);
+}
+
+/* MHz with at least 3 decimals, more only when needed: "7.078", "7.1855". */
+static void format_mhz(int32_t hz, char *buf, size_t size) {
+    snprintf(buf, size, "%d.%06d", (int)(hz / 1000000), (int)(hz % 1000000));
+    char *end = buf + strlen(buf) - 1;
+    while (*end == '0' && end[-3] != '.') *end-- = '\0';
+}
+
+/* No comment typed: "JS8" while spotting the JS8 dial. */
+static const char *spot_comment(void) {
+    if (spot_note[0]) return spot_note;
+    return spot_use_typed && spot_typed_hz ? "" : "JS8";
+}
+
+/* The APRS text after "@APRSIS CMD :<addressee>:". */
+static void spot_body(char *out, size_t size) {
+    char mhz[16];
+    format_mhz(spot_hz(), mhz, sizeof(mhz));
+    const char *note = spot_comment();
+    if (spot_sota)
+        snprintf(out, size, "%s %s %s %s%s%s", last_sota[0] ? last_sota : "?", mhz, spot_mode_now(), params.callsign.x,
+                 note[0] ? " " : "", note);
+    else
+        snprintf(out, size, "! POTA %s %s %s%s%s", last_pota[0] ? last_pota : "?", mhz, spot_mode_now(), note[0] ? " " : "",
+                 note);
+}
+
+/* kHz ("7185.5"), or MHz below 1000 ("144.2"); 1.8 MHz to 1.3 GHz. False,
+ * with the reason shown, keeps the keyboard open to fix it. */
+static bool spot_parse_freq(const char *text, int32_t *out) {
+    char  *end;
+    double v = strtod(text, &end);
+    if (end == text || v <= 0) {
+        msg_update_text_fmt("Type the frequency in kHz, e.g. 7185");
+        return false;
+    }
+    double hz = v < 1000 ? v * 1e6 : v * 1e3;
+    if (hz < 1800000 || hz > 1300000000) {
+        msg_update_text_fmt("Out of range: 1800 kHz - 1300 MHz");
+        return false;
+    }
+    if (out) *out = (int32_t)(hz + 0.5);
+    return true;
+}
+
+static void spot_close(void) {
+    if (!spot_list) return;
+    lv_obj_del_async(spot_list); /* often called from one of its buttons */
+    spot_list = NULL;
+    if (table && !composing) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+static void spot_label(spot_item_t item, char *line, size_t size) {
+    char mhz[16];
+    switch (item) {
+    case SP_SEND:
+        snprintf(line, size, "Send spot");
+        break;
+    case SP_REF:
+        if (spot_sota) snprintf(line, size, "Summit: %s", last_sota[0] ? last_sota : "(type it)");
+        else snprintf(line, size, "Park: %s", last_pota[0] ? last_pota : "(type it)");
+        break;
+    case SP_FREQ:
+        format_mhz(spot_hz(), mhz, sizeof(mhz));
+        snprintf(line, size, "Frequency: %s MHz (%s)", mhz, spot_use_typed && spot_typed_hz ? "typed" : "JS8 dial");
+        break;
+    case SP_TYPE_FREQ:
+        snprintf(line, size, "Type a frequency...");
+        break;
+    case SP_MODE:
+        snprintf(line, size, "Mode: %s", spot_mode_now());
+        break;
+    case SP_NOTE:
+        if (spot_note[0]) snprintf(line, size, "Comment: %s", spot_note);
+        else if (spot_comment()[0]) snprintf(line, size, "Comment: %s (auto)", spot_comment());
+        else snprintf(line, size, "Comment: (none)");
+        break;
+    case SP_CLOSE:
+        snprintf(line, size, "Close");
+        break;
+    default:
+        line[0] = '\0';
+    }
+}
+
+/* Labels and the message preview, in place. */
+static void spot_refresh(void) {
+    char line[96];
+    for (int i = 0; i < SP_COUNT; i++) {
+        if (!spot_items[i]) continue;
+        spot_label((spot_item_t)i, line, sizeof(line));
+        lv_label_set_text(lv_obj_get_child(spot_items[i], 0), line);
+    }
+    spot_body(line, sizeof(line));
+    lv_label_set_text_fmt(spot_preview, "%s: %s", spot_sota ? "APRS2SOTA" : "APSPOT", line);
+}
+
+static void spot_send(void) {
+    if (!(spot_sota ? last_sota : last_pota)[0]) {
+        msg_update_text_fmt("Type the %s first", spot_sota ? "summit" : "park");
+        return;
+    }
+    char body[96], text[TX_TEXT_MAX + 8], out[TX_TEXT_MAX + 8];
+    spot_body(body, sizeof(body));
+    snprintf(text, sizeof(text), APRS_CMD "%-9s:%s", spot_sota ? "APRS2SOTA" : "APSPOT", body);
+    if (!aprs_prepare(text, out, sizeof(out))) return; /* too long: says so */
+    if (!tx_queue(out)) return;
+    add_info_row("%s spot: %s. A JS8Call APRS gateway must hear it; the reply goes to APRS, not here",
+                 spot_sota ? "SOTA" : "POTA", body);
+    spot_close();
+}
+
+static void spot_item_cb(lv_event_t *e) {
+    spot_item_t item = (spot_item_t)(intptr_t)lv_event_get_user_data(e);
+    int         edit = 0;
+    switch (item) {
+    case SP_SEND:
+        spot_send();
+        return;
+    case SP_CLOSE:
+        spot_close();
+        return;
+    case SP_MODE: { /* next mode, in place */
+        const char *cur = spot_mode_now();
+        int         i   = 0;
+        while (i < SPOT_MODES && strcmp(spot_modes()[i], cur) != 0) i++;
+        snprintf(spot_mode, sizeof(spot_mode), "%s", spot_modes()[(i + 1) % SPOT_MODES]);
+        save_texts();
+        spot_refresh();
+        return;
+    }
+    case SP_FREQ: /* JS8 dial <-> the typed one; nothing typed yet: type it */
+        if (spot_typed_hz) {
+            spot_use_typed = !spot_use_typed;
+            save_texts();
+            spot_refresh();
+            return;
+        }
+        edit = EDIT_SPOT_FREQ;
+        break;
+    case SP_TYPE_FREQ:
+        edit = EDIT_SPOT_FREQ;
+        break;
+    case SP_REF:
+        edit = EDIT_SPOT_REF;
+        break;
+    case SP_NOTE:
+        edit = EDIT_SPOT_NOTE;
+        break;
+    default:
+        return;
+    }
+    /* A field: into the keyboard, then back here (see log_item_cb). */
+    char khz[16] = "";
+    if (spot_typed_hz) format_khz(spot_typed_hz, khz, sizeof(khz));
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(spot_list); i++) lv_group_remove_obj(lv_obj_get_child(spot_list, i));
+    lv_obj_del_async(spot_list);
+    spot_list   = NULL;
+    edit_target = edit;
+    compose_open(edit == EDIT_SPOT_REF ? (spot_sota ? last_sota : last_pota) : edit == EDIT_SPOT_FREQ ? khz : spot_note);
+    lv_group_set_editing(keyboard_group, true);
+    if (edit == EDIT_SPOT_REF)
+        msg_update_text_fmt(spot_sota ? "Summit, e.g. VE7/LM-001" : "Park, e.g. CA-1234 (POTA uses US- and CA- now, not K- or VE-)");
+    else if (edit == EDIT_SPOT_FREQ)
+        msg_update_text_fmt("Frequency you're on, in kHz (e.g. 7185) or MHz for VHF (144.2)");
+    else
+        msg_update_text_fmt("Comment (optional; with none, a JS8 dial spot says JS8)");
+}
+
+static void spot_key_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    if (key == LV_KEY_ESC) spot_close();
+    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
+    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+}
+
+/* `focus`: the item to start on - Send, or the field just edited. */
+static void spot_show(bool sota, spot_item_t focus) {
+    spot_sota = sota;
+    lv_group_remove_obj(table);
+    spot_list = lv_list_create(dialog.obj);
+    lv_obj_set_size(spot_list, 560, WF_HEIGHT - 10);
+    lv_obj_align(spot_list, LV_ALIGN_TOP_RIGHT, -20, 18);
+    lv_obj_set_style_text_font(spot_list, &sony_24, 0);
+    lv_obj_set_style_bg_color(spot_list, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_border_color(spot_list, lv_color_white(), 0);
+    lv_obj_t *t = lv_list_add_text(spot_list, sota ? "SOTA spot via APRS2SOTA (registration needed)"
+                                                   : "POTA spot via APSPOT (your pota.app account)");
+    lv_obj_set_style_text_font(t, &sony_22, 0);
+    spot_preview = lv_list_add_text(spot_list, "");
+    lv_obj_set_style_text_font(spot_preview, &sony_22, 0);
+    lv_obj_set_style_text_color(spot_preview, lv_color_hex(0x1030a0), 0); /* on the list's light title bar */
+
+    char line[96];
+    for (int i = 0; i < SP_COUNT; i++) {
+        spot_label((spot_item_t)i, line, sizeof(line));
+        lv_obj_t *b = list_add_item(spot_list, line);
+        lv_obj_add_event_cb(b, spot_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(b, spot_key_cb, LV_EVENT_KEY, NULL);
+        lv_group_add_obj(keyboard_group, b);
+        lv_label_set_long_mode(lv_obj_get_child(b, 0), LV_LABEL_LONG_DOT);
+        spot_items[i] = b;
+    }
+    lv_obj_set_style_text_color(spot_items[SP_SEND], lv_color_hex(0x80ff80), 0);
+    lv_obj_set_style_text_color(spot_items[SP_CLOSE], lv_color_hex(0xffc040), 0);
+    spot_refresh();
+    lv_group_set_editing(keyboard_group, false);
+    lv_group_focus_obj(spot_items[focus]);
+    const char *ref = sota ? last_sota : last_pota;
+    if (!sota && (!strncmp(ref, "K-", 2) || !strncmp(ref, "VE-", 3)))
+        msg_update_text_fmt("POTA park numbers are US-/CA- now (was K-/VE-): check yours");
+}
+
 /* ---- Log QSO ----------------------------------------------------------- */
 
 /* Like desktop JS8Call's Log QSO: the entry is filled in from the QSO and
@@ -2983,7 +3257,7 @@ static void aprs_cb(button_data_t *btn) {
  * logged without Save. */
 
 static bool any_popup(void) {
-    return query_list || texts_list || aprs_list || log_list || inbox_list || alerts_list || freq_list;
+    return query_list || texts_list || aprs_list || log_list || inbox_list || alerts_list || freq_list || spot_list;
 }
 
 static bool find_station(const char *call, js8_station_t *out) {
@@ -3216,9 +3490,28 @@ static void log_edit_done(const char *text) {
         case EDIT_FREQ:
             tune_custom(value);
             return;
+        case EDIT_SPOT_REF:
+            if (spot_sota) snprintf(last_sota, sizeof(last_sota), "%s", value);
+            else snprintf(last_pota, sizeof(last_pota), "%s", value);
+            save_texts();
+            if (btn_act.disp_btn) buttons_refresh(&btn_act);
+            break;
+        case EDIT_SPOT_FREQ:
+            spot_parse_freq(value, &spot_typed_hz);
+            spot_use_typed = true;
+            save_texts();
+            break;
+        case EDIT_SPOT_NOTE:
+            snprintf(spot_note, sizeof(spot_note), "%s", value);
+            save_texts();
+            break;
         }
     }
     if (target == EDIT_FREQ) return; /* cancelled */
+    if (target >= EDIT_SPOT_REF) { /* back on the field just edited */
+        spot_show(spot_sota, target == EDIT_SPOT_REF ? SP_REF : target == EDIT_SPOT_FREQ ? SP_FREQ : SP_NOTE);
+        return;
+    }
     if (target == EDIT_ALERT_WORDS) {
         alerts_show();
         return;
