@@ -13,13 +13,17 @@ Updating from beta 1? Writing the image replaces the whole card. Copy the DATA p
 ### New in beta 2
 
 Fixes from the first QSOs:
-- ESC closes only the text box, no longer the whole app
+- ESC closes only the text box, no longer the whole app (every text box)
+- A key held while the keyboard closes no longer repeats into the next field
 - USB keyboard: no lost letters; lowercase is typed as capitals
 - Log QSO: Enter in a field only saves that field (Submit logs)
 - The selected station stays selected (green bar, `selected:` in the TX bar), and Reply always goes to it
 - The list follows new lines, and stays in view while you type a reply
-- CQ switches heartbeats off; **hold CQ for auto CQ**, one a minute after each CQ ends, until someone answers
+- CQ switches heartbeats off, so no heartbeat goes out in the middle of your CQ or QSO
+- **Hold CQ for auto CQ**: one a minute after each CQ ends, until someone answers
 - Show *No HB* also hides heartbeat SNR reports
+- Changing band no longer wipes the Stations list
+- POTA spots went to POTAGW, which no longer answers; they now go through APSPOT
 - Hold the page button to go back a page; Clear on page 1, HW CPY? on page 2
 
 New:
