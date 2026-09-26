@@ -6,6 +6,11 @@ on:
     tags:
       - '*'           # Push events to every tag not containing /
 
+# The repo's default token is read-only; the Release step needs to create
+# the release and attach the image.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-22.04
@@ -113,10 +118,9 @@ jobs:
         mv sdcard.img sdcard.${{ github.ref_name }}.img
         zip sdcard.${{ github.ref_name }}.img.zip sdcard.${{ github.ref_name }}.img
 
-    # Manual runs (workflow_dispatch) have no release to attach to, so keep
-    # the image as a workflow artifact.
+    # Always keep the image as a workflow artifact: branch runs have no
+    # release to attach to, and on a tag it survives a failed Release step.
     - name: Upload image
-      if: ${{ !startsWith(github.ref, 'refs/tags/') }}
       uses: actions/upload-artifact@v4
       with:
         name: sdcard.${{ github.ref_name }}.img.zip
