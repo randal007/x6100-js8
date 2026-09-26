@@ -1326,6 +1326,21 @@ static void compose_changed_cb(lv_event_t *e) {
     }
 }
 
+/* JS8 is capitals only: take lowercase (a USB keyboard without Caps Lock,
+ * the on-screen "abc" page) as capitals instead of dropping it. */
+static void compose_insert_cb(lv_event_t *e) {
+    const char *in = lv_event_get_param(e);
+    static char up[8];
+    size_t      n = strlen(in);
+    if (n >= sizeof(up)) return;
+    bool lower = false;
+    for (size_t i = 0; i <= n; i++) {
+        up[i] = in[i] >= 'a' && in[i] <= 'z' ? (char)(in[i] - 'a' + 'A') : in[i];
+        lower |= up[i] != in[i];
+    }
+    if (lower) lv_textarea_set_insert_replace(lv_event_get_target(e), up);
+}
+
 static void compose_close(void) {
     if (!composing) return;
     textarea_window_close();
@@ -1388,7 +1403,8 @@ static void compose_open(const char *prefill) {
     textarea_window_open(compose_ok_cb, compose_cancel_cb);
 
     lv_obj_t *text = textarea_window_text();
-    lv_textarea_set_accepted_chars(text, "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .-+?!\"/@:>{}_#&'(),=;");
+    lv_textarea_set_accepted_chars(text, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-+?!\"/@:>{}_#&'(),=;");
+    lv_obj_add_event_cb(text, compose_insert_cb, LV_EVENT_INSERT, NULL);
     lv_textarea_set_max_length(text, TX_TEXT_MAX);
     lv_obj_add_event_cb(text, compose_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     if (edit_target) {

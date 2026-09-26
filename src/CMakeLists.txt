@@ -3,7 +3,7 @@ add_executable(${PROJECT_NAME})
 target_sources(${PROJECT_NAME} PUBLIC
     main.c main_screen.c
     styles.c spectrum.c radio.c dsp.cpp util.cpp
-    waterfall.c rotary.c keyboard.c encoder.c
+    waterfall.c rotary.c keyboard.c kbd_rollover.c encoder.c
     events.c msg.c msg_tiny.c keypad.c
     hkey.c clock.c info.c
     meter.c band_info.cpp tx_info.c

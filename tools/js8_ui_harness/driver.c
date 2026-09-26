@@ -8,6 +8,7 @@
 #include "styles.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 extern buttons_page_t *stub_page;
@@ -201,3 +202,54 @@ int ui_kb_select_ok(void) {
     }
     return 0;
 }
+
+/* A USB keyboard through the firmware's kbd_rollover filter, fed from a
+ * script of evdev-like events. */
+#include "kbd_rollover.h"
+
+typedef struct {
+    uint16_t code;
+    uint32_t key;
+    int      value;
+} usb_ev_t;
+static usb_ev_t       usb_q[512];
+static unsigned       usb_head, usb_tail;
+static kbd_rollover_t usb_ro;
+
+static bool usb_next(void *ctx, uint16_t *code, uint32_t *key, int *value) {
+    (void)ctx;
+    if (usb_head == usb_tail) return false;
+    usb_ev_t e = usb_q[usb_head++ % 512];
+    *code      = e.code;
+    *key       = e.key;
+    *value     = e.value;
+    return true;
+}
+static void usb_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+    (void)drv;
+    if (getenv("USB_NAIVE")) { /* the old evdev_read: every event as it comes */
+        static uint32_t last_key;
+        static bool     last_down;
+        uint16_t        code;
+        uint32_t        key;
+        int             value;
+        if (usb_next(NULL, &code, &key, &value)) {
+            last_key               = key;
+            last_down              = value != 0;
+            data->continue_reading = true;
+        }
+        data->key   = last_key;
+        data->state = last_down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+        return;
+    }
+    kbd_rollover_read(&usb_ro, usb_next, NULL, data);
+}
+void ui_usb_init(void) {
+    static lv_indev_drv_t d;
+    lv_indev_drv_init(&d);
+    d.type    = LV_INDEV_TYPE_KEYPAD;
+    d.read_cb = usb_read;
+    lv_indev_set_group(lv_indev_drv_register(&d), keyboard_group);
+}
+/* Queue one event; the scancode is the character itself here. */
+void ui_usb_event(uint32_t key, int value) { usb_q[usb_tail++ % 512] = (usb_ev_t){(uint16_t)key, key, value}; }

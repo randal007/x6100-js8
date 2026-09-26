@@ -11,7 +11,12 @@
 #include "pubsub_ids.h"
 #include "usb_devices.h"
 
+#include "kbd_rollover.h"
 #include "lv_drivers/indev/evdev.h"
+#include "lv_drivers/indev/xkb.h"
+
+#include <linux/input.h>
+#include <unistd.h>
 
 #include <glob.h>
 
@@ -20,6 +25,28 @@ lv_group_t *keyboard_group;
 
 static lv_indev_drv_t       indev_drv_2;
 static bool                 ready = false;
+static kbd_rollover_t       rollover;
+
+extern int evdev_fd; /* lv_drivers/indev/evdev.c, set by evdev_set_file() */
+
+/* The next key event from the USB keyboard, through xkb (layout, Shift). */
+static bool kbd_next(void *ctx, uint16_t *scancode, uint32_t *key, int *value) {
+    (void)ctx;
+    struct input_event in;
+    while (read(evdev_fd, &in, sizeof(in)) > 0) {
+        if (in.type != EV_KEY) continue;
+        *scancode = in.code;
+        *value    = in.value;
+        *key      = xkb_process_key(in.code, in.value); /* also keeps Shift state */
+        return true;
+    }
+    return false;
+}
+
+static void kbd_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+    (void)drv;
+    kbd_rollover_read(&rollover, kbd_next, NULL, data);
+}
 
 static char* search_kbd_device() {
     glob_t globbuf;
@@ -37,11 +64,12 @@ static void setup_kbd(char *path) {
     if (!evdev_set_file(path)) {
         return;
     }
+    rollover = (kbd_rollover_t){0};
 
     if (indev_drv_2.type == LV_INDEV_TYPE_NONE) {
         lv_indev_drv_init(&indev_drv_2);
         indev_drv_2.type = LV_INDEV_TYPE_KEYPAD;
-        indev_drv_2.read_cb = evdev_read;
+        indev_drv_2.read_cb = kbd_read;
 
         lv_indev_t *keyboard_indev = lv_indev_drv_register(&indev_drv_2);
 

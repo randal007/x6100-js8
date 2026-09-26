@@ -33,6 +33,8 @@ int  ui_popup_has(const char *text);
 void ui_compose_clear(void);
 void ui_indevs_init(void);
 int  ui_kb_select_ok(void);
+void ui_usb_init(void);
+void ui_usb_event(uint32_t key, int value);
 void ui_mfk_turn(int32_t diff);
 void ui_mfk_set(bool down);
 void ui_keypad_set(uint32_t key, bool down);
@@ -936,6 +938,36 @@ int main() {
         printf("[log-usb] after Enter: logged %d (want 0), focused '%s' (want Name: ROBERT)\n", lf != NULL,
                ui_focused_text());
         if (lf) fclose(lf);
+
+        // 9. Fast typing on a USB keyboard: each key goes down before the
+        // previous one is up. Once all queued at once, once as they come.
+        ui_usb_init();
+        ui_press(0); // leave the log
+        pump(200);
+        ui_page(1);
+        auto type_rolled = [](const char *text, int gap_ms) {
+            for (const char *p = text; *p; p++) {
+                bool same = p > text && p[-1] == *p; // one key can't go down twice
+                if (same) ui_usb_event((uint8_t)p[-1], 0);
+                ui_usb_event((uint8_t)*p, 1);
+                if (p > text && !same) ui_usb_event((uint8_t)p[-1], 0);
+                if (gap_ms) pump(gap_ms);
+            }
+            ui_usb_event((uint8_t)text[strlen(text) - 1], 0);
+            pump(100);
+        };
+        ui_press(3); // Send...
+        pump(200);
+        type_rolled("CQ TEST DE K2XYZ", 0);
+        printf("[usb] rolled, queued at once: '%s' (want CQ TEST DE K2XYZ)\n", ui_compose_text());
+        ui_compose_clear();
+        type_rolled("HELLO WORLD 73", 25);
+        printf("[usb] rolled, 25 ms apart: '%s' (want HELLO WORLD 73)\n", ui_compose_text());
+        ui_compose_clear();
+        type_rolled("vk2abc hw cpy?", 25);
+        printf("[usb] lowercase: '%s' (want VK2ABC HW CPY?)\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(200);
         stub_usb_kbd = 0;
         return 0;
     }
