@@ -4,16 +4,13 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 
-> **Beta 2** is the current release. In daily use on the air since beta 1:
+> **Beta 3** is the current release. In daily use on the air since beta 1:
 > heartbeats acknowledged, queries answered, QSOs and messages with desktop
-> JS8Call stations, all four speeds decoding. Beta 2 fixed what the first
-> on-air QSOs found and added GhostNet and custom frequencies, a POTA/SOTA
-> spot form and position beacons with a message
-> ([New in beta 2](#new-in-beta-2)). **Beta 3** is in testing: this manual
-> already describes it, and [Coming next](#coming-next) lists what differs
-> from beta 2 (pages 1 and 2 are swapped, for one). Please report what you
-> find. Nothing transmits by itself when the app opens; automatic replies
-> and heartbeats are switches you turn on.
+> JS8Call stations, all four speeds decoding. Beta 3 adds relays and store
+> and forward that work as desktop JS8Call's do, Time Sync as a drift,
+> alert beeps you can hear, a smoother waterfall and a Settings list
+> ([New in beta 3](#new-in-beta-3)). Nothing transmits by itself when the
+> app opens; automatic replies and heartbeats are switches you turn on.
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
@@ -36,8 +33,8 @@ us), other stations' traffic, and a CQ sent at Turbo speed (`T`).*
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
-- [New in beta 2](#new-in-beta-2)
-- [Known issues in beta 2](#known-issues-in-beta-2)
+- [New in beta 3](#new-in-beta-3)
+- [Known issues in beta 3](#known-issues-in-beta-3)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -70,7 +67,7 @@ us), other stations' traffic, and a CQ sent at Turbo speed (`T`).*
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta2.img.zip` from the Assets.
+   download `sdcard.js8-beta3.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works.
 3. Put the card in the radio and switch on. The first start creates the
@@ -449,95 +446,77 @@ All on the **DATA** partition, readable on a PC:
 | `params.db`, `qso_log.db` | the radio's settings and QSO database |
 | `incoming_log.adi` | put an ADIF log here to import it (worked-before marks) at the next start |
 
-## New in beta 2
+## New in beta 3
 
-After the first on-air QSOs:
+New:
 
-- ESC closes only the text box, not the app
-- USB keyboard: no lost letters; lowercase typed as capitals
-- Log QSO: Enter in a field only saves that field
-- The selected station stays selected (green bar, `selected:` in the TX bar)
-- The list follows new lines, and stays in view while you type a reply
-- CQ switches heartbeats off; **hold CQ for auto CQ**, a minute after each CQ ends
-- Hold the page button to go back a page
-- Show *No HB* also hides SNR reports
-- Clear on page 1, HW CPY? on page 2
-- Send up to 3000 Hz (the TX filter is set to 200–3000 Hz while JS8 is open)
-- Each frequency keeps its own Stations list (emptied when JS8 opens)
-- **GhostNet** frequencies and a **custom frequency** (**Freq**, page 6)
-- **POTA and SOTA spot form** with the frequency and mode you choose (POTA
-  now goes through APSPOT, as POTAGW no longer answers)
-- **Position beacons with a message** (Spot my grid / GPS position)
+- **[Relays](#relays)** as desktop JS8Call does them: passed on for
+  others, ACKed back along the path, and the questions and messages they
+  carry answered the same way. **Relay via them…** and **Can they
+  reach…?** (`QUERY CALL`) on the Query list
+- **Store and forward** checked line by line against desktop JS8Call:
+  `YES MSG ID 3 +2`, `NEXT MSG ID`, group messages (`MSG TO:@GROUP`),
+  `RETRIEVE MSG` notices, messages from APRS gateways, and desktop's Reply
+  choices in the Inbox (to the sender, or through the station that held
+  it). **Fetch message #…** on the Query list
+- **Settings…** (page 4, was Texts…): INFO, STATUS, Relay on/off and your
+  groups
+- **Time Sync** shifts only JS8's own timing (a drift, like desktop
+  JS8Call), not the radio's clock; the drift is shown on top, hold to
+  reset. Each station counts once and a second press can't overshoot
+- **Alert beeps through the speaker**; JS8 hears silence for under a
+  second meanwhile, as the radio feeds the beep back into its receive audio
+- **Auto CQ interval** set with the knob (1–30 min), like HB
+- **Shorter position beacons** with a message (4–5 frames instead of 6),
+  with a live frame count
+- **TX bar** shows the frame count first ("1/5 starts in 13 s", "sending
+  2/5"), so a long message can't push it off the screen
+- The **Inbox** button turns green while you have unread messages
+- **Stations lists** (times and ★ included) are kept when JS8 is closed
+  and reopened, until the radio is switched off
+- CQ page first (pages 1 and 2 swapped); a hold is half a second
 
-## Known issues in beta 2
+Fixes:
 
-- **Test beep may be silent** on some radios (no freeze). *Fixed for
-  beta 3.*
-- The **waterfall** scrolls a little less smoothly than the main X6100
-  waterfall. *Smoother in beta 3.*
-- If the radio loses power while JS8 is open, the USB-D (digital) receive
-  filter stays at 200–3000 Hz, which suits digital modes; set yours back
-  by hand if it was different. Leaving the app normally puts it back, and
-  the TX filter isn't affected. Not planned to change.
-- **APRS:** only the plain grid spot is confirmed on the air so far. POTA
-  and SOTA spots, position messages, SMS, email and Winlink are new or
-  untested through the gateways: reports welcome.
+- Always **USB-D**: a custom frequency on another band (e.g. CB, 27 MHz)
+  brought up that band's last mode, often USB, with the mode keys locked
+- **Smoother waterfall** for less work: 15 rows a second, each on time
+- Noise reduction, noise blanker and notch filters off while JS8 is open
+  (the radio applies them in USB-D too); yours come back when you leave
+- TX filter 160–3000 Hz while JS8 is open, the radio's own default
+- A heartbeat sent by hand restarts the HB timer
+- Show in the Stations view goes back to the messages
+- Spot form: one Frequency row (keyboard; empty = the JS8 dial)
+- Held messages: a delivery counts only once it has gone out in full;
+  asking again gets it again at once; `QUERY MSGS` is answered only with
+  AUTO on, as on desktop
+- Offered relays keep their `*DE*` (the keyboard dropped the `*`)
+
+**Updating from beta 2:** copy your DATA files off first as usual
+(Installing). Your Inbox and held-message files are read as they are and
+gain the relay path from then on.
+
+## Known issues in beta 3
+
+- **Relays and store and forward** follow desktop JS8Call's code but are
+  new: they haven't been tried on the air with desktop stations yet.
+  Reports welcome.
+- **APRS:** the grid spot and SMS are confirmed on the air. POTA and SOTA
+  spots, position messages, email and Winlink are untested through the
+  gateways. Gateway replies come back over APRS, never over JS8.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
+- The main screen's waterfall, seen through JS8's buttons, stands still
+  while JS8 is open (cosmetic).
+- If the radio loses power while JS8 is open, the USB-D receive filter
+  stays at 200–3000 Hz, which suits digital modes; set yours back by hand
+  if it was different. Leaving the app normally puts it back. Not planned
+  to change.
 
 ## Coming next
 
-Done for beta 3 so far:
-
-- [x] A hold is half a second (was one)
-- [x] CQ page first: pages 1 and 2 swapped
-- [x] Auto CQ interval set with the knob (1–30 min), like HB
-- [x] A heartbeat sent by hand restarts the HB timer
-- [x] Shorter position beacons with a message (6 frames down to 4–5), with a live frame count
-- [x] Spot form: one Frequency row (keyboard; empty = the JS8 dial)
-- [x] Show in the Stations view goes back to the messages
-- [x] Stations lists (with their times and ★) kept when JS8 is closed and
-  reopened, until the radio is switched off; they used to be emptied
-- [x] Time Sync shifts only JS8's own timing (a drift, like desktop JS8Call)
-  instead of the radio's clock; hold to reset; the drift is shown on top.
-  Each station counts once, a second press can't overshoot, and it waits
-  while you're sending
-- [x] Alert beeps through the speaker (the radio is switched to play them, as
-  for its voice prompts); checked on the radio. JS8 hears silence for under
-  a second meanwhile, as the radio feeds the beep back into its receive
-  audio
-- [x] TX filter 160–3000 Hz while JS8 is open: the radio's own default
-- [x] Noise reduction, noise blanker and notch filters off while JS8 is open
-  (the radio applies them in DIGI modes too); yours come back when you leave
-- [x] Smoother waterfall: 15 rows a second (as the main screen's), each
-  drawn on time, for less work than 10 were
-- [x] The Inbox button turns green while you have unread messages
-- [x] Held messages, checked against desktop JS8Call: `@ALLCALL QUERY MSGS`
-  is answered when you hold one for the asker; a delivery counts only once
-  it has gone out in full (stopped halfway, it stays held); asking again
-  gets it again at once
-- [x] TX bar: the frame count ("1/5 starts in 13 s", "sending 2/5") comes
-  before the message, so a long message can't push it off the screen
-- [x] [Relays](#relays), as desktop JS8Call does them: passed on, ACKed
-  back along the path, and the questions and messages they carry answered
-  the same way; **Relay via them…** and **Can they reach…?** (`QUERY
-  CALL`) on the Query list
-- [x] Store and forward checked line by line against desktop JS8Call:
-  `YES MSG ID 3 +2`, `NEXT MSG ID`, group messages (`MSG TO:@GROUP`),
-  `RETRIEVE MSG` notices, `QUERY CALL`, messages from APRS gateways, and
-  desktop's Reply choices in the Inbox; `QUERY MSGS` answered only with
-  AUTO on, and every time it's asked, as desktop does
-- [x] Page 4 **Texts…** is now **Settings…**: INFO, STATUS, Relay on/off
-  and your groups, with room for more
-- [x] Always USB-D: a custom frequency on another band (e.g. CB, 27 MHz)
-  used to bring up that band's last mode, often USB, with the mode keys
-  locked while JS8 is open
-
-Still to do:
-
-- [ ] On-air tests of the beta 3 build: Time Sync, the APRS gateways (POTA,
-  SOTA, SMS, email, Winlink), a long message watched to the end, and relays
-  and store and forward with desktop JS8Call stations
+- [ ] On-air tests: relays and store and forward with desktop JS8Call
+  stations, the APRS gateways, a long message watched to the end
 - [ ] Performance: measure each part's CPU use on the radio and spread the
   work over its four cores (the screen drawing and the JS8 decoder each
   lean on one core today)
@@ -555,7 +534,7 @@ This is a beta: reports from testing are very welcome.
 
 - **Bugs and problems:** open an issue in
   [Issues](https://github.com/randal007/x6100-js8/issues). Please say which
-  release you're running (e.g. `js8-beta2`), the band and speed, what you
+  release you're running (e.g. `js8-beta3`), the band and speed, what you
   did, what you expected and what happened. A photo or screenshot of the
   radio's screen helps, and so does the `app_logs` folder from the SD card's
   DATA partition if the app closed or froze.
