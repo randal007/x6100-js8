@@ -97,7 +97,7 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
             f.quality        = d->quality;
             f.low_confidence = d->quality < LOW_CONFIDENCE_QUALITY;
             f.mode           = d->mode;
-            f.drift_ms       = d->drift_ms;
+            f.capture_drift_ms = d->capture_drift_ms;
             f.timestamp_ms   = wall_ms();
 
             if (cb_.on_frame) cb_.on_frame(f);

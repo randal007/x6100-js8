@@ -75,7 +75,7 @@
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
 #define SYNC_WINDOW_MS   120000 /* Time Sync uses decodes from the last 2 min */
-#define SYNC_DTS         32
+#define SYNC_SAMPLES     64     /* decodes kept for Time Sync (a busy band's 2 min) */
 #define WF_ROWS_PER_SEC  15     /* waterfall rows per second of audio, as the main screen's */
 #define WF_ROW_SAMPLES   (SAMPLE_RATE / WF_ROWS_PER_SEC)
 #define WF_QUEUE         16     /* rows waiting to be drawn (jitter buffer) */
@@ -234,9 +234,8 @@ static lv_timer_t *tx_timer;           /* refreshes the TX bar countdown */
 static js8_tx_status_t tx_status;      /* UI-thread copy of the last status */
 static char        tx_preview[JS8_RX_TEXT_LEN]; /* what we're sending, as others see it */
 static float       base_gain_offset;
-static float       sync_dt[SYNC_DTS];  /* recent decode DTs for Time Sync */
-static int64_t     sync_ms[SYNC_DTS];
-static unsigned    sync_head;
+static js8_sync_sample_t sync_samples[SYNC_SAMPLES]; /* recent decodes for Time Sync */
+static unsigned          sync_head;
 static float       qso_freq = -1;     /* the selected station's offset (the green line), -1 none */
 /* The selected station: set by MFK or a tap on its row, never by new rows
  * arriving, so Reply still answers it after the list moves on. */
@@ -645,10 +644,13 @@ static void process_message(js8_rx_msg_t *m) {
         show_selection();
     }
     alert_check(m, new_station);
-    if (!m->low_confidence) {
-        sync_dt[sync_head] = m->dt;
-        sync_ms[sync_head] = now_wall_ms();
-        sync_head          = (sync_head + 1) % SYNC_DTS;
+    if (!m->low_confidence && m->from[0]) {
+        js8_sync_sample_t *x = &sync_samples[sync_head];
+        snprintf(x->call, sizeof(x->call), "%s", m->from);
+        x->when_ms   = now_wall_ms();
+        x->drift_ms  = m->drift_ms;
+        x->period_ms = js8_speed_period_s(js8_speed_from_submode(m->submode)) * 1000;
+        sync_head    = (sync_head + 1) % SYNC_SAMPLES;
     }
     inbox_received(m);
     held_received(m);
@@ -2093,41 +2095,43 @@ static void clear_cb(button_data_t *btn) {
     update_status();
 }
 
-/* Time Sync, as desktop JS8Call's time drift: a decode's DT is how late the
- * signal started by JS8's time, so the median DT of recent decodes is how
- * far ahead JS8's time runs. JS8's time (receive windows, transmit slots,
- * everything the app times) moves by that; the radio's clock is never
- * changed. The drift lasts until the radio restarts; hold Time Sync to go
- * back to the radio's clock. Needs JS8's time within a couple of seconds
+/* Time Sync, as desktop JS8Call's time drift: JS8's time (receive windows,
+ * transmit slots, everything the app times) moves to where the band's
+ * decodes say it should be; the radio's clock is never changed. Each decode
+ * suggests a drift worked out from the one in effect when its audio was
+ * captured (js8core, desktop's auto-sync maths), so decodes finishing just
+ * after a change can't make the next press overshoot, and every recent
+ * decode stays usable: nothing is thrown away after a press. Each station
+ * counts once. The drift lasts until the radio restarts; hold Time Sync to
+ * go back to the radio's clock. Needs JS8's time within a couple of seconds
  * already, or nothing decodes: set the radio's clock roughly in SETTINGS
- * first. (Snapping to the nearest 15 s, as the FT8 app does, moves up to 7 s
- * the wrong way unless pressed exactly as a signal starts.) */
+ * first. Not while sending: it would move the frames still to go. */
 static void time_sync_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
     (void)btn;
-    int64_t  now = now_wall_ms();
-    float    dts[SYNC_DTS];
-    unsigned n = 0;
-    for (unsigned i = 0; i < SYNC_DTS; i++)
-        if (sync_ms[i] && now - sync_ms[i] <= SYNC_WINDOW_MS) dts[n++] = sync_dt[i];
-
-    float corr;
-    if (!js8_clock_correction(dts, n, &corr)) {
+    if (js8_tx_busy(tx)) {
+        msg_update_text_fmt("Not while sending - Stop TX first");
+        return;
+    }
+    int64_t  current = js8_drift_ms(), drift;
+    unsigned decodes = 0, heard = 0;
+    if (!js8_sync_drift(sync_samples, SYNC_SAMPLES, now_wall_ms(), SYNC_WINDOW_MS, current, &drift, &decodes, &heard)) {
         msg_update_text_fmt("Time Sync needs %d decodes in the last 2 min (have %u). "
                             "Clock far off? Set it in SETTINGS first",
-                            JS8_SYNC_MIN_DECODES, n);
+                            JS8_SYNC_MIN_DECODES, decodes);
         return;
     }
-    if (fabsf(corr) < 0.05f) {
-        msg_update_text_fmt("JS8 time is on (within 0.05 s of %u decodes)", n);
+    const char *from = heard >= JS8_SYNC_MIN_STATIONS ? "stations" : "decodes";
+    unsigned    n    = heard >= JS8_SYNC_MIN_STATIONS ? heard : decodes;
+    if (llabs(drift - current) < 50) {
+        msg_update_text_fmt("JS8 time is on (within 0.05 s of %u %s)", n, from);
         return;
     }
-    int64_t drift = js8_drift_ms() + (int64_t)lroundf(corr * 1000.0f);
     js8_set_drift_ms(drift);
-    memset(sync_ms, 0, sizeof(sync_ms)); /* those DTs are stale now */
-    msg_update_text_fmt("JS8 time moved %+.2f s (median of %u decodes); drift now %+.2f s", corr, n, drift / 1000.0);
-    add_info_row("Time Sync: JS8 time %+.2f s, drift %+.2f s", corr, drift / 1000.0);
+    msg_update_text_fmt("JS8 time moved %+.2f s (median of %u %s); drift now %+.2f s", (drift - current) / 1000.0, n,
+                        from, drift / 1000.0);
+    add_info_row("Time Sync: JS8 time %+.2f s, drift %+.2f s", (drift - current) / 1000.0, drift / 1000.0);
     update_status();
 }
 
@@ -2136,12 +2140,15 @@ static void time_sync_hold_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
     (void)btn;
+    if (js8_tx_busy(tx)) {
+        msg_update_text_fmt("Not while sending - Stop TX first");
+        return;
+    }
     if (!js8_drift_ms()) {
         msg_update_text_fmt("No drift: JS8 is on the radio's clock");
         return;
     }
     js8_set_drift_ms(0);
-    memset(sync_ms, 0, sizeof(sync_ms));
     msg_update_text_fmt("Drift reset: JS8 back on the radio's clock");
     add_info_row("Time Sync: drift reset");
     update_status();

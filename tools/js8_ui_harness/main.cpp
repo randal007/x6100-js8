@@ -377,6 +377,9 @@ int main() {
         pump(200);
         long long d = js8_drift_ms();
         printf("[drift] after Time Sync: %lld ms (want about -1500)\n", d);
+        ui_press(1); // straight away again: the same decodes now say "on time"
+        pump(200);
+        printf("[drift] pressed again at once: %lld ms (want unchanged)\n", (long long)js8_drift_ms());
         // The same late band again: now on time by JS8's clock.
         feed_band(late, 0, 99, 1.5);
         ui_press(1); // Time Sync again: nothing (much) left to fix
@@ -387,6 +390,11 @@ int main() {
         int frames = stub_tx_frames;
         ui_page(1);
         ui_press(1); // CQ
+        pump(300);
+        ui_page(3);
+        ui_press(1); // Time Sync while the CQ waits for its slot: refused
+        pump(200);
+        printf("[drift] Time Sync while sending: drift %lld ms (want unchanged)\n", (long long)js8_drift_ms());
         for (int i = 0; i < 400 && stub_tx_frames == frames; i++) pump(100);
         long long slot = (stub_tx_start_sys_ms + js8_drift_ms()) % 15000;
         printf("[drift] CQ frame started %lld ms into JS8's slot (want ~500), %lld ms by the PC clock\n", slot,

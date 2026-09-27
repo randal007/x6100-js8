@@ -53,6 +53,9 @@ struct Decoded {
   int mode = 0;
   // Suggested total drift (ms) to center this signal's cycle.
   int drift_ms = 0;
+  // Drift (ms) the ring was aligned with when this audio was captured; the
+  // signal is on time with drift capture_drift_ms - 1000 * xdt.
+  int capture_drift_ms = 0;
 };
 
 struct DecodeFinished {

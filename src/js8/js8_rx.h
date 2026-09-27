@@ -33,6 +33,9 @@ typedef struct {
     int32_t utc;      /* HHMMSS */
     int16_t snr;
     float   dt;
+    int32_t drift_ms; /* JS8 drift that would put this signal on time: the
+                         drift its audio was captured with, less its DT (so
+                         it stays right if the drift changed since) */
     float   freq_hz;  /* audio offset */
     uint8_t type;     /* JS8_FRAME_* bits of the (last) frame */
     uint8_t submode;  /* 0 Normal, 1 Fast, 2 Turbo, 4 Slow */

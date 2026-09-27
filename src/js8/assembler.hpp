@@ -30,7 +30,7 @@ struct RxFrame {
     bool        low_confidence = false; ///< quality below LOW_CONFIDENCE_QUALITY
     int         checksum = 0; ///< buffered-command checksum: 0 none, 1 valid (stripped), -1 invalid
     int         mode    = 0; ///< varicode submode (0 = Normal)
-    int         drift_ms = 0;
+    int         capture_drift_ms = 0; ///< JS8 drift in effect when its audio was captured
     std::int64_t timestamp_ms = 0; ///< local receive time
     std::uint32_t msg_id  = 0;     ///< the assembler's message number (partials and final share it)
     bool          partial = false; ///< the text so far of a message still arriving

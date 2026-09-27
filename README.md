@@ -174,7 +174,7 @@ to go back a page. In JS8 a hold is half a second.
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
-| 3 | **Time Sync** | Shift JS8's timing by the last 2 minutes of decodes (needs 3 or more), like desktop's time drift; the radio's clock isn't changed. Hold to reset the drift. |
+| 3 | **Time Sync** | Shift JS8's timing to match the last 2 minutes of decodes (needs 3 or more; each station counts once), like desktop's time drift; the radio's clock isn't changed. Pressing it again right after is safe. Not while sending. Hold to reset the drift. |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
 | 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off an hour after it was last heard. |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new*. |

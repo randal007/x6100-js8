@@ -81,7 +81,17 @@ Each one is its own commit on top of the pristine import, so
    which the decoder uses to try candidates near it first.
    `set_decode_range()` and `set_qso_offset()` feed the next decode.
 
-All nine are candidates to send upstream. Patch 5 matters to upstream only
+10. **`events::Decoded::capture_drift_ms`.** The time drift the ring was
+    aligned with when the decode's audio was captured
+    (`DecodeState::drift_ms_at_capture`), so an app can work out the drift
+    that puts the signal on time (`capture_drift_ms - 1000 * xdt`) even when
+    the drift changed while the decode ran. The existing `drift_ms`
+    (`compute_drift_estimate`, from desktop's auto-sync) isn't used for
+    that: it takes the decode window's start minus the submode's start
+    delay plus `xdt`, so it comes out one start delay short (500 ms for
+    Normal and Slow, 200 Fast, 100 Turbo): signals 1.5 s late give -1000.
+
+All ten are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 

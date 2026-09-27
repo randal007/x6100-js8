@@ -1246,6 +1246,7 @@ public:
           if (auto const* d = std::get_if<events::Decoded>(&ev)) {
             auto out = *d;
             out.drift_ms = compute_drift_estimate(task, out);
+            out.capture_drift_ms = static_cast<int>(task.drift_ms_at_capture);
             emit_event(events::Variant{std::move(out)});
             return;
           }

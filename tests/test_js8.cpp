@@ -528,16 +528,73 @@ TEST_CASE("lat/lon to Maidenhead grid", "[js8][ops][aprs]") {
     CHECK_FALSE(js8_latlon_to_grid(0.0, 0.0, 10, g, 8));
 }
 
-TEST_CASE("clock correction is the negated median DT", "[js8][ops]") {
-    float c = 0;
-    const float few[] = {1.0f, 1.2f};
-    CHECK_FALSE(js8_clock_correction(few, 2, &c));
-    const float dts[] = {1.1f, 0.9f, 5.0f, 1.0f, -3.0f}; // outliers don't matter
-    REQUIRE(js8_clock_correction(dts, 5, &c));
-    CHECK(c == Catch::Approx(-1.0f));
-    const float even[] = {0.2f, 0.4f, 0.6f, 0.8f};
-    REQUIRE(js8_clock_correction(even, 4, &c));
-    CHECK(c == Catch::Approx(-0.5f));
+namespace {
+js8_sync_sample_t sync_sample(const char *call, int64_t when, int32_t drift, int32_t period = 15000) {
+    js8_sync_sample_t x{};
+    std::snprintf(x.call, sizeof(x.call), "%s", call);
+    x.when_ms   = when;
+    x.drift_ms  = drift;
+    x.period_ms = period;
+    return x;
+}
+} // namespace
+
+TEST_CASE("Time Sync: median across stations, each counted once", "[js8][ops][drift]") {
+    const int64_t now = 1'000'000'000;
+    int64_t       d   = 0;
+    unsigned      decodes = 0, stations = 0;
+
+    // Too few decodes.
+    js8_sync_sample_t two[] = {sync_sample("W1ABC", now - 1000, -1500), sync_sample("K9DEF", now - 2000, -1400)};
+    CHECK_FALSE(js8_sync_drift(two, 2, now, 120000, 0, &d, &decodes, &stations));
+    CHECK(decodes == 2);
+
+    // Three stations near -1.5 s; one chatty station 3 s out sends five
+    // messages: it counts once and can't pull the answer.
+    std::vector<js8_sync_sample_t> v = {sync_sample("W1ABC", now - 1000, -1500), sync_sample("K9DEF", now - 2000, -1400),
+                                        sync_sample("N0XYZ", now - 3000, -1600)};
+    for (int i = 0; i < 5; i++) v.push_back(sync_sample("BADCLK", now - 500 - i, -4500));
+    REQUIRE(js8_sync_drift(v.data(), (unsigned)v.size(), now, 120000, 0, &d, &decodes, &stations));
+    CHECK(decodes == 8);
+    CHECK(stations == 4);
+    CHECK(d == -1550); // -4500 -1600 -1500 -1400 (each once): the mean of the middle two
+
+    // Fewer than 3 stations: the median of all decodes.
+    js8_sync_sample_t few[] = {sync_sample("W1ABC", now - 1000, -1500), sync_sample("W1ABC", now - 20000, -1300),
+                               sync_sample("K9DEF", now - 2000, -1400)};
+    REQUIRE(js8_sync_drift(few, 3, now, 120000, 0, &d, &decodes, &stations));
+    CHECK(stations == 2);
+    CHECK(d == -1400);
+}
+
+TEST_CASE("Time Sync: decodes finishing after a change still count right", "[js8][ops][drift]") {
+    // Each decode's suggestion is absolute (worked out from the drift at
+    // capture): after syncing to -1500, the same band's decodes, old or new,
+    // all suggest -1500, so pressing again changes nothing.
+    const int64_t     now = 2'000'000'000;
+    js8_sync_sample_t v[] = {sync_sample("W1ABC", now - 30000, -1500), sync_sample("K9DEF", now - 29000, -1510),
+                             sync_sample("N0XYZ", now - 1000, -1490), sync_sample("VE7ABC", now - 500, -1500)};
+    int64_t d = 0;
+    REQUIRE(js8_sync_drift(v, 4, now, 120000, -1500, &d, nullptr, nullptr));
+    CHECK(d == -1500);
+}
+
+TEST_CASE("Time Sync: the short way round each speed's slot, and old decodes skipped", "[js8][ops][drift]") {
+    const int64_t now = 3'000'000'000;
+    int64_t       d   = 0;
+    // A Turbo decode (6 s slots) suggesting +4500 is the same as -1500;
+    // a Normal one suggesting +13500 too (15 s slots).
+    js8_sync_sample_t v[] = {sync_sample("W1ABC", now - 1000, -1500), sync_sample("K9DEF", now - 1000, 4500, 6000),
+                             sync_sample("N0XYZ", now - 1000, 13500, 15000),
+                             sync_sample("OLD1", now - 200000, 9000), // beyond the window: skipped
+                             js8_sync_sample_t{}};                       // empty: skipped
+    unsigned decodes = 0;
+    REQUIRE(js8_sync_drift(v, 5, now, 120000, 0, &d, &decodes, nullptr));
+    CHECK(decodes == 3);
+    CHECK(d == -1500);
+    // Near a large current drift the same values come out near it.
+    REQUIRE(js8_sync_drift(v, 5, now, 120000, -14000, &d, nullptr, nullptr));
+    CHECK(d == -16500);
 }
 
 TEST_CASE("JS8 time is the system clock plus the Time Sync drift", "[js8][drift]") {

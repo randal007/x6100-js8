@@ -13,6 +13,7 @@
 
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <cstring>
 #include <memory>
 #include <new>
@@ -47,6 +48,9 @@ js8_rx_msg_t to_c(const RxFrame &f, const std::string &my_call) {
     m.utc            = f.utc;
     m.snr            = (int16_t)f.snr;
     m.dt             = f.dt;
+    // On time with this drift: the one its audio was captured with, less
+    // how late it started by it (DT).
+    m.drift_ms       = f.capture_drift_ms - (int32_t)std::lround(f.dt * 1000.0f);
     m.freq_hz        = f.freq_hz;
     m.type           = (uint8_t)f.type;
     m.submode        = (uint8_t)f.mode;
