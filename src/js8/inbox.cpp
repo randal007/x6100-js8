@@ -12,6 +12,7 @@
 #include <cctype>
 #include <cstdio>
 #include <fstream>
+#include <regex>
 #include <sstream>
 #include <unistd.h>
 
@@ -20,8 +21,9 @@ namespace x6100::js8 {
 namespace {
 
 // File format, one message per line (tabs never appear in JS8 text):
-//   id <TAB> utc_ms <TAB> U|R <TAB> from <TAB> text
-const char *const HEADER = "# X6100 JS8 inbox: id, UTC ms, U(nread)/R(ead), from, message\n";
+//   id <TAB> utc_ms <TAB> U|R <TAB> from <TAB> to <TAB> path <TAB> text
+// (v1 files, without to and path, still load).
+const char *const HEADER = "# X6100 JS8 inbox v2: id, UTC ms, U(nread)/R(ead), from, to, path, message\n";
 
 std::string one_line(const std::string &s) {
     std::string out = s;
@@ -37,6 +39,33 @@ std::vector<std::string> words(const std::string &s) {
     return out;
 }
 
+// A line's fields; the message itself is the last one (it never has a tab).
+std::vector<std::string> fields(std::string line) {
+    if (!line.empty() && line.back() == '\r') line.pop_back();
+    std::vector<std::string> out;
+    std::size_t              start = 0;
+    for (auto tab = line.find('\t'); tab != std::string::npos; tab = line.find('\t', start)) {
+        out.push_back(line.substr(start, tab - start));
+        start = tab + 1;
+    }
+    out.push_back(line.substr(start));
+    return out;
+}
+
+std::string join(const std::vector<std::string> &v, char sep) {
+    std::string out;
+    for (auto &x : v) out += (out.empty() ? "" : std::string(1, sep)) + x;
+    return out;
+}
+
+std::vector<std::string> split(const std::string &s, char sep) {
+    std::vector<std::string> out;
+    std::stringstream        in(s);
+    for (std::string x; std::getline(in, x, sep);)
+        if (!x.empty()) out.push_back(x);
+    return out;
+}
+
 } // namespace
 
 bool Inbox::load(const std::string &path) {
@@ -46,26 +75,24 @@ bool Inbox::load(const std::string &path) {
     if (!f) return access(path.c_str(), F_OK) != 0; // missing: empty inbox
     for (std::string line; std::getline(f, line);) {
         if (line.empty() || line[0] == '#') continue;
-        std::vector<std::string> field;
-        std::size_t              start = 0;
-        for (int i = 0; i < 4; i++) {
-            auto tab = line.find('\t', start);
-            if (tab == std::string::npos) break;
-            field.push_back(line.substr(start, tab - start));
-            start = tab + 1;
-        }
-        if (field.size() != 4) continue;
+        // v1: id, utc, U/R, from, text; v2 adds to and path before the text.
+        auto fld = fields(line);
+        if (fld.size() != 5 && fld.size() != 7) continue;
         InboxMessage m;
         try {
-            m.id     = std::stoi(field[0]);
-            m.utc_ms = std::stoll(field[1]);
+            m.id     = std::stoi(fld[0]);
+            m.utc_ms = std::stoll(fld[1]);
         } catch (...) {
             continue;
         }
-        m.read = field[2] == "R";
-        m.from = field[3];
-        m.text = line.substr(start);
-        if (!m.text.empty() && m.text.back() == '\r') m.text.pop_back();
+        m.read = fld[2] == "R";
+        m.from = fld[3];
+        if (fld.size() == 7) {
+            m.to   = fld[4];
+            m.path = fld[5];
+        }
+        if (m.path.empty()) m.path = m.from;
+        m.text   = fld.back();
         next_id_ = std::max(next_id_, m.id + 1);
         msgs_.push_back(m);
     }
@@ -78,8 +105,9 @@ bool Inbox::save(const std::string &path) const {
     if (!f) return false;
     bool ok = std::fputs(HEADER, f) >= 0;
     for (auto &m : msgs_) {
-        ok = ok && std::fprintf(f, "%d\t%lld\t%s\t%s\t%s\n", m.id, (long long)m.utc_ms, m.read ? "R" : "U",
-                                one_line(m.from).c_str(), one_line(m.text).c_str()) >= 0;
+        ok = ok && std::fprintf(f, "%d\t%lld\t%s\t%s\t%s\t%s\t%s\n", m.id, (long long)m.utc_ms, m.read ? "R" : "U",
+                                one_line(m.from).c_str(), one_line(m.to).c_str(), one_line(m.path).c_str(),
+                                one_line(m.text).c_str()) >= 0;
     }
     ok = ok && std::fflush(f) == 0;
     fsync(fileno(f));
@@ -91,7 +119,8 @@ bool Inbox::save(const std::string &path) const {
     return true;
 }
 
-int Inbox::add(const std::string &from, const std::string &text, std::int64_t utc_ms) {
+int Inbox::add(const std::string &from, const std::string &text, std::int64_t utc_ms, const std::string &to,
+               const std::string &path) {
     for (auto &m : msgs_)
         if (m.from == from && m.text == text && utc_ms - m.utc_ms < REPEAT_MS) return m.id;
 
@@ -100,6 +129,8 @@ int Inbox::add(const std::string &from, const std::string &text, std::int64_t ut
     m.utc_ms = utc_ms;
     m.from   = one_line(from);
     m.text   = one_line(text);
+    m.to     = one_line(to);
+    m.path   = one_line(path.empty() ? from : path);
     msgs_.push_back(m);
 
     // Full: drop the oldest read message, else the oldest.
@@ -142,7 +173,9 @@ int Inbox::unread() const {
 }
 
 namespace {
-const char *const HELD_HEADER = "# X6100 JS8 held messages: id, UTC ms, H(eld)/D(elivered), from, for, message\n";
+const char *const HELD_HEADER =
+    "# X6100 JS8 held messages v2: id, UTC ms, H(eld)/D(elivered), from, for, path, RETRIEVE MSG sent (ms), "
+    "fetched by (group), message\n";
 } // namespace
 
 bool HeldMessages::load(const std::string &path) {
@@ -152,27 +185,26 @@ bool HeldMessages::load(const std::string &path) {
     if (!f) return access(path.c_str(), F_OK) != 0;
     for (std::string line; std::getline(f, line);) {
         if (line.empty() || line[0] == '#') continue;
-        std::vector<std::string> field;
-        std::size_t              start = 0;
-        for (int i = 0; i < 5; i++) {
-            auto tab = line.find('\t', start);
-            if (tab == std::string::npos) break;
-            field.push_back(line.substr(start, tab - start));
-            start = tab + 1;
-        }
-        if (field.size() != 5) continue;
+        // v1: id, utc, H/D, from, for, text; v2 adds path, notified, got.
+        auto fld = fields(line);
+        if (fld.size() != 6 && fld.size() != 9) continue;
         HeldMessage m;
         try {
-            m.id     = std::stoi(field[0]);
-            m.utc_ms = std::stoll(field[1]);
+            m.id     = std::stoi(fld[0]);
+            m.utc_ms = std::stoll(fld[1]);
+            if (fld.size() == 9) m.notified_ms = fld[6].empty() ? 0 : std::stoll(fld[6]);
         } catch (...) {
             continue;
         }
-        m.delivered = field[2] == "D";
-        m.from      = field[3];
-        m.to        = field[4];
-        m.text      = line.substr(start);
-        if (!m.text.empty() && m.text.back() == '\r') m.text.pop_back();
+        m.delivered = fld[2] == "D";
+        m.from      = fld[3];
+        m.to        = fld[4];
+        if (fld.size() == 9) {
+            m.path = fld[5];
+            m.got  = split(fld[7], ',');
+        }
+        if (m.path.empty()) m.path = m.from;
+        m.text   = fld.back();
         next_id_ = std::max(next_id_, m.id + 1);
         msgs_.push_back(m);
     }
@@ -185,8 +217,10 @@ bool HeldMessages::save(const std::string &path) const {
     if (!f) return false;
     bool ok = std::fputs(HELD_HEADER, f) >= 0;
     for (auto &m : msgs_) {
-        ok = ok && std::fprintf(f, "%d\t%lld\t%s\t%s\t%s\t%s\n", m.id, (long long)m.utc_ms, m.delivered ? "D" : "H",
-                                one_line(m.from).c_str(), one_line(m.to).c_str(), one_line(m.text).c_str()) >= 0;
+        ok = ok && std::fprintf(f, "%d\t%lld\t%s\t%s\t%s\t%s\t%lld\t%s\t%s\n", m.id, (long long)m.utc_ms,
+                                m.delivered ? "D" : "H", one_line(m.from).c_str(), one_line(m.to).c_str(),
+                                one_line(m.path).c_str(), (long long)m.notified_ms, join(m.got, ',').c_str(),
+                                one_line(m.text).c_str()) >= 0;
     }
     ok = ok && std::fflush(f) == 0;
     fsync(fileno(f));
@@ -198,7 +232,8 @@ bool HeldMessages::save(const std::string &path) const {
     return true;
 }
 
-int HeldMessages::add(const std::string &from, const std::string &to, const std::string &text, std::int64_t utc_ms) {
+int HeldMessages::add(const std::string &from, const std::string &to, const std::string &text, std::int64_t utc_ms,
+                      const std::string &path) {
     const std::string dest = base_callsign(to);
     for (auto &m : msgs_)
         if (m.from == from && m.to == dest && m.text == text && utc_ms - m.utc_ms < Inbox::REPEAT_MS) return m.id;
@@ -207,10 +242,15 @@ int HeldMessages::add(const std::string &from, const std::string &to, const std:
     m.utc_ms = utc_ms;
     m.from   = one_line(from);
     m.to     = one_line(dest);
+    m.path   = one_line(path.empty() ? from : path);
     m.text   = one_line(text);
     msgs_.push_back(m);
+    // Full: drop a delivered one (or a group message past its two days),
+    // else the oldest.
     while (msgs_.size() > MAX_MESSAGES) {
-        auto it = std::find_if(msgs_.begin(), msgs_.end(), [](const HeldMessage &x) { return x.delivered; });
+        auto it = std::find_if(msgs_.begin(), msgs_.end(), [&](const HeldMessage &x) {
+            return x.delivered || (x.is_group() && utc_ms - x.utc_ms > GROUP_WINDOW_MS);
+        });
         msgs_.erase(it != msgs_.end() ? it : msgs_.begin());
     }
     return m.id;
@@ -225,6 +265,75 @@ std::optional<int> HeldMessages::next_for(const std::string &call) const {
     const std::string base = base_callsign(call);
     for (auto &m : msgs_)
         if (!m.delivered && !m.text.empty() && (m.to == call || m.to == base)) return m.id;
+    return std::nullopt;
+}
+
+std::optional<int> HeldMessages::lookahead_for(const std::string &call, int id) const {
+    // Desktop looks for the call as heard, then its base call.
+    for (const std::string &c : {call, base_callsign(call)})
+        for (auto &m : msgs_)
+            if (m.id != id && !m.delivered && !m.text.empty() && m.to == c) return m.id;
+    return std::nullopt;
+}
+
+int HeldMessages::count_for(const std::string &call) const {
+    // Desktop counts the call exactly as heard, while messages are stored
+    // under base calls, so "W1ABC/P" would count none; count both.
+    const std::string base = base_callsign(call);
+    return (int)std::count_if(msgs_.begin(), msgs_.end(), [&](const HeldMessage &m) {
+        return !m.delivered && !m.text.empty() && (m.to == call || m.to == base);
+    });
+}
+
+namespace {
+bool group_waiting(const HeldMessage &m, const std::string &group, const std::string &call, std::int64_t now_ms) {
+    return m.to == group && !m.text.empty() && now_ms - m.utc_ms < HeldMessages::GROUP_WINDOW_MS &&
+           std::find(m.got.begin(), m.got.end(), call) == m.got.end();
+}
+} // namespace
+
+std::optional<int> HeldMessages::next_group_for(const std::string &group, const std::string &call,
+                                                std::int64_t now_ms) const {
+    for (auto &m : msgs_)
+        if (group_waiting(m, group, call, now_ms)) return m.id;
+    return std::nullopt;
+}
+
+std::optional<int> HeldMessages::lookahead_group_for(const std::string &group, const std::string &call, int id,
+                                                     std::int64_t now_ms) const {
+    for (const std::string &c : {call, base_callsign(call)})
+        for (auto &m : msgs_)
+            if (m.id != id && group_waiting(m, group, c, now_ms)) return m.id;
+    return std::nullopt;
+}
+
+int HeldMessages::count_group_for(const std::string &group, const std::string &call, std::int64_t now_ms) const {
+    return (int)std::count_if(msgs_.begin(), msgs_.end(),
+                              [&](const HeldMessage &m) { return group_waiting(m, group, call, now_ms); });
+}
+
+bool HeldMessages::mark_group_delivered(int id, const std::string &call) {
+    for (auto &m : msgs_)
+        if (m.id == id && m.is_group()) {
+            if (std::find(m.got.begin(), m.got.end(), call) != m.got.end()) return false;
+            m.got.push_back(one_line(call));
+            return true;
+        }
+    return false;
+}
+
+std::optional<std::pair<int, std::string>> HeldMessages::push_due(const std::vector<Heard> &heard,
+                                                                  std::int64_t              now_ms) {
+    for (auto &m : msgs_) {
+        if (m.delivered || m.text.empty() || m.to.empty() || m.is_group()) continue;
+        bool seen = false;
+        for (auto &h : heard)
+            if ((h.call == m.to || base_callsign(h.call) == m.to) && now_ms - h.heard_ms <= PUSH_SEEN_MS) seen = true;
+        if (!seen) continue;
+        if (m.notified_ms && now_ms - m.notified_ms < PUSH_REPEAT_MS) continue;
+        m.notified_ms = now_ms;
+        return std::make_pair(m.id, m.to + " RETRIEVE MSG " + std::to_string(m.id));
+    }
     return std::nullopt;
 }
 
@@ -307,12 +416,27 @@ std::optional<std::string> msg_body(const std::string &text, const std::string &
 std::optional<int> msg_id_offered(const std::string &text) {
     auto w = words(text);
     for (std::size_t i = 0; i + 2 < w.size(); i++) {
-        if (w[i] != "MSG" || w[i + 1] != "ID") continue;
+        bool id       = w[i] == "MSG" && w[i + 1] == "ID";
+        bool retrieve = w[i] == "RETRIEVE" && w[i + 1] == "MSG";
+        if (!id && !retrieve) continue;
         const auto &n = w[i + 2];
         if (n.empty() || n.size() > 6 || !std::all_of(n.begin(), n.end(), ::isdigit)) continue;
         return std::stoi(n);
     }
     return std::nullopt;
+}
+
+std::optional<Signature> delivered_signature(const std::string &text) {
+    // Desktop's MessagePanel: (?:^| )FROM (callsign)(?: NEXT MSG ID \d+(?: \+\d+)?)?$
+    static const std::regex re("(?:^| )FROM (\\S+)(?: NEXT MSG ID (\\d+)(?: \\+\\d+)?)?$");
+    std::smatch             m;
+    std::string             t = text;
+    while (!t.empty() && t.back() == ' ') t.pop_back();
+    if (!std::regex_search(t, m, re)) return std::nullopt;
+    Signature s;
+    s.from = m.str(1);
+    if (m[2].matched) s.next_id = std::stoi(m.str(2));
+    return s;
 }
 
 } // namespace x6100::js8

@@ -129,6 +129,7 @@ typedef struct {
     params_bool_t       js8_auto;
     params_bool_t       js8_hb;
     params_bool_t       js8_hb_ack;
+    params_bool_t       js8_relay;       /* pass relays (>) on and hold MSG TO: for others, as desktop */
     params_uint16_t     js8_hb_interval;
     params_uint16_t     js8_cq_interval; /* auto CQ: minutes after each CQ ends */
     params_bool_t       js8_log_prompt;  /* offer to log when a QSO ends */

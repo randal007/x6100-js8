@@ -26,6 +26,9 @@ enum class Query {
     SeventyThree, ///< "CALL 73"
 };
 
+/// Desktop's Varicode::formatSNR(): "+05", "-12"; empty outside -60..+60.
+std::string desktop_snr(int snr);
+
 /// Text for a one-press message to `to_call`. `their_snr` is used by
 /// SendSnr, `my_grid` by MyGrid. Returns "" if a needed value is missing.
 std::string query_text(Query q, const std::string &to_call, int their_snr, const std::string &my_grid);

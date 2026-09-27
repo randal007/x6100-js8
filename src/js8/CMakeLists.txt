@@ -6,6 +6,7 @@ add_library(JS8 STATIC
     render.cpp
     assembler.cpp
     classify.cpp
+    directed.cpp
     receiver.cpp
     wav.cpp
     tx.cpp

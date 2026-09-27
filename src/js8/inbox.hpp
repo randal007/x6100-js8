@@ -16,12 +16,16 @@
 #include <utility>
 #include <vector>
 
+#include "directed.hpp"
+
 namespace x6100::js8 {
 
 struct InboxMessage {
     int          id     = 0;
     std::int64_t utc_ms = 0;
     std::string  from, text;
+    std::string  to;   ///< our call, or one of our groups
+    std::string  path; ///< desktop's PATH: the way back, "K2XYZ>N0XYZ" if relayed
     bool         read = false;
 };
 
@@ -37,7 +41,9 @@ public:
 
     /// Returns the id. The same text from the same station within REPEAT_MS
     /// is a resend (they didn't get our ACK): the existing id, not a copy.
-    int add(const std::string &from, const std::string &text, std::int64_t utc_ms);
+    /// `path` empty: the message came straight from `from`.
+    int add(const std::string &from, const std::string &text, std::int64_t utc_ms, const std::string &to = "",
+            const std::string &path = "");
 
     /// Newest first.
     std::vector<InboxMessage> list() const;
@@ -55,35 +61,65 @@ private:
 /// A message held here for another station, as desktop JS8Call stores
 /// "MSG TO:" messages ("STORE") until that station asks with QUERY MSGS /
 /// QUERY MSG n (then "DELIVERED"). One per line in a text file, like the inbox.
+/// A message for a group ("MSG TO:@GROUP") is never delivered as a whole:
+/// any member can fetch it for two days, and `got` lists who has.
 struct HeldMessage {
     int          id     = 0;
     std::int64_t utc_ms = 0;
-    std::string  from, to, text; ///< `to` is a base call, as desktop stores it
+    std::string  from, to, text; ///< `to` is a base call, as desktop stores it, or a @GROUP
+    std::string  path;           ///< how it came: "N0XYZ", or "K2XYZ>N0XYZ" relayed
     bool         delivered = false;
+    std::int64_t notified_ms = 0;   ///< last "RETRIEVE MSG" sent for it
+    std::vector<std::string> got; ///< group message: the stations that fetched it
+
+    bool is_group() const { return !to.empty() && to[0] == '@'; }
 };
 
 class HeldMessages {
 public:
-    static constexpr std::size_t MAX_MESSAGES = 100;
+    static constexpr std::size_t  MAX_MESSAGES    = 100;
+    static constexpr std::int64_t GROUP_WINDOW_MS = 2LL * 24 * 60 * 60 * 1000; ///< desktop: group messages, 2 days
+    static constexpr std::int64_t PUSH_SEEN_MS    = 15 * 60 * 1000;          ///< heard this recently
+    static constexpr std::int64_t PUSH_REPEAT_MS  = 8LL * 60 * 60 * 1000;    ///< once per 8 h per message
 
     bool load(const std::string &path);
     bool save(const std::string &path) const;
 
     /// Hold `text` from `from` for `to` (stored as its base call). A resend
     /// within Inbox::REPEAT_MS returns the first one's id.
-    int add(const std::string &from, const std::string &to, const std::string &text, std::int64_t utc_ms);
+    int add(const std::string &from, const std::string &to, const std::string &text, std::int64_t utc_ms,
+            const std::string &path = "");
 
     /// The oldest undelivered message for `call` (or its base call), as
     /// desktop's getNextMessageIdForCallsign().
     std::optional<int> next_for(const std::string &call) const;
+    /// The next one after `id` (desktop's lookahead): "NEXT MSG ID n".
+    std::optional<int> lookahead_for(const std::string &call, int id) const;
+    /// Undelivered messages for `call`: desktop's countUnreadForCallsign().
+    int count_for(const std::string &call) const;
+
+    /// Group messages to `group` from the last two days that `call` hasn't
+    /// fetched yet: the oldest, the next after `id`, how many.
+    std::optional<int> next_group_for(const std::string &group, const std::string &call, std::int64_t now_ms) const;
+    std::optional<int> lookahead_group_for(const std::string &group, const std::string &call, int id,
+                                           std::int64_t now_ms) const;
+    int count_group_for(const std::string &group, const std::string &call, std::int64_t now_ms) const;
+
     std::optional<HeldMessage> get(int id) const;
     /// Is message `id` for `call`? (desktop: TO equals the caller or its base)
     bool is_for(int id, const std::string &call) const;
     bool mark_delivered(int id);
+    /// A group message fetched by `call`.
+    bool mark_group_delivered(int id, const std::string &call);
     bool remove(int id);
     std::vector<HeldMessage> list() const; ///< newest first
     int  waiting() const;                  ///< not yet delivered
     std::size_t size() const { return msgs_.size(); }
+
+    /// Desktop's pushNotificationHandler(): the first message whose station
+    /// was heard in the last 15 minutes and hasn't been told in 8 hours, as
+    /// "W1ABC RETRIEVE MSG 3"; marks it told. Not for group messages.
+    std::optional<std::pair<int, std::string>> push_due(const std::vector<Heard> &heard, std::int64_t now_ms);
 
 private:
     std::vector<HeldMessage> msgs_; ///< oldest first
@@ -101,8 +137,17 @@ std::optional<int> query_msg_id(const std::string &text);
 /// (or its base call): "HELLO THERE". Not "MSG TO:" (stored for others).
 std::optional<std::string> msg_body(const std::string &text, const std::string &my_call);
 
-/// "N0XYZ: K2XYZ YES MSG ID 3" or a heartbeat ack ending "MSG ID 3": they
-/// hold message 3 for us.
+/// "N0XYZ: K2XYZ YES MSG ID 3", a heartbeat ack ending "MSG ID 3", or
+/// "RETRIEVE MSG 3": they hold message 3 for us.
 std::optional<int> msg_id_offered(const std::string &text);
+
+/// A delivered message's signature, as desktop's inbox reads it: the
+/// original sender in "... FROM N0XYZ" (then maybe "NEXT MSG ID 4 +2"),
+/// and the next id if there is one.
+struct Signature {
+    std::string from;
+    int         next_id = 0;
+};
+std::optional<Signature> delivered_signature(const std::string &text);
 
 } // namespace x6100::js8

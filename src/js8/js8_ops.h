@@ -71,14 +71,26 @@ void            js8_stations_clear(js8_stations_t *s);
 /* ---- Auto-reply, heartbeat acks, heartbeat timing (T4) --------------- */
 
 typedef struct js8_held js8_held_t;
+typedef struct js8_inbox js8_inbox_t;
+
+#define JS8_PATH_LEN 48 /* a relay path, "K2XYZ>N0XYZ" */
 
 typedef struct {
     bool        autoreply; /* AUTO */
     bool        heartbeat; /* HB   */
     bool        hb_ack;    /* HB ACK: acts only with AUTO and HB on */
+    bool        relay;     /* pass relays on and hold MSG TO: (desktop's relay switch) */
     const char *my_call, *my_grid, *info, *status;
-    js8_held_t *held; /* messages held for others, or NULL */
+    const char *groups; /* "@GROUP1 @GROUP2": groups we're in, or NULL */
+    js8_held_t *held;   /* messages held for others, or NULL */
 } js8_auto_settings_t;
+
+/* A station heard lately (HEARING?, QUERY CALL, RETRIEVE MSG). */
+typedef struct {
+    const char *call;
+    int         snr;
+    int64_t     heard_ms;
+} js8_heard_t;
 
 typedef enum {
     JS8_AUTO_IGNORE,
@@ -86,25 +98,53 @@ typedef enum {
     JS8_AUTO_OFFER, /* AUTO is off: suggest it, like desktop's outgoing box */
 } js8_auto_action_t;
 
+typedef enum {
+    JS8_REPLY_QUERY,   /* an answer to a question */
+    JS8_REPLY_HB_ACK,  /* a heartbeat ack */
+    JS8_REPLY_ACK,     /* ACK for a message kept here, or a relay that ended here */
+    JS8_REPLY_SUGGEST, /* only ever offered */
+    JS8_REPLY_RELAY,   /* a relay passed on */
+    JS8_REPLY_STORED,  /* YES MSG ID / NO, a held message, QUERY CALL */
+} js8_reply_kind_t;
+
 typedef struct {
     js8_auto_action_t action;
-    bool              hb_ack; /* a heartbeat ack: send in the HB sub-band */
+    js8_reply_kind_t  kind;
+    bool              hb_ack;  /* a heartbeat ack: send in the HB sub-band */
+    bool              allcall; /* answers an @ALLCALL (rate limit) */
     char              text[JS8_RX_TEXT_LEN];
     char              to[JS8_RX_CALL_LEN];
     char              command[16];
     int               deliver_id; /* a held message this delivers: js8_held_delivered() once sent */
+    char              deliver_group_call[JS8_RX_CALL_LEN]; /* a group message: who it went to */
 } js8_auto_result_t;
+
+typedef enum { JS8_STORED_NONE, JS8_STORED_INBOX, JS8_STORED_HELD } js8_stored_kind_t;
+
+/* What js8_process() kept from a message. */
+typedef struct {
+    js8_stored_kind_t kind;
+    int               id;     /* -1: couldn't save the file (kept in memory) */
+    bool              resend; /* the same message again: nothing new */
+    char              from[JS8_RX_CALL_LEN];
+    char              to[JS8_RX_CALL_LEN];
+    char              path[JS8_PATH_LEN];
+    char              text[JS8_RX_TEXT_LEN];
+} js8_stored_t;
 
 typedef struct js8_auto js8_auto_t;
 
 js8_auto_t *js8_auto_create(void);
 void        js8_auto_destroy(js8_auto_t *a);
 
-/* Decide what to do about a received message. heard: recent calls, most
- * recent first (for HEARING?). last_tx: our last message (for AGN?). */
-void js8_auto_consider(js8_auto_t *a, const js8_rx_msg_t *msg, const js8_auto_settings_t *s,
-                       const char *const *heard, unsigned n_heard, const char *last_tx, int64_t now_ms,
-                       js8_auto_result_t *out);
+/* A received message, as desktop JS8Call's processCommandActivity() takes
+ * it: keeps a MSG for us in the inbox and a MSG TO: in s->held (stored),
+ * and decides the answer (out): queries, heartbeat acks, ACKs, relays,
+ * held messages. heard: recent stations, most recent first. last_tx: our
+ * last message (for AGN?). Either output may be NULL. */
+void js8_process(js8_auto_t *a, const js8_rx_msg_t *msg, const js8_auto_settings_t *s, const js8_heard_t *heard,
+                 unsigned n_heard, const char *last_tx, int64_t now_ms, js8_inbox_t *inbox, js8_stored_t *stored,
+                 js8_auto_result_t *out);
 /* Record that a reply was queued (rate limits). */
 void js8_auto_sent(js8_auto_t *a, const js8_auto_result_t *r, int64_t now_ms);
 /* Any key, button or knob; automatic TX stops after an hour without one. */
@@ -204,11 +244,11 @@ typedef struct {
     int     id;
     int64_t utc_ms;
     char    from[JS8_RX_CALL_LEN];
+    char    to[JS8_RX_CALL_LEN];  /* our call, or our group */
+    char    path[JS8_PATH_LEN];   /* the way back: "K2XYZ>N0XYZ" if relayed, else from */
     char    text[JS8_RX_TEXT_LEN];
     bool    read;
 } js8_inbox_msg_t;
-
-typedef struct js8_inbox js8_inbox_t;
 
 /* Loads `path` (missing = empty); every change is saved back to it. */
 js8_inbox_t *js8_inbox_open(const char *path);
@@ -230,9 +270,12 @@ typedef struct {
     int     id;
     int64_t utc_ms;
     char    from[JS8_RX_CALL_LEN];
-    char    to[JS8_RX_CALL_LEN];
+    char    to[JS8_RX_CALL_LEN]; /* a base call, or a @GROUP */
+    char    path[JS8_PATH_LEN];
     char    text[JS8_RX_TEXT_LEN];
     bool    delivered;
+    bool    group; /* for a @GROUP: any member may fetch it for two days */
+    int     got;   /* group message: how many have fetched it */
 } js8_held_msg_t;
 
 js8_held_t *js8_held_open(const char *path);
@@ -242,6 +285,13 @@ int  js8_held_add(js8_held_t *h, const char *from, const char *to, const char *t
 int  js8_held_list(js8_held_t *h, js8_held_msg_t *out, int max); /* newest first */
 bool js8_held_get(js8_held_t *h, int id, js8_held_msg_t *out);
 void js8_held_delivered(js8_held_t *h, int id);
+/* A group message fetched by `call`. */
+void js8_held_group_delivered(js8_held_t *h, int id, const char *call);
+/* Desktop's stored-message notice: if a station we hold a message for was
+ * heard in the last 15 min and not told in 8 h, "W1ABC RETRIEVE MSG 3" in
+ * text and true (marked told). */
+bool js8_held_push_due(js8_held_t *h, const js8_heard_t *heard, unsigned n_heard, int64_t now_ms, char *text,
+                       unsigned text_len);
 void js8_held_delete(js8_held_t *h, int id);
 int  js8_held_waiting(js8_held_t *h); /* not yet delivered */
 int  js8_held_count(js8_held_t *h);
@@ -252,6 +302,14 @@ bool js8_msg_to_for_me(const js8_rx_msg_t *msg, const char *my_call, char *to, u
 /* A message for the inbox: "FROM: MYCALL MSG text" with a valid checksum.
  * The text goes to out. */
 bool js8_msg_for_me(const js8_rx_msg_t *msg, const char *my_call, char *out, unsigned out_len);
+
+/* "K2XYZ>N0XYZ" -> "N0XYZ via K2XYZ", as desktop's inbox shows a path. */
+void js8_path_display(const char *path, char *out, unsigned out_len);
+/* A delivered message's "... FROM N0XYZ [NEXT MSG ID 4 [+2]]": the original
+ * sender, and the next id (0 if none). */
+bool js8_delivered_signature(const char *text, char *from, unsigned from_len, int *next_id);
+/* Groups as typed -> "@GROUP1 @GROUP2" (upper case, '@' added, at most 10). */
+void js8_groups_normalise(const char *typed, char *out, unsigned out_len);
 
 /* ---- Alerts ----------------------------------------------------------- */
 

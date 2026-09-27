@@ -30,6 +30,8 @@ us), other stations' traffic, and a CQ sent at Turbo speed (`T`).*
 - [Transmitting](#transmitting)
 - [Speeds](#speeds)
 - [Messages and the Inbox](#messages-and-the-inbox)
+- [Relays](#relays)
+- [Settings](#settings)
 - [Logging](#logging)
 - [Alerts](#alerts)
 - [APRS](#aprs)
@@ -172,7 +174,7 @@ to go back a page. In JS8 a hold is half a second.
 |---|---|---|
 | 1 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
 | 1 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. With HB on, the automatic ones count again from this one. |
-| 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
+| 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…? |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. |
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
@@ -185,7 +187,7 @@ to go back a page. In JS8 a hold is half a second.
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
 | 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. |
 | 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and HB on, as on desktop). |
-| 4 | **Texts…** | What AUTO sends for INFO? and STATUS?. |
+| 4 | **Settings…** | INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay on/off and your groups: see [Settings](#settings). |
 | 5 | **APRS >** | [APRS](#aprs) spots and messages. |
 | 5 | **Log QSO** | [Log](#logging) the QSO that just ended, or the selected station. |
 | 5 | **Activ.: Off / POTA / SOTA** | Activating a park or summit: added to every log entry. Hold to type it. |
@@ -195,7 +197,7 @@ to go back a page. In JS8 a hold is half a second.
 | 6 | **Decode: All speeds / My speed** | Decode every speed (default), or only yours. |
 | 6 | **Freq: JS8 / GhostNet / kHz** | Which frequencies the band keys step through: **JS8Call's** (7.078, 14.078 …) or **GhostNet's** (3.575, 7.107, 14.107 MHz), tuning the closest one. Or **Custom kHz…**: type a dial frequency (e.g. `7107.5`; the last one is filled in). The band keys go from a custom frequency back to the list. |
 
-While a list is open (Query, Texts…, APRS, Log, Inbox, Alerts), any other
+While a list is open (Query, Settings…, APRS, Log, Inbox, Alerts), any other
 button just closes it; press again to do the thing. ESC closes lists too.
 
 | Query list | Log popup |
@@ -213,8 +215,13 @@ button just closes it; press again to do the thing. ESC closes lists too.
 - **Nothing sends by itself** unless you switch it on. AUTO, HB and HB ACK
   are off every time the app opens, and the status line shows what's on:
   - **AUTO** answers SNR?, GRID?, INFO?, STATUS?, HEARING?, AGN?, message
-    ACKs and message queries sent to your call. With AUTO off, each answer
-    waits on **Reply** for you to send.
+    ACKs and message queries sent to your call, and passes
+    [relays](#relays) on, as desktop JS8Call does. With AUTO off, each
+    answer waits on **Reply** for you to send (desktop answers `QUERY
+    MSGS`, `QUERY CALL` and anything to `@ALLCALL` only with AUTO on, so
+    those don't wait). With AUTO on it also tells a station you hold a
+    message for, when you hear them, with `W1ABC RETRIEVE MSG 3` (at most
+    every 15 minutes, once per message every 8 hours).
   - **HB** sends heartbeats on desktop's schedule; **HB ACK** acknowledges
     others' heartbeats.
   - A message to you turns HB and HB ACK off, so heartbeats don't cut into
@@ -249,11 +256,20 @@ JS8 has four speeds (desktop JS8Call's figures):
 **Receiving:** a `MSG` sent to you goes to the Inbox (page 3). The status
 line shows `MSG 1 NEW` and the **Inbox** button turns green until you've
 read it. The sender expects an `ACK`: AUTO sends it, or **Reply** has it
-ready.
+ready. A message that came through a [relay](#relays) shows the way it
+came (*VE7ABC via W1ABC*) and is ACKed back the same way; a `MSG` to one
+of your [groups](#settings) goes to the Inbox too. Messages an APRS
+gateway passes on to you (`@APRSIS MSG TO:<your call> …`) arrive from
+*APRS*, as on desktop, without an ACK.
 
 **The Inbox** opens on the oldest unread message (`*`). Open one to read
-it all; **Reply** writes back, **Delete** removes it. *New message to …*
-writes to the selected station.
+it all. **Reply** writes back the way it came. For a message someone held
+for you (`… FROM N0XYZ`) there are desktop's other two choices as well:
+**Reply to N0XYZ via** the station that held it (`MSG TO:N0XYZ`, held
+there for them), or straight to N0XYZ. When it ends `NEXT MSG ID 4`,
+**Fetch the next** asks for it. An APRS message's Reply is an APRS
+message to its sender. **Delete** removes it. *New message to …* writes
+to the selected station.
 
 **Sending**, from the Query list with a station selected:
 
@@ -261,23 +277,66 @@ writes to the selected station.
 |---|---|---|
 | Message… | `N0XYZ MSG <text>` | their inbox |
 | Message via them… | `N0XYZ MSG TO:W1ABC <text>` | N0XYZ holds it until W1ABC asks |
-| Any messages? | `N0XYZ QUERY MSGS` | they answer `YES MSG ID 3` or `NO` |
+| Any messages? | `N0XYZ QUERY MSGS` | they answer `YES MSG ID 3` (`+2`: two more after it) or `NO` |
+| Fetch message #… | `N0XYZ QUERY MSG 3` | the message they hold for you |
+| Relay via them… | `N0XYZ>W1ABC <text>` | N0XYZ passes it on to W1ABC ([Relays](#relays)) |
+| Can they reach…? | `N0XYZ QUERY CALL W1ABC?` | N0XYZ answers `YES -12 (5m)` if they've heard W1ABC |
 
-When a station says it holds a message for you (`YES MSG ID 3`, or `MSG ID
-3` on a heartbeat ack), **Reply** has `QUERY MSG 3` ready to fetch it.
+When a station says it holds a message for you (`YES MSG ID 3`, `MSG ID
+3` on a heartbeat ack, or `RETRIEVE MSG 3`), **Reply** has `QUERY MSG 3`
+ready to fetch it.
 
-**Holding messages for others:** a `MSG TO:W1ABC` sent to you is kept for
-W1ABC (Inbox → *Held for others*) and ACKed. When W1ABC asks (`QUERY
-MSGS`, then `QUERY MSG n`), it's sent as `W1ABC MSG <text> FROM <sender>`
-and marked *(sent)* once it has gone out in full; if you stop it halfway,
-it stays held. If W1ABC asks again, it goes again straight away (they
-didn't get it). W1ABC can also ask everyone, `@ALLCALL QUERY MSGS`: as on
-desktop, you answer `YES MSG ID n` only if you hold one for them, and stay
-quiet otherwise. With HB ACK on, W1ABC's heartbeat is acknowledged with
-`MSG ID n` so they know. As always, AUTO sends these answers, or they wait
-on Reply.
+**Holding messages for others** (store and forward), as desktop JS8Call
+does it:
+
+- A `MSG TO:W1ABC` sent to you is kept for W1ABC (Inbox → *Held for
+  others*) and ACKed.
+- W1ABC finds out when they ask (`QUERY MSGS`, to you or to everyone with
+  `@ALLCALL QUERY MSGS`), from your heartbeat ack (`MSG ID 3`, with HB ACK
+  on), or from your `W1ABC RETRIEVE MSG 3` when you hear them (AUTO on).
+  With more than one waiting the answer says so: `YES MSG ID 3 +2`.
+- W1ABC fetches it with `QUERY MSG 3` and gets `W1ABC MSG <text> FROM
+  <sender>`, with `NEXT MSG ID 4` when another is waiting. It's marked
+  *(sent)* once it has gone out in full; if you stop it halfway, it stays
+  held. If W1ABC asks again, it goes again straight away (they didn't get
+  it).
+- `MSG TO:@NET` holds a message for a group: anyone asking the group
+  (`@NET QUERY MSGS`) gets it, for two days, if `@NET` is one of your
+  [groups](#settings).
+- As always, AUTO sends these answers, or they wait on Reply. Switching
+  **Relay** off in Settings stops holding messages for others, as on
+  desktop.
 
 **HW CPY?** sent to you: **Reply** has your signal report ready.
+
+## Relays
+
+A relay reaches a station you can't hear through one you can, as in
+desktop JS8Call. With W1ABC out of reach but N0XYZ hearing you both:
+
+1. You send `N0XYZ>W1ABC HELLO` (Query → **Relay via them…**, or type it).
+2. N0XYZ's station passes it on by itself as `W1ABC>HELLO *DE* <you>`.
+3. W1ABC's station answers `N0XYZ><you> ACK`, which N0XYZ passes back to
+   you. If the relay carried a question (`SNR?`, `INFO?`, `QUERY MSGS` …)
+   or a `MSG`/`MSG TO:`, that's answered instead, the same way back.
+
+Your radio does all of this for others: with **Relay** on (the default,
+in Settings) and AUTO on, relays to you are passed on and relays ending
+at you are answered; with AUTO off, **Reply** has them ready, as desktop's
+outgoing box does. More hops work too: `N0XYZ>W1ABC>VE7ABC HI`. Relays
+ending at you with plain text are ACKed but not kept (desktop doesn't
+keep them either); a relayed `MSG` goes to the Inbox.
+
+## Settings
+
+Page 4 **Settings…**:
+
+| Line | Does |
+|---|---|
+| **INFO: …** | What AUTO sends for INFO? |
+| **STATUS: …** | What AUTO sends for STATUS? |
+| **Relay: On / Off** | Press to switch. On (the default, as on desktop): relays are passed on and `MSG TO:` messages held for others. Off: both are ignored (desktop's *Disable message relay*). |
+| **Groups: …** | The groups you're in, e.g. `@NET @CANADA` (desktop's *My groups*): messages and questions to them are answered as if to you, and `MSG TO:@NET` messages are held for their members. |
 
 ## Logging
 
@@ -386,7 +445,7 @@ All on the **DATA** partition, readable on a PC:
 | `js8call_log.adi` | your JS8 log (ADIF) |
 | `js8_inbox.txt` | Inbox messages, one per line |
 | `js8_held.txt` | messages held for other stations |
-| `js8_texts.txt` | INFO, STATUS, last POTA/SOTA references, spot frequency/mode/comment, alert words |
+| `js8_texts.txt` | INFO, STATUS, last POTA/SOTA references, spot frequency/mode/comment, alert words, groups |
 | `params.db`, `qso_log.db` | the radio's settings and QSO database |
 | `incoming_log.adi` | put an ADIF log here to import it (worked-before marks) at the next start |
 
@@ -459,11 +518,23 @@ Done for beta 3 so far:
   gets it again at once
 - [x] TX bar: the frame count ("1/5 starts in 13 s", "sending 2/5") comes
   before the message, so a long message can't push it off the screen
+- [x] [Relays](#relays), as desktop JS8Call does them: passed on, ACKed
+  back along the path, and the questions and messages they carry answered
+  the same way; **Relay via them…** and **Can they reach…?** (`QUERY
+  CALL`) on the Query list
+- [x] Store and forward checked line by line against desktop JS8Call:
+  `YES MSG ID 3 +2`, `NEXT MSG ID`, group messages (`MSG TO:@GROUP`),
+  `RETRIEVE MSG` notices, `QUERY CALL`, messages from APRS gateways, and
+  desktop's Reply choices in the Inbox; `QUERY MSGS` answered only with
+  AUTO on, and every time it's asked, as desktop does
+- [x] Page 4 **Texts…** is now **Settings…**: INFO, STATUS, Relay on/off
+  and your groups, with room for more
 
 Still to do:
 
 - [ ] On-air tests of the beta 3 build: Time Sync, the APRS gateways (POTA,
-  SOTA, SMS, email, Winlink) and a long message watched to the end
+  SOTA, SMS, email, Winlink), a long message watched to the end, and relays
+  and store and forward with desktop JS8Call stations
 - [ ] Performance: measure each part's CPU use on the radio and spread the
   work over its four cores (the screen drawing and the JS8 decoder each
   lean on one core today)

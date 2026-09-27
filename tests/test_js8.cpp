@@ -1167,7 +1167,7 @@ AutoSettings settings() {
 
 TEST_CASE("auto-reply builds desktop JS8Call's answers to queries", "[js8][t4]") {
     auto                     s     = settings();
-    std::vector<std::string> heard = {"N0XYZ", "VE3KP", "K2XYZ", "G4ABC", "DL1XX", "W1ABC"};
+    std::vector<Heard>       heard = {"N0XYZ", "VE3KP", "K2XYZ", "G4ABC", "DL1XX", "W1ABC"};
 
     struct Case {
         const char *asked, *answer;
@@ -2075,7 +2075,8 @@ TEST_CASE("store and forward replies follow desktop", "[js8][held]") {
     auto bad = incoming("W1ABC", "K2XYZ QUERY MSG " + std::to_string(id), -5);
     CHECK_FALSE(build_reply(bad, s, {}, ""));
     // Asked again within the repeat guard: it didn't get there, so AUTO sends
-    // it again (a plain query would wait QUERY_REPEAT_MS).
+    // it again (a plain query would wait QUERY_REPEAT_MS). Desktop answers
+    // QUERY MSGS every time too, but only with AUTO on.
     {
         AutoPolicy p;
         auto       s2 = s;
@@ -2085,7 +2086,10 @@ TEST_CASE("store and forward replies follow desktop", "[js8][held]") {
         p.sent(*d, 0);
         CHECK(p.decide(*d, s2, 60 * 1000) == AutoPolicy::Action::Send);
         p.sent(*yes, 0);
+        CHECK(p.decide(*yes, s2, 60 * 1000) == AutoPolicy::Action::Send);
+        s2.autoreply = false;
         CHECK(p.decide(*yes, s2, 60 * 1000) == AutoPolicy::Action::Ignore);
+        CHECK(p.decide(*d, s2, 60 * 1000) == AutoPolicy::Action::Offer);
     }
 
     // "@ALLCALL QUERY MSGS" (or @HB): YES MSG ID n from whoever holds one for
@@ -2093,7 +2097,8 @@ TEST_CASE("store and forward replies follow desktop", "[js8][held]") {
     auto all = build_reply(incoming("W1ABC", "@ALLCALL QUERY MSGS", -5), s, {}, "");
     REQUIRE(all);
     CHECK(all->text == "W1ABC YES MSG ID " + std::to_string(id));
-    CHECK(all->kind == ReplyKind::Query);
+    CHECK(all->kind == ReplyKind::Stored);
+    CHECK(all->allcall);
     auto hbq = build_reply(incoming("W1ABC", "@HB QUERY MSGS", -5), s, {}, "");
     REQUIRE(hbq);
     CHECK(hbq->text == all->text);
@@ -2152,4 +2157,489 @@ TEST_CASE("the held-message C API", "[js8][held]") {
     CHECK(js8_held_count(h) == 0);
     js8_held_close(h);
     unlink(path);
+}
+
+// ---- Relays and store-and-forward, as desktop's processCommandActivity() -----
+
+namespace {
+// A buffered command (MSG, relay, QUERY ...) whose checksum checked out.
+Incoming buffered(const std::string &call, const std::string &text, int snr = -5,
+                  const std::string &my_call = "K2XYZ") {
+    auto in        = incoming(call, text, snr, my_call);
+    in.checksum_ok = true;
+    return in;
+}
+AutoSettings settings_for(const std::string &call) {
+    auto s    = settings();
+    s.my_call = call;
+    return s;
+}
+} // namespace
+
+TEST_CASE("directed commands split the way desktop's CommandDetail holds them", "[js8][relay]") {
+    struct Case {
+        const char *text, *to, *cmd, *rest;
+    };
+    for (auto c : std::vector<Case>{
+             {"N0XYZ: K2XYZ MSG TO: W1ABC HI", "K2XYZ", " MSG TO:", "W1ABC HI"},
+             {"N0XYZ: K2XYZ MSG TO:W1ABC HI", "K2XYZ", " MSG TO:", "W1ABC HI"},
+             {"N0XYZ: K2XYZ MSG HELLO", "K2XYZ", " MSG", "HELLO"},
+             {"N0XYZ: K2XYZ MSGS ARE FUN", "K2XYZ", " ", "MSGS ARE FUN"},
+             {"N0XYZ: K2XYZ > W1ABC HI", "K2XYZ", ">", "W1ABC HI"},
+             {"N0XYZ: K2XYZ>W1ABC HI", "K2XYZ", ">", "W1ABC HI"},
+             {"N0XYZ: K2XYZ QUERY MSG 3", "K2XYZ", " QUERY", "MSG 3"},
+             {"N0XYZ: K2XYZ QUERY MSGS", "K2XYZ", " QUERY MSGS", ""},
+             {"N0XYZ: K2XYZ QUERY MSGS?", "K2XYZ", " QUERY MSGS", ""},
+             {"N0XYZ: K2XYZ QUERY CALL W1ABC?", "K2XYZ", " QUERY CALL", "W1ABC?"},
+             {"N0XYZ: K2XYZ SNR?", "K2XYZ", " SNR?", ""},
+             {"N0XYZ: K2XYZ SNR -12", "K2XYZ", " SNR", "-12"},
+             {"N0XYZ: K2XYZ HEARTBEAT SNR -12 MSG ID 3", "K2XYZ", " HEARTBEAT SNR", "-12 MSG ID 3"},
+             {"N0XYZ: K2XYZ ACK", "K2XYZ", " ACK", ""},
+             {"N0XYZ: K2XYZ HELLO THERE", "K2XYZ", " ", "HELLO THERE"},
+             {"N0XYZ: @ALLCALL QUERY MSGS", "@ALLCALL", " QUERY MSGS", ""},
+         }) {
+        INFO(c.text);
+        auto d = parse_directed(c.text);
+        REQUIRE(d);
+        CHECK(d->from == "N0XYZ");
+        CHECK(d->to == c.to);
+        CHECK(d->cmd == c.cmd);
+        CHECK(d->text == c.rest);
+    }
+    CHECK_FALSE(parse_directed("HELLO THERE"));
+    // What our decoder makes of a relay JS8Call's encoder sent.
+    auto relay = parse_directed(plan_message("N0XYZ", "EN52", "K2XYZ>W1ABC HELLO").preview);
+    REQUIRE(relay);
+    CHECK(relay->cmd == ">");
+    CHECK(relay->text == "W1ABC HELLO");
+}
+
+TEST_CASE("relay hops and paths follow desktop's patterns", "[js8][relay]") {
+    CHECK(relay_next_hop("W1ABC HELLO") == "W1ABC>HELLO");
+    CHECK(relay_next_hop("W1ABC>N0CALL HELLO") == "W1ABC>N0CALL HELLO");
+    CHECK(relay_next_hop("VE7/W1ABC/P HI") == "VE7/W1ABC/P>HI");
+    CHECK_FALSE(relay_next_hop("HELLO *DE* N0XYZ"));
+    CHECK_FALSE(relay_next_hop("SNR? *DE* N0XYZ"));
+    CHECK_FALSE(relay_next_hop("MSG HELLO *DE* N0XYZ"));
+    CHECK_FALSE(relay_next_hop("73 *DE* N0XYZ")); // desktop's \b: no hop before "*DE*"
+
+    CHECK(relay_path_calls("K2XYZ", "HELLO *DE* N0XYZ") == std::vector<std::string>{"K2XYZ", "N0XYZ"});
+    CHECK(relay_path_calls("W1ABC", "HI *DE* N0XYZ *DE* K2XYZ") ==
+          std::vector<std::string>{"W1ABC", "K2XYZ", "N0XYZ"});
+    CHECK(relay_path_calls("K2XYZ", "HELLO VIA N0XYZ") == std::vector<std::string>{"K2XYZ", "N0XYZ"});
+    CHECK(relay_path_calls("K2XYZ", "HELLO") == std::vector<std::string>{"K2XYZ"});
+    CHECK(path_display("K2XYZ>N0XYZ") == "N0XYZ via K2XYZ");
+    CHECK(path_display("N0XYZ") == "N0XYZ");
+
+    using P = std::pair<std::string, std::string>;
+    CHECK(relayed_command("MSG HELLO *DE* N0XYZ") == P{" MSG", "HELLO *DE* N0XYZ"});
+    CHECK(relayed_command("MSG TO:W1ABC HI *DE* N0XYZ") == P{" MSG TO:", "W1ABC HI *DE* N0XYZ"});
+    CHECK(relayed_command("MSG TO: W1ABC HI") == P{" MSG TO:", "W1ABC HI"});
+    CHECK(relayed_command("QUERY MSGS *DE* N0XYZ") == P{" QUERY MSGS", "*DE* N0XYZ"});
+    CHECK(relayed_command("QUERY MSG 3 *DE* N0XYZ") == P{" QUERY", "MSG 3 *DE* N0XYZ"});
+    CHECK(relayed_command("QUERY CALL W1ABC? *DE* N0XYZ") == P{" QUERY CALL", "W1ABC? *DE* N0XYZ"});
+    CHECK(relayed_command("SNR? *DE* N0XYZ") == P{" SNR?", "*DE* N0XYZ"});
+    CHECK_FALSE(relayed_command("HELLO *DE* N0XYZ"));
+    CHECK_FALSE(relayed_command("73 *DE* N0XYZ")); // not one desktop answers
+
+    CHECK(parse_callsigns("W1ABC? FN42") == std::vector<std::string>{"W1ABC"});
+}
+
+TEST_CASE("a relay goes on, ends with an ACK back along the path, and stops at the ACK", "[js8][relay]") {
+    // N0XYZ asks us (K2XYZ) to pass a message on to W1ABC.
+    auto fwd = build_reply(buffered("N0XYZ", "K2XYZ>W1ABC HELLO THERE"), settings(), {}, "");
+    REQUIRE(fwd);
+    CHECK(fwd->kind == ReplyKind::Relay);
+    CHECK(fwd->text == "W1ABC>HELLO THERE *DE* N0XYZ");
+    CHECK(fwd->to == "N0XYZ");
+    auto sent = plan_message("K2XYZ", "FN42AB", fwd->text);
+    REQUIRE(sent.ok());
+
+    // W1ABC hears it from us: it ends there, ACKed back through us.
+    auto at_w1   = buffered("K2XYZ", fwd->text, -9, "W1ABC");
+    auto ack     = process(at_w1, settings_for("W1ABC"), {}, "");
+    REQUIRE(ack.reply);
+    CHECK(ack.reply->kind == ReplyKind::MsgAck);
+    CHECK(ack.reply->text == "K2XYZ>N0XYZ ACK");
+    CHECK(ack.store.kind == StoreAction::Kind::None); // plain relayed text isn't kept (desktop)
+
+    // We pass the ACK on to N0XYZ; N0XYZ doesn't answer an ACK.
+    auto back = build_reply(buffered("W1ABC", ack.reply->text), settings(), {}, "");
+    REQUIRE(back);
+    CHECK(back->text == "N0XYZ>ACK *DE* W1ABC");
+    CHECK_FALSE(build_reply(buffered("K2XYZ", back->text, -5, "N0XYZ"), settings_for("N0XYZ"), {}, ""));
+
+    // Two hops: each station adds itself.
+    auto hop1 = build_reply(buffered("N0XYZ", "K2XYZ>W1ABC>VE7ABC HI"), settings(), {}, "");
+    REQUIRE(hop1);
+    CHECK(hop1->text == "W1ABC>VE7ABC HI *DE* N0XYZ");
+    auto hop2 = build_reply(buffered("K2XYZ", hop1->text, -5, "W1ABC"), settings_for("W1ABC"), {}, "");
+    REQUIRE(hop2);
+    CHECK(hop2->text == "VE7ABC>HI *DE* N0XYZ *DE* K2XYZ");
+    auto end = build_reply(buffered("W1ABC", hop2->text, -5, "VE7ABC"), settings_for("VE7ABC"), {}, "");
+    REQUIRE(end);
+    CHECK(end->text == "W1ABC>K2XYZ>N0XYZ ACK");
+    REQUIRE(plan_message("VE7ABC", "CN89", end->text).ok());
+
+    // Relay switched off: nothing passed on, nothing ACKed.
+    auto off  = settings();
+    off.relay = false;
+    CHECK_FALSE(build_reply(buffered("N0XYZ", "K2XYZ>W1ABC HELLO THERE"), off, {}, ""));
+    CHECK_FALSE(build_reply(buffered("K2XYZ", fwd->text, -9, "W1ABC"), [] {
+                    auto s  = settings_for("W1ABC");
+                    s.relay = false;
+                    return s;
+                }(),
+                            {}, ""));
+    // A bad checksum, or a relay for someone else: nothing.
+    CHECK_FALSE(build_reply(incoming("N0XYZ", "K2XYZ>W1ABC HELLO THERE", -5), settings(), {}, ""));
+    CHECK_FALSE(build_reply(buffered("N0XYZ", "W9ZZZ>W1ABC HELLO THERE"), settings(), {}, ""));
+
+    // AUTO sends a relay every time it's asked; off, it's offered.
+    AutoPolicy p;
+    auto       s = settings();
+    p.user_activity(0);
+    CHECK(p.decide(*fwd, s, 0) == AutoPolicy::Action::Offer);
+    s.autoreply = true;
+    CHECK(p.decide(*fwd, s, 0) == AutoPolicy::Action::Send);
+    p.sent(*fwd, 0);
+    CHECK(p.decide(*fwd, s, 60'000) == AutoPolicy::Action::Send);
+    CHECK(p.decide(*end, s, 0) == AutoPolicy::Action::Send);
+}
+
+TEST_CASE("a relay carrying a command gets that command's answer, back along the path", "[js8][relay]") {
+    HeldMessages held;
+    int          id = held.add("VE7ABC", "N0XYZ", "SEE YOU AT 1800Z", 1000);
+    auto         s  = settings_for("W1ABC");
+    s.held          = &held;
+    // We're W1ABC; K2XYZ passes on what N0XYZ sent.
+    auto relayed = [&](const std::string &text, int snr = -7) {
+        return process(buffered("K2XYZ", "W1ABC>" + text + " *DE* N0XYZ", snr, "W1ABC"), s, {}, "");
+    };
+
+    auto snr = relayed("SNR?");
+    REQUIRE(snr.reply);
+    CHECK(snr.reply->text == "K2XYZ>N0XYZ SNR -07");
+    auto info = relayed("INFO?");
+    REQUIRE(info.reply);
+    CHECK(info.reply->text == "K2XYZ>N0XYZ INFO X6100 5W EFHW");
+
+    auto msg = relayed("MSG MEET AT THE PARK");
+    CHECK(msg.store.kind == StoreAction::Kind::Inbox);
+    CHECK(msg.store.from == "K2XYZ");
+    CHECK(msg.store.path == "K2XYZ>N0XYZ");
+    CHECK(msg.store.text == "MEET AT THE PARK *DE* N0XYZ");
+    REQUIRE(msg.reply);
+    CHECK(msg.reply->text == "K2XYZ>N0XYZ ACK");
+
+    auto store = relayed("MSG TO:VE7ABC CALL ME");
+    CHECK(store.store.kind == StoreAction::Kind::Held);
+    CHECK(store.store.to == "VE7ABC");
+    CHECK(store.store.path == "K2XYZ>N0XYZ");
+    CHECK(store.store.text == "CALL ME *DE* N0XYZ");
+    REQUIRE(store.reply);
+    CHECK(store.reply->text == "K2XYZ>N0XYZ ACK");
+
+    auto yes = relayed("QUERY MSGS");
+    REQUIRE(yes.reply);
+    CHECK(yes.reply->text == "K2XYZ>N0XYZ YES MSG ID " + std::to_string(id));
+    auto get = relayed("QUERY MSG " + std::to_string(id));
+    REQUIRE(get.reply);
+    CHECK(get.reply->text == "K2XYZ>N0XYZ MSG SEE YOU AT 1800Z FROM VE7ABC");
+    CHECK(get.reply->deliver_id == id);
+
+    // A command desktop doesn't answer (NACK) gets nothing, not even the ACK.
+    CHECK_FALSE(relayed("NACK").reply);
+    // Everything we'd send encodes.
+    for (auto *r : {&snr, &info, &msg, &store, &yes, &get}) CHECK(plan_message("W1ABC", "FN42", r->reply->text).ok());
+}
+
+TEST_CASE("held messages: +N waiting, NEXT MSG ID, relay switch", "[js8][held]") {
+    HeldMessages held;
+    int          a = held.add("N0XYZ", "W1ABC", "ONE", 1000);
+    int          b = held.add("VE7ABC", "W1ABC", "TWO", 2000);
+    int          c = held.add("K9DEF", "W1ABC", "THREE", 3000);
+    auto         s = settings();
+    s.held         = &held;
+    auto ask       = [&](const std::string &text) { return build_reply(buffered("W1ABC", text), s, {}, ""); };
+
+    CHECK(ask("K2XYZ QUERY MSGS")->text == "W1ABC YES MSG ID " + std::to_string(a) + " +2");
+    CHECK(build_reply(incoming("W1ABC", "@HB HEARTBEAT FN42", -8), s, {}, "")->text ==
+          "W1ABC HEARTBEAT SNR -08 MSG ID " + std::to_string(a) + " +2");
+    CHECK(ask("K2XYZ QUERY MSG " + std::to_string(a))->text ==
+          "W1ABC MSG ONE FROM N0XYZ NEXT MSG ID " + std::to_string(b) + " +1");
+    held.mark_delivered(a);
+    CHECK(ask("K2XYZ QUERY MSG " + std::to_string(b))->text ==
+          "W1ABC MSG TWO FROM VE7ABC NEXT MSG ID " + std::to_string(c));
+    held.mark_delivered(b);
+    CHECK(ask("K2XYZ QUERY MSG " + std::to_string(c))->text == "W1ABC MSG THREE FROM K9DEF");
+    CHECK(ask("K2XYZ QUERY MSGS")->text == "W1ABC YES MSG ID " + std::to_string(c));
+    // Asked again for one already delivered: desktop sends it again.
+    CHECK(ask("K2XYZ QUERY MSG " + std::to_string(a))->text ==
+          "W1ABC MSG ONE FROM N0XYZ NEXT MSG ID " + std::to_string(c));
+
+    // Relay switched off: desktop holds nothing for others either (MSG to
+    // us still goes to the inbox).
+    s.relay = false;
+    auto to = process(buffered("N0XYZ", "K2XYZ MSG TO:W1ABC HI"), s, {}, "");
+    CHECK(to.store.kind == StoreAction::Kind::None);
+    CHECK_FALSE(to.reply);
+    auto mine = process(buffered("N0XYZ", "K2XYZ MSG HI"), s, {}, "");
+    CHECK(mine.store.kind == StoreAction::Kind::Inbox);
+    CHECK(mine.store.path == "N0XYZ");
+    REQUIRE(mine.reply);
+    CHECK(mine.reply->text == "N0XYZ ACK");
+}
+
+TEST_CASE("group messages: kept for members of our groups, fetched by any member", "[js8][held]") {
+    HeldMessages held;
+    auto         s = settings();
+    s.held         = &held;
+    s.groups       = {"@NET"};
+    const std::int64_t t0 = 1'000'000;
+
+    // A MSG to our group goes to our inbox and is ACKed; other groups: nothing.
+    auto in = process(buffered("N0XYZ", "@NET MSG NET AT 0100Z"), s, {}, "");
+    CHECK(in.store.kind == StoreAction::Kind::Inbox);
+    CHECK(in.store.to == "@NET");
+    REQUIRE(in.reply);
+    CHECK(in.reply->text == "N0XYZ ACK");
+    auto other = process(buffered("N0XYZ", "@OTHER MSG HI"), s, {}, "");
+    CHECK(other.store.kind == StoreAction::Kind::None);
+    CHECK_FALSE(other.reply);
+
+    // "MSG TO:@NET" is held for the group.
+    auto keep = process(buffered("N0XYZ", "K2XYZ MSG TO:@NET CHECK IN TONIGHT"), s, {}, "");
+    CHECK(keep.store.kind == StoreAction::Kind::Held);
+    CHECK(keep.store.to == "@NET");
+    int g = held.add(keep.store.from, keep.store.to, keep.store.text, t0, keep.store.path);
+
+    auto query = [&](const std::string &call, const std::string &text, std::int64_t when) {
+        auto q    = buffered(call, text);
+        q.when_ms = when;
+        return build_reply(q, s, {}, "");
+    };
+    // Any member asking the group hears of it; a delivery is per member.
+    auto yes = query("W1ABC", "@NET QUERY MSGS", t0 + 60'000);
+    REQUIRE(yes);
+    CHECK(yes->text == "W1ABC YES MSG ID " + std::to_string(g));
+    auto get = query("W1ABC", "K2XYZ QUERY MSG " + std::to_string(g), t0 + 60'000);
+    REQUIRE(get);
+    CHECK(get->text == "W1ABC MSG CHECK IN TONIGHT FROM N0XYZ");
+    CHECK(get->deliver_id == g);
+    CHECK(get->deliver_group_call == "W1ABC");
+    CHECK(held.mark_group_delivered(g, "W1ABC"));
+    CHECK(query("W1ABC", "@NET QUERY MSGS", t0 + 60'000)->text == "W1ABC NO"); // to a group: desktop says NO
+    CHECK(query("VE7ABC", "@NET QUERY MSGS", t0 + 60'000)->text == "VE7ABC YES MSG ID " + std::to_string(g));
+    // Two days on, it's gone for the group.
+    CHECK(query("VE7ABC", "@NET QUERY MSGS", t0 + HeldMessages::GROUP_WINDOW_MS + 1)->text == "VE7ABC NO");
+    // Never delivered as a whole; RETRIEVE MSG isn't sent for it.
+    CHECK_FALSE(held.get(g)->delivered);
+    CHECK_FALSE(held.push_due({Heard("W1ABC", -5, t0)}, t0 + 1000));
+}
+
+TEST_CASE("QUERY CALL, RETRIEVE MSG and APRS gateway messages follow desktop", "[js8][held]") {
+    auto               s   = settings();
+    const std::int64_t now = 10'000'000;
+    std::vector<Heard> heard{Heard("W1ABC/P", -12, now - 5 * 60'000), Heard("VE7ABC", 3, now - 20'000)};
+
+    auto qc    = buffered("N0XYZ", "K2XYZ QUERY CALL W1ABC?");
+    qc.when_ms = now;
+    auto r     = build_reply(qc, s, heard, "");
+    REQUIRE(r);
+    CHECK(r->text == "N0XYZ YES -12 (5m)");
+    CHECK(r->auto_only);
+    REQUIRE(plan_message("K2XYZ", "FN42AB", r->text).ok());
+    auto qv    = buffered("N0XYZ", "K2XYZ QUERY CALL VE7ABC?");
+    qv.when_ms = now;
+    CHECK(build_reply(qv, s, heard, "")->text == "N0XYZ YES +03 (15s)");
+    auto qn    = buffered("N0XYZ", "K2XYZ QUERY CALL G4ABC?");
+    qn.when_ms = now;
+    CHECK_FALSE(build_reply(qn, s, heard, "")); // not heard: desktop stays quiet
+    {
+        AutoPolicy p;
+        p.user_activity(now);
+        CHECK(p.decide(*r, s, now) == AutoPolicy::Action::Ignore); // AUTO off: not even offered
+    }
+
+    // "RETRIEVE MSG 7" to us: suggest fetching it.
+    auto rt = build_reply(incoming("W1ABC", "K2XYZ RETRIEVE MSG 7", -5), s, {}, "");
+    REQUIRE(rt);
+    CHECK(rt->text == "W1ABC QUERY MSG 7");
+    CHECK(rt->kind == ReplyKind::Suggest);
+
+    // An APRS gateway's "@APRSIS MSG TO:K2XYZ ..." lands in our inbox, unACKed.
+    auto aprs = process(buffered("W1GW", "@APRSIS MSG TO:K2XYZ HELLO FROM APRS DE N0CALL"), s, {}, "");
+    CHECK(aprs.store.kind == StoreAction::Kind::Inbox);
+    CHECK(aprs.store.from == "APRS");
+    CHECK(aprs.store.text == "HELLO FROM APRS DE N0CALL");
+    CHECK_FALSE(aprs.reply);
+    auto not_mine = process(buffered("W1GW", "@APRSIS MSG TO:W9ZZZ HELLO"), s, {}, "");
+    CHECK(not_mine.store.kind == StoreAction::Kind::None);
+    CHECK_FALSE(not_mine.reply);
+}
+
+TEST_CASE("RETRIEVE MSG: when the station is heard, once per 8 hours", "[js8][held]") {
+    HeldMessages       held;
+    int                id  = held.add("N0XYZ", "W1ABC", "HELLO", 1000);
+    const std::int64_t now = 50'000'000;
+    CHECK_FALSE(held.push_due({Heard("W1ABC", -5, now - HeldMessages::PUSH_SEEN_MS - 1)}, now)); // heard too long ago
+    auto due = held.push_due({Heard("W1ABC/P", -5, now - 60'000)}, now);
+    REQUIRE(due);
+    CHECK(due->first == id);
+    CHECK(due->second == "W1ABC RETRIEVE MSG " + std::to_string(id));
+    CHECK_FALSE(held.push_due({Heard("W1ABC", -5, now)}, now + 60'000)); // told already
+    CHECK(held.push_due({Heard("W1ABC", -5, now + HeldMessages::PUSH_REPEAT_MS)}, now + HeldMessages::PUSH_REPEAT_MS));
+    held.mark_delivered(id);
+    CHECK_FALSE(held.push_due({Heard("W1ABC", -5, now + 2 * HeldMessages::PUSH_REPEAT_MS)},
+                              now + 2 * HeldMessages::PUSH_REPEAT_MS));
+}
+
+TEST_CASE("inbox and held files from the last release still load", "[js8][held]") {
+    char ipath[] = "/tmp/js8_inbox_v1_XXXXXX";
+    int  fd      = mkstemp(ipath);
+    REQUIRE(fd >= 0);
+    const char *v1 = "# X6100 JS8 inbox: id, UTC ms, U(nread)/R(ead), from, message\n"
+                     "3\t1000\tU\tN0XYZ\tMEET AT 1800Z\n";
+    REQUIRE(write(fd, v1, strlen(v1)) == (ssize_t)strlen(v1));
+    close(fd);
+    Inbox box;
+    REQUIRE(box.load(ipath));
+    REQUIRE(box.get(3));
+    CHECK(box.get(3)->path == "N0XYZ");
+    CHECK(box.get(3)->text == "MEET AT 1800Z");
+    int id = box.add("K2XYZ", "HI *DE* N0XYZ", 2000, "W1ABC", "K2XYZ>N0XYZ");
+    CHECK(id == 4);
+    REQUIRE(box.save(ipath));
+    Inbox again;
+    REQUIRE(again.load(ipath));
+    CHECK(again.get(4)->path == "K2XYZ>N0XYZ");
+    CHECK(again.get(4)->to == "W1ABC");
+    CHECK(again.get(3)->text == "MEET AT 1800Z");
+    unlink(ipath);
+
+    char hpath[] = "/tmp/js8_held_v1_XXXXXX";
+    fd           = mkstemp(hpath);
+    REQUIRE(fd >= 0);
+    const char *h1 = "# X6100 JS8 held messages: id, UTC ms, H(eld)/D(elivered), from, for, message\n"
+                     "2\t1000\tH\tN0XYZ\tW1ABC\tSEE YOU\n";
+    REQUIRE(write(fd, h1, strlen(h1)) == (ssize_t)strlen(h1));
+    close(fd);
+    HeldMessages held;
+    REQUIRE(held.load(hpath));
+    REQUIRE(held.get(2));
+    CHECK(held.get(2)->path == "N0XYZ");
+    CHECK(held.get(2)->text == "SEE YOU");
+    int g = held.add("N0XYZ", "@NET", "NET TONIGHT", 2000, "K2XYZ>N0XYZ");
+    held.mark_group_delivered(g, "W1ABC");
+    held.mark_group_delivered(g, "VE7ABC");
+    held.push_due({Heard("W1ABC", 0, 5000)}, 5000);
+    REQUIRE(held.save(hpath));
+    HeldMessages r;
+    REQUIRE(r.load(hpath));
+    CHECK(r.get(g)->got == std::vector<std::string>{"W1ABC", "VE7ABC"});
+    CHECK(r.get(g)->path == "K2XYZ>N0XYZ");
+    CHECK(r.get(2)->notified_ms == 5000);
+    unlink(hpath);
+}
+
+TEST_CASE("a delivered message's signature, as desktop's inbox reads it", "[js8][held]") {
+    auto a = delivered_signature("MEET AT 1800Z FROM N0XYZ NEXT MSG ID 4 +2");
+    REQUIRE(a);
+    CHECK(a->from == "N0XYZ");
+    CHECK(a->next_id == 4);
+    auto b = delivered_signature("I AM FROM TEXAS FROM N0XYZ");
+    REQUIRE(b);
+    CHECK(b->from == "N0XYZ");
+    CHECK(b->next_id == 0);
+    CHECK_FALSE(delivered_signature("HELLO THERE"));
+}
+
+TEST_CASE("js8_process keeps messages and answers them", "[js8][held]") {
+    char ipath[] = "/tmp/js8_proc_inbox_XXXXXX";
+    char hpath[] = "/tmp/js8_proc_held_XXXXXX";
+    close(mkstemp(ipath));
+    close(mkstemp(hpath));
+    js8_inbox_t *inbox = js8_inbox_open(ipath);
+    js8_held_t  *held  = js8_held_open(hpath);
+    js8_auto_t  *a     = js8_auto_create();
+
+    js8_auto_settings_t st{};
+    st.autoreply = true;
+    st.relay     = true;
+    st.my_call   = "K2XYZ";
+    st.my_grid   = "FN42";
+    st.groups    = "@net";
+    st.held      = held;
+    js8_auto_user_activity(a, 1000);
+
+    auto msg = [](const char *from, const char *text) {
+        js8_rx_msg_t m{};
+        auto         plan = plan_message(from, "EN52", text);
+        REQUIRE(plan.ok());
+        auto mc = classify(plan.preview, "K2XYZ");
+        snprintf(m.from, sizeof(m.from), "%s", from);
+        snprintf(m.to, sizeof(m.to), "%s", mc.to.c_str());
+        snprintf(m.text, sizeof(m.text), "%s", plan.preview.c_str());
+        m.to_me    = mc.to_me;
+        m.to_group = mc.to_group;
+        m.checksum = 1;
+        m.snr      = -6;
+        return m;
+    };
+
+    js8_stored_t      kept;
+    js8_auto_result_t r;
+    auto              m1 = msg("K2XYZ", "K2XYZ MSG HI"); // our own: nothing
+    js8_process(a, &m1, &st, nullptr, 0, "", 2000, inbox, &kept, &r);
+    CHECK(kept.kind == JS8_STORED_NONE);
+
+    auto m2 = msg("W1ABC", "K2XYZ>N0XYZ MSG HELLO");
+    js8_process(a, &m2, &st, nullptr, 0, "", 2000, inbox, &kept, &r);
+    CHECK(kept.kind == JS8_STORED_NONE);
+    CHECK(r.action == JS8_AUTO_SEND);
+    CHECK(r.kind == JS8_REPLY_RELAY);
+    CHECK(std::string(r.text) == "N0XYZ>MSG HELLO *DE* W1ABC");
+
+    auto m3 = msg("W1ABC", "K2XYZ MSG TO:@NET NET TONIGHT");
+    js8_process(a, &m3, &st, nullptr, 0, "", 3000, inbox, &kept, &r);
+    CHECK(kept.kind == JS8_STORED_HELD);
+    CHECK(kept.id > 0);
+    CHECK(std::string(kept.to) == "@NET");
+    CHECK(std::string(r.text) == "W1ABC ACK");
+    js8_held_msg_t hm;
+    REQUIRE(js8_held_get(held, kept.id, &hm));
+    CHECK(hm.group);
+
+    auto m4 = msg("N0XYZ", "K2XYZ MSG MEET AT 1800Z");
+    js8_process(a, &m4, &st, nullptr, 0, "", 4000, inbox, &kept, &r);
+    CHECK(kept.kind == JS8_STORED_INBOX);
+    CHECK_FALSE(kept.resend);
+    CHECK(std::string(r.text) == "N0XYZ ACK");
+    js8_process(a, &m4, &st, nullptr, 0, "", 5000, inbox, &kept, &r); // again: a resend, ACKed again
+    CHECK(kept.resend);
+    CHECK(r.action == JS8_AUTO_SEND);
+    js8_inbox_msg_t im;
+    REQUIRE(js8_inbox_get(inbox, kept.id, &im));
+    CHECK(std::string(im.path) == "N0XYZ");
+
+    js8_heard_t heard[] = {{"W1ABC", -3, 10'000}};
+    char        text[64];
+    CHECK_FALSE(js8_held_push_due(held, heard, 1, 20'000, text, sizeof(text))); // only a group message
+    char groups[64];
+    js8_groups_normalise("net, @Net  aa", groups, sizeof(groups));
+    CHECK(std::string(groups) == "@NET @AA");
+    char from[16];
+    int  next = -1;
+    CHECK(js8_delivered_signature("HI FROM N0XYZ NEXT MSG ID 9", from, sizeof(from), &next));
+    CHECK(next == 9);
+    char shown[64];
+    js8_path_display("K2XYZ>N0XYZ", shown, sizeof(shown));
+    CHECK(std::string(shown) == "N0XYZ via K2XYZ");
+
+    js8_auto_destroy(a);
+    js8_inbox_close(inbox);
+    js8_held_close(held);
+    unlink(ipath);
+    unlink(hpath);
 }

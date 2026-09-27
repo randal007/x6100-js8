@@ -25,6 +25,7 @@ void ui_init(void) {
     params.js8_hb_interval.x = 30;
     params.js8_cq_interval.x = 1;
     params.js8_log_prompt.x  = true;
+    params.js8_relay.x       = true;
     params.js8_log_activation.x = 0;
     params.js8_alerts.x = 7;
     params.js8_speed.x  = 0;

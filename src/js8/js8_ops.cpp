@@ -11,6 +11,7 @@
 #include "autoreply.hpp"
 #include "classify.hpp"
 #include "commands.hpp"
+#include "directed.hpp"
 #include "inbox.hpp"
 #include "qsolog.hpp"
 #include "stations.hpp"
@@ -47,6 +48,11 @@ struct js8_stations {
 struct js8_held {
     HeldMessages held;
     std::string  path;
+};
+
+struct js8_inbox {
+    Inbox       box;
+    std::string path;
 };
 
 extern "C" const char *js8_query_label(js8_query_t q) {
@@ -150,42 +156,122 @@ extern "C" void js8_auto_destroy(js8_auto_t *a) {
     delete a;
 }
 
-extern "C" void js8_auto_consider(js8_auto_t *a, const js8_rx_msg_t *msg, const js8_auto_settings_t *s,
-                                  const char *const *heard, unsigned n_heard, const char *last_tx, int64_t now_ms,
-                                  js8_auto_result_t *out) {
-    if (!out) return;
-    *out = js8_auto_result_t{};
-    if (!a || !msg || !s || msg->tx) return;
+namespace {
+std::vector<std::string> group_list(const char *groups) {
+    std::vector<std::string> out;
+    std::string              g = groups ? groups : "";
+    for (auto &c : g) c = (char)std::toupper((unsigned char)c);
+    std::size_t start = 0;
+    while (start < g.size()) {
+        auto end = g.find_first_of(" ,", start);
+        if (end == std::string::npos) end = g.size();
+        if (end > start) out.push_back(g.substr(start, end - start));
+        start = end + 1;
+    }
+    return out;
+}
+
+std::vector<Heard> heard_list(const js8_heard_t *heard, unsigned n) {
+    std::vector<Heard> out;
+    for (unsigned i = 0; heard && i < n; i++)
+        if (heard[i].call) out.emplace_back(heard[i].call, heard[i].snr, heard[i].heard_ms);
+    return out;
+}
+
+// Keep what desktop keeps: the inbox for us, held for someone else.
+void keep(const StoreAction &a, std::int64_t now_ms, js8_inbox_t *inbox, js8_held_t *held, js8_stored_t *out) {
+    js8_stored_t st{};
+    if (a.kind == StoreAction::Kind::Inbox && inbox) {
+        auto before = inbox->box.size();
+        st.kind     = JS8_STORED_INBOX;
+        st.id       = inbox->box.add(a.from, a.text, now_ms, a.to, a.path);
+        st.resend   = inbox->box.size() == before;
+        if (!st.resend && !inbox->box.save(inbox->path)) st.id = -1;
+    } else if (a.kind == StoreAction::Kind::Held && held) {
+        auto before = held->held.size();
+        st.kind     = JS8_STORED_HELD;
+        st.id       = held->held.add(a.from, a.to, a.text, now_ms, a.path);
+        st.resend   = held->held.size() == before;
+        if (!st.resend && !held->held.save(held->path)) st.id = -1;
+    } else {
+        return;
+    }
+    copy_str(st.from, sizeof(st.from), a.from);
+    copy_str(st.to, sizeof(st.to), a.to);
+    copy_str(st.path, sizeof(st.path), a.path);
+    copy_str(st.text, sizeof(st.text), a.text);
+    if (out) *out = st;
+}
+
+js8_reply_kind_t c_kind(ReplyKind k) {
+    switch (k) {
+    case ReplyKind::Query: return JS8_REPLY_QUERY;
+    case ReplyKind::HeartbeatAck: return JS8_REPLY_HB_ACK;
+    case ReplyKind::MsgAck: return JS8_REPLY_ACK;
+    case ReplyKind::Suggest: return JS8_REPLY_SUGGEST;
+    case ReplyKind::Relay: return JS8_REPLY_RELAY;
+    case ReplyKind::Stored: return JS8_REPLY_STORED;
+    }
+    return JS8_REPLY_QUERY;
+}
+
+ReplyKind cpp_kind(js8_reply_kind_t k) {
+    switch (k) {
+    case JS8_REPLY_QUERY: return ReplyKind::Query;
+    case JS8_REPLY_HB_ACK: return ReplyKind::HeartbeatAck;
+    case JS8_REPLY_ACK: return ReplyKind::MsgAck;
+    case JS8_REPLY_SUGGEST: return ReplyKind::Suggest;
+    case JS8_REPLY_RELAY: return ReplyKind::Relay;
+    case JS8_REPLY_STORED: return ReplyKind::Stored;
+    }
+    return ReplyKind::Query;
+}
+} // namespace
+
+extern "C" void js8_process(js8_auto_t *a, const js8_rx_msg_t *msg, const js8_auto_settings_t *s,
+                            const js8_heard_t *heard, unsigned n_heard, const char *last_tx, int64_t now_ms,
+                            js8_inbox_t *inbox, js8_stored_t *stored, js8_auto_result_t *out) {
+    if (out) *out = js8_auto_result_t{};
+    if (stored) *stored = js8_stored_t{};
+    if (!a || !msg || !s || msg->tx || msg->partial) return;
 
     AutoSettings settings;
     settings.autoreply = s->autoreply;
     settings.heartbeat = s->heartbeat;
     settings.hb_ack    = s->hb_ack;
+    settings.relay     = s->relay;
     settings.my_call   = s->my_call ? s->my_call : "";
     settings.my_grid   = s->my_grid ? s->my_grid : "";
     settings.info      = s->info ? s->info : "";
     settings.status    = s->status ? s->status : "";
+    settings.groups    = group_list(s->groups);
     settings.held      = s->held ? &s->held->held : nullptr;
 
-    std::vector<std::string> calls;
-    for (unsigned i = 0; i < n_heard; i++) calls.emplace_back(heard[i]);
+    Incoming in = to_incoming(msg);
+    in.when_ms  = now_ms;
+    auto p      = process(in, settings, heard_list(heard, n_heard), last_tx ? last_tx : "");
+    keep(p.store, now_ms, inbox, s->held, stored);
 
-    auto r = build_reply(to_incoming(msg), settings, calls, last_tx ? last_tx : "");
-    if (!r) return;
-    auto act    = a->policy.decide(*r, settings, now_ms);
+    if (!p.reply || !out) return;
+    auto &r     = *p.reply;
+    auto  act   = a->policy.decide(r, settings, now_ms);
     out->action = act == AutoPolicy::Action::Send    ? JS8_AUTO_SEND
                   : act == AutoPolicy::Action::Offer ? JS8_AUTO_OFFER
                                                      : JS8_AUTO_IGNORE;
-    out->hb_ack = r->kind == ReplyKind::HeartbeatAck;
-    copy_str(out->text, sizeof(out->text), r->text);
-    copy_str(out->to, sizeof(out->to), r->to);
-    copy_str(out->command, sizeof(out->command), r->command);
-    out->deliver_id = r->deliver_id;
+    out->kind    = c_kind(r.kind);
+    out->hb_ack  = r.kind == ReplyKind::HeartbeatAck;
+    out->allcall = r.allcall;
+    copy_str(out->text, sizeof(out->text), r.text);
+    copy_str(out->to, sizeof(out->to), r.to);
+    copy_str(out->command, sizeof(out->command), r.command);
+    out->deliver_id = r.deliver_id;
+    copy_str(out->deliver_group_call, sizeof(out->deliver_group_call), r.deliver_group_call);
 }
 
 extern "C" void js8_auto_sent(js8_auto_t *a, const js8_auto_result_t *r, int64_t now_ms) {
     if (!a || !r) return;
-    AutoReply reply{r->text, r->to, r->command, r->hb_ack ? ReplyKind::HeartbeatAck : ReplyKind::Query};
+    AutoReply reply{r->text, r->to, r->command, cpp_kind(r->kind)};
+    reply.allcall = r->allcall;
     a->policy.sent(reply, now_ms);
 }
 
@@ -354,16 +440,13 @@ extern "C" const char *js8_log_band(uint64_t freq_hz) {
 
 // ---- Inbox --------------------------------------------------------------
 
-struct js8_inbox {
-    Inbox       box;
-    std::string path;
-};
-
 static void fill_msg(const InboxMessage &m, js8_inbox_msg_t *out) {
     std::memset(out, 0, sizeof(*out));
     out->id     = m.id;
     out->utc_ms = m.utc_ms;
     copy_str(out->from, sizeof(out->from), m.from);
+    copy_str(out->to, sizeof(out->to), m.to);
+    copy_str(out->path, sizeof(out->path), m.path);
     copy_str(out->text, sizeof(out->text), m.text);
     out->read = m.read;
 }
@@ -451,7 +534,10 @@ static void fill_held(const HeldMessage &m, js8_held_msg_t *out) {
     out->delivered = m.delivered;
     copy_str(out->from, sizeof(out->from), m.from);
     copy_str(out->to, sizeof(out->to), m.to);
+    copy_str(out->path, sizeof(out->path), m.path);
     copy_str(out->text, sizeof(out->text), m.text);
+    out->group = m.is_group();
+    out->got   = (int)m.got.size();
 }
 
 extern "C" js8_held_t *js8_held_open(const char *path) {
@@ -494,6 +580,20 @@ extern "C" void js8_held_delivered(js8_held_t *h, int id) {
     if (h && h->held.mark_delivered(id)) h->held.save(h->path);
 }
 
+extern "C" void js8_held_group_delivered(js8_held_t *h, int id, const char *call) {
+    if (h && call && h->held.mark_group_delivered(id, call)) h->held.save(h->path);
+}
+
+extern "C" bool js8_held_push_due(js8_held_t *h, const js8_heard_t *heard, unsigned n_heard, int64_t now_ms,
+                                  char *text, unsigned text_len) {
+    if (!h) return false;
+    auto due = h->held.push_due(heard_list(heard, n_heard), now_ms);
+    if (!due) return false;
+    h->held.save(h->path);
+    copy_str(text, text_len, due->second);
+    return true;
+}
+
 extern "C" void js8_held_delete(js8_held_t *h, int id) {
     if (h && h->held.remove(id)) h->held.save(h->path);
 }
@@ -514,4 +614,31 @@ extern "C" bool js8_msg_to_for_me(const js8_rx_msg_t *msg, const char *my_call, 
     copy_str(to, to_len, r->first);
     copy_str(text, text_len, r->second);
     return true;
+}
+
+// ---- Paths, signatures, groups -----------------------------------------------
+
+extern "C" void js8_path_display(const char *path, char *out, unsigned out_len) {
+    copy_str(out, out_len, path_display(path ? path : ""));
+}
+
+extern "C" bool js8_delivered_signature(const char *text, char *from, unsigned from_len, int *next_id) {
+    auto sig = delivered_signature(text ? text : "");
+    if (!sig) return false;
+    copy_str(from, from_len, sig->from);
+    if (next_id) *next_id = sig->next_id;
+    return true;
+}
+
+extern "C" void js8_groups_normalise(const char *typed, char *out, unsigned out_len) {
+    std::vector<std::string> groups;
+    for (auto g : group_list(typed)) {
+        if (g[0] != '@') g = "@" + g;
+        if (g.size() < 2 || std::find(groups.begin(), groups.end(), g) != groups.end()) continue;
+        if (groups.size() >= 10) break;
+        groups.push_back(g);
+    }
+    std::string joined;
+    for (auto &g : groups) joined += (joined.empty() ? "" : " ") + g;
+    copy_str(out, out_len, joined);
 }

@@ -20,14 +20,6 @@ std::string upper(std::string s) {
     return s;
 }
 
-// Desktop's Varicode::formatSNR(): "+05", "-12"; empty outside -60..+60.
-std::string format_snr(int snr) {
-    if (snr < -60 || snr > 60) return "";
-    char buf[8];
-    std::snprintf(buf, sizeof(buf), "%c%02d", snr >= 0 ? '+' : '-', std::abs(snr));
-    return buf;
-}
-
 bool offset_free(const std::vector<OffsetActivity> &activity, std::int64_t now_ms, int f, int bw) {
     for (auto &a : activity) {
         if (now_ms - a.heard_ms >= 30'000) continue;
@@ -38,13 +30,20 @@ bool offset_free(const std::vector<OffsetActivity> &activity, std::int64_t now_m
 
 } // namespace
 
+std::string desktop_snr(int snr) {
+    if (snr < -60 || snr > 60) return "";
+    char buf[8];
+    std::snprintf(buf, sizeof(buf), "%c%02d", snr >= 0 ? '+' : '-', std::abs(snr));
+    return buf;
+}
+
 std::string query_text(Query q, const std::string &to_call, int their_snr, const std::string &my_grid) {
     const std::string to = upper(to_call);
     if (to.empty()) return "";
     switch (q) {
     case Query::SnrQ: return to + " SNR?";
     case Query::SendSnr: {
-        auto snr = format_snr(their_snr);
+        auto snr = desktop_snr(their_snr);
         return snr.empty() ? "" : to + " SNR " + snr;
     }
     case Query::GridQ: return to + " GRID?";

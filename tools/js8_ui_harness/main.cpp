@@ -330,6 +330,11 @@ int main() {
     ui_init();
     if (getenv("ONLY_INBOX")) unlink(JS8_INBOX_PATH); // before the dialog loads it
     if (getenv("ONLY_HELD")) unlink(JS8_HELD_PATH);
+    if (getenv("ONLY_RELAY")) {
+        unlink(JS8_INBOX_PATH);
+        unlink(JS8_HELD_PATH);
+        unlink(JS8_TEXTS_PATH);
+    }
     if (getenv("ONLY_APRS")) unlink(JS8_TEXTS_PATH); // no park or spot settings yet
     ui_open();
     if (getenv("ONLY_GEN")) {
@@ -1335,6 +1340,111 @@ int main() {
         ui_press(4);
         wait_tx();
         printf("[held] HW CPY? sent: %d\n", ui_list_has("W1ABC HW CPY?"));
+        return 0;
+    }
+    if (getenv("ONLY_RELAY")) {
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        auto focus_on = [&](const char *text) {
+            for (int i = 0; i < 40 && !strstr(ui_focused_text(), text); i++) ui_key(LV_KEY_RIGHT);
+            return strstr(ui_focused_text(), text) != nullptr;
+        };
+        pump(300);
+        ui_page(4);
+        printf("[relay] page 4 button 4: '%s' (want Settings...)\n", ui_button_label(4));
+        ui_press(1); // AUTO on
+
+        // N0XYZ asks us to pass a message on to W1ABC: sent on, as desktop.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ>W1ABC HELLO THERE", 1320, 0.05f}});
+        wait_tx();
+        printf("[relay] passed on: %d (want 1)\n", ui_list_has("HELLO THERE *DE* N0XYZ"));
+
+        // W1ABC passes us VE7ABC's message: inbox, ACK back along the path.
+        feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ>MSG MEET AT 1800Z *DE* VE7ABC", 1500, 0.05f}});
+        wait_tx();
+        printf("[relay] ACK back via W1ABC: %d (want 1)\n", ui_list_has("VE7ABC ACK"));
+
+        // AUTO off: Reply offers it, *DE* and all.
+        ui_page(4);
+        ui_press(1); // AUTO off
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ>W1ABC SECOND ONE", 1320, 0.05f}});
+        ui_select_row_from("N0XYZ");
+        ui_page(2);
+        ui_press(2); // Reply
+        pump(200);
+        printf("[relay] Reply offers: '%s' (want W1ABC>SECOND ONE *DE* N0XYZ)\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(300);
+
+        // Settings: Relay off, in place.
+        ui_page(4);
+        ui_press(4); // Settings...
+        pump(200);
+        printf("[relay] Settings open on '%s'\n", ui_focused_text());
+        printf("[relay] on the Relay line: %d, '%s'\n", focus_on("Relay"), ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        printf("[relay] after a press: '%s' (want Relay: Off), list still open %d\n", ui_focused_text(),
+               ui_popup_has("Groups:"));
+        screenshot("50_settings.ppm");
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        ui_press(1); // AUTO on
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ>W1ABC THIRD ONE", 1320, 0.05f}});
+        for (int i = 0; i < 150; i++) pump(100);
+        printf("[relay] Relay off, not passed on: %d (want 0)\n", ui_list_has("THIRD ONE *DE*"));
+
+        // Relay on again, and a group.
+        ui_press(4);
+        pump(200);
+        focus_on("Relay");
+        ui_click_focused();
+        pump(200);
+        printf("[relay] back on: '%s'\n", ui_focused_text());
+        printf("[relay] on the Groups line: %d\n", focus_on("Groups"));
+        ui_click_focused();
+        pump(300);
+        printf("[relay] editing groups, focus: %s\n", ui_focus_desc());
+        ui_compose_append("net, @pnw");
+        ui_compose_enter();
+        pump(300);
+        ui_press(4);
+        pump(200);
+        focus_on("Groups");
+        printf("[relay] groups saved: '%s' (want Groups: @NET @PNW)\n", ui_focused_text());
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "@NET", "@NET MSG NET TONIGHT AT 0100Z", 1320, 0.05f}});
+        wait_tx();
+        printf("[relay] group message ACKed: %d (want 1)\n", ui_list_has("N0XYZ ACK"));
+        ui_page(4);
+        ui_press(1); // AUTO off
+
+        // The Inbox: relayed message shown with its path, Reply goes back along it.
+        ui_page(3);
+        ui_press(4);
+        pump(300);
+        printf("[relay] inbox shows the path: %d, the group message: %d\n", ui_popup_has("VE7ABC via W1ABC"),
+               ui_popup_has("NET TONIGHT"));
+        screenshot("51_inbox_relayed.ppm");
+        printf("[relay] on the relayed one: %d\n", focus_on("VE7ABC via W1ABC"));
+        ui_click_focused();
+        pump(300);
+        printf("[relay] view focused '%s' (want Reply: MSG to VE7ABC via W1ABC)\n", ui_focused_text());
+        screenshot("52_inbox_relayed_view.ppm");
+        ui_click_focused();
+        pump(300);
+        printf("[relay] reply prefill '%s' (want W1ABC>VE7ABC MSG )\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(300);
         return 0;
     }
     if (getenv("ONLY_PARTIAL")) {
