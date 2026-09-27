@@ -39,10 +39,22 @@ int gcd(int a, int b) { return b == 0 ? a : gcd(b, a % b); }
 
 } // namespace
 
+namespace {
+std::atomic<std::int64_t> g_drift_ms{0};
+} // namespace
+
+// JS8's time: the system clock plus the drift set by Time Sync, as desktop
+// JS8Call's DriftingDateTime. Decode windows, transmit slots and everything
+// else JS8 times go by it; the system clock itself is never changed.
 std::int64_t wall_ms() {
     using namespace std::chrono;
-    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+    return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count() +
+           g_drift_ms.load(std::memory_order_relaxed);
 }
+
+void set_drift_ms(std::int64_t ms) { g_drift_ms.store(ms, std::memory_order_relaxed); }
+
+std::int64_t drift_ms() { return g_drift_ms.load(std::memory_order_relaxed); }
 
 Receiver::Receiver(const Config &config, Callbacks callbacks)
     : config_(config),
@@ -102,6 +114,8 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
 
     engine_ = js8core::make_engine(ec, std::move(ecb), {});
     engine_->set_submodes(config_.submodes);
+    applied_drift_ms_ = drift_ms(); // a Time Sync drift from before JS8 reopened
+    if (applied_drift_ms_) engine_->set_time_drift_ms(applied_drift_ms_);
     engine_->start();
 
     worker_ = std::thread([this] { worker_loop(); });
@@ -208,6 +222,19 @@ void Receiver::push_pcm(const std::int16_t *pcm, std::size_t count) {
 }
 
 void Receiver::check_clock(std::size_t new_samples) {
+    const std::int64_t drift = drift_ms();
+    if (drift != applied_drift_ms_) {
+        // Time Sync moved JS8's time. The engine realigns its ring to it
+        // (set_time_drift_ms, on the next buffer); our check starts over, so
+        // the jump isn't taken for missing audio or a clock error.
+        applied_drift_ms_ = drift;
+        engine_->set_time_drift_ms(drift);
+        aligned_             = true;
+        align_wall_ms_       = wall_ms();
+        samples_since_align_ = new_samples;
+        return;
+    }
+
     const std::int64_t now = wall_ms();
 
     if (!aligned_) {

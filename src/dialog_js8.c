@@ -43,7 +43,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <linux/rtc.h>
 #include <math.h>
 #include <pthread.h>
 #include <stdarg.h>
@@ -52,7 +51,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/ioctl.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -132,6 +130,7 @@ static const char *show_label_getter(void);
 static void        show_cb(button_data_t *btn);
 static void        clear_cb(button_data_t *btn);
 static void        time_sync_cb(button_data_t *btn);
+static void        time_sync_hold_cb(button_data_t *btn);
 static void        rotary_cb(int32_t diff);
 static void        reply_cb(button_data_t *btn);
 static void        send_cb(button_data_t *btn);
@@ -414,7 +413,7 @@ static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press =
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
 static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_4, .prev = &page_2};
-static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb};
+static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb, .hold = time_sync_hold_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
 static button_data_t btn_inbox     = {.type = BTN_TEXT_FN, .label_fn = inbox_label_getter, .press = inbox_cb};
@@ -612,10 +611,9 @@ static int rx_speed_mask(void) {
     return mask;
 }
 
+/* JS8's time: the radio's clock plus the Time Sync drift (js8_rx.h). */
 static int64_t now_wall_ms(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_REALTIME, &ts);
-    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    return js8_wall_ms();
 }
 
 static void handle_incoming(const js8_rx_msg_t *m);
@@ -987,7 +985,7 @@ static void on_message(const js8_rx_msg_t *m, void *ctx) {
 }
 
 static void update_status(void) {
-    time_t    now = time(NULL);
+    time_t    now = (time_t)(now_wall_ms() / 1000);
     struct tm tm;
     gmtime_r(&now, &tm);
     bool testing = js8_rx_wav_active(rx);
@@ -1022,8 +1020,12 @@ static void update_status(void) {
         snprintf(m, sizeof(m), "MSG %d NEW  ", unread);
         strcat(flags, m);
     }
-    lv_label_set_text_fmt(status, "%s%s%s  %02d:%02d:%02dZ  total %u", flags, testing ? "TEST WAV  " : "",
-                          where_label(), tm.tm_hour, tm.tm_min, tm.tm_sec, hist_count);
+    /* JS8 runs off the radio's clock by this much (Time Sync). */
+    char    drift[24] = "";
+    int64_t d         = js8_drift_ms();
+    if (d) snprintf(drift, sizeof(drift), " drift %+.1fs", d / 1000.0);
+    lv_label_set_text_fmt(status, "%s%s%s  %02d:%02d:%02dZ%s  total %u", flags, testing ? "TEST WAV  " : "",
+                          where_label(), tm.tm_hour, tm.tm_min, tm.tm_sec, drift, hist_count);
 }
 
 static void ui_cycle_done(void *arg) {
@@ -1272,7 +1274,7 @@ static bool tx_play(int16_t *samples, unsigned n, int index, int count, void *ct
 }
 
 static int current_utc_hhmmss(void) {
-    time_t    now = time(NULL);
+    time_t    now = (time_t)(now_wall_ms() / 1000);
     struct tm tm;
     gmtime_r(&now, &tm);
     return tm.tm_hour * 10000 + tm.tm_min * 100 + tm.tm_sec;
@@ -1385,9 +1387,7 @@ static void update_tx_bar(void) {
 
     switch (tx_status.state) {
     case JS8_TX_WAITING: {
-        struct timespec ts;
-        clock_gettime(CLOCK_REALTIME, &ts);
-        int64_t now_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+        int64_t now_ms = now_wall_ms(); /* the transmitter's slots are in JS8 time */
         int     secs   = (int)((tx_status.next_ms - now_ms + 999) / 1000);
         if (secs < 0) secs = 0;
         snprintf(line, sizeof(line), "TX %4.0f Hz %s   %s   %s %d s  (%d/%d)", tx_status.offset_hz,
@@ -2082,14 +2082,15 @@ static void clear_cb(button_data_t *btn) {
     update_status();
 }
 
-/* Time Sync, like desktop JS8Call's drift tool: a decode's DT is how late
- * the signal started by our clock, so the median DT of recent decodes is
- * how fast our clock runs. Shift the clock by that and save it to the
- * battery-backed RTC, as the settings screen does. Needs the clock within
- * a couple of seconds already (or nothing decodes): set it roughly in
- * SETTINGS first. (Snapping to the nearest 15 s, as the FT8 app does, moves
- * the clock up to 7 s the wrong way unless pressed exactly as a signal
- * starts.) */
+/* Time Sync, as desktop JS8Call's time drift: a decode's DT is how late the
+ * signal started by JS8's time, so the median DT of recent decodes is how
+ * far ahead JS8's time runs. JS8's time (receive windows, transmit slots,
+ * everything the app times) moves by that; the radio's clock is never
+ * changed. The drift lasts until the radio restarts; hold Time Sync to go
+ * back to the radio's clock. Needs JS8's time within a couple of seconds
+ * already, or nothing decodes: set the radio's clock roughly in SETTINGS
+ * first. (Snapping to the nearest 15 s, as the FT8 app does, moves up to 7 s
+ * the wrong way unless pressed exactly as a signal starts.) */
 static void time_sync_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
@@ -2108,33 +2109,31 @@ static void time_sync_cb(button_data_t *btn) {
         return;
     }
     if (fabsf(corr) < 0.05f) {
-        msg_update_text_fmt("Clock is on time (within 0.05 s of %u decodes)", n);
+        msg_update_text_fmt("JS8 time is on (within 0.05 s of %u decodes)", n);
         return;
     }
-
-    struct timespec tp;
-    clock_gettime(CLOCK_REALTIME, &tp);
-    int64_t ns = (int64_t)tp.tv_sec * 1000000000LL + tp.tv_nsec + (int64_t)(corr * 1e9f);
-    tp.tv_sec  = ns / 1000000000LL;
-    tp.tv_nsec = ns % 1000000000LL;
-    if (clock_settime(CLOCK_REALTIME, &tp) != 0) {
-        msg_update_text_fmt("Can't set the clock: %s", strerror(errno));
-        return;
-    }
+    int64_t drift = js8_drift_ms() + (int64_t)lroundf(corr * 1000.0f);
+    js8_set_drift_ms(drift);
     memset(sync_ms, 0, sizeof(sync_ms)); /* those DTs are stale now */
+    msg_update_text_fmt("JS8 time moved %+.2f s (median of %u decodes); drift now %+.2f s", corr, n, drift / 1000.0);
+    add_info_row("Time Sync: JS8 time %+.2f s, drift %+.2f s", corr, drift / 1000.0);
+    update_status();
+}
 
-    /* Keep it across power-off (the kernel reads rtc1 at boot). */
-    struct tm tm;
-    gmtime_r(&tp.tv_sec, &tm);
-    struct rtc_time rt = {.tm_sec = tm.tm_sec, .tm_min = tm.tm_min, .tm_hour = tm.tm_hour,
-                          .tm_mday = tm.tm_mday, .tm_mon = tm.tm_mon, .tm_year = tm.tm_year};
-    int fd = open("/dev/rtc1", O_WRONLY);
-    if (fd >= 0) {
-        if (ioctl(fd, RTC_SET_TIME, &rt) != 0) LV_LOG_ERROR("Can't set RTC: %s", strerror(errno));
-        close(fd);
+/* Hold: no drift, JS8 back on the radio's clock (desktop's Reset). */
+static void time_sync_hold_cb(button_data_t *btn) {
+    user_touch();
+    if (popup_guard()) return;
+    (void)btn;
+    if (!js8_drift_ms()) {
+        msg_update_text_fmt("No drift: JS8 is on the radio's clock");
+        return;
     }
-    msg_update_text_fmt("Clock moved %+.2f s (median of %u decodes)", corr, n);
-    add_info_row("Time Sync: clock moved %+.2f s", corr);
+    js8_set_drift_ms(0);
+    memset(sync_ms, 0, sizeof(sync_ms));
+    msg_update_text_fmt("Drift reset: JS8 back on the radio's clock");
+    add_info_row("Time Sync: drift reset");
+    update_status();
 }
 
 static void reply_cb(button_data_t *btn) {

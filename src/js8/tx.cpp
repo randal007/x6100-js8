@@ -5,6 +5,7 @@
  */
 
 #include "tx.hpp"
+#include "receiver.hpp" // wall_ms(): JS8 time with the drift
 
 #include "assembler.hpp"
 #include "classify.hpp"
@@ -55,10 +56,7 @@ std::string decode_back(const std::vector<TxFrame> &frames, const Speed &sp) {
 
 class WallClock : public Transmitter::Clock {
 public:
-    std::int64_t now_ms() override {
-        using namespace std::chrono;
-        return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
-    }
+    std::int64_t now_ms() override { return wall_ms(); } // with the drift
     bool wait_until(std::int64_t ms, const std::atomic<bool> &cancelled) override {
         // Short sleeps so stop() is noticed quickly without extra plumbing.
         while (!cancelled) {

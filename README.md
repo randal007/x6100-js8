@@ -87,8 +87,10 @@ the image you used before.
    characters). JS8 won't send without a callsign.
 2. **Clock:** JS8 needs the radio's clock within about 2 seconds. WiFi sets
    it automatically; otherwise set it in SETTINGS, then use **Time Sync**
-   (page 3) once some stations have decoded, which corrects it from their
-   timing and saves it to the radio's clock chip.
+   (page 3) once some stations have decoded. Like desktop JS8Call's time
+   drift, it shifts only JS8's own timing to match theirs (the top line
+   shows `drift +1.2s`); the radio's clock isn't touched. The drift lasts
+   until the radio is switched off; hold **Time Sync** to reset it.
 3. **Open JS8:** APP → page 3 → **JS8**. The radio tunes the nearest JS8
    frequency; the **band keys** step through JS8Call's standard frequencies
    (160 m to 6 m), or GhostNet's, or you can type your own (**Freq**, page
@@ -172,7 +174,7 @@ to go back a page. In JS8 a hold is half a second.
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
-| 3 | **Time Sync** | Set the clock from the last 2 minutes of decodes (needs 3 or more). |
+| 3 | **Time Sync** | Shift JS8's timing by the last 2 minutes of decodes (needs 3 or more), like desktop's time drift; the radio's clock isn't changed. Hold to reset the drift. |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
 | 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. All are emptied when JS8 opens. |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new*. |
@@ -418,6 +420,8 @@ Done for beta 3 so far:
 - [x] A heartbeat sent by hand restarts the HB timer
 - [x] Shorter position beacons with a message (6 frames down to 4–5), with a live frame count
 - [x] Spot form: one Frequency row (keyboard; empty = the JS8 dial)
+- [x] Time Sync shifts only JS8's own timing (a drift, like desktop JS8Call)
+  instead of the radio's clock; hold to reset; the drift is shown on top
 - [x] Alert beeps through the speaker (the radio is switched to play them, as
   for its voice prompts; JS8 hears about a second of silence meanwhile) -
   needs a check on the radio

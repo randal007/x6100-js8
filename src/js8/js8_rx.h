@@ -94,6 +94,14 @@ bool  js8_rx_wav_active(js8_rx_t *rx);
 /* Stops threads; no callbacks fire after this returns. NULL is ignored. */
 void js8_rx_destroy(js8_rx_t *rx);
 
+/* JS8's time, as desktop JS8Call's time drift: the system clock plus a
+ * drift (ms) that Time Sync sets. Receive windows and transmit slots go by
+ * it; the system clock is never changed. The drift is process-wide and
+ * starts at 0 (so it lasts until the radio restarts). */
+int64_t js8_wall_ms(void);
+void    js8_set_drift_ms(int64_t ms);
+int64_t js8_drift_ms(void);
+
 #ifdef __cplusplus
 }
 #endif

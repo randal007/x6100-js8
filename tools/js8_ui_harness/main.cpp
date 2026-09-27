@@ -47,6 +47,8 @@ extern int stub_tx_frames;
 extern int stub_usb_kbd;
 extern int32_t stub_tx_offset;
 extern uint32_t stub_tx_samples;
+extern int64_t stub_tx_start_sys_ms;
+int64_t js8_drift_ms(void);
 extern int16_t stub_tx_peak;
 }
 
@@ -166,7 +168,8 @@ struct Station {
 
 // Synthesise `band` (one slot per frame, starting at the next slot
 // boundary) and feed it through the dialog's audio callback in real time.
-static void feed_band(const std::vector<Station> &band, std::size_t first = 0, std::size_t last = 99) {
+static void feed_band(const std::vector<Station> &band, std::size_t first = 0, std::size_t last = 99,
+                      double late_s = 0) {
     const auto &costas = js8core::protocol::costas(js8core::protocol::CostasType::Original);
     std::vector<std::vector<std::array<int, js8core::kJs8NumSymbols>>> tones(band.size());
     std::size_t slots = 0;
@@ -186,7 +189,7 @@ static void feed_band(const std::vector<Station> &band, std::size_t first = 0, s
     std::vector<float> audio(lead + slots * 15 * RATE + 3 * RATE, 0.0f);
     for (std::size_t i = 0; i < band.size(); i++)
         for (std::size_t k = 0; k < tones[i].size(); k++) {
-            std::size_t start = lead + k * 15 * RATE + RATE / 2;
+            std::size_t start = lead + k * 15 * RATE + RATE / 2 + (std::size_t)(late_s * RATE);
             double      phi   = 0;
             for (int s = 0; s < js8core::kJs8NumSymbols; s++) {
                 double dphi = 2 * M_PI * (band[i].offset_hz + tones[i][k][s] * 6.25) / RATE;
@@ -357,6 +360,42 @@ int main() {
         dialog_destruct(); // what GEN does
         pump(500);
         printf("[gen] closed with the %s list open: running=%d (survived)\n", which, ui_running());
+        return 0;
+    }
+    if (getenv("ONLY_DRIFT")) {
+        // Time Sync as desktop's time drift: JS8's timing moves, the clock doesn't.
+        pump(300);
+        printf("[drift] at start: %lld ms\n", (long long)js8_drift_ms());
+        // Everyone 1.5 s later than our clock says they should be.
+        std::vector<Station> late = {{"W1ABC", "FN42", "", "@HB HEARTBEAT FN42", 900, 0.05f},
+                                     {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1400, 0.05f},
+                                     {"VE7ABC", "CN89", "", "CQ CQ CQ CN89", 1900, 0.05f},
+                                     {"N0XYZ", "EN34", "", "@HB HEARTBEAT EN34", 2400, 0.05f}};
+        feed_band(late, 0, 99, 1.5);
+        ui_page(3);
+        ui_press(1); // Time Sync
+        pump(200);
+        long long d = js8_drift_ms();
+        printf("[drift] after Time Sync: %lld ms (want about -1500)\n", d);
+        // The same late band again: now on time by JS8's clock.
+        feed_band(late, 0, 99, 1.5);
+        ui_press(1); // Time Sync again: nothing (much) left to fix
+        pump(200);
+        printf("[drift] second Time Sync: %lld ms (want within 100 of the first)\n", (long long)js8_drift_ms());
+        // Our own frame starts on JS8's slot (0.5 s after a 15 s boundary of
+        // drifted time), i.e. 1.5 s early by the PC's clock.
+        int frames = stub_tx_frames;
+        ui_page(1);
+        ui_press(1); // CQ
+        for (int i = 0; i < 400 && stub_tx_frames == frames; i++) pump(100);
+        long long slot = (stub_tx_start_sys_ms + js8_drift_ms()) % 15000;
+        printf("[drift] CQ frame started %lld ms into JS8's slot (want ~500), %lld ms by the PC clock\n", slot,
+               (long long)(stub_tx_start_sys_ms % 15000));
+        for (int i = 0; i < 200; i++) pump(100); // let it finish
+        ui_page(3);
+        ui_hold(1); // hold Time Sync: reset
+        pump(200);
+        printf("[drift] after hold: %lld ms (want 0)\n", (long long)js8_drift_ms());
         return 0;
     }
     if (getenv("ONLY_WFRING")) {

@@ -225,3 +225,7 @@ extern "C" void js8_rx_destroy(js8_rx_t *rx) {
     rx->receiver.reset();
     delete rx;
 }
+
+extern "C" int64_t js8_wall_ms(void) { return x6100::js8::wall_ms(); }
+extern "C" void    js8_set_drift_ms(int64_t ms) { x6100::js8::set_drift_ms(ms); }
+extern "C" int64_t js8_drift_ms(void) { return x6100::js8::drift_ms(); }

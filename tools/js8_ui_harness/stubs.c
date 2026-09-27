@@ -145,11 +145,17 @@ int      stub_tx_frames;
 int32_t  stub_tx_offset;
 uint32_t stub_tx_samples;
 int16_t  stub_tx_peak;
+int64_t stub_tx_start_sys_ms;
 bool tx_player_play(int16_t *samples, uint32_t n, int32_t offset, float gain, tx_abort_fn_t abort_check, void *ctx) {
     (void)gain;
     int16_t peak = 0;
     for (uint32_t i = 0; i < n; i++) if (samples[i] > peak) peak = samples[i];
     stub_tx_frames++;
+    {   /* when the frame started, by the PC's own clock (no JS8 drift) */
+        struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+        stub_tx_start_sys_ms = (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+    }
     stub_tx_offset  = offset;
     stub_tx_samples = n;
     stub_tx_peak    = peak;

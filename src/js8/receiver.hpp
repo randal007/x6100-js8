@@ -111,6 +111,7 @@ private:
 
     // Clock tracking (worker thread only)
     bool                  aligned_ = false;
+    std::int64_t          applied_drift_ms_ = 0; ///< drift the engine was last given
     std::int64_t          align_wall_ms_ = 0;
     std::uint64_t         samples_since_align_ = 0;
     std::atomic<unsigned> realigns_{0};
@@ -122,6 +123,10 @@ private:
     MessageAssembler assembler_;
 };
 
+/// JS8's time in ms since the epoch: the system clock plus the drift.
 std::int64_t wall_ms();
+/// Drift added to the system clock (Time Sync); 0 until set. Process-wide.
+void         set_drift_ms(std::int64_t ms);
+std::int64_t drift_ms();
 
 } // namespace x6100::js8

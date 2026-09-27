@@ -540,6 +540,19 @@ TEST_CASE("clock correction is the negated median DT", "[js8][ops]") {
     CHECK(c == Catch::Approx(-0.5f));
 }
 
+TEST_CASE("JS8 time is the system clock plus the Time Sync drift", "[js8][drift]") {
+    using namespace std::chrono;
+    auto sys = [] { return duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count(); };
+    REQUIRE(js8_drift_ms() == 0);
+    CHECK(std::llabs(js8_wall_ms() - sys()) < 50);
+    js8_set_drift_ms(-1500);
+    CHECK(js8_drift_ms() == -1500);
+    CHECK(std::llabs(js8_wall_ms() - (sys() - 1500)) < 50);
+    CHECK(std::llabs(x6100::js8::wall_ms() - (sys() - 1500)) < 50);
+    js8_set_drift_ms(0);
+    CHECK(std::llabs(js8_wall_ms() - sys()) < 50);
+}
+
 TEST_CASE("DT is 0 on time and positive when a signal starts late", "[js8][receiver][slow]") {
     // The sign the Time Sync button relies on: our clock 1 s fast means
     // signals appear 1 s late, DT = +1, correction -1 s.
