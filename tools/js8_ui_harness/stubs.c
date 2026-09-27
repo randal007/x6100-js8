@@ -23,22 +23,36 @@ uint32_t    EVENT_BAND_UP;
 uint32_t    EVENT_BAND_DOWN;
 
 /* Filter edges the dialog reads through the computed-param API. */
-static int               dummy_low, dummy_high, dummy_fg;
+static int               dummy_low, dummy_high, dummy_fg, dummy_mode;
 ComputedParamInt        *cfg_cur_filter_low  = (ComputedParamInt *)&dummy_low;
 ComputedParamInt        *cfg_cur_filter_high = (ComputedParamInt *)&dummy_high;
 ComputedParamInt        *cfg_fg_freq         = (ComputedParamInt *)&dummy_fg; /* dial, Hz */
+ComputedParamInt        *cfg_cur_mode        = (ComputedParamInt *)&dummy_mode;
+/* Each band keeps its own mode, as the settings manager does: tuning into
+ * another band loads that band's (an implicit band switch). All USB to
+ * start, as after SSB use. */
+static int band_mode[64];
+static int stub_band(int hz) { return hz / 1000000 < 64 ? hz / 1000000 : 63; } /* by MHz: enough here */
+int        stub_mode(void);
 /* The dial: a preset (see presets[] below) or any frequency set. */
 static int dial_hz = 14078000;
 /* The radio's filter: 100-2900 Hz (a typical USB setting) until the app sets it. */
 static int32_t filter_low = 100, filter_high = 2900;
+int stub_mode(void) { return band_mode[stub_band(dial_hz)] ? band_mode[stub_band(dial_hz)] : x6100_mode_usb; }
 int32_t cparam_i_get(const ComputedParamInt *p) {
     if (p == cfg_fg_freq) return dial_hz;
+    if (p == cfg_cur_mode) return stub_mode();
     return p == cfg_cur_filter_low ? filter_low : filter_high;
 }
 void cparam_i_set(ComputedParamInt *p, int32_t v) {
     if (p == cfg_fg_freq) {
         dial_hz = v;
-        printf("[radio] dial %d Hz\n", v);
+        printf("[radio] dial %d Hz, mode %d\n", v, stub_mode());
+        return;
+    }
+    if (p == cfg_cur_mode) {
+        band_mode[stub_band(dial_hz)] = v;
+        printf("[radio] mode %d\n", v);
         return;
     }
     if (p == cfg_cur_filter_low) filter_low = v;
@@ -72,6 +86,7 @@ bool cfg_digital_load(int8_t dir, cfg_digital_type_t type) {
     if (best < 0) return false;
     dial_hz      = presets[best].hz;
     preset_label = presets[best].label;
+    band_mode[stub_band(dial_hz)] = x6100_mode_usb_dig; /* the preset's mode, as cfg_digital_load sets it */
     return true;
 }
 const char *cfg_digital_label_get(void) { return preset_label; }
@@ -247,3 +262,11 @@ void audio_play_wait(void) {
 void keypad_set_long_time(uint32_t ms) { printf("[keypad] hold time %u ms\n", (unsigned)ms); }
 void radio_set_rx_dsp_off(bool off) { printf("[radio] NR/NB/notches %s\n", off ? "off" : "back to the settings"); }
 void radio_speaker_play(bool on) { printf("[radio] speaker play %s\n", on ? "on" : "off"); }
+
+/* ONLY_MODE: on 14.2 MHz in USB with a custom 27.245 MHz (CB) saved. */
+void stub_mode_setup(void) {
+    dial_hz                   = 14200000;
+    params.js8_custom_on.x    = true;
+    params.js8_custom_hz.x    = 27245000;
+}
+int stub_usb_dig(void) { return x6100_mode_usb_dig; }

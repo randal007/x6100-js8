@@ -529,6 +529,9 @@ Done for beta 3 so far:
   AUTO on, and every time it's asked, as desktop does
 - [x] Page 4 **Texts…** is now **Settings…**: INFO, STATUS, Relay on/off
   and your groups, with room for more
+- [x] Always USB-D: a custom frequency on another band (e.g. CB, 27 MHz)
+  used to bring up that band's last mode, often USB, with the mode keys
+  locked while JS8 is open
 
 Still to do:
 

@@ -1738,11 +1738,20 @@ static const char *where_label(void) {
     return buf;
 }
 
+/* JS8 always runs in USB-D (the mode keys are locked while it's open).
+ * Tuning into another band loads that band's saved mode (USB if it was
+ * last used for SSB), so this follows every retune. */
+static void js8_usb_dig(void) {
+    if (cparam_i_get(cfg_cur_mode) != x6100_mode_usb_dig) cparam_i_set(cfg_cur_mode, x6100_mode_usb_dig);
+}
+
 /* The presets the band keys step through: JS8Call's or GhostNet's. False
  * past either end of the list (nothing changes). */
 static bool load_band(int8_t dir) {
     cfg_digital_type_t set = params.js8_ghostnet.x ? CFG_DIG_TYPE_JS8_GHOSTNET : CFG_DIG_TYPE_JS8;
-    if (!cfg_digital_load(dir, set)) return false;
+    bool               ok  = cfg_digital_load(dir, set);
+    js8_usb_dig(); /* even with no preset found */
+    if (!ok) return false;
     msg_update_text_fmt("%s", cfg_digital_label_get());
     return true;
 }
@@ -1847,6 +1856,7 @@ static void construct_cb(lv_obj_t *parent) {
         else
             params_bool_set(&params.js8_custom_on, false);
     }
+    js8_usb_dig(); /* a custom frequency on another band loaded that band's mode */
 
     /* 200-3000 Hz while JS8 is open. High first: each edge is validated
      * against the other. */
@@ -4862,6 +4872,7 @@ static void tune_custom(const char *text) {
     params_int32_set(&params.js8_custom_hz, hz);
     params_bool_set(&params.js8_custom_on, true);
     cparam_i_set(cfg_fg_freq, hz);
+    js8_usb_dig();
     retuned();
     msg_update_text_fmt("%s", where_label());
 }

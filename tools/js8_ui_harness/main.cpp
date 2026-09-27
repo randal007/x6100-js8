@@ -16,6 +16,9 @@ void ui_press(int i);
 void ui_band_up(void);
 void ui_band_down(void);
 int  stub_dial_hz(void);
+int  stub_mode(void);
+void stub_mode_setup(void);
+int  stub_usb_dig(void);
 void ui_key(uint32_t key);
 int  ui_running(void);
 int  ui_focus_is_table(void);
@@ -328,6 +331,7 @@ int main() {
     lv_disp_drv_register(&drv);
 
     ui_init();
+    if (getenv("ONLY_MODE")) stub_mode_setup();
     if (getenv("ONLY_INBOX")) unlink(JS8_INBOX_PATH); // before the dialog loads it
     if (getenv("ONLY_HELD")) unlink(JS8_HELD_PATH);
     if (getenv("ONLY_RELAY")) {
@@ -1445,6 +1449,27 @@ int main() {
         printf("[relay] reply prefill '%s' (want W1ABC>VE7ABC MSG )\n", ui_compose_text());
         ui_compose_cancel();
         pump(300);
+        return 0;
+    }
+    if (getenv("ONLY_MODE")) {
+        // Opened on 14.2 MHz in USB with a custom 27.245 MHz (CB) saved, that
+        // band last used in USB: the app must still run in USB-D (the mode
+        // keys are locked while it's open). A beta tester on CB was stuck in USB.
+        pump(300);
+        printf("[mode] opened: dial %d, mode %d (want 27245000, %d USB-D)\n", stub_dial_hz(), stub_mode(),
+               stub_usb_dig());
+        ui_page(6);
+        ui_press(4); // Freq
+        pump(200);
+        for (int i = 0; i < 10 && !strstr(ui_focused_text(), "Custom"); i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        pump(300);
+        ui_compose_clear();
+        ui_compose_append("3575.8");
+        ui_compose_enter();
+        pump(300);
+        printf("[mode] custom 3575.8: dial %d, mode %d (want 3575800, %d)\n", stub_dial_hz(), stub_mode(),
+               stub_usb_dig());
         return 0;
     }
     if (getenv("ONLY_PARTIAL")) {
