@@ -24,6 +24,7 @@ int  ui_list_has(const char *text);
 const char *ui_focused_text(void);
 const char *ui_focus_desc(void);
 const char *ui_button_label(int i);
+int         ui_button_marked(int i);
 void ui_compose_append(const char *text);
 const char *ui_compose_text(void);
 void ui_compose_enter(void);
@@ -905,7 +906,8 @@ int main() {
         // A message for us, AUTO off: saved, ACK offered on Reply.
         feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ MSG MEET AT THE PARK 1800Z", 1320, 0.05f}});
         ui_page(3);
-        printf("[inbox] button: '%s' (want Inbox / 1 new)\n", ui_button_label(4));
+        printf("[inbox] button: '%s' (want Inbox / 1 new), green %d (want 1)\n", ui_button_label(4),
+               ui_button_marked(4));
         ui_select_row_from("N0XYZ");
         ui_page(2);
         ui_press(2); // Reply
@@ -925,7 +927,8 @@ int main() {
         printf("[inbox] message view focused '%s' (want Reply: MSG to N0XYZ), shows text %d\n", ui_focused_text(),
                ui_popup_has("MEET AT THE PARK 1800Z"));
         screenshot("31_inbox_message.ppm");
-        printf("[inbox] after reading: '%s' (want Inbox)\n", ui_button_label(4));
+        printf("[inbox] after reading: '%s' (want Inbox), green %d (want 0)\n", ui_button_label(4),
+               ui_button_marked(4));
         ui_key(LV_KEY_ESC); // back to the list
         pump(300);
         printf("[inbox] ESC: back in the list, focused '%s'\n", ui_focused_text());
@@ -1282,13 +1285,27 @@ int main() {
         feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ MSG TO:W1ABC MEET AT THE PARK", 1320, 0.05f}});
         wait_tx();
         printf("[held] ACK sent: %d\n", ui_list_has("N0XYZ ACK"));
-        // W1ABC asks what we hold, then fetches it.
-        feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ QUERY MSGS", 1500, 0.05f}});
+        // W1ABC asks everyone what they hold (as desktop allows), then fetches it.
+        feed_band({{"W1ABC", "FN42", "@ALLCALL", "@ALLCALL QUERY MSGS", 1500, 0.05f}});
         wait_tx();
-        printf("[held] YES sent: %d\n", ui_list_has("W1ABC YES MSG ID 1"));
+        printf("[held] YES to @ALLCALL sent: %d\n", ui_list_has("W1ABC YES MSG ID 1"));
+        feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ QUERY MSG 1", 1500, 0.05f}});
+        // Stopped in its first frame: not delivered, still held.
+        {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 300 && stub_tx_frames == b; i++) pump(100);
+        }
+        pump(500);
+        ui_key(LV_KEY_ESC);
+        for (int i = 0; i < 60; i++) pump(100);
+        printf("[held] stopped: still held %d, delivered row %d (want 1, 0)\n",
+               ui_list_has("Held message 1 stopped before the end: still held"),
+               ui_list_has("Held message 1 delivered"));
+        // They ask again at once: sent again (no 5 min wait), in full this time.
         feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ QUERY MSG 1", 1500, 0.05f}});
         wait_tx();
-        printf("[held] delivered: %d\n", ui_list_has("W1ABC MSG MEET AT THE PARK FROM N0XYZ"));
+        printf("[held] delivered: %d, row %d\n", ui_list_has("W1ABC MSG MEET AT THE PARK FROM N0XYZ"),
+               ui_list_has("Held message 1 delivered"));
         ui_page(4);
         ui_press(1); // AUTO off
 

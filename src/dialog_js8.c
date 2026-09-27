@@ -190,6 +190,9 @@ static void        inbox_cb(button_data_t *btn);
 static void        inbox_close(void);
 static void        inbox_received(const js8_rx_msg_t *m);
 static void        held_received(const js8_rx_msg_t *m);
+static void        deliver_start(int id, const char *text);
+static void        deliver_end(const char *text, bool completed);
+static void        inbox_refresh_button(void);
 static void        msg_compose(const char *call, const char *kind);
 static void        alerts_cb(button_data_t *btn);
 static void        alerts_close(void);
@@ -283,9 +286,20 @@ static bool           st_alert[MAX_ROWS]; /* st_rows matching an alert word */
 static js8_inbox_t   *inbox;           /* MSGs to us, JS8_INBOX_PATH */
 static js8_held_t    *held;            /* MSG TO: messages held for others, JS8_HELD_PATH */
 static struct {
-    int  id;                           /* offered on Reply: mark it delivered when that goes */
+    int  id;                           /* offered on Reply: queued as offered, it's on its way */
     char text[JS8_RX_TEXT_LEN];
 } deliver_pending;
+/* A held message on the air: delivered once it has gone out in full, as
+ * desktop marks it only after sending. Stopped halfway, it stays held. */
+static struct {
+    int  id;
+    char text[JS8_RX_TEXT_LEN];
+} deliver_tx;
+/* How a message ended, from the transmitter's thread to ours. */
+typedef struct {
+    bool completed;
+    char text[JS8_RX_TEXT_LEN]; /* as sent: upper case, trimmed */
+} tx_done_t;
 static bool           st_worked[MAX_ROWS]; /* in the log already (st_rows) */
 static js8_qsos_t    *qsos;            /* QSOs, for the log */
 static js8_log_entry_t log_entry;      /* the entry the Log popup shows */
@@ -1310,8 +1324,10 @@ static void on_tx_status(const js8_tx_status_t *st, void *ctx) {
 
 static void ui_tx_done(void *arg) {
     if (!dialog.run || !tx_bar) return;
-    bool completed = *(bool *)arg;
+    const tx_done_t *done      = arg;
+    bool             completed = done->completed;
     if (!completed) add_info_row("TX stopped");
+    deliver_end(done->text, completed);
     memset(&tx_status, 0, sizeof(tx_status));
     update_tx_bar();
     /* Auto CQ counts its minute from the end of what we sent, as desktop
@@ -1330,9 +1346,10 @@ static void ui_tx_done(void *arg) {
 }
 
 static void on_tx_done(const char *text, bool completed, void *ctx) {
-    (void)text;
     (void)ctx;
-    scheduler_put(ui_tx_done, &completed, sizeof(completed));
+    tx_done_t done = {.completed = completed};
+    snprintf(done.text, sizeof(done.text), "%s", text ? text : "");
+    scheduler_put(ui_tx_done, &done, sizeof(done));
 }
 
 static void tx_start(void) {
@@ -1611,11 +1628,8 @@ static bool compose_ok_cb(void) {
     char text[TX_TEXT_MAX + 8];
     if (!aprs_prepare(textarea_window_get(), text, sizeof(text))) return false;
     if (!tx_queue(text)) return false; /* keep the window open */
-    /* The held message offered on Reply went as offered: it's delivered. */
-    if (deliver_pending.id && strcasecmp(text, deliver_pending.text) == 0) {
-        js8_held_delivered(held, deliver_pending.id);
-        add_info_row("Held message %d delivered", deliver_pending.id);
-    }
+    /* The held message offered on Reply went as offered: it's on its way. */
+    if (deliver_pending.id && strcasecmp(text, deliver_pending.text) == 0) deliver_start(deliver_pending.id, text);
     deliver_pending.id = 0;
     compose_close();
     return true;
@@ -1969,6 +1983,9 @@ static void construct_cb(lv_obj_t *parent) {
     if (!inbox) inbox = js8_inbox_open(JS8_INBOX_PATH);
     if (!held) held = js8_held_open(JS8_HELD_PATH);
     if (!autop) autop = js8_auto_create();
+    deliver_tx.id      = 0;
+    deliver_pending.id = 0;
+    inbox_refresh_button();
     user_touch();
     load_texts();
     hb_next_ms         = 0;
@@ -2662,7 +2679,7 @@ static void auto_send(const js8_auto_result_t *r) {
     LV_LOG_USER("JS8 auto: '%s' at %d Hz", r->text, offset);
     if (tx_queue_at(r->text, offset, true)) {
         js8_auto_sent(autop, r, now);
-        if (r->deliver_id) js8_held_delivered(held, r->deliver_id);
+        if (r->deliver_id) deliver_start(r->deliver_id, r->text);
         add_info_row("Auto: %s", r->text);
     }
 }
@@ -3910,8 +3927,9 @@ static void act_hold_cb(button_data_t *btn) {
 
 static int inbox_view_id; /* the message shown, 0: the list */
 
+/* Green, like a selected Settings tab, while there are unread messages. */
 static void inbox_refresh_button(void) {
-    if (btn_inbox.disp_btn) buttons_refresh(&btn_inbox);
+    buttons_mark(&btn_inbox, inbox && js8_inbox_unread(inbox) > 0);
 }
 
 static const char *inbox_label_getter(void) {
@@ -3947,6 +3965,36 @@ static void held_received(const js8_rx_msg_t *m) {
     if (id < 0) msg_update_text_fmt("Can't save %s", JS8_HELD_PATH);
     else msg_update_text_fmt("Holding a message from %s for %s (Inbox)", m->from, to);
     add_info_row("Holding message %d from %s for %s: %s", id, m->from, to, text);
+}
+
+/* Same message as the transmitter reports it: it sends upper case, trimmed. */
+static bool same_tx_text(const char *a, const char *b) {
+    while (*a == ' ') a++;
+    while (*b == ' ') b++;
+    size_t la = strlen(a), lb = strlen(b);
+    while (la && a[la - 1] == ' ') la--;
+    while (lb && b[lb - 1] == ' ') lb--;
+    return la == lb && strncasecmp(a, b, la) == 0;
+}
+
+/* A held message's delivery was queued: it counts once it has all gone. */
+static void deliver_start(int id, const char *text) {
+    deliver_tx.id = id;
+    snprintf(deliver_tx.text, sizeof(deliver_tx.text), "%s", text);
+}
+
+/* A message ended. If it was the delivery, sent in full it's delivered;
+ * stopped halfway, it stays held, and their next QUERY MSGS or heartbeat
+ * is offered it again. */
+static void deliver_end(const char *text, bool completed) {
+    if (!deliver_tx.id || !same_tx_text(text, deliver_tx.text)) return;
+    if (completed) {
+        js8_held_delivered(held, deliver_tx.id);
+        add_info_row("Held message %d delivered", deliver_tx.id);
+    } else {
+        add_info_row("Held message %d stopped before the end: still held", deliver_tx.id);
+    }
+    deliver_tx.id = 0;
 }
 
 static void inbox_close(void) {

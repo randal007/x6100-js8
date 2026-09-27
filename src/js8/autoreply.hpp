@@ -57,9 +57,12 @@ struct AutoReply {
 
 /// What desktop JS8Call would answer to `in`, ignoring the switches: queries
 /// to our call (SNR?, ?, GRID?, INFO?, STATUS?, HEARING?, AGN?, QUERY MSGS -
-/// "NO", as we hold nobody's messages), others' heartbeats (an ack with their
-/// SNR), a MSG to us (ACK), and "MSG ID n" offers (suggest QUERY MSG n). Nothing for groups, our own traffic,
-/// low-confidence decodes, or queries we can't answer (no INFO text, etc.).
+/// "YES MSG ID n" or "NO", QUERY MSG n - the held message), others' heartbeats
+/// (an ack with their SNR, plus "MSG ID n" if we hold one for them), a MSG to
+/// us (ACK), and "MSG ID n" offers (suggest QUERY MSG n). For groups only
+/// "@ALLCALL QUERY MSGS" from a station we hold a message for. Nothing for our
+/// own traffic, low-confidence decodes, or queries we can't answer (no INFO
+/// text, etc.).
 /// `heard` is recently heard calls, most recent first (for HEARING?).
 std::optional<AutoReply> build_reply(const Incoming &in, const AutoSettings &s, const std::vector<std::string> &heard,
                                      const std::string &last_tx);

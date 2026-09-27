@@ -2074,6 +2074,32 @@ TEST_CASE("store and forward replies follow desktop", "[js8][held]") {
     CHECK_FALSE(build_reply(other, s, {}, ""));
     auto bad = incoming("W1ABC", "K2XYZ QUERY MSG " + std::to_string(id), -5);
     CHECK_FALSE(build_reply(bad, s, {}, ""));
+    // Asked again within the repeat guard: it didn't get there, so AUTO sends
+    // it again (a plain query would wait QUERY_REPEAT_MS).
+    {
+        AutoPolicy p;
+        auto       s2 = s;
+        s2.autoreply  = true;
+        p.user_activity(0);
+        CHECK(p.decide(*d, s2, 0) == AutoPolicy::Action::Send);
+        p.sent(*d, 0);
+        CHECK(p.decide(*d, s2, 60 * 1000) == AutoPolicy::Action::Send);
+        p.sent(*yes, 0);
+        CHECK(p.decide(*yes, s2, 60 * 1000) == AutoPolicy::Action::Ignore);
+    }
+
+    // "@ALLCALL QUERY MSGS" (or @HB): YES MSG ID n from whoever holds one for
+    // the asker, as on desktop; nobody answers NO to a group.
+    auto all = build_reply(incoming("W1ABC", "@ALLCALL QUERY MSGS", -5), s, {}, "");
+    REQUIRE(all);
+    CHECK(all->text == "W1ABC YES MSG ID " + std::to_string(id));
+    CHECK(all->kind == ReplyKind::Query);
+    auto hbq = build_reply(incoming("W1ABC", "@HB QUERY MSGS", -5), s, {}, "");
+    REQUIRE(hbq);
+    CHECK(hbq->text == all->text);
+    CHECK_FALSE(build_reply(incoming("W9ZZZ", "@ALLCALL QUERY MSGS", -5), s, {}, ""));
+    CHECK_FALSE(build_reply(incoming("W1ABC", "@ALLCALL SNR?", -5), s, {}, ""));
+    CHECK_FALSE(build_reply(incoming("W1ABC", "@ALLCALL QUERY MSGS", -5), settings(), {}, ""));
 
     // W1ABC's heartbeat gets "MSG ID n" in our ack.
     auto hb = build_reply(incoming("W1ABC", "@HB HEARTBEAT FN42", -8), s, {}, "");
@@ -2094,6 +2120,7 @@ TEST_CASE("store and forward replies follow desktop", "[js8][held]") {
     auto after = build_reply(incoming("W1ABC", "K2XYZ QUERY MSGS", -5), s, {}, "");
     REQUIRE(after);
     CHECK(after->text == "W1ABC NO");
+    CHECK_FALSE(build_reply(incoming("W1ABC", "@ALLCALL QUERY MSGS", -5), s, {}, ""));
 }
 
 TEST_CASE("the held-message C API", "[js8][held]") {

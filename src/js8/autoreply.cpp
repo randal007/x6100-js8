@@ -37,6 +37,11 @@ std::string command_after_target(const std::string &text, const std::string &to)
     return upper(trim(rest.substr(to.size())));
 }
 
+// Desktop's isAllCallIncluded(): @ALLCALL, and @HB (heartbeats go there).
+bool is_allcall(const std::string &to) {
+    return to.find("@ALLCALL") != std::string::npos || to.find("@HB") != std::string::npos;
+}
+
 } // namespace
 
 bool starts_qso(const Incoming &in) {
@@ -62,8 +67,19 @@ std::optional<AutoReply> build_reply(const Incoming &in, const AutoSettings &s, 
         return AutoReply{text, in.from, "HEARTBEAT", ReplyKind::HeartbeatAck};
     }
 
-    // Queries to our call only: never to @ALLCALL or other groups.
-    if (!in.to_me || in.to_group) return std::nullopt;
+    // Queries to our call only, with one exception: a station looking for
+    // its messages with "@ALLCALL QUERY MSGS" hears from whoever holds one,
+    // as on desktop. Nobody answers NO to a group.
+    if (in.to_group) {
+        const std::string gcmd = command_after_target(in.text, in.to);
+        if (!s.held || !is_allcall(in.to) || (gcmd != "QUERY MSGS" && gcmd != "QUERY MSGS?"))
+            return std::nullopt;
+        auto id = s.held->next_for(in.from);
+        if (!id) return std::nullopt;
+        return AutoReply{upper(in.from) + " YES MSG ID " + std::to_string(*id), in.from, "QUERY MSGS",
+                         ReplyKind::Query};
+    }
+    if (!in.to_me) return std::nullopt;
 
     const std::string cmd = command_after_target(in.text, in.to);
 
@@ -138,7 +154,9 @@ AutoPolicy::Action AutoPolicy::decide(const AutoReply &r, const AutoSettings &s,
     } else if (!auto_ok) {
         return Action::Offer;
     }
-    if (r.kind == ReplyKind::MsgAck) return Action::Send; // a resend wants its ACK too
+    // A resend wants its ACK too, and asking again for a held message means
+    // it didn't get there (stopped, or lost in QRM): send it again.
+    if (r.kind == ReplyKind::MsgAck || r.deliver_id) return Action::Send;
 
     auto key = r.to + "|" + r.command;
     auto it  = last_sent_.find(key);

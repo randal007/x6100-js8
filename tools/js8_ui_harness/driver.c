@@ -98,6 +98,10 @@ const char *ui_button_label(int i) {
     button_data_t *b = stub_page->items[i];
     return b->type == BTN_TEXT_FN ? b->label_fn() : b->label;
 }
+int ui_button_marked(int i) {
+    button_data_t *b = stub_page->items[i];
+    return b && b->mark;
+}
 void ui_band_up(void) { lv_event_send(dialog_js8->obj, (lv_event_code_t)EVENT_BAND_UP, NULL); }
 void ui_band_down(void) { lv_event_send(dialog_js8->obj, (lv_event_code_t)EVENT_BAND_DOWN, NULL); }
 void ui_key(uint32_t key) { lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_KEY, &key); }

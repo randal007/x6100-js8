@@ -222,8 +222,9 @@ bool HeldMessages::is_for(int id, const std::string &call) const {
 }
 
 std::optional<int> HeldMessages::next_for(const std::string &call) const {
+    const std::string base = base_callsign(call);
     for (auto &m : msgs_)
-        if (!m.delivered && !m.text.empty() && (m.to == call || m.to == base_callsign(call))) return m.id;
+        if (!m.delivered && !m.text.empty() && (m.to == call || m.to == base)) return m.id;
     return std::nullopt;
 }
 

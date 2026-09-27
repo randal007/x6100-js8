@@ -85,6 +85,11 @@ buttons_page_t *buttons_get_cur_page() { return stub_page; }
 void            buttons_refresh(button_data_t *d) {
     if (d->type == BTN_TEXT_FN) printf("[button] %s\n", d->label_fn());
 }
+/* The real one tints the button green (btn_active_style); record it. */
+void buttons_mark(button_data_t *d, bool val) {
+    if (d->mark != val && d->type == BTN_TEXT_FN) printf("[button] %s: %s\n", d->label_fn(), val ? "green" : "plain");
+    d->mark = val;
+}
 void button_next_page_cb(button_data_t *d) { stub_page = d->next; }
 void button_prev_page_cb(button_data_t *d) { stub_page = d->prev; }
 

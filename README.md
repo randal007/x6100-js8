@@ -181,7 +181,7 @@ to go back a page. In JS8 a hold is half a second.
 | 3 | **Time Sync** | Shift JS8's timing to match the last 2 minutes of decodes (needs 3 or more; with 3 or more stations, each counts once), like desktop's time drift; the radio's clock isn't changed. Pressing it again right after is safe. Not while sending. Hold to reset the drift. |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
 | 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off an hour after it was last heard. |
-| 3 | **Inbox** | Your messages, and messages held for others. Shows *N new*. |
+| 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
 | 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. |
 | 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and HB on, as on desktop). |
@@ -247,8 +247,9 @@ JS8 has four speeds (desktop JS8Call's figures):
 | ![Inbox](docs/screenshots/06_inbox.png) | ![A message](docs/screenshots/07_inbox_message.png) |
 
 **Receiving:** a `MSG` sent to you goes to the Inbox (page 3). The status
-line shows `MSG 1 NEW`. The sender expects an `ACK`: AUTO sends it, or
-**Reply** has it ready.
+line shows `MSG 1 NEW` and the **Inbox** button turns green until you've
+read it. The sender expects an `ACK`: AUTO sends it, or **Reply** has it
+ready.
 
 **The Inbox** opens on the oldest unread message (`*`). Open one to read
 it all; **Reply** writes back, **Delete** removes it. *New message to …*
@@ -268,9 +269,13 @@ When a station says it holds a message for you (`YES MSG ID 3`, or `MSG ID
 **Holding messages for others:** a `MSG TO:W1ABC` sent to you is kept for
 W1ABC (Inbox → *Held for others*) and ACKed. When W1ABC asks (`QUERY
 MSGS`, then `QUERY MSG n`), it's sent as `W1ABC MSG <text> FROM <sender>`
-and marked *(sent)*. With HB ACK on, W1ABC's heartbeat is acknowledged
-with `MSG ID n` so they know. As always, AUTO sends these answers, or they
-wait on Reply.
+and marked *(sent)* once it has gone out in full; if you stop it halfway,
+it stays held. If W1ABC asks again, it goes again straight away (they
+didn't get it). W1ABC can also ask everyone, `@ALLCALL QUERY MSGS`: as on
+desktop, you answer `YES MSG ID n` only if you hold one for them, and stay
+quiet otherwise. With HB ACK on, W1ABC's heartbeat is acknowledged with
+`MSG ID n` so they know. As always, AUTO sends these answers, or they wait
+on Reply.
 
 **HW CPY?** sent to you: **Reply** has your signal report ready.
 
@@ -447,6 +452,11 @@ Done for beta 3 so far:
   (the radio applies them in DIGI modes too); yours come back when you leave
 - [x] Smoother waterfall: 15 rows a second (as the main screen's), each
   drawn on time, for less work than 10 were
+- [x] The Inbox button turns green while you have unread messages
+- [x] Held messages, checked against desktop JS8Call: `@ALLCALL QUERY MSGS`
+  is answered when you hold one for the asker; a delivery counts only once
+  it has gone out in full (stopped halfway, it stays held); asking again
+  gets it again at once
 - [x] TX bar: the frame count ("1/5 starts in 13 s", "sending 2/5") comes
   before the message, so a long message can't push it off the screen
 
