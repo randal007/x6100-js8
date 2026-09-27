@@ -4,14 +4,16 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 
-> **Beta 2.** In daily use on the air since beta 1: heartbeats acknowledged,
-> queries answered, QSOs and messages with desktop JS8Call stations, all
-> four speeds decoding. Beta 2 fixes what the first on-air QSOs found and
-> adds GhostNet and custom frequencies, a POTA/SOTA spot form and position
-> beacons with a message ([New in beta 2](#new-in-beta-2)). Please report
-> what you find. Nothing transmits by itself
-> when the app opens; automatic replies and heartbeats are switches you
-> turn on.
+> **Beta 2** is the current release. In daily use on the air since beta 1:
+> heartbeats acknowledged, queries answered, QSOs and messages with desktop
+> JS8Call stations, all four speeds decoding. Beta 2 fixed what the first
+> on-air QSOs found and added GhostNet and custom frequencies, a POTA/SOTA
+> spot form and position beacons with a message
+> ([New in beta 2](#new-in-beta-2)). **Beta 3** is in testing: this manual
+> already describes it, and [Coming next](#coming-next) lists what differs
+> from beta 2 (pages 1 and 2 are swapped, for one). Please report what you
+> find. Nothing transmits by itself when the app opens; automatic replies
+> and heartbeats are switches you turn on.
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
@@ -176,7 +178,7 @@ to go back a page. In JS8 a hold is half a second.
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
-| 3 | **Time Sync** | Shift JS8's timing to match the last 2 minutes of decodes (needs 3 or more; each station counts once), like desktop's time drift; the radio's clock isn't changed. Pressing it again right after is safe. Not while sending. Hold to reset the drift. |
+| 3 | **Time Sync** | Shift JS8's timing to match the last 2 minutes of decodes (needs 3 or more; with 3 or more stations, each counts once), like desktop's time drift; the radio's clock isn't changed. Pressing it again right after is safe. Not while sending. Hold to reset the drift. |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
 | 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off an hour after it was last heard. |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new*. |
@@ -297,6 +299,11 @@ words you type (e.g. `VE7ABC @POTA SOTA`). Decodes containing them beep
 twice and show purple, in the list and the Stations view. **Test beep**
 plays it. Beeps never sound while transmitting.
 
+Beeps play through the speaker the way the radio's voice prompts do. The
+radio also feeds them back into its receive audio, so for under a second
+around each beep JS8 hears silence instead and the waterfall pauses;
+decoding carries on.
+
 ## APRS
 
 ![APRS list](docs/screenshots/09_aprs.png)
@@ -400,12 +407,14 @@ After the first on-air QSOs:
 
 ## Known issues in beta 2
 
-- **Test beep may be silent** on some radios (no freeze).
+- **Test beep may be silent** on some radios (no freeze). *Fixed for
+  beta 3.*
 - The **waterfall** scrolls a little less smoothly than the main X6100
-  waterfall.
-- If the radio loses power while JS8 is open, the USB filter stays at
-  200–3000 Hz (leaving the app normally puts yours back). The TX filter
-  isn't affected.
+  waterfall. *Smoother in beta 3.*
+- If the radio loses power while JS8 is open, the USB-D (digital) receive
+  filter stays at 200–3000 Hz, which suits digital modes; set yours back
+  by hand if it was different. Leaving the app normally puts it back, and
+  the TX filter isn't affected. Not planned to change.
 - **APRS:** only the plain grid spot is confirmed on the air so far. POTA
   and SOTA spots, position messages, SMS, email and Winlink are new or
   untested through the gateways: reports welcome.
@@ -426,10 +435,13 @@ Done for beta 3 so far:
 - [x] Stations lists (with their times and ★) kept when JS8 is closed and
   reopened, until the radio is switched off; they used to be emptied
 - [x] Time Sync shifts only JS8's own timing (a drift, like desktop JS8Call)
-  instead of the radio's clock; hold to reset; the drift is shown on top
+  instead of the radio's clock; hold to reset; the drift is shown on top.
+  Each station counts once, a second press can't overshoot, and it waits
+  while you're sending
 - [x] Alert beeps through the speaker (the radio is switched to play them, as
-  for its voice prompts; JS8 hears about a second of silence meanwhile) -
-  needs a check on the radio
+  for its voice prompts); checked on the radio. JS8 hears silence for under
+  a second meanwhile, as the radio feeds the beep back into its receive
+  audio
 - [x] TX filter 160–3000 Hz while JS8 is open: the radio's own default
 - [x] Noise reduction, noise blanker and notch filters off while JS8 is open
   (the radio applies them in DIGI modes too); yours come back when you leave
@@ -440,11 +452,18 @@ Done for beta 3 so far:
 
 Still to do:
 
-- [ ] A power loss with JS8 open no longer leaves the USB filter at
-  200–3000 Hz
-- [ ] Performance: profile the app and spread the work over the radio's
-  four cores (the screen drawing and the JS8 decoder each lean on one core
-  today)
+- [ ] On-air tests of the beta 3 build: Time Sync, the APRS gateways (POTA,
+  SOTA, SMS, email, Winlink) and a long message watched to the end
+- [ ] Performance: measure each part's CPU use on the radio and spread the
+  work over its four cores (the screen drawing and the JS8 decoder each
+  lean on one core today)
+
+Ideas for later:
+
+- Time Sync from a USB GPS (true UTC, no stations needed)
+- Automatic time drift, like desktop JS8Call's auto sync
+- Waterfall: an option for a solid (not see-through) list, for even less
+  work, and the same drawing fix for the FT8 app's waterfall
 
 ## Bug reports and feature requests
 
@@ -481,9 +500,12 @@ JS8 app by VE7NHW.
 - **Tests:** `tests/test_js8.cpp` (Catch2; `[.slow]` runs real-time decodes),
   and [tools/js8_ui_harness](tools/js8_ui_harness), which runs the real app
   headless on stock LVGL under ASan/UBSan.
-- **Building:** GitHub Actions builds the SD image on each pushed tag, using
-  [AetherX6100Buildroot](https://github.com/gdyuldin/AetherX6100Buildroot);
-  upstream notes in [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
+- **Building:** GitHub Actions builds the SD image with
+  [AetherX6100Buildroot](https://github.com/gdyuldin/AetherX6100Buildroot)
+  (about an hour): run *Build image* on `main` for a test image (an
+  artifact), or on a tag to publish a release with the image attached;
+  upstream notes in
+  [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 
 ## License
 
