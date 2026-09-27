@@ -1393,15 +1393,16 @@ static void update_tx_bar(void) {
         int64_t now_ms = now_wall_ms(); /* the transmitter's slots are in JS8 time */
         int     secs   = (int)((tx_status.next_ms - now_ms + 999) / 1000);
         if (secs < 0) secs = 0;
-        snprintf(line, sizeof(line), "TX %4.0f Hz %s   %s   %s %d s  (%d/%d)", tx_status.offset_hz,
-                 js8_speed_name(tx_status.speed), tx_status.text,
-                 tx_status.frame == 1 ? "starts in" : "next frame in", secs, tx_status.frame, tx_status.frames);
+        /* Progress before the text: a long message only loses its end. */
+        snprintf(line, sizeof(line), "TX %4.0f Hz %s  %d/%d %s %d s   %s", tx_status.offset_hz,
+                 js8_speed_name(tx_status.speed), tx_status.frame, tx_status.frames,
+                 tx_status.frame == 1 ? "starts in" : "next in", secs, tx_status.text);
         lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x5a4a00), 0);
         break;
     }
     case JS8_TX_KEYING:
-        snprintf(line, sizeof(line), "TX %4.0f Hz %s   %s   sending %d/%d", tx_status.offset_hz,
-                 js8_speed_name(tx_status.speed), tx_status.text, tx_status.frame, tx_status.frames);
+        snprintf(line, sizeof(line), "TX %4.0f Hz %s  sending %d/%d   %s", tx_status.offset_hz,
+                 js8_speed_name(tx_status.speed), tx_status.frame, tx_status.frames, tx_status.text);
         lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0xa00000), 0);
         break;
     default:

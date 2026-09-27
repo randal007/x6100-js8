@@ -125,9 +125,11 @@ read, it goes back to following them 30 s after you last turned the MFK.
 00:14`, `ACK`, `MSG 1 NEW`), the band, UTC time and how many messages
 have been decoded.
 
-**TX bar:** your offset and speed, then the countdown ("starts in 9 s
-(1/3)"), the selected station and `auto CQ` when it's on. It turns red
-while you're on the air.
+**TX bar:** your offset and speed, then how far the message has got
+("1/3 starts in 9 s", "sending 2/3") and its text; a long message is cut
+short at the end, never the count. When nothing is queued it shows the
+selected station and `auto CQ` when it's on. It turns red while you're on
+the air.
 
 **Typing** (Reply, Send…): the text box sits at the top of the screen and
 the list stays in view, following the other station's message as it
@@ -433,6 +435,8 @@ Done for beta 3 so far:
   (the radio applies them in DIGI modes too); yours come back when you leave
 - [x] Smoother waterfall: 15 rows a second (as the main screen's), each
   drawn on time, for less work than 10 were
+- [x] TX bar: the frame count ("1/5 starts in 13 s", "sending 2/5") comes
+  before the message, so a long message can't push it off the screen
 
 Still to do:
 

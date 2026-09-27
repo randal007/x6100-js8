@@ -362,6 +362,22 @@ int main() {
         printf("[gen] closed with the %s list open: running=%d (survived)\n", which, ui_running());
         return 0;
     }
+    if (getenv("ONLY_TXBAR")) {
+        // A long message: the frame progress stays on screen.
+        pump(300);
+        ui_page(2);
+        ui_press(3); // Send...
+        pump(200);
+        ui_compose_append("K9DEF THIS IS A RATHER LONG MESSAGE TO SEE WHERE THE FRAME COUNT GOES IN THE BAR");
+        ui_compose_enter();
+        pump(600);
+        screenshot("50_txbar_waiting.ppm");
+        int frames = stub_tx_frames;
+        for (int i = 0; i < 400 && stub_tx_frames == frames; i++) pump(50);
+        pump(300);
+        screenshot("51_txbar_sending.ppm");
+        return 0;
+    }
     if (getenv("ONLY_DRIFT")) {
         // Time Sync as desktop's time drift: JS8's timing moves, the clock doesn't.
         pump(300);
