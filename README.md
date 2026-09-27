@@ -176,7 +176,7 @@ to go back a page. In JS8 a hold is half a second.
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
 | 3 | **Time Sync** | Shift JS8's timing by the last 2 minutes of decodes (needs 3 or more), like desktop's time drift; the radio's clock isn't changed. Hold to reset the drift. |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
-| 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. All are emptied when JS8 opens. |
+| 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off an hour after it was last heard. |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new*. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
 | 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. |
@@ -420,6 +420,8 @@ Done for beta 3 so far:
 - [x] A heartbeat sent by hand restarts the HB timer
 - [x] Shorter position beacons with a message (6 frames down to 4–5), with a live frame count
 - [x] Spot form: one Frequency row (keyboard; empty = the JS8 dial)
+- [x] Stations lists (with their times and ★) kept when JS8 is closed and
+  reopened, until the radio is switched off; they used to be emptied
 - [x] Time Sync shifts only JS8's own timing (a drift, like desktop JS8Call)
   instead of the radio's clock; hold to reset; the drift is shown on top
 - [x] Alert beeps through the speaker (the radio is switched to play them, as

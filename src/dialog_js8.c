@@ -260,8 +260,9 @@ static bool        composing;          /* compose window open */
 static js8_stations_t *stations;       /* who we've heard, who heard us: this band's */
 
 /* One Stations list per dial frequency (7.078 and GhostNet's 7.107 are
- * different nets): going back brings its list back. All are emptied when
- * JS8 opens. */
+ * different nets): going back brings its list back. They last while the
+ * radio is on, JS8 closed and reopened included; each station drops off an
+ * hour after it was last heard. */
 #define BAND_LISTS 16
 static struct {
     int32_t         dial_khz;
@@ -1956,9 +1957,10 @@ static void construct_cb(lv_obj_t *parent) {
     }
     base_gain_offset = tx_player_base_gain_offset();
     tx_start();
-    for (int i = 0; i < BAND_LISTS; i++) {
-        if (band_lists[i].list) js8_stations_clear(band_lists[i].list);
-    }
+    /* The lists stay while the radio is on, like the messages: closing and
+     * reopening JS8 used to empty them, so the next decodes came back all at
+     * one time and without the ★ of those that had heard us. Stations still
+     * drop off an hour after they were last heard (StationList::EXPIRE_MS). */
     stations = stations_for_band();
     if (!qsos) qsos = js8_qsos_create();
     if (!inbox) inbox = js8_inbox_open(JS8_INBOX_PATH);

@@ -1134,6 +1134,15 @@ int main() {
         pump(300);
         printf("[bands] 20m back: %d (want 1)\n", !ui_list_has("No stations heard yet"));
         screenshot("41_bands_20m_again.ppm");
+        // Close JS8 and open it again: the list, its times and ★ stay.
+        ui_key(LV_KEY_ESC);
+        pump(500);
+        printf("[bands] closed: %d (want 1)\n", !ui_running());
+        ui_open();
+        pump(1000);
+        printf("[bands] reopened, stations kept: %d, rows %d (want 1, 2)\n", !ui_list_has("No stations heard yet"),
+               ui_list_count(" "));
+        screenshot("42_bands_reopened.ppm");
         ui_page(2);
         ui_press(4); // Clear: this band only
         pump(300);
