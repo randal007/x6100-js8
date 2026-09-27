@@ -170,7 +170,7 @@ to go back a page. In JS8 a hold is half a second.
 | 1 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. With HB on, the automatic ones count again from this one. |
 | 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages? |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
-| 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). |
+| 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. |
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
 | 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
@@ -420,6 +420,7 @@ Done for beta 3 so far:
 - [x] A heartbeat sent by hand restarts the HB timer
 - [x] Shorter position beacons with a message (6 frames down to 4–5), with a live frame count
 - [x] Spot form: one Frequency row (keyboard; empty = the JS8 dial)
+- [x] Show in the Stations view goes back to the messages
 - [x] Stations lists (with their times and ★) kept when JS8 is closed and
   reopened, until the radio is switched off; they used to be emptied
 - [x] Time Sync shifts only JS8's own timing (a drift, like desktop JS8Call)

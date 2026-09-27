@@ -1143,6 +1143,19 @@ int main() {
         printf("[bands] reopened, stations kept: %d, rows %d (want 1, 2)\n", !ui_list_has("No stations heard yet"),
                ui_list_count(" "));
         screenshot("42_bands_reopened.ppm");
+        // Show in the Stations view: back to the messages, filter unchanged.
+        ui_page(2);
+        std::string before = ui_button_label(1);
+        ui_press(1);
+        pump(300);
+        printf("[bands] Show from Stations: messages %d, filter kept %d (want 1, 1)\n",
+               ui_list_has("CQ CQ CQ FN42"), before == ui_button_label(1));
+        ui_press(1); // now it cycles
+        pump(200);
+        printf("[bands] Show again cycles: %d (want 1)\n", before != ui_button_label(1));
+        ui_page(3);
+        ui_press(3); // Stations again, for Clear below
+        pump(300);
         ui_page(2);
         ui_press(4); // Clear: this band only
         pump(300);

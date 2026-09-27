@@ -2062,9 +2062,18 @@ static const char *show_label_getter(void) {
     return labels[show];
 }
 
+/* Press: next filter. In the Stations view, where the filter means
+ * nothing, the first press goes back to the messages as they were. */
 static void show_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
+    if (view_stations) {
+        view_stations = false;
+        if (btn_stations.disp_btn) buttons_refresh(&btn_stations);
+        rebuild_rows();
+        msg_update_text_fmt("Messages (%s)", show == SHOW_ALL ? "all" : show == SHOW_DIRECTED ? "directed" : "no HB");
+        return;
+    }
     show = (show + 1) % SHOW_COUNT;
     buttons_refresh(btn);
     rebuild_rows();
