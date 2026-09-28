@@ -538,6 +538,8 @@ Done for beta 4 so far:
   station's frequency, and with the MFK on one, every row on its frequency
   (nobody new is selected)
 
+Still to do:
+
 - [ ] On-air tests: relays and store and forward with desktop JS8Call
   stations, the APRS gateways, a long message watched to the end
 - [ ] Performance: measure each part's CPU use on the radio and spread the
