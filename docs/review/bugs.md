@@ -44,10 +44,10 @@ Combining this review with the earlier bug hunt (BH-n):
 | B-11 | F22 | After a receiver stall, minute-old audio can decode again as new | low | possible |
 | B-12 | F26, F30 | A message still arriving when JS8 closed can take over a new message's row | low | likely |
 | B-13 | F28 | Any first word starting with "CQ" makes a message a CQ | low | confirmed |
-| B-14 | F32, F33, F41 | An Inbox file that can't be read is overwritten by the next save | medium | confirmed |
-| B-15 | F38, F41 | `js8_texts.txt` is rewritten in place: a power cut can wipe the settings | low | confirmed |
+| B-14 | F32, F33, F41 | ~~An Inbox file that can't be read is overwritten by the next save~~ **fixed in 4bfb8d6** | medium | confirmed |
+| B-15 | F38, F41 | ~~`js8_texts.txt` is rewritten in place: a power cut can wipe the settings~~ **fixed in 4bfb8d6** | low | confirmed |
 | B-16 | F40, F63 | Without a callsign the keyboard never opens, and leaves a stale edit mode behind | low | confirmed |
-| B-17 | F34, F41 | A message that couldn't be saved is still ACKed | low | confirmed |
+| B-17 | F34, F41 | ~~A message that couldn't be saved is still ACKed~~ **fixed in 4bfb8d6** | low | confirmed |
 | B-18 | F12, F62 | QUERY CALL about a station heard only through a relay gets no answer | low | confirmed |
 | B-19 | F56 | The VOL knob does nothing while most popups are open | low | confirmed |
 | B-20 | F60, F83 | "New station" alerts again for a station that dropped off the list | low | likely |
@@ -367,6 +367,8 @@ filter) gets it wrong. Desktop decides CQ from the frame type.
 
 ### B-14. An Inbox file that can't be read is overwritten by the next save — medium, confirmed
 
+**Fixed in 4bfb8d6** (package 2).
+
 **Where:** `src/js8/js8_ops.cpp:525-531` (`js8_inbox_open`), `:614-620`
 (`js8_held_open`); `src/js8/inbox.cpp:75`, `:185`.
 
@@ -384,6 +386,8 @@ so on screen: "Inbox file can't be read"), or move the unreadable file
 aside (`js8_inbox.txt.bad`) before the first save.
 
 ### B-15. `js8_texts.txt` is rewritten in place: a power cut can wipe the settings — low, confirmed
+
+**Fixed in 4bfb8d6** (package 2).
 
 **Where:** `src/dialog_js8.c:3242-3254` (`save_texts`).
 
@@ -423,6 +427,8 @@ editor, and Enter retunes.
 (`tx_queue_at()` already refuses without one).
 
 ### B-17. A message that couldn't be saved is still ACKed — low, confirmed
+
+**Fixed in 4bfb8d6** (package 2).
 
 **Where:** `src/js8/js8_ops.cpp:239-261` (`keep`), `:309-326`
 (`js8_process`).

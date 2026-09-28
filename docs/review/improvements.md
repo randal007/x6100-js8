@@ -16,7 +16,7 @@ numbers refer to that commit.
 
 | ID | Feature | Improvement | Kind | Worth |
 |---|---|---|---|---|
-| I-01 | F02, F04 | Test closing the app while a frame is keyed | tests | high |
+| I-01 | F02, F04 | ~~Test closing the app while a frame is keyed~~ **done in 2ed19a8** | tests | high |
 | I-02 | F02 | Synthesise TX audio without 16 MB of temporary buffers | efficiency | medium |
 | I-03 | F10 | Keep the JS8 presets out of upstream's migration numbers | robustness | medium |
 | I-04 | F03 | Plan each message once, not twice | efficiency | low |
@@ -26,9 +26,9 @@ numbers refer to that commit.
 | I-08 | F11, F20 | Decide once, when the reply is actually sent | simplify | low |
 | I-09 | F11 | Prune the auto-reply rate-limit map | efficiency | low |
 | I-10 | F22 | Test the receiver's stall path | tests | low |
-| I-11 | F31 | Size the groups setting for ten groups | robustness | low |
-| I-12 | F32, F33, F38 | One safe "write the file" helper for all three data files | simplify | medium |
-| I-13 | F32, F33, F38 | Tests for damaged, unreadable and half-written data files | tests | medium |
+| I-11 | F31 | ~~Size the groups setting for ten groups~~ **done in 4bfb8d6** | robustness | low |
+| I-12 | F32, F33, F38 | ~~One safe "write the file" helper for all three data files~~ **done in 4bfb8d6** | simplify | medium |
+| I-13 | F32, F33, F38 | ~~Tests for damaged, unreadable and half-written data files~~ **done in 4bfb8d6** | tests | medium |
 | I-14 | F51 | Restyle the TX bar and the waterfall frame only when they change | efficiency | high |
 | I-15 | F45, F46, F59 | Work out each row's colours and fields once, not on every redraw | efficiency | medium |
 | I-16 | F42, F43 | Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes | efficiency | low |
