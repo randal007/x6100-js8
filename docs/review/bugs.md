@@ -31,13 +31,13 @@ Combining this review with the earlier bug hunt (BH-n):
 
 | ID | Feature | Bug | Severity | Confidence |
 |---|---|---|---|---|
-| B-01 | F02, F04, F05 | Closing the app during a transmission crashes it, radio keyed until it restarts | high | confirmed (reproduced) |
-| B-02 | F05 | Switching off with JS8 open skips its close: back on the JS8 dial, USB-D, 200–3000 Hz | low | confirmed |
+| B-01 | F02, F04, F05 | ~~Closing the app during a transmission crashes it, radio keyed until it restarts~~ **fixed in 2ed19a8** | high | confirmed (reproduced) |
+| B-02 | F05 | Switching off with JS8 open skips its close: back on the JS8 dial, USB-D, 200–3000 Hz (won't fix: user's decision) | low | confirmed |
 | B-03 | F08 | Heartbeat offset chosen differently from desktop | low | confirmed |
 | B-04 | F11, F14 | Automatic replies go out while a message to us is still arriving | medium | confirmed |
 | B-05 | F14 | Heartbeat ACKs every 15 min per station; desktop waits 55 | medium | confirmed |
 | B-06 | F12 | Our 5-minute guard drops a repeated AGN? and relayed questions | low | confirmed |
-| B-07 | F07, F11 | No WSPR guard band: can transmit on top of WSPR on 30 m | low | confirmed |
+| B-07 | F07, F11 | No WSPR guard band: can transmit on top of WSPR on 30 m (won't fix: user's decision) | low | confirmed |
 | B-08 | F13, F15 | Heartbeat and auto CQ timing follow the older desktop | low | confirmed |
 | B-09 | F15 | Holding CQ while sending: first CQ a whole interval later | low | confirmed |
 | B-10 | F11 | An `@APRSIS MSG` without `TO:` is kept and ACKed | low | confirmed |
@@ -62,6 +62,9 @@ Combining this review with the earlier bug hunt (BH-n):
 ## Batch 1: Transmitting and the radio
 
 ### B-01. Closing the app during a transmission crashes it — high, confirmed (reproduced)
+
+**Fixed in 2ed19a8:** `js8_tx_destroy()` stops and joins the TX thread
+before resetting the pointer; unit test and harness `ONLY_TXSAFE`.
 
 **Where:** `src/js8/js8_tx.cpp:119-123` (`js8_tx_destroy`), `:115-117`
 (`js8_tx_stopping`); `src/dialog_js8.c:1462-1465` (`tx_abort_check`),
