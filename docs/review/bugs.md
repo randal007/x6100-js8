@@ -27,6 +27,9 @@ Findings from the earlier hunt ([bug-hunt-2026-09-28.md](../bug-hunt-2026-09-28.
 | B-08 | F13, F15 | Heartbeat and auto CQ timing follow the older desktop | low | confirmed |
 | B-09 | F15 | Holding CQ while sending: first CQ a whole interval later | low | confirmed |
 | B-10 | F11 | An `@APRSIS MSG` without `TO:` is kept and ACKed | low | confirmed |
+| B-11 | F22 | After a receiver stall, minute-old audio can decode again as new | low | possible |
+| B-12 | F26, F30 | A message still arriving when JS8 closed can take over a new message's row | low | likely |
+| B-13 | F28 | Any first word starting with "CQ" makes a message a CQ | low | confirmed |
 
 ## Batch 1: Transmitting and the radio
 
@@ -273,3 +276,58 @@ on, we transmit an ACK to whoever sent it. Someone sending
 
 **Fix:** after the `@APRSIS` check, return nothing when the pattern
 doesn't match.
+
+## Batch 3: Receiving and decoding
+
+The receive path matches desktop where it was checked (speed table,
+assembler grouping and timeout, checksums, relay and command parsing) and
+has good unit tests. Three small findings.
+
+### B-11. After a receiver stall, minute-old audio can decode again as new — low, possible
+
+**Where:** `src/js8/receiver.cpp:175-180` (`worker_loop`).
+
+**What goes wrong:** if the worker falls more than 5 s behind, it throws
+the backlog away and sets `aligned_ = false`, so the next buffer only
+realigns the engine's 60 s ring (`request_realign()`, local patch 3). The
+gap-fill comment a few lines below (`:32-35`) explains why that's wrong
+for a gap: the ring positions skipped over still hold audio from a minute
+earlier, which "decodes again as new". The TX gap is filled with silence;
+this one isn't. The old frames are past the duplicate filter's 30 s
+memory, so an old `MSG` could be ACKed again, an old query answered again,
+an old CQ alerted again. It needs a 5 s stall of the worker thread, which
+nothing normally causes (it does no file I/O), so it's unlikely.
+
+**Fix:** keep the discarded length and push that much silence (up to the
+ring), as the gap fill does, instead of a bare realign.
+
+### B-12. A message still arriving when JS8 closed can take over a new message's row — low, likely
+
+**Where:** `src/dialog_js8.c:683-690` (`find_partial`), `:751-760`
+(`add_message`); `src/js8/assembler.hpp:87` (`next_id_ = 1`).
+
+**What goes wrong:** partial rows are found again by the assembler's
+`msg_id`. Each `Receiver` numbers from 1, but the message history lives
+as long as the radio is on (JS8 closed and reopened included). A message
+whose last frame never came before JS8 closed (or before a retune, which
+clears the assembler) stays in the history as a partial; after reopening,
+the new receiver's message with the same number updates *that* old slot:
+the new text appears in the old row, at the old time and position, instead
+of at the bottom. Such partials also keep their "growing" state forever.
+
+**Fix:** a process-wide message counter (so ids never repeat while the
+radio is on), and mark leftover partials as final on retune and close.
+
+### B-13. Any first word starting with "CQ" makes a message a CQ — low, confirmed
+
+**Where:** `src/js8/classify.cpp:67`
+(`starts_with(first, "CQ")`).
+
+**What goes wrong:** Portugal's special-event calls use the CQ prefix
+(CQ0–CQ9, e.g. CQ7ABC). A directed message to such a station
+(`CT1ABC: CQ7ABC HELLO`) is classified as a CQ: the CQ alert beeps, and
+anything else that treats CQs specially (Stations marks, the Directed
+filter) gets it wrong. Desktop decides CQ from the frame type.
+
+**Fix:** `first == "CQ"` (the renderer already turns CQ frames into
+`@ALLCALL CQ ...`, which the second test catches).

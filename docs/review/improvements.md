@@ -25,6 +25,8 @@ numbers refer to that commit.
 | I-07 | F11–F20 | A desktop-parity test table for the auto-reply rules | tests | medium |
 | I-08 | F11, F20 | Decide once, when the reply is actually sent | simplify | low |
 | I-09 | F11 | Prune the auto-reply rate-limit map | efficiency | low |
+| I-10 | F22 | Test the receiver's stall path | tests | low |
+| I-11 | F31 | Size the groups setting for ten groups | robustness | low |
 
 ## Batch 1: Transmitting and the radio
 
@@ -117,3 +119,21 @@ command answered and never drops one; `autop` lives until power-off. A
 relay or heartbeat station running for days keeps every station it ever
 ACKed. Tiny per entry, but pruning entries older than the longest window
 (55 min once B-05 is fixed) at each `sent()` keeps it bounded.
+
+## Batch 3: Receiving and decoding
+
+### I-10. Test the receiver's stall path — tests, low
+
+`tests/test_js8.cpp` covers the realign (`:466`) and the TX gap fill
+(`:483`) but not the "worker fell more than 5 s behind" branch
+(`receiver.cpp:175-180`), where B-11 lives. A test feeding 6 s of audio
+in one burst and checking that no frame from before the burst decodes
+again would pin it down.
+
+### I-11. Size the groups setting for ten groups — robustness, low
+
+`js8_groups_normalise()` keeps up to 10 groups, but `groups_text` is 96
+characters (`dialog_js8.c:294`): ten long group names (up to about 10
+characters each, plus spaces) don't fit, and `copy_str()` cuts the last
+one mid-name, which then silently matches nothing (or the wrong group).
+Either a bigger buffer or stop at the last group that fits whole.

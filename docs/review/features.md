@@ -26,7 +26,7 @@ The review reads code only: **no code is changed**.
 |---|---|---|---|
 | 1 | Transmitting and the radio | F01–F10 | ✅ 2026-09-28: 3 bugs (1 high), 6 improvements |
 | 2 | Automatic sending | F11–F20 | ✅ 2026-09-28: 7 bugs (2 medium), 3 improvements |
-| 3 | Receiving and decoding | F21–F31 | |
+| 3 | Receiving and decoding | F21–F31 | ✅ 2026-09-28: 3 bugs (all low), 2 improvements |
 | 4 | Inbox, saved data, settings | F32–F41 | |
 | 5 | The screen | F42–F52 | |
 | 6 | Selecting, navigating, Stations | F53–F62 | |
@@ -123,31 +123,42 @@ What an unattended station sends by itself.
 
 ## Batch 3: Receiving and decoding
 
-- [ ] **F21. Audio in**: `audio_cb`, the resampler
+- [x] **F21. Audio in**: `audio_cb`, the resampler
   (`src/js8/resampler.cpp`), `js8_rx_feed`, silence during a beep.
-- [ ] **F22. Receiver thread**: ring buffer, slot schedule, filling
+  → nothing new. Fine: dropped while keyed, silence (same length) during a beep, level only for the log.
+- [x] **F22. Receiver thread**: ring buffer, slot schedule, filling
   gaps, realign, `check_clock`. `src/js8/receiver.cpp`, `js8_rx.cpp`.
-- [ ] **F23. Speeds**: all four decoded together, the Decode button
+  → B-11, I-10. Fine: TX gap filled with silence, drift changes restart the clock check, realign threshold.
+- [x] **F23. Speeds**: all four decoded together, the Decode button
   (`js8_rx_all`), `rx_speed_mask`, `src/js8/speeds.cpp`, `js8_speed.h`.
-- [ ] **F24. Decode range and QSO offset**: `js8_rx_set_decode_range`,
+  → nothing new. Fine: table matches desktop JS8Submode.cpp (symbol samples, delays, periods, Costas, rxThreshold); desktop's rxSNRThreshold is unused there too.
+- [x] **F24. Decode range and QSO offset**: `js8_rx_set_decode_range`,
   `js8_rx_set_qso_offset` (local patch 9).
-- [ ] **F25. Duplicate filter**: `DuplicateFilter` (Turbo retries).
-- [ ] **F26. Frame assembler**: multi-frame messages, closing 60 s
+  → nothing new. Fine: range from the filter, QSO offset updated on every offset change.
+- [x] **F25. Duplicate filter**: `DuplicateFilter` (Turbo retries).
+  → nothing new. Fine: same speed/frame/offset within one slot.
+- [x] **F26. Frame assembler**: multi-frame messages, closing 60 s
   after the latest frame, partial rows growing in place.
   `src/js8/assembler.cpp`, `find_partial`.
-- [ ] **F27. Frame rendering**: frame bits, compound calls.
+  → B-12. Fine: grouping within rxThreshold, 60 s from the latest frame, first+last = complete, missed first frame handled.
+- [x] **F27. Frame rendering**: frame bits, compound calls.
   `src/js8/render.cpp`.
-- [ ] **F28. Message classification**: to me, groups, heartbeats, CQ,
+  → nothing new. Fine: a faithful port of the Android renderer.
+- [x] **F28. Message classification**: to me, groups, heartbeats, CQ,
   low confidence, checksums, grids, base calls. `src/js8/classify.cpp`.
   Earlier: BH-4, BH-6.
-- [ ] **F29. Directed-message parser**: `parse_directed`,
+  → B-13. BH-4 and BH-6 still there. Fine: checksum rules including @APRSIS.
+- [x] **F29. Directed-message parser**: `parse_directed`,
   `relay_next_hop`, `relay_path_calls`, `parse_callsigns`, `is_allcall`.
   `src/js8/directed.cpp`.
-- [ ] **F30. Incoming messages in the app**: `on_message`,
+  → nothing new (checked in batch 2 against desktop's patterns).
+- [x] **F30. Incoming messages in the app**: `on_message`,
   `ui_add_message`, `handle_incoming`, `process_message`,
   `add_message`, `on_cycle_done`.
-- [ ] **F31. Groups and @ALLCALL**: `GROUPS=`, `js8_groups_normalise`,
+  → B-12. Fine: acts only on final messages, own messages skipped, the audio callback can't outlive the receiver in practice.
+- [x] **F31. Groups and @ALLCALL**: `GROUPS=`, `js8_groups_normalise`,
   group addressing.
+  → I-11. Fine: @ added, upper case, duplicates dropped, exact match as desktop.
 
 ## Batch 4: Inbox, saved data, settings
 
