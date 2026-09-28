@@ -122,13 +122,20 @@ Checksum verify_command_checksum(std::string &text) {
     if (b == std::string::npos) return Checksum::None;
     payload = payload.substr(b, e - b + 1);
 
+    // Desktop sends @APRSIS MSG / MSG TO: (an APRS gateway passing an APRS
+    // message on to a JS8 station) without a checksum: take it as it is.
+    const bool aprs_unchecked =
+        text.compare(to_start, to_end - to_start, "@APRSIS") == 0 && (std::strcmp(cmd, " MSG") == 0 ||
+                                                                       std::strcmp(cmd, " MSG TO:") == 0);
+    const Checksum bad = aprs_unchecked ? Checksum::None : Checksum::Invalid;
+
     const std::size_t len = bits == 32 ? 6 : 3;
-    if (payload.size() < len + 2 || payload[payload.size() - len - 1] != ' ') return Checksum::Invalid;
+    if (payload.size() < len + 2 || payload[payload.size() - len - 1] != ' ') return bad;
     std::string checksum = payload.substr(payload.size() - len);
     std::string message  = payload.substr(0, payload.size() - len - 1);
 
     bool ok = bits == 32 ? vc::checksum32_valid(checksum, message) : vc::checksum16_valid(checksum, message);
-    if (!ok) return Checksum::Invalid;
+    if (!ok) return bad;
 
     // Drop " CHECKSUM" from the end of the displayed text.
     auto last = text.find_last_not_of(' ');

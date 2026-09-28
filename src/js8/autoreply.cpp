@@ -320,8 +320,10 @@ Processed process(const Incoming &in, const AutoSettings &s, const std::vector<H
 
     auto d = parse_directed(in.text);
     if (!d) return {};
-    // A buffered command with text counts only once its checksum checks out.
-    if (is_checksummed_command(d->cmd) && !d->text.empty() && !in.checksum_ok) return {};
+    // A buffered command with text counts only once its checksum checks out
+    // (desktop sends an APRS gateway's @APRSIS MSG / MSG TO: without one).
+    const bool aprs_unchecked = in.to == "@APRSIS" && (d->cmd == " MSG" || d->cmd == " MSG TO:");
+    if (is_checksummed_command(d->cmd) && !d->text.empty() && !in.checksum_ok && !aprs_unchecked) return {};
     return handle(*d, "", c);
 }
 

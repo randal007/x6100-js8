@@ -404,8 +404,13 @@ JS8Spotter do):
 | Email | `@APRSIS CMD :EMAIL-2  :address message` | address and message |
 | Winlink: start / text / send | `SP address subject`, a line of text, `/EX` | [APRSLink](https://winlink.org/APRSLink)'s three steps |
 
-Nothing reaches APRS unless a gateway station hears you; replies come back
-over APRS, not JS8. APRS text is limited to 67 characters.
+Nothing reaches APRS unless a gateway station hears you. Replies (an SMS
+answer, a gateway's confirmation) go to your call on APRS-IS (aprs.fi shows
+them); they come back to the radio only if a JS8Call-improved station with
+*relaying inbound APRS messages* switched on has heard you lately. Its
+`@APRSIS MSG TO:<your call> <text> DE <sender>` then lands in your Inbox,
+from *APRS*, and **Reply by APRS** answers it. Older desktop JS8Call never
+passes APRS messages back. APRS text is limited to 67 characters.
 
 **Position with a message:** Spot my grid and Spot GPS position open a
 text box. Press Enter on it empty for the plain position beacon (2 frames),
@@ -524,7 +529,8 @@ gain the relay path from then on.
   Reports welcome.
 - **APRS:** the grid spot and SMS are confirmed on the air. POTA and SOTA
   spots, position messages, email and Winlink are untested through the
-  gateways. Gateway replies come back over APRS, never over JS8.
+  gateways. Replies come back to the radio only through a station that
+  relays inbound APRS (see [APRS](#aprs)).
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
 - The main screen's waterfall, seen through JS8's buttons, stands still
@@ -553,6 +559,14 @@ Done for beta 4 so far:
 - [x] Settings: how long stations and messages stay listed
 - [x] Settings: an operator callsign different from the station's, logged
   as `OPERATOR` (shown in the Log popup)
+- [x] Messages go out exactly as desktop JS8Call sends them, checked frame
+  by frame against desktop's own code at all four speeds. Before, desktop
+  read "RR 73" as "RR 31", a message starting with a number lost it, a
+  relay or `MSG TO:` / `QUERY CALL` to a call starting with a digit
+  (2E0ABC) named the wrong station, and messages naming a callsign
+  sometimes took an extra frame at Normal speed
+- [x] APRS replies relayed back over JS8 (e.g. an SMS answer) reach the
+  Inbox; desktop sends them without the checksum we expected
 
 Still to do:
 
