@@ -28,7 +28,7 @@ The review reads code only: **no code is changed**.
 | 2 | Automatic sending | F11–F20 | ✅ 2026-09-28: 7 bugs (2 medium), 3 improvements |
 | 3 | Receiving and decoding | F21–F31 | ✅ 2026-09-28: 3 bugs (all low), 2 improvements |
 | 4 | Inbox, saved data, settings | F32–F41 | ✅ 2026-09-28: 4 bugs (1 medium), 2 improvements |
-| 5 | The screen | F42–F52 | |
+| 5 | The screen | F42–F52 | ✅ 2026-09-28: no new bugs, 3 improvements (1 high) |
 | 6 | Selecting, navigating, Stations | F53–F62 | |
 | 7 | Sending by hand | F63–F72 | |
 | 8 | Logging and APRS | F73–F82 | |
@@ -200,27 +200,38 @@ What an unattended station sends by itself.
 
 ## Batch 5: The screen
 
-- [ ] **F42. Waterfall in the app**: PSD, noise floor, row queue,
+- [x] **F42. Waterfall in the app**: PSD, noise floor, row queue,
   15 rows/s pacing. `wf_*`, `ui_waterfall_add`, `on_audio`.
-- [ ] **F43. Waterfall widget**: ring buffer, `invalidate_exact`.
+  → I-16. Fine: rows paced by the monotonic clock, oldest dropped when far behind, freed on close, noise floor.
+- [x] **F43. Waterfall widget**: ring buffer, `invalidate_exact`.
   `src/widgets/lv_waterfall.c` (shared with FT8 and the main screen).
-- [ ] **F44. Finder and markers**: TX offset marker, the green QSO line.
-- [ ] **F45. Message list rows**: `format_row`, `append_row`, history
+  → I-16. Fine: ring window, exact invalidation, image freed on delete. Shared with FT8 (same behaviour there).
+- [x] **F44. Finder and markers**: TX offset marker, the green QSO line.
+  → nothing new. Fine: range, width per speed, green line follows the selected station.
+- [x] **F45. Message list rows**: `format_row`, `append_row`, history
   ring, trimming at 200 → 150, `rebuild_rows`, `row_hist`.
-- [ ] **F46. Row colours and marks**: own red, to-me blue, groups,
+  → I-15. Fine: history slots vs rows, trimming, rebuild when a shown slot is reused.
+- [x] **F46. Row colours and marks**: own red, to-me blue, groups,
   alerts purple, yellow commands (`draw_recoloured`, `table_draw_cb`,
   `table_draw_end_cb`), the end mark `♢`, the `js8_marks_24` font.
-- [ ] **F47. Show filter**: All / No HB / Directed (`passes_filter`,
+  → I-15. Fine: '#' escaped for recolouring, colour priority (TX, alert, to me, CQ, HB, group).
+- [x] **F47. Show filter**: All / No HB / Directed (`passes_filter`,
   `show_cb`).
-- [ ] **F48. Info rows**: `add_info_row`. Earlier: BH-18.
-- [ ] **F49. Following new rows, reading back**: `follow`,
+  → nothing new. Fine: No HB keeps HB acks to us, Directed keeps the selected station's frequency.
+- [x] **F48. Info rows**: `add_info_row`. Earlier: BH-18.
+  → nothing new. BH-18 still there; info rows are cut at 127 characters (cosmetic).
+- [x] **F49. Following new rows, reading back**: `follow`,
   `at_bottom`, `READ_PAUSE_MS`, `list_scroll_end`.
-- [ ] **F50. Status line**: `update_status` (cycles, decodes, drift,
+  → nothing new. Fine: 30 s read pause, scroll to the very end of a tall row.
+- [x] **F50. Status line**: `update_status` (cycles, decodes, drift,
   dial, speed).
-- [ ] **F51. TX bar**: `update_tx_bar`, `tx_timer_cb` (countdown, frame
+  → nothing new. Fine: buffer sizes, idle and Turbo flags.
+- [x] **F51. TX bar**: `update_tx_bar`, `tx_timer_cb` (countdown, frame
   progress, selected/locked).
-- [ ] **F52. Aging and Clear**: Messages kept / Stations kept
+  → **I-14**.
+- [x] **F52. Aging and Clear**: Messages kept / Stations kept
   (`msg_age_tick`, `msg_keep_ms`, `apply_station_keep`), `clear_cb`.
+  → nothing new. Fine: Clear resets the list, this band's stations, the assembler and the waterfall; Messages kept only trims when you're at the bottom.
 
 ## Batch 6: Selecting, navigating, Stations
 

@@ -29,6 +29,9 @@ numbers refer to that commit.
 | I-11 | F31 | Size the groups setting for ten groups | robustness | low |
 | I-12 | F32, F33, F38 | One safe "write the file" helper for all three data files | simplify | medium |
 | I-13 | F32, F33, F38 | Tests for damaged, unreadable and half-written data files | tests | medium |
+| I-14 | F51 | Restyle the TX bar and the waterfall frame only when they change | efficiency | high |
+| I-15 | F45, F46, F59 | Work out each row's colours and fields once, not on every redraw | efficiency | medium |
+| I-16 | F42, F43 | Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes | efficiency | low |
 
 ## Batch 1: Transmitting and the radio
 
@@ -159,3 +162,58 @@ parsing.
 what happens when a file exists but can't be read (B-14), when only the
 `.tmp` survived (BH-16), or when `js8_texts.txt` is cut short (B-15). All
 three are easy to set up in a temporary directory.
+
+## Batch 5: The screen
+
+No new bugs here (BH-18, info rows vanishing on a rebuild, is still
+there). Three ways to draw less.
+
+### I-14. Restyle the TX bar and the waterfall frame only when they change — efficiency, high
+
+`tx_timer_cb()` calls `update_tx_bar()` every 250 ms, idle or not
+(`src/dialog_js8.c:1567-1579`), and `update_tx_bar()` always sets the TX
+bar's background colour, its text, and the waterfall's border width and
+colour (`:1590-1636`). In LVGL 8.3 every style setter ends in
+`lv_obj_refresh_style()` → `lv_obj_invalidate()`, changed or not
+(`lvgl/src/core/lv_obj_style.c:270-276`, `:167-173`), and
+`lv_obj_area_is_visible()` grows the area by 5 px for the object *and* for
+its parent (`lv_obj_pos.c:896`, `:908`, `lv_obj_get_transformed_area()`
+→ `lv_area_increase(area, 5, 5)`). For the waterfall that is exactly the
+path 72b134e removed for waterfall rows: the area spills past the opaque
+`wf_box`, so LVGL redraws from the dialog background (the 1 MB
+`dialog.bin`, read and blended line by line) — now four times a second,
+all the time JS8 is open. `lv_label_set_text()` also re-lays out the TX
+bar each time.
+
+**Improvement:** keep the last state, text and colours; call the setters
+only when they change (the frame changes only when keying starts and
+stops). Worth measuring first: the harness's `wf_bench` (`main.cpp:272`)
+calls `lv_refr_now()` in a tight loop and never runs LVGL timers, so it
+can't see this; a case that also runs `lv_timer_handler()` would.
+Likely rather than confirmed: read in the code, not measured.
+
+### I-15. Work out each row's colours and fields once, not on every redraw — efficiency, medium
+
+The list is see-through over the waterfall, so every waterfall row
+(15 a second) redraws every visible list row. For each one,
+`table_draw_cb()` runs `row_command()` → `js8_command_span()`
+(`js8_ops.cpp:133-157`: a `std::string` copy, `parse_directed()` with
+more copies), then `draw_recoloured()` measures the text and draws it a
+second time; in the Stations view `table_draw_end_cb()` calls
+`station_fields()` (age, distance, bearing, formatted) per row per frame.
+The command span only depends on the message: compute it once in
+`add_message()` and keep it with the history slot; the station fields
+change once per `rebuild_station_rows()` (every 5 s). The README's
+"solid (not see-through) list" idea goes further: with an opaque list only
+the 55-pixel strip above it needs redrawing per row.
+
+### I-16. Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes — efficiency, low
+
+On the receiver thread, `wf_emit_row()` (`dialog_js8.c:1323-1360`)
+allocates two buffers per row and `qsort`s all 771 values to find the
+30th percentile: a preallocated buffer and a selection
+(`nth_element`-style quickselect, O(n)) do the same. In the widget,
+`lv_waterfall_add_data_with_ts()` paints each pixel through
+`lv_img_buf_set_px_color()` (format checks per call); writing the row as a
+`lv_color_t` array is simpler. `line_buf` (`lv_waterfall.c:90`) is
+allocated and never read (already so upstream).
