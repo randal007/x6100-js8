@@ -27,6 +27,8 @@ numbers refer to that commit.
 | I-09 | F11 | Prune the auto-reply rate-limit map | efficiency | low |
 | I-10 | F22 | Test the receiver's stall path | tests | low |
 | I-11 | F31 | Size the groups setting for ten groups | robustness | low |
+| I-12 | F32, F33, F38 | One safe "write the file" helper for all three data files | simplify | medium |
+| I-13 | F32, F33, F38 | Tests for damaged, unreadable and half-written data files | tests | medium |
 
 ## Batch 1: Transmitting and the radio
 
@@ -137,3 +139,23 @@ characters (`dialog_js8.c:294`): ten long group names (up to about 10
 characters each, plus spaces) don't fit, and `copy_str()` cuts the last
 one mid-name, which then silently matches nothing (or the wrong group).
 Either a bigger buffer or stop at the last group that fits whole.
+
+## Batch 4: Inbox, saved data, settings
+
+### I-12. One safe "write the file" helper for all three data files — simplify, medium
+
+`Inbox::save()` and `HeldMessages::save()` (`inbox.cpp:102-120`,
+`:214-233`) are the same code twice (header, `.tmp`, `fsync`, `rename`,
+clean-up), and `save_texts()` doesn't use it at all (B-15). One helper,
+`write_file_atomically(path, lines)`, with the directory `fsync` and a
+load-side `.tmp` fallback (BH-16), would fix B-15 and BH-16 in one place.
+The two `load()`s also share their line splitting and `try`/`catch`
+parsing.
+
+### I-13. Tests for damaged, unreadable and half-written data files — tests, medium
+
+`tests/test_js8.cpp` checks that files from the last release load
+(`:2500`) and that the Inbox survives a reload (`:1538`). Nothing checks
+what happens when a file exists but can't be read (B-14), when only the
+`.tmp` survived (BH-16), or when `js8_texts.txt` is cut short (B-15). All
+three are easy to set up in a temporary directory.

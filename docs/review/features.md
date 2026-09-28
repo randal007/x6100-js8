@@ -27,7 +27,7 @@ The review reads code only: **no code is changed**.
 | 1 | Transmitting and the radio | F01–F10 | ✅ 2026-09-28: 3 bugs (1 high), 6 improvements |
 | 2 | Automatic sending | F11–F20 | ✅ 2026-09-28: 7 bugs (2 medium), 3 improvements |
 | 3 | Receiving and decoding | F21–F31 | ✅ 2026-09-28: 3 bugs (all low), 2 improvements |
-| 4 | Inbox, saved data, settings | F32–F41 | |
+| 4 | Inbox, saved data, settings | F32–F41 | ✅ 2026-09-28: 4 bugs (1 medium), 2 improvements |
 | 5 | The screen | F42–F52 | |
 | 6 | Selecting, navigating, Stations | F53–F62 | |
 | 7 | Sending by hand | F63–F72 | |
@@ -162,31 +162,41 @@ What an unattended station sends by itself.
 
 ## Batch 4: Inbox, saved data, settings
 
-- [ ] **F32. Inbox store**: file format v1/v2, the 200 cap, ids,
+- [x] **F32. Inbox store**: file format v1/v2, the 200 cap, ids,
   load/save. `src/js8/inbox.cpp` (`Inbox`). Earlier: BH-8, BH-16.
-- [ ] **F33. Held-message store**: `HeldMessages`, group recipients,
+  → **B-14**, I-12, I-13. BH-8 and BH-16 still there. Fine: parsing in try/catch, v1 files, resends within 30 min (which also catches duplicate APRS relays).
+- [x] **F33. Held-message store**: `HeldMessages`, group recipients,
   `notified_ms`. Earlier: BH-16.
-- [ ] **F34. The C glue for the stores**: `keep()`, `js8_msg_for_me`,
+  → **B-14**, I-12. Fine: stored by base call, 2-day group window, who fetched a group message, desktop's counts.
+- [x] **F34. The C glue for the stores**: `keep()`, `js8_msg_for_me`,
   `js8_msg_to_for_me`, `js8_path_display`, `js8_delivered_signature`.
   `src/js8/js8_ops.cpp`. Earlier: BH-3, BH-8.
-- [ ] **F35. Inbox window**: the list, one message, mark read, delete,
+  → B-17. BH-3 and BH-8 still there.
+- [x] **F35. Inbox window**: the list, one message, mark read, delete,
   Fetch the next, desktop's Reply choices. `inbox_show`,
   `inbox_item_cb`, `inbox_key_cb`. Earlier: BH-9.
-- [ ] **F36. APRS messages in the Inbox**: `aprs_to_inbox`,
+  → nothing new. BH-9 still there. Fine: desktop's Reply choices, Fetch the next, held view, delete, focus on the oldest unread.
+- [x] **F36. APRS messages in the Inbox**: `aprs_to_inbox`,
   `aprs_sender`, `aprs_sms_from`, Reply by APRS / SMS, gateway receipts
   (`ACKnn}`).
-- [ ] **F37. New-message notices**: `stored_received`,
+  → nothing new. Fine: the DE sender, the SMS number prefill. The ACKnn} receipt as a message is in the bug hunt's smaller things.
+- [x] **F37. New-message notices**: `stored_received`,
   `inbox_refresh_button` (green button), `inbox_label_getter`.
-- [ ] **F38. The settings file `js8_texts.txt`**: `load_texts`,
+  → nothing new. Fine: resends silent, group vs direct wording, green button.
+- [x] **F38. The settings file `js8_texts.txt`**: `load_texts`,
   `save_texts` (INFO, STATUS, GROUPS, ALERTS, OPERATOR, spot form,
   POTA/SOTA refs).
-- [ ] **F39. Params**: the `js8_*` entries in `src/params/params.c/h`,
+  → B-15, I-12, I-13.
+- [x] **F39. Params**: the `js8_*` entries in `src/params/params.c/h`,
   defaults, limits, saving; the harness's copy of the defaults.
-- [ ] **F40. Settings popup**: `texts_cb`, `texts_item_cb`,
+  → nothing new. Fine: the harness's copy of the defaults matches; out-of-range saved values are clamped where used.
+- [x] **F40. Settings popup**: `texts_cb`, `texts_item_cb`,
   `settings_label`, `relay_label`, INFO/STATUS/Groups/Operator editing,
   km/miles, Stations kept, Messages kept.
-- [ ] **F41. A missing, full or read-only DATA partition**: every
+  → B-16. I-11 (groups length) from batch 3.
+- [x] **F41. A missing, full or read-only DATA partition**: every
   read and write under `/mnt` (inbox, held, texts, log, `app_logs`).
+  → **B-14**, B-15, B-17.
 
 ## Batch 5: The screen
 

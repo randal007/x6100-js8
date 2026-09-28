@@ -30,6 +30,10 @@ Findings from the earlier hunt ([bug-hunt-2026-09-28.md](../bug-hunt-2026-09-28.
 | B-11 | F22 | After a receiver stall, minute-old audio can decode again as new | low | possible |
 | B-12 | F26, F30 | A message still arriving when JS8 closed can take over a new message's row | low | likely |
 | B-13 | F28 | Any first word starting with "CQ" makes a message a CQ | low | confirmed |
+| B-14 | F32, F33, F41 | An Inbox file that can't be read is overwritten by the next save | medium | confirmed |
+| B-15 | F38, F41 | `js8_texts.txt` is rewritten in place: a power cut can wipe the settings | low | confirmed |
+| B-16 | F40, F63 | Without a callsign the keyboard never opens, and leaves a stale edit mode behind | low | confirmed |
+| B-17 | F34, F41 | A message that couldn't be saved is still ACKed | low | confirmed |
 
 ## Batch 1: Transmitting and the radio
 
@@ -331,3 +335,76 @@ filter) gets it wrong. Desktop decides CQ from the frame type.
 
 **Fix:** `first == "CQ"` (the renderer already turns CQ frames into
 `@ALLCALL CQ ...`, which the second test catches).
+
+## Batch 4: Inbox, saved data, settings
+
+### B-14. An Inbox file that can't be read is overwritten by the next save — medium, confirmed
+
+**Where:** `src/js8/js8_ops.cpp:525-531` (`js8_inbox_open`), `:614-620`
+(`js8_held_open`); `src/js8/inbox.cpp:75`, `:185`.
+
+**What goes wrong:** `Inbox::load()` returns false when the file exists
+but can't be opened (`access()` finds it, `ifstream` doesn't: an SD read
+error, too many open files, a damaged directory entry). Both open
+functions ignore that and carry on with an empty list. The next change
+(a new message, marking one read, a delivery, a RETRIEVE MSG notice)
+calls `save()`, which writes the one-message list to `.tmp` and renames it
+over the real file: every earlier message is gone. The same for held
+messages (`js8_held.txt`), which are other people's traffic.
+
+**Fix:** remember that the load failed and don't save over the file (say
+so on screen: "Inbox file can't be read"), or move the unreadable file
+aside (`js8_inbox.txt.bad`) before the first save.
+
+### B-15. `js8_texts.txt` is rewritten in place: a power cut can wipe the settings — low, confirmed
+
+**Where:** `src/dialog_js8.c:3242-3254` (`save_texts`).
+
+**What goes wrong:** `fopen(..., "w")` truncates the file, then writes it,
+with no temporary file, no `fsync` and no check of `fprintf`/`fclose`.
+A power cut or a full card during a save leaves it empty or cut short, and
+INFO, STATUS, groups, alert words, the operator call, the POTA/SOTA refs
+and the spot form are all lost (`load_texts()` just finds nothing). The
+Inbox files next to it are written safely (temporary file, `fsync`,
+`rename`).
+
+**Fix:** the same write-then-rename as the Inbox (see I-12), plus
+BH-16's fallback to the `.tmp` file on load.
+
+### B-16. Without a callsign the keyboard never opens, and leaves a stale edit mode behind — low, confirmed
+
+**Where:** `src/dialog_js8.c:1874-1879` (`compose_open`); callers that
+set `edit_target` first: `texts_item_cb` (`:3344`), `freq_item_cb`
+(`:5229`), the log, alerts, spot and beacon forms; `construct_cb` never
+resets it.
+
+**What goes wrong:** `compose_open()` refuses with "Set your callsign
+first" when there's no callsign, for every use of the keyboard, including
+the ones that never transmit: a custom frequency, alert words, INFO,
+STATUS, groups, the log fields. Receiving works without a callsign, so a
+new user can be listening and still unable to type a frequency.
+
+Worse, the caller has already set `edit_target`, and nothing resets it
+(not the refusal, not closing and reopening the app). After setting the
+callsign, **Send...** or **Reply** opens the keyboard in the leftover
+mode: e.g. INFO's editor (64 characters, INFO placeholder), and Enter
+saves the typed message as INFO instead of sending it; or the frequency
+editor, and Enter retunes.
+
+**Fix:** reset `edit_target` in `construct_cb` and whenever
+`compose_open()` refuses; require the callsign only when sending
+(`tx_queue_at()` already refuses without one).
+
+### B-17. A message that couldn't be saved is still ACKed — low, confirmed
+
+**Where:** `src/js8/js8_ops.cpp:239-261` (`keep`), `:309-326`
+(`js8_process`).
+
+**What goes wrong:** when the Inbox (or held-message) file can't be
+written (card full, read-only after a FAT error, DATA partition missing),
+`keep()` sets `id = -1` and the screen says "can't save", but the ACK
+`process()` built still goes out. The sender sees the message as
+delivered; it's only in memory here and is lost at power-off.
+
+**Fix:** drop the ACK when the store failed, so the sender's station
+tries again later.
