@@ -40,6 +40,9 @@ Findings from the earlier hunt ([bug-hunt-2026-09-28.md](../bug-hunt-2026-09-28.
 | B-21 | F66 | AGN? repeats what we last queued, not what went out | low | confirmed |
 | B-22 | F63 | The keyboard refuses some characters JS8 can send ($, %, [ and others) | low | confirmed |
 | B-23 | F63, F72 | A message that's too long freezes the frame count instead of saying so | low | confirmed |
+| B-24 | F74, F76 | A QSO left unlogged stays first in Log QSO for good | low | confirmed |
+| B-25 | F88 | A stalled screen can silently drop decoded messages (64-item scheduler queue) | low | possible |
+| B-26 | F83 | Alert words miss a word with punctuation attached ("SOTA,") | low | confirmed |
 
 ## Batch 1: Transmitting and the radio
 
@@ -504,3 +507,57 @@ good count; you only find out on Enter. Rare with 160 characters of
 ordinary text, easier with many escaped punctuation characters.
 
 **Fix:** show `pv.error` when the preview fails.
+
+## Batch 9: Alerts, time, app life cycle, firmware hooks
+
+### B-24. A QSO left unlogged stays first in Log QSO for good — low, confirmed
+
+**Where:** `src/dialog_js8.c:4274-4288` (`log_offer` sets `log_pending`),
+`:4067-4073` (only Save and the Cancel item clear it), `:4264`
+(`log_cb` takes it before the selected station).
+
+**What goes wrong:** when a QSO ends, its call is remembered as
+`log_pending`. Closing the prompt with ESC (`log_key_cb` → `log_close`),
+or with the log prompt off, or by closing the app, leaves it set, and
+nothing expires it. From then on **Log QSO** always opens that old QSO,
+whichever station you've selected since, until you either save it or pick
+Cancel inside the popup.
+
+**Fix:** clear it on ESC too, and prefer the selected station when it
+isn't the pending one (or expire it with the QSO tracker's timeout).
+
+### B-25. A stalled screen can silently drop decoded messages — low, possible
+
+**Where:** `src/scheduler.cpp:26-37` (firmware code: `QUEUE_MAX_SIZE 64`,
+"Scheduler queue overflow" and the item is dropped); JS8's users:
+`on_message` (every frame's partial and every final message),
+`on_cycle_done`, `on_tx_status`, `on_tx_done` and `wf_emit_row`
+(15 waterfall rows a second).
+
+**What goes wrong:** everything the worker threads hand to the LVGL
+thread goes through one 64-item queue, and JS8 alone puts about 15 items
+a second in it before any decodes. If the LVGL thread stalls for a few
+seconds (a Stations rebuild with 200 database lookups, BH-17; an Inbox
+`fsync`; a full redraw) while a slot's decodes arrive, the queue
+overflows and items are dropped with only a log line. A dropped final
+message is simply gone: no row, no Inbox, no ACK. A dropped `on_tx_done`
+skips `deliver_end` (the held message stays held) and the auto CQ timer
+restart. A dropped waterfall row leaks its `malloc`'d buffer.
+
+**Fix:** give the waterfall rows their own ring (the dialog already has
+one, `wf_queue`, fed through the scheduler), so the shared queue carries
+only a few items per slot; and don't let `scheduler_put()` drop silently
+for JS8's message and TX events (a bigger queue, or a JS8-side queue the
+UI drains).
+
+### B-26. Alert words miss a word with punctuation attached — low, confirmed
+
+**Where:** `src/js8/alerts.cpp:48-57` (`alert_word_hit` splits only on
+`: > space tab`).
+
+**What goes wrong:** "SOTA," "(POTA)" or "VE7ABC?" don't match the alert
+words SOTA, POTA, VE7ABC (the last one only if it's also the sender).
+The row isn't purple and nothing beeps.
+
+**Fix:** strip leading and trailing punctuation from each token before
+comparing (keep `@` and `/`).

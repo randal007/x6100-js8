@@ -32,7 +32,7 @@ The review reads code only: **no code is changed**.
 | 6 | Selecting, navigating, Stations | F53–F62 | ✅ 2026-09-28: 3 bugs (all low), 1 improvement |
 | 7 | Sending by hand | F63–F72 | ✅ 2026-09-28: 3 bugs (all low), 1 improvement |
 | 8 | Logging and APRS | F73–F82 | ✅ 2026-09-28: no new bugs, 1 improvement |
-| 9 | Alerts, time, app life cycle, firmware hooks | F83–F92 | |
+| 9 | Alerts, time, app life cycle, firmware hooks | F83–F92 | ✅ 2026-09-28: 3 bugs (all low) |
 | 10 | Engine, build, tests, tools, docs | F93–F101 | |
 
 ## Batch 1: Transmitting and the radio
@@ -332,28 +332,38 @@ What an unattended station sends by itself.
 
 ## Batch 9: Alerts, time, app life cycle, firmware hooks
 
-- [ ] **F83. Alert words and matching**: `src/js8/alerts.cpp`,
+- [x] **F83. Alert words and matching**: `src/js8/alerts.cpp`,
   `js8_alert_hit`, `alert_check`.
-- [ ] **F84. Alerts popup**: `alerts_show`, `alerts_item_cb`,
+  → B-26, B-20 (batch 6). Fine: whole-word matching, calls by base call, low-confidence decodes skipped.
+- [x] **F84. Alerts popup**: `alerts_show`, `alerts_item_cb`,
   `alerts_switch_label`, the `JS8_ALERT_*` bits.
-- [ ] **F85. Time Sync**: `time_sync_cb`, `time_sync_hold_cb`,
+  → nothing new. Fine: switches in place, Test beep bypasses the 3 s limit without upsetting it.
+- [x] **F85. Time Sync**: `time_sync_cb`, `time_sync_hold_cb`,
   `sync_samples`, `js8_sync_drift`.
-- [ ] **F86. JS8 time and drift plumbing**: `wall_ms`/`set_drift_ms`
+  → nothing new. Fine: median of stations (one each) else decodes, short way round each slot, refused while sending, hold resets.
+- [x] **F86. JS8 time and drift plumbing**: `wall_ms`/`set_drift_ms`
   (receiver), `js8_wall_ms`, `now_wall_ms`, the transmitter's clock.
-- [ ] **F87. Opening and closing the app**: `construct_cb`,
+  → nothing new. Fine: one process-wide drift for receive windows, slots, row times and the log.
+- [x] **F87. Opening and closing the app**: `construct_cb`,
   `destruct_cb` (threads, timers, popups, memory, files).
-- [ ] **F88. Worker thread → screen hand-off**: `scheduler_put`
+  → B-24 (log_pending survives a close), B-01 (batch 1). Fine: timers, popups, filters, power, keypad hold time restored.
+- [x] **F88. Worker thread → screen hand-off**: `scheduler_put`
   callbacks (`on_message`, `on_cycle_done`, `on_tx_status`,
   `on_tx_done`, `on_audio`) and what they may touch.
-- [ ] **F89. Popups**: `any_popup`, `popup_guard`, `close_popups`,
+  → **B-25**.
+- [x] **F89. Popups**: `any_popup`, `popup_guard`, `close_popups`,
   `list_add_item`, `list_item_focused_cb`, deletion rules.
-- [ ] **F90. Keyboard input**: `src/kbd_rollover.c`, `src/keyboard.c`,
+  → I-05 (batch 1), B-19 (batch 6).
+- [x] **F90. Keyboard input**: `src/kbd_rollover.c`, `src/keyboard.c`,
   `swallow_key` in `src/textarea_window.c`.
-- [ ] **F91. App launcher and keypad hooks**: `src/buttons.cpp`,
+  → nothing new. Fine: rollover by scancode, non-blocking evdev, the closing key swallowed.
+- [x] **F91. App launcher and keypad hooks**: `src/buttons.cpp`,
   `src/main_screen.c`, `dialog_settings.cpp` (long-press action),
   `ACTION_APP_JS8`, `src/keypad.c`.
-- [ ] **F92. Radio helpers added to the firmware**: `src/radio.c`
+  → I-19 note (the stored action number).
+- [x] **F92. Radio helpers added to the firmware**: `src/radio.c`
   (TX filter, DSP off, speaker play) as used outside JS8.
+  → nothing new. Fine: NR/NB/DNF and the TX filter are global settings, so a band change inside JS8 doesn't switch them back on.
 
 ## Batch 10: Engine, build, tests, tools, docs
 

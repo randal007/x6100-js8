@@ -276,3 +276,7 @@ card used with an upstream image would show our JS8 QSOs as their new mode
 (worked-before marks, ADIF export). Same kind of risk as I-03: a fixed,
 high value (e.g. 100) for `MODE_JS8` now, before more records are written,
 avoids it; the few existing records would need a one-off update.
+
+The same holds for `ACTION_APP_JS8`, appended to `press_action_t`, whose
+values are saved as the long-press actions (`params.h:56`); that enum
+already differs from upstream's (1KO125 added WeFax and NavTex before it).
