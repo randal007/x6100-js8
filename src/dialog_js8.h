@@ -17,6 +17,7 @@ extern dialog_t *dialog_js8;
 /* The callsign the list selection points at, if any (used by
  * tools/js8_ui_harness). */
 bool dialog_js8_selected_call(char *call, unsigned len);
+bool dialog_js8_row_marked(unsigned row); /* test hook: the row has the green bar */
 
 #ifdef __cplusplus
 }

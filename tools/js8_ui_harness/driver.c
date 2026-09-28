@@ -271,3 +271,19 @@ const char *ui_cursor_text(void) {
     return t ? t : "";
 }
 int ui_group_count(void) { return (int)lv_group_get_obj_count(keyboard_group); }
+bool dialog_js8_row_marked(unsigned row); /* test hook */
+/* The message rows with the green bar, as "text | text", in `out`. */
+int ui_marked_rows(char *out, unsigned len) {
+    lv_obj_t *t = lv_group_get_focused(keyboard_group);
+    out[0]      = 0;
+    if (!t || !lv_obj_check_type(t, &lv_table_class)) return 0;
+    int n = 0;
+    for (uint16_t r = 0; r < lv_table_get_row_cnt(t); r++) {
+        if (!dialog_js8_row_marked(r)) continue;
+        const char *v = lv_table_get_cell_value(t, r, 0);
+        const char *c = v ? strstr(v, "  ") : NULL;
+        snprintf(out + strlen(out), len - strlen(out), "%s%s", n++ ? " | " : "", v ? v + 17 : "");
+        (void)c;
+    }
+    return n;
+}

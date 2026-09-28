@@ -246,6 +246,10 @@ static int         sel_snr;
 /* Hold MFK on a station to lock it: turning then only scrolls, and the
  * selection stays until you press another station (or hold it again). */
 static bool        sel_locked;
+/* The cursor is on a row without a callsign (a QSO's later lines often
+ * have none): its offset, whose rows get the green bar; -1 otherwise. It
+ * selects nobody: Reply still goes to the selected station. */
+static float       cursor_freq = -1;
 static bool        press_on_locked; /* this press began on the locked station */
 static bool        press_held;      /* this press has already been a hold */
 static int64_t     cursor_user_ms;    /* last MFK move on the list */
@@ -895,12 +899,21 @@ static void table_draw_cb(lv_event_t *e) {
     if (sel_row == row) dsc->rect_dsc->bg_color = lv_color_lighten(dsc->rect_dsc->bg_color, 30);
 }
 
-/* A row of the selected station: theirs, or ours to them. */
+/* On offset `f`: within desktop's "same station" window for the row's speed. */
+static bool row_on_freq(const js8_rx_msg_t *m, float f) {
+    return f >= 0 && fabsf(m->freq_hz - f) <= js8_speed_rx_threshold_hz(js8_speed_from_submode(m->submode));
+}
+
+/* Rows with the green bar: with the cursor on a row without a callsign,
+ * every row on its frequency; else the selected station's rows, ours to
+ * them, and the rows without a callsign on their frequency. */
 static bool row_is_selected_station(int16_t h) {
-    if (!sel_call[0] || h < 0) return false;
-    if (view_stations) return strcasecmp(st_rows[h].call, sel_call) == 0;
+    if (h < 0) return false;
+    if (view_stations) return sel_call[0] && strcasecmp(st_rows[h].call, sel_call) == 0;
     const js8_rx_msg_t *m = &history[h];
-    if (!m->tx) return strcasecmp(m->from, sel_call) == 0;
+    if (cursor_freq >= 0) return row_on_freq(m, cursor_freq);
+    if (!sel_call[0]) return false;
+    if (!m->tx) return strcasecmp(m->from, sel_call) == 0 || (!m->from[0] && row_on_freq(m, qso_freq));
     size_t n = strlen(sel_call);
     return strncasecmp(m->text, sel_call, n) == 0 && (m->text[n] == ' ' || m->text[n] == '\0');
 }
@@ -984,6 +997,7 @@ static void clear_selection(void) {
     sel_call[0] = '\0';
     sel_locked  = false;
     qso_freq    = -1;
+    cursor_freq = -1;
     show_selection();
 }
 
@@ -1029,8 +1043,23 @@ static void table_hold_cb(lv_event_t *e) {
     update_tx_bar();
 }
 
+/* A received row without a callsign under the cursor: its offset, else -1. */
+static float callless_cursor_freq(void) {
+    if (view_stations) return -1;
+    uint16_t row = 0, col = 0;
+    lv_table_get_selected_cell(table, &row, &col);
+    if (row == LV_TABLE_CELL_NONE || row >= rows || row_hist[row] < 0) return -1;
+    const js8_rx_msg_t *m = &history[row_hist[row]];
+    return m->tx || m->from[0] ? -1 : m->freq_hz;
+}
+
 static void table_select_cb(lv_event_t *e) {
     (void)e;
+    float f = auto_selecting ? -1 : callless_cursor_freq(); /* following new rows: back to the station */
+    if (f != cursor_freq) {
+        cursor_freq = f;
+        lv_obj_invalidate(table);
+    }
     if (auto_selecting) return;
     cursor_user_ms = now_wall_ms();
     if (sel_locked) return; /* scrolling to read: the locked station stays */
@@ -1968,6 +1997,7 @@ static void construct_cb(lv_obj_t *parent) {
     qso_freq       = -1;
     sel_call[0]    = '\0';
     sel_locked     = false;
+    cursor_freq    = -1;
     cursor_user_ms = 0;
     lv_obj_set_size(finder, WIDTH, WF_HEIGHT);
     lv_obj_set_pos(finder, 0, 0);
@@ -2165,6 +2195,7 @@ static void show_cb(button_data_t *btn) {
     if (popup_guard()) return;
     if (view_stations) {
         view_stations = false;
+        cursor_freq   = -1;
         if (btn_stations.disp_btn) buttons_refresh(&btn_stations);
         rebuild_rows();
         msg_update_text_fmt("Messages (%s)", show == SHOW_ALL ? "all" : show == SHOW_DIRECTED ? "directed" : "no HB");
@@ -2507,6 +2538,7 @@ static void stations_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
     view_stations = !view_stations;
+    cursor_freq   = -1;
     buttons_refresh(btn);
     rebuild_rows();
 }
@@ -2730,6 +2762,11 @@ bool dialog_js8_selected_call(char *call, unsigned len) {
     float freq;
     int   snr;
     return table && selected_station(call, len, &freq, &snr);
+}
+
+/* For tools/js8_ui_harness: does message-list row `row` have the green bar? */
+bool dialog_js8_row_marked(unsigned row) {
+    return table && row < rows && row_is_selected_station(row_hist[row]);
 }
 
 /* ---- T4: auto-reply, heartbeats ---------------------------------------- */

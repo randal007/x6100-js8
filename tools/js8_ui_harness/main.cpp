@@ -48,6 +48,7 @@ void ui_mfk_turn(int32_t diff);
 void ui_mfk_set(bool down);
 const char *ui_cursor_text(void);
 int         ui_group_count(void);
+int         ui_marked_rows(char *out, unsigned len);
 void ui_keypad_set(uint32_t key, bool down);
 extern int stub_tx_frames;
 extern int stub_usb_kbd;
@@ -1528,6 +1529,50 @@ int main() {
         mfk(900); // hold the locked one: unlock
         cursor_to("W1ABC: ");
         printf("[lock] held again, unlocked: selected '%s' (want W1ABC)\n", selected());
+        return 0;
+    }
+    if (getenv("ONLY_FREQMARK")) {
+        // Rows without a callsign (a QSO's later lines): the cursor on one
+        // selects nobody but marks every row on its frequency; selecting a
+        // station also marks the call-less rows on its frequency.
+        ui_indevs_init();
+        auto selected = []() {
+            static char c[32];
+            c[0] = 0;
+            dialog_js8_selected_call(c, sizeof(c));
+            return (const char *)c;
+        };
+        auto cursor_to = [&](const char *text) {
+            for (int dir : {-1, 1})
+                for (int i = 0; i < 30 && !strstr(ui_cursor_text(), text); i++) {
+                    ui_mfk_turn(dir);
+                    pump(80);
+                }
+            return strstr(ui_cursor_text(), text) != nullptr;
+        };
+        char marked[2048];
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO FROM THE PARK", 1320, 0.05f},
+                   {"W1ABC", "FN42", "VE7ABC", "VE7ABC GOOD COPY", 1800, 0.05f}});
+        feed_band({{"N0XYZ", "EN34", "", "RR THANKS FOR THE REPORT", 1322, 0.05f},
+                   {"W1ABC", "FN42", "", "NICE SIGNAL HERE", 1801, 0.05f}});
+        bool on = cursor_to("N0XYZ: ");
+        int  n  = ui_marked_rows(marked, sizeof(marked));
+        printf("[fmark] on N0XYZ: %d, selected '%s', %d marked: %s\n", on, selected(), n, marked);
+        printf("[fmark]   (want N0XYZ's row and RR THANKS..., not W1ABC's)\n");
+        on = cursor_to("W1ABC: ");
+        for (int i = 0; i < 5 && !strstr(ui_cursor_text(), "RR THANKS"); i++) { // step down onto the next rows
+            ui_mfk_turn(1);
+            pump(80);
+        }
+        n = ui_marked_rows(marked, sizeof(marked));
+        printf("[fmark] W1ABC selected, stepped onto '%.40s' (no call): selected '%s' (want W1ABC), %d marked: %s\n",
+               ui_cursor_text(), selected(), n, marked);
+        printf("[fmark]   (want N0XYZ's HELLO and RR THANKS: that row's frequency)\n");
+        screenshot("61_freq_marked.ppm");
+        on = cursor_to("W1ABC: ");
+        n  = ui_marked_rows(marked, sizeof(marked));
+        printf("[fmark] on W1ABC: %d, selected '%s', %d marked: %s\n", on, selected(), n, marked);
         return 0;
     }
     if (getenv("ONLY_PARTIAL")) {

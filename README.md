@@ -122,6 +122,13 @@ them if they move. Only another MFK move (or **Clear**, or a change of band or f
 changes it. The list keeps showing the newest lines; if you scroll up to
 read, it goes back to following them 30 s after you last turned the MFK.
 
+**Rows without a callsign:** later lines of a QSO often don't carry the
+sender's call. Their rows count as the selected station's when they're on
+its frequency (they get the green bar too). With the MFK on such a row,
+nobody new is selected (Reply still goes to the selected station), but
+every row on that row's frequency gets the green bar, so you can read
+that conversation.
+
 **Locking a station:** hold the **MFK** (half a second) on their row. The
 TX bar says `locked: CALL` in red, and turning the MFK then only scrolls:
 the selection stays put while you read back. Press another station's row
@@ -527,6 +534,9 @@ Done for beta 4 so far:
 - [x] Hold the MFK on a station to lock it: the knob then only scrolls,
   `locked: CALL` in red in the TX bar; press another station or hold again
   to unlock
+- [x] Rows without a callsign: the green bar marks those on the selected
+  station's frequency, and with the MFK on one, every row on its frequency
+  (nobody new is selected)
 
 - [ ] On-air tests: relays and store and forward with desktop JS8Call
   stations, the APRS gateways, a long message watched to the end
