@@ -260,3 +260,14 @@ void ui_usb_init(void) {
 }
 /* Queue one event; the scancode is the character itself here. */
 void ui_usb_event(uint32_t key, int value) { usb_q[usb_tail++ % 512] = (usb_ev_t){(uint16_t)key, key, value}; }
+/* The message list's cursor row, and how many objects the knob can reach. */
+const char *ui_cursor_text(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_table_class)) return "";
+    uint16_t r = 0, c = 0;
+    lv_table_get_selected_cell(f, &r, &c);
+    if (r == LV_TABLE_CELL_NONE) return "";
+    const char *t = lv_table_get_cell_value(f, r, 0);
+    return t ? t : "";
+}
+int ui_group_count(void) { return (int)lv_group_get_obj_count(keyboard_group); }

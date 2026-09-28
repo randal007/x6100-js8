@@ -243,6 +243,11 @@ static float       qso_freq = -1;     /* the selected station's offset (the gree
  * arriving, so Reply still answers it after the list moves on. */
 static char        sel_call[JS8_RX_CALL_LEN];
 static int         sel_snr;
+/* Hold MFK on a station to lock it: turning then only scrolls, and the
+ * selection stays until you press another station (or hold it again). */
+static bool        sel_locked;
+static bool        press_on_locked; /* this press began on the locked station */
+static bool        press_held;      /* this press has already been a hold */
 static int64_t     cursor_user_ms;    /* last MFK move on the list */
 static atomic_bool keyed;              /* a frame is on the air (TX thread) */
 /* Held while an alert beep plays; tx_play takes it after setting keyed, so
@@ -977,19 +982,58 @@ static void select_at_cursor(bool announce) {
 
 static void clear_selection(void) {
     sel_call[0] = '\0';
+    sel_locked  = false;
     qso_freq    = -1;
     show_selection();
 }
 
+/* The station on the cursor's row, if any. */
+static bool cursor_call(char *call, size_t len) {
+    float freq;
+    int   snr;
+    return row_station(call, len, &freq, &snr);
+}
+
+/* A press selects the station on its row; on another station than the
+ * locked one it also ends the lock. */
 static void table_press_cb(lv_event_t *e) {
     (void)e;
+    char call[JS8_RX_CALL_LEN];
+    press_held      = false;
+    press_on_locked = sel_locked && cursor_call(call, sizeof(call)) && strcasecmp(call, sel_call) == 0;
+    if (press_on_locked) return;
+    if (sel_locked && cursor_call(call, sizeof(call))) {
+        sel_locked = false;
+        msg_update_text_fmt("%s unlocked", sel_call);
+    }
     select_at_cursor(true);
+}
+
+/* Held (about half a second, LVGL's long press plus one repeat): lock the
+ * station, or unlock it if it was the locked one. */
+static void table_hold_cb(lv_event_t *e) {
+    (void)e;
+    if (press_held) return; /* one per press */
+    press_held = true;
+    user_touch();
+    if (press_on_locked) {
+        sel_locked = false;
+        msg_update_text_fmt("%s unlocked: turning the knob selects again", sel_call);
+    } else if (sel_call[0]) {
+        char call[JS8_RX_CALL_LEN];
+        if (!cursor_call(call, sizeof(call)) || strcasecmp(call, sel_call) != 0) return;
+        sel_locked = true;
+        msg_update_text_fmt("%s locked: the knob only scrolls; press another station to change, hold to unlock",
+                            sel_call);
+    }
+    update_tx_bar();
 }
 
 static void table_select_cb(lv_event_t *e) {
     (void)e;
     if (auto_selecting) return;
     cursor_user_ms = now_wall_ms();
+    if (sel_locked) return; /* scrolling to read: the locked station stays */
     select_at_cursor(false);
 }
 
@@ -1427,14 +1471,17 @@ static void update_tx_bar(void) {
         lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0xa00000), 0);
         break;
     default:
+        /* A locked station in red (recolor only here: sent text may hold '#'). */
         snprintf(line, sizeof(line), "TX %4u Hz %s   ready%s%s", offset, js8_speed_name(cur_speed()),
                  params.callsign.x[0] ? "" : "  (set your callsign: APP > Callsign)",
-                 sel_call[0] ? "      selected: " : "");
+                 !sel_call[0] ? "" : sel_locked ? "      #ff5050 locked: " : "      selected: ");
         if (sel_call[0]) strncat(line, sel_call, sizeof(line) - strlen(line) - 1);
+        if (sel_call[0] && sel_locked) strncat(line, "#", sizeof(line) - strlen(line) - 1);
         if (auto_cq) strncat(line, "      auto CQ", sizeof(line) - strlen(line) - 1);
         lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x202020), 0);
         break;
     }
+    lv_label_set_recolor(tx_bar, tx_status.state != JS8_TX_WAITING && tx_status.state != JS8_TX_KEYING && sel_locked);
     lv_label_set_text(tx_bar, line);
 
     /* A red frame round the waterfall while keyed. */
@@ -1920,6 +1967,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_finder_clear_cursor(finder);
     qso_freq       = -1;
     sel_call[0]    = '\0';
+    sel_locked     = false;
     cursor_user_ms = 0;
     lv_obj_set_size(finder, WIDTH, WF_HEIGHT);
     lv_obj_set_pos(finder, 0, 0);
@@ -1956,6 +2004,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_remove_style(table, NULL, LV_STATE_ANY | LV_PART_MAIN);
     lv_obj_add_event_cb(table, table_press_cb, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(table, table_select_cb, LV_EVENT_VALUE_CHANGED, NULL);
+    lv_obj_add_event_cb(table, table_hold_cb, LV_EVENT_LONG_PRESSED_REPEAT, NULL);
     lv_obj_add_event_cb(table, key_cb, LV_EVENT_KEY, NULL);
     lv_obj_add_event_cb(table, table_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
     lv_obj_add_event_cb(table, table_draw_end_cb, LV_EVENT_DRAW_PART_END, NULL);

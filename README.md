@@ -122,6 +122,11 @@ them if they move. Only another MFK move (or **Clear**, or a change of band or f
 changes it. The list keeps showing the newest lines; if you scroll up to
 read, it goes back to following them 30 s after you last turned the MFK.
 
+**Locking a station:** hold the **MFK** (half a second) on their row. The
+TX bar says `locked: CALL` in red, and turning the MFK then only scrolls:
+the selection stays put while you read back. Press another station's row
+to select it (that ends the lock), or hold the locked one again to unlock.
+
 **Status line** (top right): what's switched on (`AUTO`, `HB 10m next
 00:14`, `ACK`, `MSG 1 NEW`), the band, UTC time and how many messages
 have been decoded.
@@ -519,6 +524,9 @@ Done for beta 4 so far:
 
 - [x] Your own messages are red (as when transmitting) and messages to you
   blue; it was the other way round
+- [x] Hold the MFK on a station to lock it: the knob then only scrolls,
+  `locked: CALL` in red in the TX bar; press another station or hold again
+  to unlock
 
 - [ ] On-air tests: relays and store and forward with desktop JS8Call
   stations, the APRS gateways, a long message watched to the end

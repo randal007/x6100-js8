@@ -46,6 +46,8 @@ bool dialog_js8_selected_call(char *call, unsigned len);
 void ui_usb_event(uint32_t key, int value);
 void ui_mfk_turn(int32_t diff);
 void ui_mfk_set(bool down);
+const char *ui_cursor_text(void);
+int         ui_group_count(void);
 void ui_keypad_set(uint32_t key, bool down);
 extern int stub_tx_frames;
 extern int stub_usb_kbd;
@@ -1470,6 +1472,62 @@ int main() {
         pump(300);
         printf("[mode] custom 3575.8: dial %d, mode %d (want 3575800, %d)\n", stub_dial_hz(), stub_mode(),
                stub_usb_dig());
+        return 0;
+    }
+    if (getenv("ONLY_LOCK")) {
+        // Hold MFK on a station: locked, turning only scrolls; a press on
+        // another station selects it and unlocks; holding the locked one
+        // unlocks it. Through LVGL's encoder, as the radio's MFK.
+        ui_indevs_init();
+        auto mfk = [](int ms) {
+            ui_mfk_set(true);
+            pump(ms);
+            ui_mfk_set(false);
+            pump(200);
+        };
+        auto selected = []() {
+            static char c[32];
+            c[0] = 0;
+            dialog_js8_selected_call(c, sizeof(c));
+            return (const char *)c;
+        };
+        auto cursor_to = [&](const char *call) { // up to the top, then down to it
+            for (int dir : {-1, 1})
+                for (int i = 0; i < 30 && !strstr(ui_cursor_text(), call); i++) {
+                    ui_mfk_turn(dir);
+                    pump(80);
+                }
+            return strstr(ui_cursor_text(), call) != nullptr;
+        };
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO FROM THE PARK", 1320, 0.05f},
+                   {"W1ABC", "FN42", "", "@ALLCALL CQ CQ FN42", 1800, 0.05f},
+                   {"VE7ABC", "CN89", "K2XYZ", "K2XYZ SNR?", 900, 0.05f}});
+        printf("[lock] objects the knob reaches: %d (1: a hold can't leave the list)\n", ui_group_count());
+        bool on = cursor_to("N0XYZ: ");
+        printf("[lock] cursor on N0XYZ: %d, selected '%s' (turning selects)\n", on, selected());
+        mfk(900); // hold
+        printf("[lock] after a hold: selected '%s'\n", selected());
+        screenshot("60_locked.ppm");
+        for (int i = 0; i < 3; i++) {
+            ui_mfk_turn(1);
+            pump(80);
+        }
+        printf("[lock] turned 3: cursor '%.20s', selected '%s' (want N0XYZ)\n", ui_cursor_text(), selected());
+        on = cursor_to("W1ABC: ");
+        printf("[lock] cursor on W1ABC: %d, selected '%s' (still N0XYZ)\n", on, selected());
+        mfk(150); // a press on another station
+        printf("[lock] pressed W1ABC: selected '%s' (want W1ABC)\n", selected());
+        on = cursor_to("VE7ABC: ");
+        printf("[lock] unlocked, turning selects again: found %d, cursor '%s', selected '%s' (want VE7ABC)\n", on,
+               ui_cursor_text(), selected());
+        mfk(900); // lock VE7ABC
+        cursor_to("N0XYZ: ");
+        printf("[lock] VE7ABC locked, cursor on N0XYZ: selected '%s' (want VE7ABC)\n", selected());
+        cursor_to("VE7ABC: ");
+        mfk(900); // hold the locked one: unlock
+        cursor_to("W1ABC: ");
+        printf("[lock] held again, unlocked: selected '%s' (want W1ABC)\n", selected());
         return 0;
     }
     if (getenv("ONLY_PARTIAL")) {
