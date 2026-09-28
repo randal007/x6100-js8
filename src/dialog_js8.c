@@ -2681,6 +2681,13 @@ static void stations_cb(button_data_t *btn) {
     view_stations = !view_stations;
     cursor_freq   = -1;
     buttons_refresh(btn);
+    /* The Stations view ends a lock: the station stays selected, and the
+     * knob selects again there. */
+    if (view_stations && sel_locked) {
+        sel_locked = false;
+        msg_update_text_fmt("%s unlocked", sel_call);
+        update_tx_bar();
+    }
     rebuild_rows();
 }
 
@@ -4485,6 +4492,22 @@ static bool aprs_sender(const char *text, char *call, size_t size) {
     snprintf(call, size, "%.*s", (int)n, de);
     return true;
 }
+
+/* A text from a phone, passed on by an SMS gateway (sender SMS, SMSGTE):
+ * "@6045551234 TEXT DE SMS" starts with the number (or the alias) it came
+ * from, which the gateway needs at the front of the reply. */
+static bool aprs_sms_from(const char *text, const char *sender, char *out, size_t size) {
+    if (strncmp(sender, "SMS", 3) != 0) return false;
+    while (*text == ' ') text++;
+    size_t n = strcspn(text, " ");
+    if (text[0] != '@' || n < 2 || n >= size) return false;
+    for (size_t i = 1; i < n; i++) {
+        char c = text[i];
+        if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z'))) return false;
+    }
+    snprintf(out, size, "%.*s", (int)n, text);
+    return true;
+}
 #define INBOX_HELD 100000 /* list/view ids from here on are held messages (id - INBOX_HELD) */
 
 static void inbox_item_cb(lv_event_t *e) {
@@ -4538,11 +4561,14 @@ static void inbox_item_cb(lv_event_t *e) {
             lv_group_set_editing(keyboard_group, true);
             msg_update_text_fmt("Left at %s for %s: type the message and press Enter", path, orig);
         } else {
-            char head[40];
-            snprintf(head, sizeof(head), "%s%-9.9s:", APRS_CMD, aprs_to);
+            /* An SMS: the number filled in, the cursor after it. */
+            char head[64], sms[24];
+            bool to_sms = aprs_sms_from(m.text, aprs_to, sms, sizeof(sms));
+            snprintf(head, sizeof(head), "%s%-9.9s:%s%s", APRS_CMD, aprs_to, to_sms ? sms : "", to_sms ? " " : "");
             aprs_compose(head, "");
             lv_group_set_editing(keyboard_group, true);
-            msg_update_text_fmt("APRS message to %s: type it and press Enter", aprs_to);
+            if (to_sms) msg_update_text_fmt("SMS to %s: type your message and press Enter", sms + 1);
+            else msg_update_text_fmt("APRS message to %s: type it and press Enter", aprs_to);
         }
         return;
     }
@@ -4658,7 +4684,10 @@ static void inbox_show(int id) {
         bool        signed_ = js8_delivered_signature(m.text, orig, sizeof(orig), &next) && orig[0] != '@';
         if (strcmp(path, "APRS") == 0) {
             if (aprs_sender(m.text, aprs_from, sizeof(aprs_from))) {
-                snprintf(line, sizeof(line), "Reply by APRS to %s", aprs_from);
+                char sms[24];
+                if (aprs_sms_from(m.text, aprs_from, sms, sizeof(sms)))
+                    snprintf(line, sizeof(line), "Reply by SMS to %s", sms);
+                else snprintf(line, sizeof(line), "Reply by APRS to %s", aprs_from);
                 first = inbox_add(line, INBOX_REPLY_APRS);
             }
         } else {

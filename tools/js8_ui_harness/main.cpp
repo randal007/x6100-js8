@@ -335,7 +335,7 @@ int main() {
 
     ui_init();
     if (getenv("ONLY_MODE")) stub_mode_setup();
-    if (getenv("ONLY_INBOX")) unlink(JS8_INBOX_PATH); // before the dialog loads it
+    if (getenv("ONLY_INBOX") || getenv("ONLY_SMS")) unlink(JS8_INBOX_PATH); // before the dialog loads it
     if (getenv("ONLY_HELD")) unlink(JS8_HELD_PATH);
     if (getenv("ONLY_RELAY")) {
         unlink(JS8_INBOX_PATH);
@@ -1529,6 +1529,60 @@ int main() {
         mfk(900); // hold the locked one: unlock
         cursor_to("W1ABC: ");
         printf("[lock] held again, unlocked: selected '%s' (want W1ABC)\n", selected());
+        // Opening the Stations view ends a lock; the station stays selected.
+        cursor_to("N0XYZ: ");
+        mfk(900); // lock N0XYZ
+        ui_page(3);
+        ui_press(3); // Stations
+        pump(300);
+        printf("[lock] Stations view: selected '%s' (want N0XYZ, kept)\n", selected());
+        ui_mfk_turn(1);
+        pump(200);
+        if (!strcmp(selected(), "N0XYZ")) {
+            ui_mfk_turn(-2);
+            pump(200);
+        }
+        printf("[lock] Stations view, turned: selected '%s' (want another station: unlocked)\n", selected());
+        return 0;
+    }
+    if (getenv("ONLY_SMS")) {
+        // A text from a phone, passed on by an APRS gateway: Reply fills in
+        // the phone number for the SMS gateway.
+        pump(300);
+        feed_band({{"VA7GW", "CN89", "", "@APRSIS MSG TO:K2XYZ @6045551234 2 WAY DE SMS", 1320, 0.05f},
+                   {"W7GW", "DN17", "", "@APRSIS MSG TO:K2XYZ ACK04} DE SMS", 1800, 0.05f}});
+        ui_page(3);
+        ui_press(4); // Inbox
+        pump(300);
+        for (int i = 0; i < 4 && !strstr(ui_focused_text(), "@6045551234"); i++) ui_key(LV_KEY_RIGHT);
+        printf("[sms] inbox on '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[sms] message view focused '%s' (want Reply by SMS to @6045551234)\n", ui_focused_text());
+        screenshot("70_sms_message.ppm");
+        ui_click_focused();
+        pump(300);
+        printf("[sms] reply prefill '%s' (want @APRSIS CMD :SMS      :@6045551234 )\n", ui_compose_text());
+        ui_compose_append("GOT IT");
+        ui_compose_enter();
+        int b = stub_tx_frames;
+        for (int i = 0; i < 300 && stub_tx_frames == b; i++) pump(100);
+        printf("[sms] sent: %d (want @APRSIS CMD :SMS      :@6045551234 GOT IT{nn})\n",
+               ui_list_has("@APRSIS CMD :SMS      :@6045551234 GOT IT{"));
+        // The gateway's receipt has no number: plain Reply by APRS, empty line.
+        pump(500);
+        ui_page(3);
+        ui_press(4);
+        pump(300);
+        for (int i = 0; i < 4 && !strstr(ui_focused_text(), "ACK04"); i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        pump(300);
+        printf("[sms] receipt view focused '%s' (want Reply by APRS to SMS)\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[sms] receipt reply prefill '%s' (want @APRSIS CMD :SMS      :)\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(300);
         return 0;
     }
     if (getenv("ONLY_FREQMARK")) {

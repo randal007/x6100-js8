@@ -132,7 +132,8 @@ that conversation.
 **Locking a station:** hold the **MFK** (half a second) on their row. The
 TX bar says `locked: CALL` in red, and turning the MFK then only scrolls:
 the selection stays put while you read back. Press another station's row
-to select it (that ends the lock), or hold the locked one again to unlock.
+to select it (that ends the lock), hold the locked one again, or open the
+Stations view (the station stays selected there, unlocked).
 
 **Status line** (top right): what's switched on (`AUTO`, `HB 10m next
 00:14`, `ACK`, `MSG 1 NEW`), the band, UTC time and how many messages
@@ -415,9 +416,10 @@ passes APRS messages back. APRS text is limited to 67 characters.
 **Two-way SMS works** (confirmed on the air 2026-09-28 with the beta 4
 test build, through NR4U's gateway on 40 m): texts from a phone arrive in
 the Inbox as `@6045551234 <text> DE SMS`, and a reply goes back to the
-phone. For now, **Reply by APRS** on an SMS opens the SMS gateway's line
-empty: type `@`, the phone number (shown in the message) and your text.
-The gateway's receipt for your reply (`ACK04}`) also arrives, as an Inbox
+phone: open the text in the Inbox and choose **Reply by SMS to
+@6045551234**; the keyboard opens with the number filled in, so you only
+type your text (from the next build on; the beta 4 test build opens the
+line empty). The gateway's receipt for your reply (`ACK04}`) also arrives, as an Inbox
 message for now. Beta 3 drops all of these messages (see
 [Known issues](#known-issues-in-beta-3)).
 
@@ -557,8 +559,8 @@ Done for beta 4 so far:
 - [x] Your own messages are red (as when transmitting) and messages to you
   blue; it was the other way round
 - [x] Hold the MFK on a station to lock it: the knob then only scrolls,
-  `locked: CALL` in red in the TX bar; press another station or hold again
-  to unlock
+  `locked: CALL` in red in the TX bar; press another station, hold again
+  or open the Stations view to unlock
 - [x] Rows without a callsign: the green bar marks those on the selected
   station's frequency, and with the MFK on one, every row on its frequency
   (nobody new is selected)
@@ -578,6 +580,9 @@ Done for beta 4 so far:
 - [x] APRS replies relayed back over JS8 (e.g. an SMS answer) reach the
   Inbox; desktop sends them without the checksum we expected. **Two-way
   SMS confirmed on the air** (2026-09-28, through NR4U's gateway)
+- [x] SMS: **Reply by SMS to @number** in the Inbox fills in the phone
+  number, so you only type the text (not yet on the air: after the beta 4
+  test build)
 
 Still to do:
 
@@ -586,8 +591,6 @@ Still to do:
   worst first: a full Inbox stops saving new messages, the band keys work
   in the middle of a transmission, heartbeats switch off after automated
   traffic)
-- [ ] SMS: **Reply by APRS** fills in the phone number, so you only type
-  the text
 - [ ] SMS: show the gateway's receipt (`ACK04}`) as "delivered" on the
   message you sent, instead of as a new Inbox message
 - [ ] On-air tests: relays and store and forward with desktop JS8Call

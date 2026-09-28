@@ -2795,17 +2795,17 @@ TEST_CASE("our frames are desktop JS8Call's, bit for bit", "[js8][desktop]") {
 TEST_CASE("an APRS gateway's reply (no checksum, as desktop sends it) reaches the inbox", "[js8][held]") {
     // Desktop's AprsInboundRelay: "@APRSIS MSG to:<DEST> <MESSAGE> DE <SENDER>",
     // sent without a checksum; e.g. an SMS reply from the SMS gateway.
-    auto plan = plan_message("VA7GW", "CN89", "@APRSIS MSG TO:K2XYZ @7785512409 2 WAY DE SMS");
+    auto plan = plan_message("VA7GW", "CN89", "@APRSIS MSG TO:K2XYZ @6045551234 2 WAY DE SMS");
     REQUIRE(plan.ok());
     std::string text = plan.preview;
     CHECK(verify_command_checksum(text) == Checksum::None); // not "bad"
-    CHECK(text == "VA7GW: @APRSIS MSG TO: K2XYZ @7785512409 2 WAY DE SMS");
-    auto in = incoming("VA7GW", "@APRSIS MSG TO:K2XYZ @7785512409 2 WAY DE SMS", -9);
+    CHECK(text == "VA7GW: @APRSIS MSG TO: K2XYZ @6045551234 2 WAY DE SMS");
+    auto in = incoming("VA7GW", "@APRSIS MSG TO:K2XYZ @6045551234 2 WAY DE SMS", -9);
     in.checksum_ok = false;
     auto p = process(in, settings(), {}, "");
     CHECK(p.store.kind == StoreAction::Kind::Inbox);
     CHECK(p.store.from == "APRS");
-    CHECK(p.store.text == "@7785512409 2 WAY DE SMS");
+    CHECK(p.store.text == "@6045551234 2 WAY DE SMS");
     CHECK_FALSE(p.reply); // never ACKed on JS8
     // Other checksummed messages still need theirs.
     auto msg        = incoming("N0XYZ", "K2XYZ MSG HELLO", -5);
