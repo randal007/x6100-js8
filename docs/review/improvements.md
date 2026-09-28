@@ -22,6 +22,9 @@ numbers refer to that commit.
 | I-04 | F03 | Plan each message once, not twice | efficiency | low |
 | I-05 | F05, F89 | One list of popups instead of three | simplify | low |
 | I-06 | F01 | Save the learned TX gain once per message, not per frame | efficiency | low |
+| I-07 | F11–F20 | A desktop-parity test table for the auto-reply rules | tests | medium |
+| I-08 | F11, F20 | Decide once, when the reply is actually sent | simplify | low |
+| I-09 | F11 | Prune the auto-reply rate-limit map | efficiency | low |
 
 ## Batch 1: Transmitting and the radio
 
@@ -82,3 +85,35 @@ after every frame; the params thread (`params.c:447`, every 100 ms) then
 writes `params.db` on the SD card. A 20-frame message writes it 20
 times. Save when the message ends, or only when the value moved by more
 than ~0.1 dB. Shared with FT8, so a change here touches both apps.
+
+## Batch 2: Automatic sending
+
+### I-07. A desktop-parity test table for the auto-reply rules — tests, medium
+
+`tests/test_js8.cpp` checks our own expectations of `process()`. The
+frame encoder was made bit-for-bit with desktop by building desktop's code
+and comparing (patch 11); `processCommandActivity()` is too tied to Qt for
+that, but a table of (incoming text, switches, held messages) → (desktop's
+reply, what it stores) written from reading desktop, one row per branch
+(SNR?, INFO?, HEARING?, relays with and without a command, MSG / MSG TO:
+/ QUERY / QUERY MSGS / QUERY CALL, @ALLCALL and group forms, the 55-min
+cooldown, B-04's open-buffer rule), would catch drift both ways when
+desktop changes. Plus a harness scenario for B-04: a heartbeat arriving
+between the frames of a message to us.
+
+### I-08. Decide once, when the reply is actually sent — simplify, low
+
+`AutoPolicy::decide()` runs when the message is decoded, and `auto_send()`
+checks the switches again because they "may have changed while it
+waited"; the Turbo rule for HB ACKs is only in `auto_send()`, and the
+rate-limit record (`js8_auto_sent`) only happens if it's queued. Keeping
+the decoded reply and calling `decide()` once at send time would put all
+the rules in one place (and is where B-04's hold-off would go too).
+
+### I-09. Prune the auto-reply rate-limit map — efficiency, low
+
+`AutoPolicy::last_sent_` (`autoreply.hpp:128`) gets a key per station and
+command answered and never drops one; `autop` lives until power-off. A
+relay or heartbeat station running for days keeps every station it ever
+ACKed. Tiny per entry, but pruning entries older than the longest window
+(55 min once B-05 is fixed) at each `sent()` keeps it bounded.

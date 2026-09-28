@@ -20,6 +20,13 @@ Findings from the earlier hunt ([bug-hunt-2026-09-28.md](../bug-hunt-2026-09-28.
 | B-01 | F02, F04, F05 | Closing the app during a transmission crashes it, radio keyed until it restarts | high | confirmed (reproduced) |
 | B-02 | F05 | Switching off with JS8 open skips its close: back on the JS8 dial, USB-D, 200–3000 Hz | low | confirmed |
 | B-03 | F08 | Heartbeat offset chosen differently from desktop | low | confirmed |
+| B-04 | F11, F14 | Automatic replies go out while a message to us is still arriving | medium | confirmed |
+| B-05 | F14 | Heartbeat ACKs every 15 min per station; desktop waits 55 | medium | confirmed |
+| B-06 | F12 | Our 5-minute guard drops a repeated AGN? and relayed questions | low | confirmed |
+| B-07 | F07, F11 | No WSPR guard band: can transmit on top of WSPR on 30 m | low | confirmed |
+| B-08 | F13, F15 | Heartbeat and auto CQ timing follow the older desktop | low | confirmed |
+| B-09 | F15 | Holding CQ while sending: first CQ a whole interval later | low | confirmed |
+| B-10 | F11 | An `@APRSIS MSG` without `TO:` is kept and ACKed | low | confirmed |
 
 ## Batch 1: Transmitting and the radio
 
@@ -138,3 +145,131 @@ Small, but the user wants desktop behaviour.
 
 **Fix:** port the two missing rules; feed the offsets of all recent
 decodes, not only stations.
+
+## Batch 2: Automatic sending
+
+Compared with desktop JS8Call-improved at `d9c50510` (two commits after the
+`e3d7a3b` used before): `JS8_Mainwindow/processCommandActivity.cpp`,
+`pushNotificationHandler.cpp`, `JS8_UI/mainwindow.cpp`,
+`JS8_Main/TxLoop.cpp`.
+
+### B-04. Automatic replies go out while a message to us is still arriving — medium, confirmed
+
+**Where:** `src/dialog_js8.c:2949-2970` (`auto_send`), `:3099-3132`
+(`hb_tick`), `:3068-3081` (`push_tick`): they wait only for our own TX,
+the keyboard and popups.
+
+**What goes wrong:** we can't receive while we transmit (`audio_cb`
+drops the audio while keyed). Desktop won't answer anyone while a
+multi-frame command addressed to us (`MSG`, `MSG TO:`, `QUERY`...) is
+still coming in (`processCommandActivity.cpp:1133-1139`,
+`hasExistingMessageBufferToMe`), and sends no heartbeat ACK while *any*
+such command is still coming in (`:636-641`, and `canEnableHBReplies()`,
+`mainwindow.cpp:5118-5122`). We do. Example: N0XYZ sends us a 4-frame
+`MSG`; after its first frame W1ABC's heartbeat decodes and, with HB ACK
+on, we key in the next slot. We miss frames 2–4, so the message never
+completes: nothing reaches the Inbox, no ACK goes back, and desktop N0XYZ
+shows it as not delivered. The same with an `SNR?` or a relay from
+someone else in the middle.
+
+**Fix:** hold automatic replies (don't drop them, as desktop does: put
+them off) while the assembler has an open partial addressed to our call,
+and HB ACKs while it has any open multi-frame command. The partial rows
+(`find_partial`) already know this.
+
+### B-05. Heartbeat ACKs every 15 min per station; desktop waits 55 — medium, confirmed
+
+**Where:** `src/js8/autoreply.hpp:107` (`HB_ACK_REPEAT_MS = 15 min`),
+`AutoPolicy::decide()` (`autoreply.cpp:349-352`).
+
+**What goes wrong:** desktop answers anything sent to `@ALLCALL` or
+`@HB`, heartbeats included, at most once per station per **55 minutes**
+(`processCommandActivity.cpp:296-307`, bumped by the HB ACK at
+`:710-716`), and keeps that in a database (`HBBlockingDB`) so a restart
+doesn't reset it. Ours allows one every 15 minutes, and forgets on power
+off. A station heartbeating every 10 minutes gets an ACK from us every
+15–20 minutes instead of about once an hour: up to four times desktop's
+traffic from an unattended station. (Listed as "55-min ACK suppression"
+among the desktop features we lack; it changes what we put on the air, so
+it's here too.)
+
+**Fix:** 55 minutes; optionally save the times with the held messages so
+they survive a restart.
+
+### B-06. Our 5-minute guard drops a repeated AGN? and relayed questions — low, confirmed
+
+**Where:** `AutoPolicy::decide()` (`autoreply.cpp:357-358`), keyed by
+`r.to + "|" + r.command`; `make()` (`:82-86`) sets `r.to` to the station
+we heard.
+
+**What goes wrong:** desktop has no such guard (it's ours, against
+answering the same query twice). It also blocks things desktop answers:
+- `AGN?` asked twice within 5 minutes (they missed our repeat too) gets
+  nothing the second time;
+- for a relayed question `r.to` is the **relaying** station, so two
+  different stations asking `SNR?` through the same relay within 5
+  minutes: the second gets no answer.
+
+**Fix:** key the guard by the real asker (the relay path's first call),
+and leave `AGN?` out of it.
+
+### B-07. No WSPR guard band: can transmit on top of WSPR on 30 m — low, confirmed
+
+**Where:** `tx_queue_at()` / `tx_player_play()`: no frequency check.
+
+**What goes wrong:** desktop refuses to transmit, and cancels its CQ and
+HB loops, when the on-air frequency is within 10 139.900–10 140.320 kHz,
+the WSPR band (`mainwindow.cpp:2267-2280`). The 30 m preset (10 130 kHz)
+is well clear, but a custom dial (Freq > Custom kHz) of e.g. 10 138 kHz
+with a 2 kHz offset puts JS8 on top of WSPR, including automatic replies
+and heartbeats.
+
+**Fix:** the same check in `tx_queue_at()` (dial + offset, and the
+signal's width) with a message, and stop auto CQ/HB there.
+
+### B-08. Heartbeat and auto CQ timing follow the older desktop — low, confirmed
+
+**Where:** `next_heartbeat_ms()` (`autoreply.cpp:367-376`), `hb_tick()`;
+auto CQ in `cq_hold_cb()` / `ui_tx_done()` (`dialog_js8.c:1529-1533`).
+
+**What goes wrong:** desktop now runs both through `TxLoop`
+(`JS8_Main/TxLoop.cpp`): one transmission every N minutes on a fixed
+schedule aligned to the speed's slots, the first one N minutes after
+switching on, and nothing restarts it after other transmissions.
+- Heartbeats: ours use the old `scheduleHeartbeat()` rule (next 15 s
+  boundary + 1 s + N min, one slot later 25% of the time).
+- Auto CQ: ours sends one at once, then counts N minutes from the end of
+  **every** transmission (`ui_tx_done` restarts it after an automatic
+  reply or a heartbeat too), so on a busy frequency CQs come further
+  apart than asked. The "from the end" part was the user's choice
+  (beta 2), so check before changing it.
+
+**Fix:** port `TxLoop`'s schedule, if wanted.
+
+### B-09. Holding CQ while sending: first CQ a whole interval later — low, confirmed
+
+**Where:** `src/dialog_js8.c:2582-2588` (`cq_hold_cb`).
+
+**What goes wrong:** the comment says "Busy sending: the first CQ right
+after", but the code sets `auto_cq_next_ms = now + interval`, and
+`ui_tx_done()` then moves it to *the end of the message* + interval. So
+the first automatic CQ comes a whole interval after the message ends, not
+right after it.
+
+**Fix:** when busy, set `auto_cq_next_ms` so the first CQ follows the
+message (e.g. a flag `ui_tx_done` honours), or fix the comment.
+
+### B-10. An `@APRSIS MSG` without `TO:` is kept and ACKed — low, confirmed
+
+**Where:** `src/js8/autoreply.cpp:194-205`.
+
+**What goes wrong:** `@APRSIS` counts as one of our groups (as on
+desktop). For `MSG` to `@APRSIS`, desktop only takes the gateway's form
+`MSG TO:CALL text` and otherwise ignores it (`processCommandActivity.cpp:758-803`,
+`continue`). Ours falls through to the ordinary `MSG` branch when the
+`TO:` pattern doesn't match: the text goes into our Inbox and, with AUTO
+on, we transmit an ACK to whoever sent it. Someone sending
+`@APRSIS MSG hello` by mistake would get an ACK from us.
+
+**Fix:** after the `@APRSIS` check, return nothing when the pattern
+doesn't match.

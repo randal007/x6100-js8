@@ -25,7 +25,7 @@ The review reads code only: **no code is changed**.
 | Batch | Area | Features | Done |
 |---|---|---|---|
 | 1 | Transmitting and the radio | F01–F10 | ✅ 2026-09-28: 3 bugs (1 high), 6 improvements |
-| 2 | Automatic sending | F11–F20 | |
+| 2 | Automatic sending | F11–F20 | ✅ 2026-09-28: 7 bugs (2 medium), 3 improvements |
 | 3 | Receiving and decoding | F21–F31 | |
 | 4 | Inbox, saved data, settings | F32–F41 | |
 | 5 | The screen | F42–F52 | |
@@ -87,29 +87,39 @@ frequency, mode or filters.
 
 What an unattended station sends by itself.
 
-- [ ] **F11. AUTO and the auto-reply engine**: `process()`,
+- [x] **F11. AUTO and the auto-reply engine**: `process()`,
   `build_reply()`, `AutoPolicy` (`decide`, `sent`, `idle`),
   `js8_process()`. `src/js8/autoreply.cpp`, `js8_ops.cpp`.
-- [ ] **F12. Queries answered**: `SNR?`, `GRID?`, `INFO?`, `STATUS?`,
+  → B-04, B-07, B-10, I-07, I-08, I-09. Fine: stores MSG / MSG TO: whatever AUTO says, as desktop; checksum rule; own-call and low-confidence filters.
+- [x] **F12. Queries answered**: `SNR?`, `GRID?`, `INFO?`, `STATUS?`,
   `HEARING?`, `QUERY CALL`, `AGN?`, the 5-minute repeat guard.
-- [ ] **F13. Heartbeats**: auto HB and its interval knob (`hb_tick`,
+  → B-06. Fine: SNR?, INFO?, STATUS?, GRID?, HEARING?, AGN? texts and conditions match desktop (no macros in INFO/STATUS: known).
+- [x] **F13. Heartbeats**: auto HB and its interval knob (`hb_tick`,
   `hb_cb`, `hb_hold_cb`, `hb_adjust_start`/`end`), `send_heartbeat`.
-- [ ] **F14. HB ACK**: heartbeat acknowledgements, the 15-minute
+  → B-08. Fine: first HB an interval after switching on, not in Turbo, 5 s early, idle stop.
+- [x] **F14. HB ACK**: heartbeat acknowledgements, the 15-minute
   @ALLCALL cache.
-- [ ] **F15. Auto CQ**: `cq_hold_cb`, the interval knob
+  → B-04, **B-05**. Fine: text "CALL HEARTBEAT SNR -08 MSG ID n +k" as desktop (minus its stray ")"), AUTO + HB + HB ACK all needed.
+- [x] **F15. Auto CQ**: `cq_hold_cb`, the interval knob
   (`cq_adjust_*`), `auto_cq_tick`, `auto_cq_stop`.
-- [ ] **F16. QSO detection and the HB pause**: `starts_qso`,
+  → B-08, B-09. Fine: stops on an answer, band change, Stop TX, idle hour, send failure.
+- [x] **F16. QSO detection and the HB pause**: `starts_qso`,
   `qso_started`, `hb_pause`. Earlier: BH-7.
-- [ ] **F17. Relays**: passing `>` on, ACKs back along the path, the
+  → nothing new. BH-7 still there; desktop detail: it pauses HB and HB ACKs while a station is *selected* (HeartbeatQSOPause, default on) and brings HB back when deselected.
+- [x] **F17. Relays**: passing `>` on, ACKs back along the path, the
   relayed command, the Relay switch (`js8_relay`). `src/js8/directed.cpp`,
   `autoreply.cpp`.
-- [ ] **F18. Store and forward**: `MSG TO:` holding, `QUERY MSGS`,
+  → nothing new. Fine: next hop, *DE*, ACK back along the path, relayed commands re-dispatched, Relay switch, no relays for groups.
+- [x] **F18. Store and forward**: `MSG TO:` holding, `QUERY MSGS`,
   `QUERY MSG n`, deliveries (`deliver_start`/`deliver_end`), group
   messages. Earlier: BH-2.
-- [ ] **F19. RETRIEVE MSG notices**: `push_tick`, `js8_held_push_due`.
-- [ ] **F20. Offers and the waiting reply**: `offer`, `OFFER_MS`,
+  → nothing new. Fine: QUERY MSG n / QUERY MSGS / YES MSG ID n +k / NO / NEXT MSG ID as desktop. BH-2 still there.
+- [x] **F19. RETRIEVE MSG notices**: `push_tick`, `js8_held_push_due`.
+  → nothing new. Fine: matches desktop's pushNotificationHandler (15 min heard, 8 h repeat, one per sweep, no groups, AUTO only).
+- [x] **F20. Offers and the waiting reply**: `offer`, `OFFER_MS`,
   `pending_auto`, `PENDING_AUTO_MS`, `auto_send`. Earlier: BH-1, BH-5,
   BH-11.
+  → I-08. BH-1, BH-5 and BH-11 still there. Inbox dedupe (same sender and text within 30 min) also covers duplicate APRS relays.
 
 ## Batch 3: Receiving and decoding
 
