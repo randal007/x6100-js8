@@ -1,0 +1,291 @@
+# Feature check sheet
+
+Every feature of the JS8 app, and everything we changed in the firmware
+around it, split up for a feature-by-feature review. Each feature is read
+for **bugs** (written up in [bugs.md](bugs.md)) and for **improvements**
+(efficiency, simpler or safer code, tests: [improvements.md](improvements.md)).
+The review reads code only: **no code is changed**.
+
+- Started 2026-09-28 on `main` at `9391f80`.
+- Done about 10 features at a time, in the batches below, riskiest first:
+  anything that transmits or changes the radio, then automatic sending,
+  then receiving, then stored data, then the screen.
+- A ticked box means the feature has been read for both bugs and
+  improvements; the finding IDs follow it.
+- `BH-n` = finding n of the earlier read-only hunt,
+  [bug-hunt-2026-09-28.md](../bug-hunt-2026-09-28.md). Those aren't
+  repeated in bugs.md; a batch that covers one checks it's still there.
+- Scope: `src/dialog_js8.c`, `src/js8/`, `src/tx_player.c`, our changes
+  to the firmware (77 files differ from the `1ko125-beta6` import), the
+  local patches in `third-party/js8core`, tests, tools, CI, and the
+  helper scripts in `~/Work/bin`.
+
+## Progress
+
+| Batch | Area | Features | Done |
+|---|---|---|---|
+| 1 | Transmitting and the radio | F01–F10 | |
+| 2 | Automatic sending | F11–F20 | |
+| 3 | Receiving and decoding | F21–F31 | |
+| 4 | Inbox, saved data, settings | F32–F41 | |
+| 5 | The screen | F42–F52 | |
+| 6 | Selecting, navigating, Stations | F53–F62 | |
+| 7 | Sending by hand | F63–F72 | |
+| 8 | Logging and APRS | F73–F82 | |
+| 9 | Alerts, time, app life cycle, firmware hooks | F83–F92 | |
+| 10 | Engine, build, tests, tools, docs | F93–F101 | |
+
+## Batch 1: Transmitting and the radio
+
+Anything that keys the transmitter, sets power, or changes the radio's
+frequency, mode or filters.
+
+- [ ] **F01. TX player**: PTT and modem, ALC-driven gain correction,
+  5 W cap, dial shifted for the audio tone and put back after, abort
+  between parts. `src/tx_player.c`; also used by FT8 (`src/ft8/tx_worker.c`,
+  `dialog_ft8.c`). Earlier: BH-10.
+- [ ] **F02. Transmitter**: message → frames (`plan_message`), tone
+  synthesis, slot timing, Idle/Waiting/Keying states, status, stop.
+  `src/js8/tx.cpp`, `src/js8/js8_tx.cpp`.
+- [ ] **F03. The app's send queue**: `tx_queue_at`, `tx_queue`,
+  `tx_start`, `tx_play`, `on_tx_status`/`ui_tx_status`,
+  `on_tx_done`/`ui_tx_done`, `last_tx_text`.
+- [ ] **F04. Stop TX**: ESC, top knob, `stop_tx_cb`, `tx_stop_all`,
+  `tx_abort_check`, `keyed`.
+- [ ] **F05. Radio set-up on open, put back on close**: USB-D, RX filter
+  200–3000 Hz saved and restored, TX filter 160–3000 Hz, NR/NB/DNF off,
+  5 W cap. `construct_cb`, `destruct_cb`, `radio_set_tx_filter`,
+  `radio_set_rx_dsp_off` (`src/radio.c`).
+- [ ] **F06. Band keys and retuning**: `band_cb`, `load_band`,
+  `retuned`, `stations_for_band`, `js8_usb_dig`. Earlier: BH-10, BH-11.
+- [ ] **F07. Freq popup**: JS8Call presets, GhostNet, custom kHz.
+  `freq_show`, `use_presets`, `parse_custom`, `tune_custom`,
+  `freq_item_cb`; params `js8_ghostnet`, `js8_custom_on`, `js8_custom_hz`.
+- [ ] **F08. TX offset**: where it comes from (`js8_tx_freq`), Hold
+  (`js8_hold_offset`, `hold_cb`), the heartbeat's free offset
+  (`free_hb_offset`, `js8_heartbeat_offset`, `find_free_offset`), the top
+  limit per speed.
+- [ ] **F09. Alert beep and the TX interlock**: `beep_play`,
+  `beep_thread`, `speaker_lock`, `keyed`, `beep_guard`,
+  `radio_speaker_play`.
+- [ ] **F10. Frequency presets in the database**: `sql/digital_modes.csv`,
+  migrations 4 and 5 (`src/params/migrations.c`),
+  `cfg/digital_modes.h` types 2 and 3, and whether FT8's band stepping
+  can land on JS8 rows.
+
+## Batch 2: Automatic sending
+
+What an unattended station sends by itself.
+
+- [ ] **F11. AUTO and the auto-reply engine**: `process()`,
+  `build_reply()`, `AutoPolicy` (`decide`, `sent`, `idle`),
+  `js8_process()`. `src/js8/autoreply.cpp`, `js8_ops.cpp`.
+- [ ] **F12. Queries answered**: `SNR?`, `GRID?`, `INFO?`, `STATUS?`,
+  `HEARING?`, `QUERY CALL`, `AGN?`, the 5-minute repeat guard.
+- [ ] **F13. Heartbeats**: auto HB and its interval knob (`hb_tick`,
+  `hb_cb`, `hb_hold_cb`, `hb_adjust_start`/`end`), `send_heartbeat`.
+- [ ] **F14. HB ACK**: heartbeat acknowledgements, the 15-minute
+  @ALLCALL cache.
+- [ ] **F15. Auto CQ**: `cq_hold_cb`, the interval knob
+  (`cq_adjust_*`), `auto_cq_tick`, `auto_cq_stop`.
+- [ ] **F16. QSO detection and the HB pause**: `starts_qso`,
+  `qso_started`, `hb_pause`. Earlier: BH-7.
+- [ ] **F17. Relays**: passing `>` on, ACKs back along the path, the
+  relayed command, the Relay switch (`js8_relay`). `src/js8/directed.cpp`,
+  `autoreply.cpp`.
+- [ ] **F18. Store and forward**: `MSG TO:` holding, `QUERY MSGS`,
+  `QUERY MSG n`, deliveries (`deliver_start`/`deliver_end`), group
+  messages. Earlier: BH-2.
+- [ ] **F19. RETRIEVE MSG notices**: `push_tick`, `js8_held_push_due`.
+- [ ] **F20. Offers and the waiting reply**: `offer`, `OFFER_MS`,
+  `pending_auto`, `PENDING_AUTO_MS`, `auto_send`. Earlier: BH-1, BH-5,
+  BH-11.
+
+## Batch 3: Receiving and decoding
+
+- [ ] **F21. Audio in**: `audio_cb`, the resampler
+  (`src/js8/resampler.cpp`), `js8_rx_feed`, silence during a beep.
+- [ ] **F22. Receiver thread**: ring buffer, slot schedule, filling
+  gaps, realign, `check_clock`. `src/js8/receiver.cpp`, `js8_rx.cpp`.
+- [ ] **F23. Speeds**: all four decoded together, the Decode button
+  (`js8_rx_all`), `rx_speed_mask`, `src/js8/speeds.cpp`, `js8_speed.h`.
+- [ ] **F24. Decode range and QSO offset**: `js8_rx_set_decode_range`,
+  `js8_rx_set_qso_offset` (local patch 9).
+- [ ] **F25. Duplicate filter**: `DuplicateFilter` (Turbo retries).
+- [ ] **F26. Frame assembler**: multi-frame messages, closing 60 s
+  after the latest frame, partial rows growing in place.
+  `src/js8/assembler.cpp`, `find_partial`.
+- [ ] **F27. Frame rendering**: frame bits, compound calls.
+  `src/js8/render.cpp`.
+- [ ] **F28. Message classification**: to me, groups, heartbeats, CQ,
+  low confidence, checksums, grids, base calls. `src/js8/classify.cpp`.
+  Earlier: BH-4, BH-6.
+- [ ] **F29. Directed-message parser**: `parse_directed`,
+  `relay_next_hop`, `relay_path_calls`, `parse_callsigns`, `is_allcall`.
+  `src/js8/directed.cpp`.
+- [ ] **F30. Incoming messages in the app**: `on_message`,
+  `ui_add_message`, `handle_incoming`, `process_message`,
+  `add_message`, `on_cycle_done`.
+- [ ] **F31. Groups and @ALLCALL**: `GROUPS=`, `js8_groups_normalise`,
+  group addressing.
+
+## Batch 4: Inbox, saved data, settings
+
+- [ ] **F32. Inbox store**: file format v1/v2, the 200 cap, ids,
+  load/save. `src/js8/inbox.cpp` (`Inbox`). Earlier: BH-8, BH-16.
+- [ ] **F33. Held-message store**: `HeldMessages`, group recipients,
+  `notified_ms`. Earlier: BH-16.
+- [ ] **F34. The C glue for the stores**: `keep()`, `js8_msg_for_me`,
+  `js8_msg_to_for_me`, `js8_path_display`, `js8_delivered_signature`.
+  `src/js8/js8_ops.cpp`. Earlier: BH-3, BH-8.
+- [ ] **F35. Inbox window**: the list, one message, mark read, delete,
+  Fetch the next, desktop's Reply choices. `inbox_show`,
+  `inbox_item_cb`, `inbox_key_cb`. Earlier: BH-9.
+- [ ] **F36. APRS messages in the Inbox**: `aprs_to_inbox`,
+  `aprs_sender`, `aprs_sms_from`, Reply by APRS / SMS, gateway receipts
+  (`ACKnn}`).
+- [ ] **F37. New-message notices**: `stored_received`,
+  `inbox_refresh_button` (green button), `inbox_label_getter`.
+- [ ] **F38. The settings file `js8_texts.txt`**: `load_texts`,
+  `save_texts` (INFO, STATUS, GROUPS, ALERTS, OPERATOR, spot form,
+  POTA/SOTA refs).
+- [ ] **F39. Params**: the `js8_*` entries in `src/params/params.c/h`,
+  defaults, limits, saving; the harness's copy of the defaults.
+- [ ] **F40. Settings popup**: `texts_cb`, `texts_item_cb`,
+  `settings_label`, `relay_label`, INFO/STATUS/Groups/Operator editing,
+  km/miles, Stations kept, Messages kept.
+- [ ] **F41. A missing, full or read-only DATA partition**: every
+  read and write under `/mnt` (inbox, held, texts, log, `app_logs`).
+
+## Batch 5: The screen
+
+- [ ] **F42. Waterfall in the app**: PSD, noise floor, row queue,
+  15 rows/s pacing. `wf_*`, `ui_waterfall_add`, `on_audio`.
+- [ ] **F43. Waterfall widget**: ring buffer, `invalidate_exact`.
+  `src/widgets/lv_waterfall.c` (shared with FT8 and the main screen).
+- [ ] **F44. Finder and markers**: TX offset marker, the green QSO line.
+- [ ] **F45. Message list rows**: `format_row`, `append_row`, history
+  ring, trimming at 200 → 150, `rebuild_rows`, `row_hist`.
+- [ ] **F46. Row colours and marks**: own red, to-me blue, groups,
+  alerts purple, yellow commands (`draw_recoloured`, `table_draw_cb`,
+  `table_draw_end_cb`), the end mark `♢`, the `js8_marks_24` font.
+- [ ] **F47. Show filter**: All / No HB / Directed (`passes_filter`,
+  `show_cb`).
+- [ ] **F48. Info rows**: `add_info_row`. Earlier: BH-18.
+- [ ] **F49. Following new rows, reading back**: `follow`,
+  `at_bottom`, `READ_PAUSE_MS`, `list_scroll_end`.
+- [ ] **F50. Status line**: `update_status` (cycles, decodes, drift,
+  dial, speed).
+- [ ] **F51. TX bar**: `update_tx_bar`, `tx_timer_cb` (countdown, frame
+  progress, selected/locked).
+- [ ] **F52. Aging and Clear**: Messages kept / Stations kept
+  (`msg_age_tick`, `msg_keep_ms`, `apply_station_keep`), `clear_cb`.
+
+## Batch 6: Selecting, navigating, Stations
+
+- [ ] **F53. Selecting a station**: `select_row`, `select_at_cursor`,
+  `table_select_cb`, `table_press_cb`, `show_selection`,
+  `clear_selection`, `sel_call`.
+- [ ] **F54. Lock (hold MFK)**: `table_hold_cb`, `sel_locked`,
+  `press_on_locked`, `press_held`.
+- [ ] **F55. Rows without a callsign, marked by frequency**:
+  `callless_cursor_freq`, `row_on_freq`, `cursor_freq`.
+- [ ] **F56. Knob and keys**: `rotary_cb`, `key_cb`, `user_touch`.
+- [ ] **F57. Button pages**: six pages, next/previous, hold time
+  500 ms (`keypad_set_long_time`), label getters.
+- [ ] **F58. Stations store**: `StationList` (`src/js8/stations.cpp`),
+  1 h expiry, `band_lists` per dial kHz and slot reuse.
+- [ ] **F59. Stations view**: `rebuild_station_rows`, `station_fields`
+  (SNR, age, grid, km/miles, bearing). Earlier: BH-14 (fixed), BH-17.
+- [ ] **F60. Worked-before ★ and alert marks in Stations**:
+  `qso_log_search_worked`, `st_worked`, `st_alert`.
+- [ ] **F61. Stations heard through relays**: `js8_relay_stations`,
+  `add_via`.
+- [ ] **F62. The heard list for automatic replies**: `heard_stations`
+  → `js8_heard_t`.
+
+## Batch 7: Sending by hand
+
+- [ ] **F63. Compose window**: `compose_open`, `compose_ok_cb`,
+  `compose_cancel_cb`, accepted characters, prefill, layout, live frame
+  count (`compose_changed_cb`, `compose_insert_cb`, `compose_layout`).
+- [ ] **F64. Reply**: `reply_cb` (offer, selected station, prefill).
+- [ ] **F65. Send...**: `send_cb`.
+- [ ] **F66. HW CPY? and AGN?**: `hw_cpy_cb`, `last_tx_text`.
+- [ ] **F67. Query list**: `query_cb`, `query_item_cb`, `query_msg_cb`,
+  `js8_query_text` (SNR?, GRID?, INFO?, STATUS?, HEARING?, QUERY MSGS,
+  Fetch message #, Relay via them, Can they reach).
+- [ ] **F68. CQ button**: `cq_cb`, `send_cq`.
+- [ ] **F69. Heartbeat button**: `heartbeat_cb` (restarts the HB timer).
+- [ ] **F70. Speed**: `speed_cb`, `speed_hold_cb`, `selected_speed`,
+  `speed_warn`, `set_speed`. Earlier: BH-15.
+- [ ] **F71. Decode button**: `decode_cb` (this speed or all).
+- [ ] **F72. Frame preview and sendable characters**: `js8_tx_preview`,
+  `js8_tx_sendable_char`, `tx_preview`.
+
+## Batch 8: Logging and APRS
+
+- [ ] **F73. QSO tracker**: `QsoTracker`, `js8_qsos_*` (reports, grids,
+  end of QSO). `src/js8/qsolog.cpp`. Earlier: BH-6, BH-13.
+- [ ] **F74. Log popup**: `log_cb`, `log_prepare`, `log_list_open`,
+  `log_item_cb`, `log_edit_done`, `log_save`, `my_log_grid`,
+  `log_reports_*`.
+- [ ] **F75. ADIF file and log database**: `adif_record`,
+  `adif_append`, `js8_log_append`, `js8_log_band`; `src/adif.c`
+  (MODE_JS8, and the SSB fall-through fix), `qso_log.h`.
+- [ ] **F76. Log prompt**: `log_offer`, `prompt_cb`, `js8_log_prompt`.
+  Earlier: BH-12.
+- [ ] **F77. POTA/SOTA activation**: `act_cb`, `act_hold_cb`, MY_SIG
+  fields.
+- [ ] **F78. Operator callsign**: `EDIT_OPERATOR`,
+  `js8_operator_call_valid`.
+- [ ] **F79. APRS menu and message format**: `aprs_cb`,
+  `aprs_item_cb`, `aprs_prepare`, `aprs_compose` (SMS, email, Winlink,
+  67 characters, `{NN}` IDs).
+- [ ] **F80. Grid spot**: `aprs_grid` (`@APRSIS GRID`).
+- [ ] **F81. Position beacon (grid or GPS)**: `aprs_gps`,
+  `aprs_position`, `beacon_text`, `aprs_beacon`, `beacon_changed_cb`,
+  `js8_latlon_to_grid`, `gps_last_fix` (`src/gps.c`).
+- [ ] **F82. POTA/SOTA spot form**: the `spot_*` functions.
+
+## Batch 9: Alerts, time, app life cycle, firmware hooks
+
+- [ ] **F83. Alert words and matching**: `src/js8/alerts.cpp`,
+  `js8_alert_hit`, `alert_check`.
+- [ ] **F84. Alerts popup**: `alerts_show`, `alerts_item_cb`,
+  `alerts_switch_label`, the `JS8_ALERT_*` bits.
+- [ ] **F85. Time Sync**: `time_sync_cb`, `time_sync_hold_cb`,
+  `sync_samples`, `js8_sync_drift`.
+- [ ] **F86. JS8 time and drift plumbing**: `wall_ms`/`set_drift_ms`
+  (receiver), `js8_wall_ms`, `now_wall_ms`, the transmitter's clock.
+- [ ] **F87. Opening and closing the app**: `construct_cb`,
+  `destruct_cb` (threads, timers, popups, memory, files).
+- [ ] **F88. Worker thread → screen hand-off**: `scheduler_put`
+  callbacks (`on_message`, `on_cycle_done`, `on_tx_status`,
+  `on_tx_done`, `on_audio`) and what they may touch.
+- [ ] **F89. Popups**: `any_popup`, `popup_guard`, `close_popups`,
+  `list_add_item`, `list_item_focused_cb`, deletion rules.
+- [ ] **F90. Keyboard input**: `src/kbd_rollover.c`, `src/keyboard.c`,
+  `swallow_key` in `src/textarea_window.c`.
+- [ ] **F91. App launcher and keypad hooks**: `src/buttons.cpp`,
+  `src/main_screen.c`, `dialog_settings.cpp` (long-press action),
+  `ACTION_APP_JS8`, `src/keypad.c`.
+- [ ] **F92. Radio helpers added to the firmware**: `src/radio.c`
+  (TX filter, DSP off, speaker play) as used outside JS8.
+
+## Batch 10: Engine, build, tests, tools, docs
+
+- [ ] **F93. js8core local patches 1–11**: `third-party/js8core`,
+  `UPSTREAM.md`.
+- [ ] **F94. WAV playback and test signals**: `src/js8/wav.cpp`,
+  `testsignal.cpp`, `js8_rx_play_wav`, `tools/js8_wavgen`.
+- [ ] **F95. Unit tests**: `tests/test_js8.cpp`, `run_tests.sh`.
+- [ ] **F96. UI harness**: `tools/js8_ui_harness` (`driver.c`,
+  `stubs.c`, `main.cpp`).
+- [ ] **F97. CI build and release**: `.github/workflows/main.yml`.
+- [ ] **F98. Build files**: `CMakeLists.txt`, `src/js8/CMakeLists.txt`,
+  js8core's CMake.
+- [ ] **F99. Flash script**: `~/Work/bin/x6100-flash` (outside the repo).
+- [ ] **F100. Console and screenshot helpers**: `~/Work/bin/x6100-console`,
+  `x6100-screenshot` (outside the repo).
+- [ ] **F101. README and docs against the code**: is the manual right?
