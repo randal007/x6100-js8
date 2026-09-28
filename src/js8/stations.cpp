@@ -39,6 +39,7 @@ void StationList::add(const StationEvent &ev, const std::string &my_call) {
 
     Station &st = stations_[ev.from];
     st.call     = ev.from;
+    st.via.clear(); // heard directly
     st.heard_ms = ev.when_ms;
     st.snr      = ev.snr;
     st.freq_hz  = ev.freq_hz;
@@ -66,10 +67,25 @@ void StationList::add(const StationEvent &ev, const std::string &my_call) {
     }
 }
 
-std::vector<Station> StationList::sorted(std::int64_t now_ms) const {
+void StationList::add_via(const std::string &call, const std::string &via, float freq_hz, int mode,
+                          std::int64_t when_ms, std::int64_t expire_ms) {
+    if (call.empty() || via.empty() || call == via) return;
+    auto it = stations_.find(call);
+    if (it != stations_.end() && it->second.via.empty() && (expire_ms <= 0 || when_ms - it->second.heard_ms < expire_ms))
+        return; // heard directly: keep that
+    Station &st = stations_[call];
+    st.call     = call;
+    st.via      = via;
+    st.heard_ms = when_ms;
+    st.snr      = -64; // desktop's value for a station only heard through a relay
+    st.freq_hz  = freq_hz;
+    st.mode     = mode;
+}
+
+std::vector<Station> StationList::sorted(std::int64_t now_ms, std::int64_t expire_ms) const {
     std::vector<Station> out;
     for (auto &[call, st] : stations_)
-        if (now_ms - st.heard_ms < EXPIRE_MS) out.push_back(st);
+        if (expire_ms <= 0 || now_ms - st.heard_ms < expire_ms) out.push_back(st);
 
     std::stable_sort(out.begin(), out.end(), [](const Station &a, const Station &b) {
         if (a.heard_me != b.heard_me) return a.heard_me;

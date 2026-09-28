@@ -109,6 +109,7 @@
 #define KEEP_ROWS        150
 #define CQ_MIN_INTERVAL  1      /* auto CQ: minutes after our last TX ends (desktop's shortest: 1) */
 #define CQ_MAX_INTERVAL  30
+#define EOT_MARK         "\xE2\x99\xA2" /* desktop JS8Call's end-of-transmission mark, U+2662 */
 #define READ_PAUSE_MS    30000 /* list follows new rows again this long after the last MFK move */
 #define HOLD_MS          500      /* a button held this long is a hold (1 s elsewhere) */
 #define CUSTOM_MIN_HZ    1800000  /* custom dial frequency: 160m ... */
@@ -393,7 +394,10 @@ static void alerts_show(void);
 
 /* Message history, a ring, so the list can be rebuilt when the filter
  * changes. row_hist[] maps a table row to its history slot (-1 = info row). */
+LV_FONT_DECLARE(js8_marks_24);
+static lv_font_t    table_font; /* the list's font: sony_24 with js8_marks_24 as fallback */
 static js8_rx_msg_t history[HISTORY];
+static int64_t      hist_ms[HISTORY]; /* when each arrived (JS8 time), for Messages kept */
 static uint16_t     hist_head;  /* next slot to write */
 static uint16_t     hist_count;
 static int16_t      row_hist[MAX_ROWS + 1];
@@ -517,12 +521,14 @@ static void format_row(const js8_rx_msg_t *m, char *buf, size_t size) {
         return;
     }
 
-    snprintf(buf, size, "%02d:%02d:%02d %+3d %4.0f%s  %s%s%s%s",
+    snprintf(buf, size, "%02d:%02d:%02d %+3d %4.0f%s  %s%s%s%s%s",
              hh, mm, ss, m->snr, m->freq_hz, speed,
              m->low_confidence ? "[" : "",
              m->text,
              m->low_confidence ? "]" : "",
-             m->partial ? " ..." : m->checksum < 0 ? "  (bad checksum)" : "");
+             m->partial ? " ..." : m->checksum < 0 ? "  (bad checksum)" : "",
+             /* Desktop's end-of-transmission mark: the message's last frame arrived. */
+             !m->partial && (m->type & JS8_FRAME_LAST) ? " " EOT_MARK : "");
 }
 
 static bool auto_selecting; /* follow() is moving the selection, not the user */
@@ -598,6 +604,25 @@ static void add_info_row(const char *fmt, ...) {
 /* Rebuild the list from history, newest KEEP_ROWS matching messages. */
 static void rebuild_station_rows(void);
 
+/* Settings: how long stations and messages stay listed (desktop's callsign
+ * and activity aging), 0 minutes = always. */
+static const struct {
+    const char *label;
+    int         min;
+} st_keep_opts[] = {{"15 min", 15}, {"30 min", 30}, {"1 hour", 60}, {"2 hours", 120}, {"6 hours", 360}, {"always", 0}},
+  msg_keep_opts[] = {{"all", 0}, {"15 min", 15}, {"30 min", 30}, {"1 hour", 60}, {"2 hours", 120}};
+#define ST_KEEP_N  (int)(sizeof(st_keep_opts) / sizeof(st_keep_opts[0]))
+#define MSG_KEEP_N (int)(sizeof(msg_keep_opts) / sizeof(msg_keep_opts[0]))
+
+static int64_t msg_keep_ms(void) {
+    return (int64_t)msg_keep_opts[params.js8_msg_keep.x < MSG_KEEP_N ? params.js8_msg_keep.x : 0].min * 60000;
+}
+
+static void apply_station_keep(void) {
+    js8_stations_set_expire_ms((int64_t)st_keep_opts[params.js8_st_keep.x < ST_KEEP_N ? params.js8_st_keep.x : 2].min *
+                               60000);
+}
+
 static void rebuild_rows(void) {
     if (view_stations) {
         rebuild_station_rows();
@@ -606,8 +631,10 @@ static void rebuild_rows(void) {
     int16_t idx[KEEP_ROWS]; /* newest first */
     int     n = 0;
 
+    int64_t keep = msg_keep_ms(), now = now_wall_ms();
     for (int age = 0; age < hist_count && n < KEEP_ROWS; age++) {
         int slot = (hist_head - 1 - age + HISTORY) % HISTORY;
+        if (keep && now - hist_ms[slot] > keep) break; /* older ones too */
         if (passes_filter(&history[slot])) idx[n++] = (int16_t)slot;
     }
 
@@ -667,6 +694,12 @@ static void process_message(js8_rx_msg_t *m) {
     bool          new_station = !m->tx && m->from[0] && !find_station(m->from, &seen);
     js8_stations_add(stations, m, params.callsign.x, now_wall_ms());
     if (m->tx) return;
+    if (params.js8_relay.x) { /* stations a relay to us came through, as desktop lists them */
+        char via_calls[4][JS8_RX_CALL_LEN], via[JS8_RX_CALL_LEN];
+        int  n = js8_relay_stations(m, params.callsign.x, via_calls, 4, via, sizeof(via));
+        for (int i = 0; i < n; i++)
+            js8_stations_add_via(stations, via_calls[i], via, m->freq_hz, m->submode, now_wall_ms());
+    }
     if (sel_call[0] && strcasecmp(m->from, sel_call) == 0) { /* they moved: the green line follows */
         qso_freq = m->freq_hz;
         sel_snr  = m->snr;
@@ -726,6 +759,7 @@ static void add_message(const js8_rx_msg_t *msg) {
 
     int slot = hist_head;
     history[slot] = *m;
+    hist_ms[slot] = now_wall_ms();
     hist_head     = (hist_head + 1) % HISTORY;
     if (hist_count < HISTORY) hist_count++;
 
@@ -768,8 +802,15 @@ static void format_age(int64_t ms, char *buf, size_t size) {
 /* Station-view fields, drawn in fixed columns by table_draw_end_cb() since
  * the radio's font is proportional and spaces can't line text up. */
 typedef struct {
-    char star[2], call[JS8_RX_CALL_LEN], speed[2], age[8], snr[8], heard[40], grid[8], dist[16];
+    char star[2], call[JS8_RX_CALL_LEN], speed[2], age[8], snr[8], heard[40], grid[8], dist[16], az[8];
 } station_fields_t;
+
+/* Initial great-circle bearing from 1 to 2, degrees 0-359. */
+static double bearing_deg(double lat1, double lon1, double lat2, double lon2) {
+    double p1 = lat1 * M_PI / 180, p2 = lat2 * M_PI / 180, dl = (lon2 - lon1) * M_PI / 180;
+    double b  = atan2(sin(dl) * cos(p2), cos(p1) * sin(p2) - sin(p1) * cos(p2) * cos(dl)) * 180 / M_PI;
+    return fmod(b + 360, 360);
+}
 
 static void station_fields(const js8_station_t *st, int64_t now, station_fields_t *f) {
     memset(f, 0, sizeof(*f));
@@ -777,11 +818,13 @@ static void station_fields(const js8_station_t *st, int64_t now, station_fields_
     snprintf(f->call, sizeof(f->call), "%s", st->call);
     js8_speed_t sp = js8_speed_from_submode(st->submode);
     if (sp != JS8_SPEED_NORMAL) f->speed[0] = js8_speed_letter(sp); /* F, T, S */
-    snprintf(f->snr, sizeof(f->snr), "%+d", st->snr);
+    if (!st->via[0]) snprintf(f->snr, sizeof(f->snr), "%+d", st->snr);
     snprintf(f->grid, sizeof(f->grid), "%s", st->grid);
     char *age = f->age, *heard = f->heard, *dist = f->dist;
     format_age(now - st->heard_ms, age, sizeof(f->age));
-    if (st->heard_me) {
+    if (st->via[0]) {
+        snprintf(heard, sizeof(f->heard), "via %s", st->via); /* only heard through a relay */
+    } else if (st->heard_me) {
         char hage[8];
         format_age(now - st->heard_me_ms, hage, sizeof(hage));
         if (st->has_reported_snr) {
@@ -794,7 +837,10 @@ static void station_fields(const js8_station_t *st, int64_t now, station_fields_
         double lat, lon, my_lat, my_lon;
         qth_str_to_pos(st->grid, &lat, &lon);
         qth_str_to_pos(params.qth.x, &my_lat, &my_lon);
-        snprintf(dist, sizeof(f->dist), "%.0f km", qth_pos_dist(lat, lon, my_lat, my_lon));
+        double km = qth_pos_dist(lat, lon, my_lat, my_lon);
+        if (params.js8_miles.x) snprintf(dist, sizeof(f->dist), "%.0f mi", km * 0.621371);
+        else snprintf(dist, sizeof(f->dist), "%.0f km", km);
+        snprintf(f->az, sizeof(f->az), "%.0f\xC2\xB0", bearing_deg(my_lat, my_lon, lat, lon)); /* ° */
     }
 }
 
@@ -854,6 +900,60 @@ static void rebuild_station_rows(void) {
     select_row(keep_row);
 }
 
+/* Commands in colour (desktop draws them as "pills"): the table draws such
+ * a row's text transparent, and table_draw_end_cb() draws it again with
+ * the command recoloured. Recolour codes take no width, so the lines break
+ * exactly as the table measured them. */
+#define CMD_COLOR "ffd24a"
+static struct {
+    bool                on;
+    uint32_t            id;          /* the cell */
+    unsigned            start, len;  /* the command in the cell's text */
+    lv_draw_label_dsc_t label;       /* how the table would have drawn it */
+} cmd_draw;
+
+/* The command in message row `row`'s text: false for rows without one. */
+static bool row_command(uint32_t row, const js8_rx_msg_t *m, unsigned *start, unsigned *len) {
+    const char *cell = lv_table_get_cell_value(table, row, 0);
+    const char *at   = cell ? strstr(cell, m->text) : NULL;
+    if (!at || !js8_command_span(m->text, start, len)) return false;
+    *start += (unsigned)(at - cell);
+    return true;
+}
+
+static void draw_recoloured(lv_obj_t *obj, lv_obj_draw_part_dsc_t *dsc, uint32_t row) {
+    const char *cell = lv_table_get_cell_value(obj, row, 0);
+    if (!cell) return;
+    char   buf[2 * (JS8_RX_TEXT_LEN + 48) + 16];
+    size_t o = 0, n = strlen(cell);
+    for (size_t i = 0; i < n && o + 12 < sizeof(buf); i++) {
+        if (i == cmd_draw.start) o += (size_t)snprintf(buf + o, sizeof(buf) - o, "#" CMD_COLOR " ");
+        if (cell[i] == '#' && o + 2 < sizeof(buf)) buf[o++] = '#'; /* "##" is a plain '#' */
+        buf[o++] = cell[i];
+        if (i + 1 == cmd_draw.start + cmd_draw.len) buf[o++] = '#';
+    }
+    buf[o] = '\0';
+
+    /* Where lv_table puts a cell's text: inside the padding, centred. */
+    lv_draw_label_dsc_t l    = cmd_draw.label;
+    lv_area_t           cell_a = *dsc->draw_area, a;
+    a.x1 = cell_a.x1 + lv_obj_get_style_pad_left(obj, LV_PART_ITEMS);
+    a.x2 = cell_a.x2 - lv_obj_get_style_pad_right(obj, LV_PART_ITEMS);
+    lv_point_t size;
+    lv_txt_get_size(&size, cell, l.font, l.letter_space, l.line_space, lv_area_get_width(&a), LV_TEXT_FLAG_NONE);
+    lv_coord_t h = lv_area_get_height(&cell_a);
+    a.y1         = cell_a.y1 + h / 2 - size.y / 2;
+    a.y2         = cell_a.y1 + h / 2 + size.y / 2;
+    l.flag |= LV_TEXT_FLAG_RECOLOR;
+
+    const lv_area_t *clip_ori = dsc->draw_ctx->clip_area;
+    lv_area_t        clip;
+    if (!_lv_area_intersect(&clip, clip_ori, &cell_a)) return;
+    dsc->draw_ctx->clip_area = &clip;
+    lv_draw_label(dsc->draw_ctx, &l, &a, buf, NULL);
+    dsc->draw_ctx->clip_area = clip_ori;
+}
+
 static void table_draw_cb(lv_event_t *e) {
     lv_obj_t               *obj = lv_event_get_target(e);
     lv_obj_draw_part_dsc_t *dsc = lv_event_get_draw_part_dsc(e);
@@ -897,6 +997,16 @@ static void table_draw_cb(lv_event_t *e) {
     uint16_t sel_row, sel_col;
     lv_table_get_selected_cell(obj, &sel_row, &sel_col);
     if (sel_row == row) dsc->rect_dsc->bg_color = lv_color_lighten(dsc->rect_dsc->bg_color, 30);
+
+    /* A command to colour (not in the dimmed heartbeat rows): drawn later. */
+    cmd_draw.on = false;
+    if (h >= 0 && !view_stations && !history[h].heartbeat &&
+        row_command(row, &history[h], &cmd_draw.start, &cmd_draw.len)) {
+        cmd_draw.on          = true;
+        cmd_draw.id          = dsc->id;
+        cmd_draw.label       = *dsc->label_dsc;
+        dsc->label_dsc->opa = LV_OPA_TRANSP;
+    }
 }
 
 /* On offset `f`: within desktop's "same station" window for the row's speed. */
@@ -927,6 +1037,10 @@ static void table_draw_end_cb(lv_event_t *e) {
 
     uint32_t row = dsc->id / lv_table_get_col_cnt(obj);
     int16_t  h   = row < rows ? row_hist[row] : -1;
+    if (cmd_draw.on && cmd_draw.id == dsc->id) {
+        cmd_draw.on = false;
+        draw_recoloured(obj, dsc, row);
+    }
     if (h < 0) return;
 
     if (row_is_selected_station(h)) {
@@ -949,7 +1063,8 @@ static void table_draw_end_cb(lv_event_t *e) {
         {0, offsetof(station_fields_t, star)},    {18, offsetof(station_fields_t, call)},
         {140, offsetof(station_fields_t, speed)}, {162, offsetof(station_fields_t, age)},
         {218, offsetof(station_fields_t, snr)},   {276, offsetof(station_fields_t, heard)},
-        {520, offsetof(station_fields_t, grid)},  {610, offsetof(station_fields_t, dist)},
+        {505, offsetof(station_fields_t, grid)},  {588, offsetof(station_fields_t, dist)},
+        {692, offsetof(station_fields_t, az)},
     };
 
     lv_area_t area = *dsc->draw_area;
@@ -2050,7 +2165,10 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_border_opa(table, 128, LV_PART_MAIN);
     lv_obj_set_style_text_color(table, lv_color_hex(0xC0C0C0), LV_PART_ITEMS);
     /* JS8 messages are long; the dialog's 36 px font fits only two rows. */
-    lv_obj_set_style_text_font(table, &sony_24, LV_PART_ITEMS);
+    /* sony_24, with js8_marks_24 for the end mark and the degree sign. */
+    table_font          = sony_24;
+    table_font.fallback = &js8_marks_24;
+    lv_obj_set_style_text_font(table, &table_font, LV_PART_ITEMS);
     lv_obj_set_style_pad_top(table, 3, LV_PART_ITEMS);
     lv_obj_set_style_pad_bottom(table, 3, LV_PART_ITEMS);
     lv_obj_set_style_pad_left(table, 5, LV_PART_ITEMS);
@@ -2095,6 +2213,7 @@ static void construct_cb(lv_obj_t *parent) {
     load_texts();
     hb_next_ms         = 0;
     push_next_ms       = 0;
+    apply_station_keep();
     hb_adjusting       = false;
     pending_auto_valid = false;
     memset(&offer, 0, sizeof(offer));
@@ -2932,6 +3051,21 @@ static void push_tick(void) {
     if (tx_queue_at(text, params.js8_tx_freq.x, true)) add_info_row("Auto: %s", text);
 }
 
+/* Messages kept (Settings): every 30 s, drop rows past their time, unless
+ * you're scrolled up reading. */
+static void msg_age_tick(void) {
+    static int64_t next;
+    int64_t        now = now_wall_ms(), keep = msg_keep_ms();
+    if (now < next) return;
+    next = now + 30000;
+    if (!keep || view_stations || !table || !at_bottom()) return;
+    for (uint16_t r = 0; r < rows; r++) {
+        if (row_hist[r] < 0) continue;
+        if (now - hist_ms[row_hist[r]] > keep) rebuild_rows();
+        return; /* the oldest message row decides */
+    }
+}
+
 /* Once a second: send a heartbeat when one is due. */
 static void hb_tick(void) {
     beep_log_level();
@@ -2946,6 +3080,7 @@ static void hb_tick(void) {
         }
     }
     push_tick();
+    msg_age_tick();
     if (!params.js8_hb.x) {
         hb_next_ms = 0;
         return;
@@ -3104,22 +3239,67 @@ static void texts_close_cb(lv_event_t *e) {
 }
 
 /* The Settings list's items (user data): the texts are edit_t values. */
-#define SETTINGS_RELAY 100
+#define SETTINGS_RELAY    100
+#define SETTINGS_ST_KEEP  101
+#define SETTINGS_MSG_KEEP 102
+#define SETTINGS_MILES    103
 
 static const char *relay_label(void) {
     return params.js8_relay.x ? "Relay: On" : "Relay: Off";
 }
 
+/* The label of a line that changes in place. */
+static const char *settings_label(int which) {
+    static char buf[40];
+    switch (which) {
+    case SETTINGS_RELAY: return relay_label();
+    case SETTINGS_ST_KEEP:
+        snprintf(buf, sizeof(buf), "Stations kept: %s",
+                 st_keep_opts[params.js8_st_keep.x < ST_KEEP_N ? params.js8_st_keep.x : 2].label);
+        return buf;
+    case SETTINGS_MSG_KEEP:
+        snprintf(buf, sizeof(buf), "Messages kept: %s",
+                 msg_keep_opts[params.js8_msg_keep.x < MSG_KEEP_N ? params.js8_msg_keep.x : 0].label);
+        return buf;
+    case SETTINGS_MILES: return params.js8_miles.x ? "Distance: miles" : "Distance: km";
+    }
+    return "";
+}
+
 static void texts_item_cb(lv_event_t *e) {
     int which = (int)(intptr_t)lv_event_get_user_data(e);
-    if (which == SETTINGS_RELAY) {
-        /* Desktop's "Disable message relay (>)": it stops holding MSG TO:
-         * messages for others too. Switched in place; the list stays. */
-        params_bool_set(&params.js8_relay, !params.js8_relay.x);
-        lv_label_set_text(lv_obj_get_child(lv_event_get_target(e), 0), relay_label());
-        msg_update_text_fmt(params.js8_relay.x
-                                ? "Relay on: relays (>) are passed on and MSG TO: messages held, as desktop JS8Call"
-                                : "Relay off: relays (>) and MSG TO: messages for others are ignored");
+    if (which >= SETTINGS_RELAY) { /* switched in place; the list stays */
+        switch (which) {
+        case SETTINGS_RELAY:
+            /* Desktop's "Disable message relay (>)": it stops holding MSG
+             * TO: messages for others too. */
+            params_bool_set(&params.js8_relay, !params.js8_relay.x);
+            msg_update_text_fmt(params.js8_relay.x
+                                    ? "Relay on: relays (>) are passed on and MSG TO: messages held, as desktop JS8Call"
+                                    : "Relay off: relays (>) and MSG TO: messages for others are ignored");
+            break;
+        case SETTINGS_ST_KEEP:
+            params_uint8_set(&params.js8_st_keep, (params.js8_st_keep.x + 1) % ST_KEEP_N);
+            apply_station_keep();
+            if (view_stations) rebuild_rows();
+            msg_update_text_fmt("Stations stay listed %s after they were last heard",
+                                st_keep_opts[params.js8_st_keep.x].min ? st_keep_opts[params.js8_st_keep.x].label
+                                                                       : "until the radio is switched off, however long");
+            break;
+        case SETTINGS_MSG_KEEP:
+            params_uint8_set(&params.js8_msg_keep, (params.js8_msg_keep.x + 1) % MSG_KEEP_N);
+            if (!view_stations) rebuild_rows();
+            if (params.js8_msg_keep.x)
+                msg_update_text_fmt("Messages leave the list %s after they arrived",
+                                    msg_keep_opts[params.js8_msg_keep.x].label);
+            else msg_update_text_fmt("Messages stay in the list (the newest %d)", KEEP_ROWS);
+            break;
+        case SETTINGS_MILES:
+            params_bool_set(&params.js8_miles, !params.js8_miles.x);
+            if (view_stations) rebuild_rows();
+            break;
+        }
+        lv_label_set_text(lv_obj_get_child(lv_event_get_target(e), 0), settings_label(which));
         return;
     }
     /* Straight into the keyboard: take the list's buttons out of the group
@@ -3179,6 +3359,9 @@ static void texts_cb(button_data_t *btn) {
     settings_add(relay_label(), SETTINGS_RELAY);
     snprintf(label, sizeof(label), "Groups: %s", groups_text[0] ? groups_text : "(none)");
     settings_add(label, EDIT_GROUPS);
+    settings_add(settings_label(SETTINGS_ST_KEEP), SETTINGS_ST_KEEP);
+    settings_add(settings_label(SETTINGS_MSG_KEEP), SETTINGS_MSG_KEEP);
+    settings_add(settings_label(SETTINGS_MILES), SETTINGS_MILES);
 
     lv_obj_t *close = list_add_item(texts_list, "Close");
     lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);

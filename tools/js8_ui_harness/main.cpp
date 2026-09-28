@@ -1575,6 +1575,45 @@ int main() {
         printf("[fmark] on W1ABC: %d, selected '%s', %d marked: %s\n", on, selected(), n, marked);
         return 0;
     }
+    if (getenv("ONLY_LOOKS")) {
+        // Commands in colour, end marks, relay stations "via", bearing,
+        // km / miles, and the Settings lines for them.
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "", "N0XYZ: @HB HEARTBEAT EN34", 700, 0.05f},
+                   {"VE7ABC", "CN89", "", "@ALLCALL CQ CQ CQ CN89", 1800, 0.05f},
+                   {"W1ABC", "FN42", "K2XYZ", "K2XYZ SNR?", 1320, 0.05f}});
+        feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ>HELLO *DE* VE7XYZ", 1320, 0.05f},
+                   {"G4ABC", "IO91", "", "G4ABC: @ALLCALL CQ CQ CQ IO91", 2200, 0.05f}});
+        pump(500);
+        screenshot("70_messages.ppm");
+        ui_page(3);
+        ui_press(3); // Show Stations
+        pump(500);
+        screenshot("71_stations_km.ppm");
+        ui_page(4);
+        ui_press(4); // Settings
+        pump(200);
+        for (int i = 0; i < 12 && !strstr(ui_focused_text(), "Distance"); i++) ui_key(LV_KEY_RIGHT);
+        printf("[looks] on '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        printf("[looks] after a press: '%s' (want Distance: miles)\n", ui_focused_text());
+        for (int i = 0; i < 12 && !strstr(ui_focused_text(), "Stations kept"); i++) ui_key(LV_KEY_LEFT);
+        printf("[looks] '%s'", ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        printf(" -> '%s' (want 2 hours)\n", ui_focused_text());
+        ui_key(LV_KEY_RIGHT);
+        printf("[looks] '%s'", ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        printf(" -> '%s' (want 15 min)\n", ui_focused_text());
+        screenshot("72_settings.ppm");
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        screenshot("73_stations_miles.ppm");
+        return 0;
+    }
     if (getenv("ONLY_PARTIAL")) {
         // A long message shows as it arrives, one decode cycle at a time.
         pump(300);

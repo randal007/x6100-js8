@@ -77,6 +77,9 @@ params_t params = {
     .js8_hb                 = { .x = false,     .name = "js8_hb" },
     .js8_hb_ack             = { .x = false,     .name = "js8_hb_ack" },
     .js8_relay              = { .x = true,      .name = "js8_relay" },
+    .js8_st_keep            = { .x = 2, .min = 0, .max = 5, .name = "js8_st_keep" },   /* 1 hour */
+    .js8_msg_keep           = { .x = 0, .min = 0, .max = 4, .name = "js8_msg_keep" },  /* all */
+    .js8_miles              = { .x = false,     .name = "js8_miles" },
     .js8_hb_interval        = { .x = 30,        .name = "js8_hb_interval" },
     .js8_cq_interval        = { .x = 1,         .name = "js8_cq_interval" },
     .js8_log_prompt         = { .x = true,      .name = "js8_log_prompt" },
@@ -258,6 +261,9 @@ static bool params_load() {
         if (params_load_bool(&params.js8_hb, name, i)) continue;
         if (params_load_bool(&params.js8_hb_ack, name, i)) continue;
         if (params_load_bool(&params.js8_relay, name, i)) continue;
+        if (params_load_uint8(&params.js8_st_keep, name, i)) continue;
+        if (params_load_uint8(&params.js8_msg_keep, name, i)) continue;
+        if (params_load_bool(&params.js8_miles, name, i)) continue;
         if (params_load_uint16(&params.js8_hb_interval, name, i)) continue;
         if (params_load_uint16(&params.js8_cq_interval, name, i)) continue;
         if (params_load_bool(&params.js8_log_prompt, name, i)) continue;
@@ -397,6 +403,9 @@ static void params_save() {
     params_save_bool(&params.js8_hb);
     params_save_bool(&params.js8_hb_ack);
     params_save_bool(&params.js8_relay);
+    params_save_uint8(&params.js8_st_keep);
+    params_save_uint8(&params.js8_msg_keep);
+    params_save_bool(&params.js8_miles);
     params_save_uint16(&params.js8_hb_interval);
     params_save_uint16(&params.js8_cq_interval);
     params_save_bool(&params.js8_log_prompt);

@@ -57,6 +57,7 @@ typedef struct {
     int64_t heard_me_ms;
     bool    has_reported_snr;
     int16_t reported_snr; /* how they hear us */
+    char    via[JS8_RX_CALL_LEN]; /* only heard through this relay station, or "" */
 } js8_station_t;
 
 typedef struct js8_stations js8_stations_t;
@@ -67,6 +68,19 @@ void            js8_stations_add(js8_stations_t *s, const js8_rx_msg_t *msg, con
 /* Fill up to max stations, ★ first then most recent; returns the count. */
 int             js8_stations_list(js8_stations_t *s, int64_t now_ms, js8_station_t *out, int max);
 void            js8_stations_clear(js8_stations_t *s);
+/* How long a station stays listed, for every list (0: always); default 1 h. */
+void            js8_stations_set_expire_ms(int64_t ms);
+/* A station heard only through `via` (a relay), as desktop lists them. */
+void            js8_stations_add_via(js8_stations_t *s, const char *call, const char *via, float freq_hz,
+                                     uint8_t submode, int64_t now_ms);
+/* A relay that ends at my_call (desktop's rule: to us, no further hop, not
+ * an ACK): the stations it came through, besides the one we heard. Their
+ * calls go to out (up to max), the station heard to via; returns how many. */
+int             js8_relay_stations(const js8_rx_msg_t *msg, const char *my_call, char (*out)[JS8_RX_CALL_LEN],
+                                   int max, char *via, unsigned via_len);
+/* The command in a decoded "FROM: TO CMD ..." (SNR?, MSG, ACK, >, CQ ...):
+ * its offset and length in text; false if it has none. */
+bool            js8_command_span(const char *text, unsigned *start, unsigned *len);
 
 /* ---- Auto-reply, heartbeat acks, heartbeat timing (T4) --------------- */
 

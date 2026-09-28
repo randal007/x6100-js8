@@ -4,4 +4,5 @@ target_sources(${PROJECT_NAME} PUBLIC
     sony_28.c sony_30.c sony_32.c sony_34.c sony_36.c
     sony_38.c sony_40.c sony_42.c sony_44.c
     sony_60.c
+    js8_marks_24.c
 )

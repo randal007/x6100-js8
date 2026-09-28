@@ -2643,3 +2643,76 @@ TEST_CASE("js8_process keeps messages and answers them", "[js8][held]") {
     unlink(ipath);
     unlink(hpath);
 }
+
+TEST_CASE("stations heard through a relay are listed via it; aging is adjustable", "[js8][stations]") {
+    StationList list;
+    StationEvent direct;
+    direct.from    = "W1ABC";
+    direct.text    = "W1ABC: @HB HEARTBEAT FN42";
+    direct.snr     = -9;
+    direct.when_ms = 1000;
+    list.add(direct, "K2XYZ");
+    list.add_via("W1ABC", "N0XYZ", 1500, 0, 2000); // heard directly: kept
+    list.add_via("VE7ABC", "N0XYZ", 1500, 0, 3000);
+    auto l = list.sorted(4000);
+    REQUIRE(l.size() == 2);
+    CHECK(l[0].call == "VE7ABC");
+    CHECK(l[0].via == "N0XYZ");
+    CHECK(l[0].snr == -64);
+    CHECK(l[1].via.empty());
+    CHECK(l[1].snr == -9);
+    direct.from = "VE7ABC"; // then heard directly: no longer "via"
+    direct.when_ms = 5000;
+    list.add(direct, "K2XYZ");
+    CHECK(list.sorted(6000)[0].via.empty());
+    // Aging: 0 keeps everything; the default drops after an hour.
+    CHECK(list.sorted(1000 + StationList::EXPIRE_MS + 10).size() == 1);
+    CHECK(list.sorted(1000 + StationList::EXPIRE_MS + 10, 0).size() == 2);
+    CHECK(list.sorted(10'000, 5500).size() == 1);
+}
+
+TEST_CASE("relay stations and command spans for the message list", "[js8][relay]") {
+    auto msg = [](const char *from, const char *text, const char *my_call) {
+        js8_rx_msg_t m{};
+        auto         plan = plan_message(from, "EN52", text);
+        REQUIRE(plan.ok());
+        auto mc = classify(plan.preview, my_call);
+        snprintf(m.from, sizeof(m.from), "%s", from);
+        snprintf(m.text, sizeof(m.text), "%s", plan.preview.c_str());
+        m.to_me    = mc.to_me;
+        m.checksum = 1;
+        return m;
+    };
+    char calls[4][JS8_RX_CALL_LEN], via[16];
+    auto end = msg("K2XYZ", "W1ABC>HELLO *DE* N0XYZ *DE* VE7ABC", "W1ABC");
+    REQUIRE(js8_relay_stations(&end, "W1ABC", calls, 4, via, sizeof(via)) == 2);
+    CHECK(std::string(via) == "K2XYZ");
+    CHECK(std::string(calls[0]) == "VE7ABC");
+    CHECK(std::string(calls[1]) == "N0XYZ");
+    auto on  = msg("N0XYZ", "K2XYZ>W1ABC HELLO", "K2XYZ"); // passed on, not ending here
+    CHECK(js8_relay_stations(&on, "K2XYZ", calls, 4, via, sizeof(via)) == 0);
+    auto ack = msg("K2XYZ", "W1ABC>ACK *DE* N0XYZ", "W1ABC");
+    CHECK(js8_relay_stations(&ack, "W1ABC", calls, 4, via, sizeof(via)) == 0);
+
+    struct Case {
+        const char *text, *cmd;
+    };
+    for (auto c : std::vector<Case>{
+             {"N0XYZ: K2XYZ SNR?", "SNR?"},
+             {"N0XYZ: K2XYZ MSG HELLO THERE", "MSG"},
+             {"N0XYZ: K2XYZ MSG TO: W1ABC HI", "MSG TO:"},
+             {"N0XYZ: K2XYZ QUERY MSGS", "QUERY MSGS"},
+             {"N0XYZ: K2XYZ ACK", "ACK"},
+             {"N0XYZ: K2XYZ > W1ABC HI", ">"},
+             {"N0XYZ: @ALLCALL CQ CQ CQ FN42", "CQ CQ CQ"},
+             {"N0XYZ: K2XYZ HEARTBEAT SNR -08", "HEARTBEAT SNR"},
+             {"N0XYZ: K2XYZ HELLO THERE", nullptr},
+             {"HELLO THERE", nullptr},
+         }) {
+        INFO(c.text);
+        unsigned s = 0, n = 0;
+        bool     ok = js8_command_span(c.text, &s, &n);
+        CHECK(ok == (c.cmd != nullptr));
+        if (ok && c.cmd) CHECK(std::string(c.text).substr(s, n) == c.cmd);
+    }
+}

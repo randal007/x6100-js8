@@ -130,6 +130,9 @@ typedef struct {
     params_bool_t       js8_hb;
     params_bool_t       js8_hb_ack;
     params_bool_t       js8_relay;       /* pass relays (>) on and hold MSG TO: for others, as desktop */
+    params_uint8_t      js8_st_keep;     /* Settings: how long stations stay listed (index) */
+    params_uint8_t      js8_msg_keep;    /* Settings: how long messages stay listed (index) */
+    params_bool_t       js8_miles;       /* Settings: distances in miles, not km */
     params_uint16_t     js8_hb_interval;
     params_uint16_t     js8_cq_interval; /* auto CQ: minutes after each CQ ends */
     params_bool_t       js8_log_prompt;  /* offer to log when a QSO ends */

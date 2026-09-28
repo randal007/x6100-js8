@@ -100,9 +100,64 @@ extern "C" void js8_stations_add(js8_stations_t *s, const js8_rx_msg_t *m, const
     s->list.add(ev, my_call ? my_call : "");
 }
 
+namespace {
+std::int64_t g_station_expire_ms = StationList::EXPIRE_MS;
+}
+
+extern "C" void js8_stations_set_expire_ms(int64_t ms) {
+    g_station_expire_ms = ms;
+}
+
+extern "C" void js8_stations_add_via(js8_stations_t *s, const char *call, const char *via, float freq_hz,
+                                     uint8_t submode, int64_t now_ms) {
+    if (!s || !call || !via) return;
+    s->list.add_via(call, via, freq_hz, submode, now_ms, g_station_expire_ms);
+}
+
+extern "C" int js8_relay_stations(const js8_rx_msg_t *msg, const char *my_call, char (*out)[JS8_RX_CALL_LEN],
+                                  int max, char *via, unsigned via_len) {
+    if (!msg || msg->tx || !my_call || !my_call[0] || !msg->to_me || msg->checksum != 1) return 0;
+    auto d = parse_directed(msg->text);
+    if (!d || d->cmd != ">" || relay_next_hop(d->text) || d->text.rfind("ACK", 0) == 0) return 0;
+    auto calls = relay_path_calls(d->from, d->text);
+    copy_str(via, via_len, d->from);
+    int n = 0;
+    for (std::size_t i = 1; i < calls.size() && n < max; i++) {
+        if (base_callsign(calls[i]) == base_callsign(my_call)) continue;
+        copy_str(out[n++], JS8_RX_CALL_LEN, calls[i]);
+    }
+    return n;
+}
+
+extern "C" bool js8_command_span(const char *text, unsigned *start, unsigned *len) {
+    if (!text) return false;
+    std::string t = text;
+    auto        d = parse_directed(t);
+    if (!d) return false;
+    // After "FROM: TO": the command, or a CQ's "CQ CQ CQ".
+    auto pos = t.find(": ");
+    pos      = t.find(d->to, pos == std::string::npos ? 0 : pos + 2);
+    if (pos == std::string::npos) return false;
+    pos += d->to.size();
+    std::string cmd = d->cmd == ">" ? ">" : d->cmd.size() > 1 ? d->cmd.substr(1) : "";
+    std::size_t at  = std::string::npos, n = 0;
+    if (!cmd.empty()) {
+        at = t.find(cmd, pos);
+        n  = cmd.size();
+    } else if (d->text.rfind("CQ", 0) == 0) { // "@ALLCALL CQ CQ CQ FN42"
+        at = t.find("CQ", pos);
+        n  = 2;
+        while (at != std::string::npos && t.compare(at + n, 3, " CQ") == 0) n += 3;
+    }
+    if (at == std::string::npos || at > pos + 2) return false; // right after the target only
+    if (start) *start = (unsigned)at;
+    if (len) *len = (unsigned)n;
+    return true;
+}
+
 extern "C" int js8_stations_list(js8_stations_t *s, int64_t now_ms, js8_station_t *out, int max) {
     if (!s || !out || max <= 0) return 0;
-    auto list = s->list.sorted(now_ms);
+    auto list = s->list.sorted(now_ms, g_station_expire_ms);
     int  n    = std::min<int>(max, (int)list.size());
     for (int i = 0; i < n; i++) {
         const auto &st = list[i];
@@ -118,6 +173,7 @@ extern "C" int js8_stations_list(js8_stations_t *s, int64_t now_ms, js8_station_
         o.heard_me_ms      = st.heard_me_ms;
         o.has_reported_snr = st.reported_snr.has_value();
         o.reported_snr     = (int16_t)st.reported_snr.value_or(0);
+        copy_str(o.via, sizeof(o.via), st.via);
     }
     return n;
 }

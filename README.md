@@ -163,12 +163,17 @@ keyboard works too; lowercase is typed as capitals.
 | purple | contains one of your [alert words](#alerts) |
 | `[...]` | a low-confidence decode |
 | ends in `...` | a long message still arriving; the row grows each decode cycle |
+| ends in `♢` | the message's last frame arrived (desktop's end-of-transmission mark) |
+| yellow words | the command (`SNR?`, `MSG`, `ACK`, `>`, `CQ CQ CQ` ...) |
 
 **Stations view** (page 3, *Show Stations*): one row per station, like
 desktop's Call Activity. `*` and gold: they heard you (they replied or
 acknowledged your heartbeat), with the report they gave you ("heard you
-−13"). Then time since heard, their SNR here, speed, grid and distance.
-Calls you've logged are green. Stations drop off after an hour.
+−13"). Then time since heard, their SNR here, speed, grid, distance and
+bearing (degrees from north). Calls you've logged are green. Stations
+named in a relay that reached you show *via* the station that passed it
+on, as on desktop. Stations drop off an hour after they were last heard
+(*Stations kept* in [Settings](#settings)).
 
 **Grids** come from heartbeats, CQs and messages. Longer grids are kept to
 6 characters, the most precise one wins, and the `RR73` sign-off is never
@@ -346,6 +351,9 @@ Page 4 **Settings…**:
 | **STATUS: …** | What AUTO sends for STATUS? |
 | **Relay: On / Off** | Press to switch. On (the default, as on desktop): relays are passed on and `MSG TO:` messages held for others. Off: both are ignored (desktop's *Disable message relay*). |
 | **Groups: …** | The groups you're in, e.g. `@NET @CANADA` (desktop's *My groups*): messages and questions to them are answered as if to you, and `MSG TO:@NET` messages are held for their members. |
+| **Stations kept: …** | Press to change: how long a station stays in the Stations view after it was last heard (15 min to 6 hours, or always; 1 hour to start). |
+| **Messages kept: …** | Press to change: messages leave the list this long after they arrived (15 min to 2 hours), or *all* (the default: the newest 200 stay). |
+| **Distance: km / miles** | Press to switch the Stations view's distances (km to start). |
 
 ## Logging
 
@@ -537,6 +545,11 @@ Done for beta 4 so far:
 - [x] Rows without a callsign: the green bar marks those on the selected
   station's frequency, and with the MFK on one, every row on its frequency
   (nobody new is selected)
+- [x] Commands in yellow in the list (`SNR?`, `MSG`, `>`, `CQ CQ CQ` ...),
+  and desktop's end-of-message mark `♢` on messages whose last frame arrived
+- [x] Stations view: bearing column, km or miles (Settings), and stations
+  heard through a relay listed *via* it, as on desktop
+- [x] Settings: how long stations and messages stay listed
 
 Still to do:
 

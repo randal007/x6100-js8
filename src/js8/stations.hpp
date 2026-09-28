@@ -24,6 +24,7 @@ struct Station {
     bool         heard_me = false;       ///< they have sent us something
     std::int64_t heard_me_ms = 0;
     std::optional<int> reported_snr;     ///< how they hear us, if they said
+    std::string  via;            ///< only heard through this relay station (desktop's "through")
 };
 
 /// One decoded message, as the station list needs it.
@@ -44,9 +45,15 @@ public:
 
     void add(const StationEvent &ev, const std::string &my_call);
 
-    /// Stations heard within EXPIRE_MS: those that heard us first (most
-    /// recent first), then the rest by most recently heard.
-    std::vector<Station> sorted(std::int64_t now_ms) const;
+    /// `call` named in a relay that reached us through `via` (desktop puts
+    /// a relay path's stations in its Call Activity). A station heard
+    /// directly within `expire_ms` keeps what we heard of it.
+    void add_via(const std::string &call, const std::string &via, float freq_hz, int mode, std::int64_t when_ms,
+                 std::int64_t expire_ms = EXPIRE_MS);
+
+    /// Stations heard within `expire_ms` (0: all): those that heard us
+    /// first (most recent first), then the rest by most recently heard.
+    std::vector<Station> sorted(std::int64_t now_ms, std::int64_t expire_ms = EXPIRE_MS) const;
 
     void clear() { stations_.clear(); }
 
