@@ -866,12 +866,12 @@ static void table_draw_cb(lv_event_t *e) {
                                                         : lv_color_black();
     } else {
         const js8_rx_msg_t *m = &history[h];
-        if (m->tx) {
-            dsc->rect_dsc->bg_color = lv_color_hex(0x1830a0);
+        if (m->tx) { /* red: transmitting, as the TX bar */
+            dsc->rect_dsc->bg_color = lv_color_hex(0xB00000);
         } else if (m->alert) {
             dsc->rect_dsc->bg_color = lv_color_hex(ALERT_COLOR);
         } else if (m->to_me) {
-            dsc->rect_dsc->bg_color = lv_color_hex(0xB00000);
+            dsc->rect_dsc->bg_color = lv_color_hex(0x1830a0);
         } else if (m->cq) {
             dsc->rect_dsc->bg_color = lv_color_hex(0x006000);
         } else if (m->heartbeat) {

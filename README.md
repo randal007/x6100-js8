@@ -14,8 +14,8 @@ the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
-*On the radio: our heartbeats (blue) acknowledged by KK7RFI (+07, red, to
-us), other stations' traffic, and a CQ sent at Turbo speed (`T`).*
+*On the radio (beta 3 colours): our heartbeats acknowledged by KK7RFI
+(+07, to us), other stations' traffic, and a CQ sent at Turbo speed (`T`).*
 
 ## Contents
 
@@ -143,8 +143,8 @@ keyboard works too; lowercase is typed as capitals.
 
 | Row | Means |
 |---|---|
-| blue | sent by you |
-| red | to you |
+| red | sent by you |
+| blue | to you |
 | green | a CQ |
 | grey text | heartbeats |
 | dark blue | to a group (`@ALLCALL`, `@HB`, ...) |
@@ -514,6 +514,11 @@ gain the relay path from then on.
   to change.
 
 ## Coming next
+
+Done for beta 4 so far:
+
+- [x] Your own messages are red (as when transmitting) and messages to you
+  blue; it was the other way round
 
 - [ ] On-air tests: relays and store and forward with desktop JS8Call
   stations, the APRS gateways, a long message watched to the end
