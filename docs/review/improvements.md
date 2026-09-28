@@ -33,6 +33,7 @@ numbers refer to that commit.
 | I-15 | F45, F46, F59 | Work out each row's colours and fields once, not on every redraw | efficiency | medium |
 | I-16 | F42, F43 | Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes | efficiency | low |
 | I-17 | F58, F62 | Forget expired stations; look one up without copying the list | efficiency | medium |
+| I-18 | F63, F67, F40 | One "from a popup into the keyboard" helper | simplify | medium |
 
 ## Batch 1: Transmitting and the radio
 
@@ -235,3 +236,18 @@ on a busy band that's thousands of entries copied and sorted per message.
 Erase entries past the expiry in `add()` (or every few minutes), and add a
 `js8_stations_find(call)` that looks the key up directly. It also fixes
 the 200-station blind spot in B-20.
+
+## Batch 7: Sending by hand
+
+### I-18. One "from a popup into the keyboard" helper — simplify, medium
+
+The same six steps are written out in `texts_item_cb`, `query_msg_cb`,
+`freq_item_cb`, the Inbox items (`inbox_leave` + `msg_compose`), the log,
+alerts, spot and beacon forms: take the list's buttons out of the group,
+`lv_obj_del_async` the list, NULL its pointer, set `edit_target`,
+`compose_open(prefill)`, `lv_group_set_editing(true)`, then a hint. Each
+copy has to get the order right (memory: "lists opening the keyboard
+remove their buttons from the group first"), and none of them undoes
+`edit_target` when `compose_open()` refuses (B-16). One
+`popup_to_keyboard(list, target, prefill, hint)` would hold the rule and
+the reset in one place.

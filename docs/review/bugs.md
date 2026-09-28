@@ -37,6 +37,9 @@ Findings from the earlier hunt ([bug-hunt-2026-09-28.md](../bug-hunt-2026-09-28.
 | B-18 | F12, F62 | QUERY CALL about a station heard only through a relay gets no answer | low | confirmed |
 | B-19 | F56 | The VOL knob does nothing while most popups are open | low | confirmed |
 | B-20 | F60, F83 | "New station" alerts again for a station that dropped off the list | low | likely |
+| B-21 | F66 | AGN? repeats what we last queued, not what went out | low | confirmed |
+| B-22 | F63 | The keyboard refuses some characters JS8 can send ($, %, [ and others) | low | confirmed |
+| B-23 | F63, F72 | A message that's too long freezes the frame count instead of saying so | low | confirmed |
 
 ## Batch 1: Transmitting and the radio
 
@@ -457,3 +460,47 @@ the sorted list: past that (a busy band with "Stations kept: 6 hours" or
 
 **Fix:** keep a separate "heard since power-on" set of calls (or
 per-dial), and look the call up by key (see I-17).
+
+## Batch 7: Sending by hand
+
+### B-21. AGN? repeats what we last queued, not what went out — low, confirmed
+
+**Where:** `src/dialog_js8.c:1682` (`tx_queue_at` sets `last_tx_text`
+when a message is queued); `src/js8/autoreply.cpp:187-191`.
+
+**What goes wrong:** desktop's `m_lastTxMessage` is built from the frames
+actually sent, as they're sent (`mainwindow.cpp:3380-3385`), and cleared
+when the band changes (`:2728`). Ours is whatever was last *queued*: a
+message stopped before its first frame, or one sent on the previous band,
+is what an `AGN?` gets.
+
+**Fix:** set `last_tx_text` from the transmitter's `on_tx_done` (the text
+sent, or the frames that went out when it was stopped), and clear it in
+`retuned()`.
+
+### B-22. The keyboard refuses characters JS8 can send — low, confirmed
+
+**Where:** `src/dialog_js8.c:1886` (`lv_textarea_set_accepted_chars`).
+
+**What goes wrong:** `is_sendable_char()` takes all printable ASCII
+(`tx.cpp:73-78`, and the tests check they all round-trip), and desktop's
+text boxes take any non-control character
+(`Configuration.cpp:207`, `[^\x00-\x1F]*`). The compose box's list
+leaves out ten of them: dollar, percent, less-than, both square
+brackets, caret, vertical bar, tilde, backslash and backtick. So "COSTS $5" or "50%" can't be typed
+into a message or an SMS, and a Reply prefilled with one of them loses it
+silently (the filter also applies to prefilled text).
+
+**Fix:** accept every character `js8_tx_sendable_char()` accepts.
+
+### B-23. A message that's too long freezes the frame count instead of saying so — low, confirmed
+
+**Where:** `src/dialog_js8.c:1748-1755` (`compose_changed_cb`).
+
+**What goes wrong:** the live "N frames, S s" line is only updated while
+the preview is OK. Past 20 frames (`TX_MAX_FRAMES`) the plan fails with
+"too long: 21 frames (max 20)", and the line just keeps showing the last
+good count; you only find out on Enter. Rare with 160 characters of
+ordinary text, easier with many escaped punctuation characters.
+
+**Fix:** show `pv.error` when the preview fails.

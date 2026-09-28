@@ -30,7 +30,7 @@ The review reads code only: **no code is changed**.
 | 4 | Inbox, saved data, settings | F32–F41 | ✅ 2026-09-28: 4 bugs (1 medium), 2 improvements |
 | 5 | The screen | F42–F52 | ✅ 2026-09-28: no new bugs, 3 improvements (1 high) |
 | 6 | Selecting, navigating, Stations | F53–F62 | ✅ 2026-09-28: 3 bugs (all low), 1 improvement |
-| 7 | Sending by hand | F63–F72 | |
+| 7 | Sending by hand | F63–F72 | ✅ 2026-09-28: 3 bugs (all low), 1 improvement |
 | 8 | Logging and APRS | F73–F82 | |
 | 9 | Alerts, time, app life cycle, firmware hooks | F83–F92 | |
 | 10 | Engine, build, tests, tools, docs | F93–F101 | |
@@ -268,22 +268,32 @@ What an unattended station sends by itself.
 
 ## Batch 7: Sending by hand
 
-- [ ] **F63. Compose window**: `compose_open`, `compose_ok_cb`,
+- [x] **F63. Compose window**: `compose_open`, `compose_ok_cb`,
   `compose_cancel_cb`, accepted characters, prefill, layout, live frame
   count (`compose_changed_cb`, `compose_insert_cb`, `compose_layout`).
-- [ ] **F64. Reply**: `reply_cb` (offer, selected station, prefill).
-- [ ] **F65. Send...**: `send_cb`.
-- [ ] **F66. HW CPY? and AGN?**: `hw_cpy_cb`, `last_tx_text`.
-- [ ] **F67. Query list**: `query_cb`, `query_item_cb`, `query_msg_cb`,
+  → B-16 (batch 4), B-22, B-23, I-18. Fine: lowercase taken as capitals, the window stays open when a send is refused.
+- [x] **F64. Reply**: `reply_cb` (offer, selected station, prefill).
+  → nothing new. BH-5 still there. Fine: the offer is used only for the same station within 5 min; an edited offer isn't counted as a delivery.
+- [x] **F65. Send...**: `send_cb`.
+  → nothing new.
+- [x] **F66. HW CPY? and AGN?**: `hw_cpy_cb`, `last_tx_text`.
+  → B-21.
+- [x] **F67. Query list**: `query_cb`, `query_item_cb`, `query_msg_cb`,
   `js8_query_text` (SNR?, GRID?, INFO?, STATUS?, HEARING?, QUERY MSGS,
   Fetch message #, Relay via them, Can they reach).
-- [ ] **F68. CQ button**: `cq_cb`, `send_cq`.
-- [ ] **F69. Heartbeat button**: `heartbeat_cb` (restarts the HB timer).
-- [ ] **F70. Speed**: `speed_cb`, `speed_hold_cb`, `selected_speed`,
+  → nothing new. Fine: texts as desktop's call menu; Message / via / Fetch / Relay / QUERY CALL prefills.
+- [x] **F68. CQ button**: `cq_cb`, `send_cq`.
+  → nothing new (auto CQ: B-08, B-09). Fine: 4-character grid; a single CQ switches HB off, as desktop's does.
+- [x] **F69. Heartbeat button**: `heartbeat_cb` (restarts the HB timer).
+  → nothing new (offset: B-03). Fine: restarts the HB timer, refused in Turbo, not taken as a QSO start.
+- [x] **F70. Speed**: `speed_cb`, `speed_hold_cb`, `selected_speed`,
   `speed_warn`, `set_speed`. Earlier: BH-15.
-- [ ] **F71. Decode button**: `decode_cb` (this speed or all).
-- [ ] **F72. Frame preview and sendable characters**: `js8_tx_preview`,
+  → nothing new. BH-15 still there. Fine: refused while sending, offset clamped to the new speed, HB timer restarted.
+- [x] **F71. Decode button**: `decode_cb` (this speed or all).
+  → nothing new.
+- [x] **F72. Frame preview and sendable characters**: `js8_tx_preview`,
   `js8_tx_sendable_char`, `tx_preview`.
+  → B-23.
 
 ## Batch 8: Logging and APRS
 
