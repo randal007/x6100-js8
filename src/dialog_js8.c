@@ -292,6 +292,7 @@ static lv_obj_t      *freq_list;       /* Freq popup, when open */
 static lv_obj_t      *spot_list;       /* POTA / SOTA spot form, when open */
 static char           alert_words[128]; /* "VE7ABC @POTA SOTA", ALERTS= in JS8_TEXTS_PATH */
 static char           groups_text[96];  /* "@NET @GROUP2": groups we're in, GROUPS= in JS8_TEXTS_PATH */
+static char           operator_call[JS8_RX_CALL_LEN]; /* logged as OPERATOR ("": the station call), OPERATOR= */
 static bool           st_alert[MAX_ROWS]; /* st_rows matching an alert word */
 static js8_inbox_t   *inbox;           /* MSGs to us, JS8_INBOX_PATH */
 static js8_held_t    *held;            /* MSG TO: messages held for others, JS8_HELD_PATH */
@@ -370,6 +371,7 @@ typedef enum {
     EDIT_INFO = 1,
     EDIT_STATUS,
     EDIT_GROUPS,   /* Settings: the groups we're in */
+    EDIT_OPERATOR, /* Settings: the operator, if not the station call */
     EDIT_LOG_GRID, /* the Log popup's fields, then back to it */
     EDIT_LOG_NAME,
     EDIT_LOG_NOTE,
@@ -1811,6 +1813,24 @@ static bool compose_ok_cb(void) {
         log_edit_done(textarea_window_get());
         return true;
     }
+    if (edit_target == EDIT_OPERATOR) {
+        const char *typed = textarea_window_get();
+        while (*typed == ' ') typed++;
+        if (!*typed) {
+            operator_call[0] = '\0';
+            msg_update_text_fmt("Operator: the station call (%s)", params.callsign.x);
+        } else if (js8_operator_call_valid(typed, operator_call, sizeof(operator_call))) {
+            msg_update_text_fmt("Operator %s: logged as OPERATOR; %s is still sent on the air", operator_call,
+                                params.callsign.x);
+        } else {
+            msg_update_text_fmt("Not a callsign: letters, digits and /, e.g. VA7XYZ");
+            return false; /* keep the keyboard open */
+        }
+        save_texts();
+        edit_target = 0;
+        compose_close();
+        return true;
+    }
     if (edit_target == EDIT_GROUPS) {
         js8_groups_normalise(textarea_window_get(), groups_text, sizeof(groups_text));
         save_texts();
@@ -1873,6 +1893,7 @@ static void compose_open(const char *prefill) {
                                          : edit_target == EDIT_SOTA_REF ? sizeof(last_sota) - 1
                                          : edit_target == EDIT_ALERT_WORDS ? sizeof(alert_words) - 1
                                          : edit_target == EDIT_GROUPS ? sizeof(groups_text) - 1
+                                         : edit_target == EDIT_OPERATOR ? sizeof(operator_call) - 1
                                          : edit_target == EDIT_FREQ ? 9
                                          : edit_target == EDIT_SPOT_REF ? (spot_sota ? sizeof(last_sota) : sizeof(last_pota)) - 1
                                          : edit_target == EDIT_SPOT_FREQ ? 10
@@ -1892,6 +1913,7 @@ static void compose_open(const char *prefill) {
             [EDIT_INFO]     = " INFO, e.g. X6100 5W EFHW",
             [EDIT_STATUS]   = " STATUS, e.g. PORTABLE QRV",
             [EDIT_GROUPS]   = " Your groups, e.g. @NET @CANADA",
+            [EDIT_OPERATOR] = " Operator's call - empty: the station's",
             [EDIT_LOG_GRID] = " Their grid, e.g. DN17",
             [EDIT_LOG_NAME] = " Their name",
             [EDIT_LOG_NOTE] = " Comment for the log",
@@ -3187,7 +3209,7 @@ static void hb_ack_cb(button_data_t *btn) {
 
 static void load_texts(void) {
     info_text[0] = status_text[0] = last_pota[0] = last_sota[0] = alert_words[0] = spot_note[0] = '\0';
-    groups_text[0] = '\0';
+    groups_text[0] = operator_call[0] = '\0';
     FILE *f = fopen(JS8_TEXTS_PATH, "r");
     if (!f) return;
     char line[sizeof(alert_words) + 16];
@@ -3199,6 +3221,8 @@ static void load_texts(void) {
         if (strncmp(line, "SOTA=", 5) == 0) snprintf(last_sota, sizeof(last_sota), "%s", line + 5);
         if (strncmp(line, "ALERTS=", 7) == 0) js8_alert_words_normalise(line + 7, alert_words, sizeof(alert_words));
         if (strncmp(line, "GROUPS=", 7) == 0) js8_groups_normalise(line + 7, groups_text, sizeof(groups_text));
+        if (strncmp(line, "OPERATOR=", 9) == 0 && !js8_operator_call_valid(line + 9, operator_call, sizeof(operator_call)))
+            operator_call[0] = '\0';
         if (strncmp(line, "SPOTMODE=", 9) == 0 && line[9]) snprintf(spot_mode, sizeof(spot_mode), "%s", line + 9);
         if (strncmp(line, "SPOTHZ=", 7) == 0) spot_typed_hz = atoi(line + 7);
         if (strncmp(line, "SPOTTYPED=", 10) == 0) spot_use_typed = atoi(line + 10) != 0;
@@ -3218,7 +3242,7 @@ static void save_texts(void) {
             alert_words);
     fprintf(f, "SPOTMODE=%s\nSPOTHZ=%d\nSPOTTYPED=%d\nSPOTNOTE=%s\n", spot_mode, (int)spot_typed_hz, spot_use_typed ? 1 : 0,
             spot_note);
-    fprintf(f, "GROUPS=%s\n", groups_text);
+    fprintf(f, "GROUPS=%s\nOPERATOR=%s\n", groups_text, operator_call);
     fclose(f);
 }
 
@@ -3311,7 +3335,10 @@ static void texts_item_cb(lv_event_t *e) {
     lv_obj_del_async(texts_list);
     texts_list  = NULL;
     edit_target = which;
-    compose_open(which == EDIT_INFO ? info_text : which == EDIT_STATUS ? status_text : groups_text);
+    compose_open(which == EDIT_INFO     ? info_text
+                 : which == EDIT_STATUS ? status_text
+                 : which == EDIT_GROUPS ? groups_text
+                                        : operator_call);
     lv_group_set_editing(keyboard_group, true); /* as after Reply / Send... */
 }
 
@@ -3362,6 +3389,8 @@ static void texts_cb(button_data_t *btn) {
     settings_add(settings_label(SETTINGS_ST_KEEP), SETTINGS_ST_KEEP);
     settings_add(settings_label(SETTINGS_MSG_KEEP), SETTINGS_MSG_KEEP);
     settings_add(settings_label(SETTINGS_MILES), SETTINGS_MILES);
+    snprintf(label, sizeof(label), "Operator: %s", operator_call[0] ? operator_call : "(the station call)");
+    settings_add(label, EDIT_OPERATOR);
 
     lv_obj_t *close = list_add_item(texts_list, "Close");
     lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
@@ -3979,6 +4008,7 @@ static void log_prepare(const char *call) {
     log_entry.off_ms  = now;
     log_entry.freq_hz = (uint64_t)cparam_i_get(cfg_fg_freq) + params.js8_tx_freq.x;
     snprintf(log_entry.my_call, sizeof(log_entry.my_call), "%s", params.callsign.x);
+    snprintf(log_entry.op_call, sizeof(log_entry.op_call), "%s", operator_call);
     my_log_grid(log_entry.my_grid, sizeof(log_entry.my_grid));
     float pwr          = param_f_get(cfg_pwr);
     log_entry.tx_pwr_w = pwr > TX_PLAYER_MAX_PWR_W ? TX_PLAYER_MAX_PWR_W : pwr;
@@ -4114,6 +4144,11 @@ static void log_list_open(log_item_t focus) {
     if (log_entry.pota_ref[0] || log_entry.sota_ref[0]) {
         snprintf(line, sizeof(line), "Activating %s %s", log_entry.pota_ref[0] ? "POTA" : "SOTA",
                  log_entry.pota_ref[0] ? log_entry.pota_ref : log_entry.sota_ref);
+        t = lv_list_add_text(log_list, line);
+        lv_obj_set_style_text_font(t, &sony_22, 0);
+    }
+    if (log_entry.op_call[0]) { /* Settings: operator, not the station call */
+        snprintf(line, sizeof(line), "Operator %s (station %s)", log_entry.op_call, log_entry.my_call);
         t = lv_list_add_text(log_list, line);
         lv_obj_set_style_text_font(t, &sony_22, 0);
     }

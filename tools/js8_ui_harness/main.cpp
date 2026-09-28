@@ -1614,6 +1614,49 @@ int main() {
         screenshot("73_stations_miles.ppm");
         return 0;
     }
+    if (getenv("ONLY_OPERATOR")) {
+        // Settings: an operator call, logged as OPERATOR (desktop's), shown
+        // in the Log popup; the station call stays on the air.
+        unlink(JS8_LOG_PATH);
+        pump(300);
+        ui_page(4);
+        ui_press(4); // Settings
+        pump(200);
+        for (int i = 0; i < 12 && !strstr(ui_focused_text(), "Operator"); i++) ui_key(LV_KEY_RIGHT);
+        printf("[op] '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        ui_compose_append("va7-xyz");
+        ui_compose_enter();
+        pump(200);
+        printf("[op] bad call: keyboard still open %d\n", ui_compose_text()[0] != 0);
+        ui_compose_clear();
+        ui_compose_append("va7xyz");
+        ui_compose_enter();
+        pump(300);
+        ui_press(4);
+        pump(200);
+        for (int i = 0; i < 12 && !strstr(ui_focused_text(), "Operator"); i++) ui_key(LV_KEY_RIGHT);
+        printf("[op] saved: '%s' (want Operator: VA7XYZ)\n", ui_focused_text());
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+        ui_select_row_from("N0XYZ");
+        ui_page(5);
+        ui_press(2); // Log QSO
+        pump(300);
+        printf("[op] log popup shows it: %d, focused '%s'\n", ui_popup_has("Operator VA7XYZ (station K2XYZ)"),
+               ui_focused_text());
+        screenshot("74_log_operator.ppm");
+        ui_click_focused(); // Save to log
+        pump(300);
+        FILE *f = fopen(JS8_LOG_PATH, "r");
+        char  line[1024];
+        while (f && fgets(line, sizeof(line), f))
+            if (strstr(line, "<call:")) printf("[op] logged: %s", strstr(line, "<station_callsign"));
+        if (f) fclose(f);
+        return 0;
+    }
     if (getenv("ONLY_PARTIAL")) {
         // A long message shows as it arrives, one decode cycle at a time.
         pump(300);

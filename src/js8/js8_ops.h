@@ -240,6 +240,7 @@ typedef struct {
     int64_t  on_ms, off_ms;
     uint64_t freq_hz;     /* dial + audio offset */
     char     my_call[JS8_RX_CALL_LEN];
+    char     op_call[JS8_RX_CALL_LEN]; /* OPERATOR, if not the station call ("": my_call) */
     char     my_grid[12];
     float    tx_pwr_w;
     char     pota_ref[16]; /* MY_SIG POTA + MY_SIG_INFO */
@@ -249,6 +250,9 @@ typedef struct {
 /* Append to an ADIF file in desktop JS8Call's format (MODE MFSK, SUBMODE
  * JS8), with a header if the file is new. False with a message in err. */
 bool js8_log_append(const char *path, const js8_log_entry_t *e, char *err, unsigned err_len);
+/* A callsign someone could operate under: letters, digits and '/', with a
+ * digit, e.g. "VE7NHW" or "VE7NHW/P", upper-cased into out. */
+bool js8_operator_call_valid(const char *typed, char *out, unsigned out_len);
 /* "40m", or "" outside the bands. */
 const char *js8_log_band(uint64_t freq_hz);
 

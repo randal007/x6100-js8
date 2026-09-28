@@ -32,6 +32,8 @@
 #include <condition_variable>
 #include <mutex>
 #include <random>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
@@ -2715,4 +2717,36 @@ TEST_CASE("relay stations and command spans for the message list", "[js8][relay]
         CHECK(ok == (c.cmd != nullptr));
         if (ok && c.cmd) CHECK(std::string(c.text).substr(s, n) == c.cmd);
     }
+}
+
+TEST_CASE("the operator callsign goes to the ADIF OPERATOR field", "[js8][log]") {
+    char path[] = "/tmp/js8_op_adif_XXXXXX";
+    int  fd     = mkstemp(path);
+    REQUIRE(fd >= 0);
+    close(fd);
+    unlink(path);
+    js8_log_entry_t e{};
+    snprintf(e.call, sizeof(e.call), "W1ABC");
+    snprintf(e.my_call, sizeof(e.my_call), "VE7NHW");
+    e.on_ms = e.off_ms = 1'790'000'000'000;
+    e.freq_hz          = 14'079'500;
+    char err[64];
+    REQUIRE(js8_log_append(path, &e, err, sizeof(err))); // none set: the station call, as desktop
+    snprintf(e.op_call, sizeof(e.op_call), "VA7XYZ");
+    REQUIRE(js8_log_append(path, &e, err, sizeof(err)));
+    std::ifstream     f(path);
+    std::stringstream all;
+    all << f.rdbuf();
+    auto text = all.str();
+    CHECK(text.find("<operator:6>VE7NHW") != std::string::npos);
+    CHECK(text.find("<operator:6>VA7XYZ") != std::string::npos);
+    CHECK(text.find("<station_callsign:6>VE7NHW") != std::string::npos);
+    unlink(path);
+
+    char out[16];
+    CHECK(js8_operator_call_valid("va7xyz/p", out, sizeof(out)));
+    CHECK(std::string(out) == "VA7XYZ/P");
+    CHECK_FALSE(js8_operator_call_valid("HELLO", out, sizeof(out)));
+    CHECK_FALSE(js8_operator_call_valid("VA7-XYZ", out, sizeof(out)));
+    CHECK_FALSE(js8_operator_call_valid("", out, sizeof(out)));
 }

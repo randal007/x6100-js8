@@ -17,6 +17,7 @@
 #include "stations.hpp"
 
 #include <algorithm>
+#include <cctype>
 #include <map>
 #include <string>
 #include <cstring>
@@ -477,7 +478,7 @@ extern "C" bool js8_log_append(const char *path, const js8_log_entry_t *e, char 
     le.off_ms   = e->off_ms;
     le.freq_hz  = e->freq_hz;
     le.my_call  = e->my_call;
-    le.op_call  = e->my_call;
+    le.op_call  = e->op_call[0] ? e->op_call : e->my_call; /* desktop: the operator, else the station */
     le.my_grid  = e->my_grid;
     le.tx_pwr_w = e->tx_pwr_w;
     le.pota_ref = e->pota_ref;
@@ -486,6 +487,20 @@ extern "C" bool js8_log_append(const char *path, const js8_log_entry_t *e, char 
     if (adif_append(path, le, msg)) return true;
     copy_str(err, err_len, msg);
     return false;
+}
+
+extern "C" bool js8_operator_call_valid(const char *typed, char *out, unsigned out_len) {
+    std::string c;
+    for (const char *p = typed ? typed : ""; *p; p++)
+        if (*p != ' ') c += (char)std::toupper((unsigned char)*p);
+    bool digit = false, ok = c.size() >= 3 && c.size() < JS8_RX_CALL_LEN;
+    for (char ch : c) {
+        digit |= std::isdigit((unsigned char)ch) != 0;
+        ok &= std::isalnum((unsigned char)ch) || ch == '/';
+    }
+    if (!ok || !digit) return false;
+    copy_str(out, out_len, c);
+    return true;
 }
 
 extern "C" const char *js8_log_band(uint64_t freq_hz) {

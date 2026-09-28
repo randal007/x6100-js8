@@ -354,6 +354,7 @@ Page 4 **Settings…**:
 | **Stations kept: …** | Press to change: how long a station stays in the Stations view after it was last heard (15 min to 6 hours, or always; 1 hour to start). |
 | **Messages kept: …** | Press to change: messages leave the list this long after they arrived (15 min to 2 hours), or *all* (the default: the newest 200 stay). |
 | **Distance: km / miles** | Press to switch the Stations view's distances (km to start). |
+| **Operator: …** | Someone else operating your station (desktop's *Operator Callsign*): their call goes in the log as `OPERATOR`; your station call is still what's sent on the air and logged as `STATION_CALLSIGN`. Empty: the station call. |
 
 ## Logging
 
@@ -550,6 +551,8 @@ Done for beta 4 so far:
 - [x] Stations view: bearing column, km or miles (Settings), and stations
   heard through a relay listed *via* it, as on desktop
 - [x] Settings: how long stations and messages stay listed
+- [x] Settings: an operator callsign different from the station's, logged
+  as `OPERATOR` (shown in the Log popup)
 
 Still to do:
 
