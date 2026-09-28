@@ -22,6 +22,10 @@ The review reads code only: **no code is changed**.
 
 ## Progress
 
+All 101 features reviewed on 2026-09-28: **27 bugs** in [bugs.md](bugs.md)
+(1 high, 3 medium, 23 low; suggested fix order at its top) and **25
+improvements** in [improvements.md](improvements.md).
+
 | Batch | Area | Features | Done |
 |---|---|---|---|
 | 1 | Transmitting and the radio | F01–F10 | ✅ 2026-09-28: 3 bugs (1 high), 6 improvements |
@@ -33,7 +37,7 @@ The review reads code only: **no code is changed**.
 | 7 | Sending by hand | F63–F72 | ✅ 2026-09-28: 3 bugs (all low), 1 improvement |
 | 8 | Logging and APRS | F73–F82 | ✅ 2026-09-28: no new bugs, 1 improvement |
 | 9 | Alerts, time, app life cycle, firmware hooks | F83–F92 | ✅ 2026-09-28: 3 bugs (all low) |
-| 10 | Engine, build, tests, tools, docs | F93–F101 | |
+| 10 | Engine, build, tests, tools, docs | F93–F101 | ✅ 2026-09-28: 1 bug (low), 6 improvements |
 
 ## Batch 1: Transmitting and the radio
 
@@ -367,17 +371,26 @@ What an unattended station sends by itself.
 
 ## Batch 10: Engine, build, tests, tools, docs
 
-- [ ] **F93. js8core local patches 1–11**: `third-party/js8core`,
+- [x] **F93. js8core local patches 1–11**: `third-party/js8core`,
   `UPSTREAM.md`.
-- [ ] **F94. WAV playback and test signals**: `src/js8/wav.cpp`,
+  → nothing new. Fine: patches as UPSTREAM.md describes, tested (11 bit for bit with desktop). Offering them upstream still open.
+- [x] **F94. WAV playback and test signals**: `src/js8/wav.cpp`,
   `testsignal.cpp`, `js8_rx_play_wav`, `tools/js8_wavgen`.
-- [ ] **F95. Unit tests**: `tests/test_js8.cpp`, `run_tests.sh`.
-- [ ] **F96. UI harness**: `tools/js8_ui_harness` (`driver.c`,
+  → I-22. Fine: WAV parsing checks sizes and formats.
+- [x] **F95. Unit tests**: `tests/test_js8.cpp`, `run_tests.sh`.
+  → I-20, and gaps listed elsewhere (I-01, I-10, I-13).
+- [x] **F96. UI harness**: `tools/js8_ui_harness` (`driver.c`,
   `stubs.c`, `main.cpp`).
-- [ ] **F97. CI build and release**: `.github/workflows/main.yml`.
-- [ ] **F98. Build files**: `CMakeLists.txt`, `src/js8/CMakeLists.txt`,
+  → I-20, I-01. Its waterfall benchmark can't see timer-driven redraws (I-14).
+- [x] **F97. CI build and release**: `.github/workflows/main.yml`.
+  → I-20, I-21.
+- [x] **F98. Build files**: `CMakeLists.txt`, `src/js8/CMakeLists.txt`,
   js8core's CMake.
-- [ ] **F99. Flash script**: `~/Work/bin/x6100-flash` (outside the repo).
-- [ ] **F100. Console and screenshot helpers**: `~/Work/bin/x6100-console`,
+  → I-22 (warnings). Fine: C++20 kept private to js8core, the test-signal library not linked into the app, buildroot builds -O3.
+- [x] **F99. Flash script**: `~/Work/bin/x6100-flash` (outside the repo).
+  → B-27, I-24. Fine: card found by serial and size, image size checked against DATA, backup, confirmation, DATA compared after.
+- [x] **F100. Console and screenshot helpers**: `~/Work/bin/x6100-console`,
   `x6100-screenshot` (outside the repo).
-- [ ] **F101. README and docs against the code**: is the manual right?
+  → I-23.
+- [x] **F101. README and docs against the code**: is the manual right?
+  → I-25. Fine: the button pages and the Settings section match the code.

@@ -35,6 +35,12 @@ numbers refer to that commit.
 | I-17 | F58, F62 | Forget expired stations; look one up without copying the list | efficiency | medium |
 | I-18 | F63, F67, F40 | One "from a popup into the keyboard" helper | simplify | medium |
 | I-19 | F75 | Keep `MODE_JS8`'s number clear of upstream's | robustness | low |
+| I-20 | F95, F96, F97 | Run the unit tests and the harness in CI | tests | high |
+| I-21 | F97 | Pin buildroot and the third-party actions; find out why tags never build | robustness | medium |
+| I-22 | F94, F98 | Leave the WAV test mode out of the firmware; compiler warnings on | simplify | low |
+| I-23 | F100 | `x6100-console`: refuse to type into a login prompt, and tidy up | robustness | medium |
+| I-24 | F99 | `x6100-flash`: no stale default, check the image's partition table | robustness | low |
+| I-25 | F101 | README: two stale button rows, one number, and a link to this review | docs | low |
 
 ## Batch 1: Transmitting and the radio
 
@@ -280,3 +286,86 @@ avoids it; the few existing records would need a one-off update.
 The same holds for `ACTION_APP_JS8`, appended to `press_action_t`, whose
 values are saved as the long-press actions (`params.h:56`); that enum
 already differs from upstream's (1KO125 added WeFax and NavTex before it).
+
+## Batch 10: Engine, build, tests, tools, docs
+
+The eleven js8core patches read as `UPSTREAM.md` describes them and are
+covered by tests (patch 11 bit for bit against desktop). Offering them
+upstream is still an open question (the js8core bug list went to
+Android-port#104).
+
+### I-20. Run the unit tests and the harness in CI — tests, high
+
+`.github/workflows/main.yml` builds the SD image and nothing else: the 95
+Catch2 tests (`tests/test_js8.cpp`, `run_tests.sh`) and the UI harness
+(`tools/js8_ui_harness`, ASan/UBSan) only run when someone runs them on
+this PC. A separate quick job on `ubuntu-22.04` (fast tests, `~[.slow]`,
+a couple of minutes; then the harness scenarios) on every push and
+before the hour-long image build would catch regressions on GitHub, and
+I-01's close-while-keyed case would then guard B-01 for good.
+
+### I-21. Pin buildroot and the third-party actions; find out why tags never build — robustness, medium
+
+- `gdyuldin/AetherX6100Buildroot` is checked out at whatever its default
+  branch is that day: the same commit can build a different image, and
+  `x6100-flash` assumes the image ends exactly where DATA starts. Pin a
+  commit (`ref:`) and move it on purpose.
+- `jlumbroso/free-disk-space@main` and `softprops/action-gh-release@v2`
+  run with `permissions: contents: write`; pin them to commit SHAs.
+- The workflow has `on: push: tags: '*'`, but all 35 runs on record were
+  started by hand (`workflow_dispatch`), betas 1–3 included (memory:
+  "pushing a tag did NOT start CI"). The repo isn't a fork and Actions are
+  on; the cause isn't visible from here. Worth one test tag, or drop the
+  trigger and keep the documented manual start.
+
+### I-22. Leave the WAV test mode out of the firmware; compiler warnings on — simplify, low
+
+The Test WAV button went in 0e18013, but `js8_rx_play_wav()`, its thread
+and the status bar's "TEST WAV" flag are still built into the firmware,
+unreachable; only the tests and the harness use them. Build `wav.cpp` and
+the play path only for those. Separately, `src/js8/` and `dialog_js8.c`
+are compiled without `-Wall -Wextra` (the ARM syntax check in memory adds
+`-Wall` by hand); turning warnings on for our own targets would make that
+check part of every build.
+
+### I-23. `x6100-console`: refuse to type into a login prompt, and tidy up — robustness, medium
+
+`~/Work/bin/x6100-console` (outside the repo):
+- `cmd` and `send` type into whatever the console shows. The rule "tail
+  first; at a login, a password prompt or the stock Xiegu banner, send
+  nothing" (memory: hands off during flashes) is only procedure. The
+  daemon sees every byte: it can track the last prompt and make
+  `cmd`/`send` refuse (with a message) unless the last thing seen was a
+  root shell prompt.
+- A stale `daemon.pid` after the daemon died gives `OSError: [Errno 6]`;
+  check the PID is alive and say "daemon not running".
+- `daemon` defaults to `/dev/ttyUSB0`; the radio is `/dev/ttyACM0`.
+- `console.log` is never rotated (12 MB now, screenshots add their
+  base64), and `tail` reads the whole file each time; rotate it and read
+  from the end.
+
+### I-24. `x6100-flash`: no stale default, check the image's partition table — robustness, low
+
+Besides B-27: the script only checks the image isn't bigger than DATA's
+start. It could also check the image's own partition table (two
+partitions, ending at `P3_START`) before writing, since `sfdisk --append`
+fails after `dd` if a future image has a third one (see I-21's unpinned
+buildroot). And if two runs happen in the same minute, `cp -a` copies
+DATA *into* the existing backup folder, and the later `diff` then reports
+a difference that isn't there.
+
+### I-25. README: two stale button rows, one number, and a link to this review — docs, low
+
+- The buttons table's **Show Stations** row still says a station "drops
+  off an hour after it was last heard" (now *Stations kept* in Settings),
+  and the **Settings…** row lists only INFO, STATUS, Relay and groups
+  (beta 4 added Stations kept, Messages kept, Distance, Operator; the
+  Settings section itself is up to date).
+- *Messages kept: all* says "the newest 200 stay"; the list is trimmed to
+  150 when it reaches 200, and the app's own message says 150.
+- The list of popups that any button closes leaves out Freq and the spot
+  form.
+- "For developers" and "Still to do" point at the bug hunt only; add
+  `docs/review/`.
+- The power-off known issue (B-02) says "loses power"; holding POWER does
+  the same.

@@ -13,6 +13,20 @@ Findings from the earlier hunt ([bug-hunt-2026-09-28.md](../bug-hunt-2026-09-28.
   left in a wrong state, messages or settings lost), *medium* (wrong
   behaviour you'd notice), *low* (cosmetic or rare).
 
+## Suggested fix order
+
+Combining this review with the earlier bug hunt (BH-n):
+
+1. **B-01** (crash with the radio keyed when the app closes mid-frame),
+   with its harness test (I-01).
+2. **On the air:** BH-10 (band keys mid-transmission), B-07 (WSPR guard).
+3. **Lost data:** BH-8, B-14, B-17, B-15, BH-16, with I-12 and I-13
+   (one safe file writer and tests for damaged files).
+4. **The unattended station, as desktop:** B-04, B-05, BH-7, BH-12,
+   BH-1, BH-2, B-25.
+5. **Smoothness:** I-14 (TX bar redraw), I-17 (station lists), I-15.
+6. The rest, low severity, as convenient; B-16 and B-22 are quick.
+
 ## Summary
 
 | ID | Feature | Bug | Severity | Confidence |
@@ -43,6 +57,7 @@ Findings from the earlier hunt ([bug-hunt-2026-09-28.md](../bug-hunt-2026-09-28.
 | B-24 | F74, F76 | A QSO left unlogged stays first in Log QSO for good | low | confirmed |
 | B-25 | F88 | A stalled screen can silently drop decoded messages (64-item scheduler queue) | low | possible |
 | B-26 | F83 | Alert words miss a word with punctuation attached ("SOTA,") | low | confirmed |
+| B-27 | F99 | `x6100-flash` with no argument writes an old build (18ebf06) | low | confirmed |
 
 ## Batch 1: Transmitting and the radio
 
@@ -561,3 +576,20 @@ The row isn't purple and nothing beeps.
 
 **Fix:** strip leading and trailing punctuation from each token before
 comparing (keep `@` and `/`).
+
+## Batch 10: Engine, build, tests, tools, docs
+
+### B-27. `x6100-flash` with no argument writes an old build — low, confirmed
+
+**Where:** `~/Work/bin/x6100-flash:13` (`RUN="${1:-36383576566}"`),
+outside the repo.
+
+**What goes wrong:** the default is the beta 4 test build of 18ebf06, the
+one on the card today. Once the next build exists, running the script
+without its run id (e.g. from memory, or when Claude isn't available,
+which is what the script is for) quietly puts the old build back. It
+still backs up DATA and asks before writing, so nothing is lost, but the
+radio ends up on the wrong firmware.
+
+**Fix:** require the run id, or default to the newest successful *Build
+image* run on `main` and show its commit before asking (see I-24).
