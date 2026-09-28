@@ -22,9 +22,9 @@ numbers refer to that commit.
 | I-04 | F03 | Plan each message once, not twice | efficiency | low |
 | I-05 | F05, F89 | One list of popups instead of three | simplify | low |
 | I-06 | F01 | Save the learned TX gain once per message, not per frame | efficiency | low |
-| I-07 | F11–F20 | A desktop-parity test table for the auto-reply rules | tests | medium |
-| I-08 | F11, F20 | Decide once, when the reply is actually sent | simplify | low |
-| I-09 | F11 | Prune the auto-reply rate-limit map | efficiency | low |
+| I-07 | F11–F20 | ~~A desktop-parity test table for the auto-reply rules~~ **done in 4140fbb** | tests | medium |
+| I-08 | F11, F20 | ~~Decide once, when the reply is actually sent~~ **done in 4140fbb** | simplify | low |
+| I-09 | F11 | ~~Prune the auto-reply rate-limit map~~ **done in 4140fbb** | efficiency | low |
 | I-10 | F22 | Test the receiver's stall path | tests | low |
 | I-11 | F31 | ~~Size the groups setting for ten groups~~ **done in 4bfb8d6** | robustness | low |
 | I-12 | F32, F33, F38 | ~~One safe "write the file" helper for all three data files~~ **done in 4bfb8d6** | simplify | medium |
@@ -106,6 +106,8 @@ than ~0.1 dB. Shared with FT8, so a change here touches both apps.
 
 ### I-07. A desktop-parity test table for the auto-reply rules — tests, medium
 
+**Done in 4140fbb** (package 3): `[parity]` in `tests/test_js8.cpp`, incoming text and switches against desktop's answer.
+
 `tests/test_js8.cpp` checks our own expectations of `process()`. The
 frame encoder was made bit-for-bit with desktop by building desktop's code
 and comparing (patch 11); `processCommandActivity()` is too tied to Qt for
@@ -119,6 +121,8 @@ between the frames of a message to us.
 
 ### I-08. Decide once, when the reply is actually sent — simplify, low
 
+**Done in 4140fbb** (package 3): `js8_auto_decide()` at send time, from `auto_try_send()`.
+
 `AutoPolicy::decide()` runs when the message is decoded, and `auto_send()`
 checks the switches again because they "may have changed while it
 waited"; the Turbo rule for HB ACKs is only in `auto_send()`, and the
@@ -127,6 +131,8 @@ the decoded reply and calling `decide()` once at send time would put all
 the rules in one place (and is where B-04's hold-off would go too).
 
 ### I-09. Prune the auto-reply rate-limit map — efficiency, low
+
+**Done in 4140fbb** (package 3).
 
 `AutoPolicy::last_sent_` (`autoreply.hpp:128`) gets a key per station and
 command answered and never drops one; `autop` lives until power-off. A

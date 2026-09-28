@@ -29,7 +29,7 @@ Nothing in WP1, WP2 or WP7 waits on these; WP3 does. D1 is decided.
 | D4 | B-05: HB ACK / @ALLCALL cooldown 55 min like desktop? Keep it across power-off (desktop does)? | **Decided 2026-09-28:** 55 min; not kept across power-off. |
 | D5 | B-08: heartbeats on desktop's fixed schedule? Auto CQ: keep "N minutes after each CQ ends" (your choice) but count only from our CQs, not every transmission? | **Decided 2026-09-28: yes to both.** |
 | D6 | B-06: keep our 5-minute "don't answer the same question twice" guard (fixed), or drop it like desktop? | **Decided 2026-09-28: as desktop**: the guard goes; every question is answered. |
-| D7 | BH-5: remember one offered answer per station (so Reply works for each), or keep desktop's single outgoing box? | One per station: small, and our Reply is per station. |
+| D7 | BH-5: remember one offered answer per station (so Reply works for each), or keep desktop's single outgoing box? | **Decided 2026-09-28: yes**, one per station. |
 | D8 | B-14: an Inbox file that can't be read: move it aside, or refuse to save? | **Decided 2026-09-28: A**, move it aside (`<name>.unreadable-<date>`) and say so; refuse to save only if it can't even be moved. |
 | D9 | I-21: pin the buildroot commit CI builds with? (Updates become deliberate.) | Yes. |
 | D10 | I-03 / I-19: our migration numbers and `MODE_JS8 = 8` will collide with upstream's future ones. Renumber now, or write the rule down for the next upstream merge? | Write the rule down; renumbering needs database surgery on your card. |
@@ -77,7 +77,7 @@ backup the flash script makes.
 them fixed in bugs.md. `src/js8/datafile.cpp` holds the safe reader and
 writer; unit tests `[files]`, harness `ONLY_BADFILES`.
 
-### WP3: The unattended station, as desktop (effort L; D1–D6 decided, D7 open)
+### WP3: The unattended station, as desktop — done 2026-09-28
 
 One rework of the automatic-reply path, which fixes most of these at once.
 Today a reply is decided when it's decoded, then waits in one slot
@@ -116,6 +116,17 @@ Today a reply is decided when it's decoded, then waits in one slot
 **On the air afterwards** (your to-do list already has it): with a desktop
 JS8Call station: heartbeats and HB ACKs, a query while a long MSG to you is
 arriving, QUERY MSGS / relays.
+
+**Status:** all done in 4140fbb (B-09 dropped by your decision). As
+built: replies are decided when their decode cycle has ended (desktop
+processes a whole cycle before answering, so a question decoded just
+before the first frame of a message to us is dropped too); the rule for
+B-04 is applied then, and queued replies also wait while a message to us
+is open. Lists hold nothing automatic (replies, heartbeats, auto CQ,
+RETRIEVE MSG notices); only the keyboard does. B-03's "QSO partner's
+offset counts as free" isn't ported: desktop never marks such offsets at
+`d9c50510`. Tests: `[parity]` and the switches/timing unit tests; harness
+`ONLY_REPLYQ` (new) and `ONLY_RETUNE` (now uses the keyboard).
 
 ### WP4: Smoother screen, lighter work (effort M–L)
 

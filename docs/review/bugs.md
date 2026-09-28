@@ -33,14 +33,14 @@ Combining this review with the earlier bug hunt (BH-n):
 |---|---|---|---|---|
 | B-01 | F02, F04, F05 | ~~Closing the app during a transmission crashes it, radio keyed until it restarts~~ **fixed in 2ed19a8** | high | confirmed (reproduced) |
 | B-02 | F05 | Switching off with JS8 open skips its close: back on the JS8 dial, USB-D, 200–3000 Hz (won't fix: user's decision) | low | confirmed |
-| B-03 | F08 | Heartbeat offset chosen differently from desktop | low | confirmed |
-| B-04 | F11, F14 | Automatic replies go out while a message to us is still arriving | medium | confirmed |
-| B-05 | F14 | Heartbeat ACKs every 15 min per station; desktop waits 55 | medium | confirmed |
-| B-06 | F12 | Our 5-minute guard drops a repeated AGN? and relayed questions | low | confirmed |
+| B-03 | F08 | ~~Heartbeat offset chosen differently from desktop~~ **fixed in 4140fbb** | low | confirmed |
+| B-04 | F11, F14 | ~~Automatic replies go out while a message to us is still arriving~~ **fixed in 4140fbb** | medium | confirmed |
+| B-05 | F14 | ~~Heartbeat ACKs every 15 min per station; desktop waits 55~~ **fixed in 4140fbb** | medium | confirmed |
+| B-06 | F12 | ~~Our 5-minute guard drops a repeated AGN? and relayed questions~~ **fixed in 4140fbb** | low | confirmed |
 | B-07 | F07, F11 | No WSPR guard band: can transmit on top of WSPR on 30 m (won't fix: user's decision) | low | confirmed |
-| B-08 | F13, F15 | Heartbeat and auto CQ timing follow the older desktop | low | confirmed |
-| B-09 | F15 | Holding CQ while sending: first CQ a whole interval later | low | confirmed |
-| B-10 | F11 | An `@APRSIS MSG` without `TO:` is kept and ACKed | low | confirmed |
+| B-08 | F13, F15 | ~~Heartbeat and auto CQ timing follow the older desktop~~ **fixed in 4140fbb** | low | confirmed |
+| B-09 | F15 | Holding CQ while sending: first CQ a whole interval later (won't fix: user's decision) | low | confirmed |
+| B-10 | F11 | ~~An `@APRSIS MSG` without `TO:` is kept and ACKed~~ **fixed in 4140fbb** | low | confirmed |
 | B-11 | F22 | After a receiver stall, minute-old audio can decode again as new | low | possible |
 | B-12 | F26, F30 | A message still arriving when JS8 closed can take over a new message's row | low | likely |
 | B-13 | F28 | Any first word starting with "CQ" makes a message a CQ | low | confirmed |
@@ -48,10 +48,10 @@ Combining this review with the earlier bug hunt (BH-n):
 | B-15 | F38, F41 | ~~`js8_texts.txt` is rewritten in place: a power cut can wipe the settings~~ **fixed in 4bfb8d6** | low | confirmed |
 | B-16 | F40, F63 | Without a callsign the keyboard never opens, and leaves a stale edit mode behind | low | confirmed |
 | B-17 | F34, F41 | ~~A message that couldn't be saved is still ACKed~~ **fixed in 4bfb8d6** | low | confirmed |
-| B-18 | F12, F62 | QUERY CALL about a station heard only through a relay gets no answer | low | confirmed |
+| B-18 | F12, F62 | ~~QUERY CALL about a station heard only through a relay gets no answer~~ **fixed in 4140fbb** | low | confirmed |
 | B-19 | F56 | The VOL knob does nothing while most popups are open | low | confirmed |
 | B-20 | F60, F83 | "New station" alerts again for a station that dropped off the list | low | likely |
-| B-21 | F66 | AGN? repeats what we last queued, not what went out | low | confirmed |
+| B-21 | F66 | ~~AGN? repeats what we last queued, not what went out~~ **fixed in 4140fbb** | low | confirmed |
 | B-22 | F63 | The keyboard refuses some characters JS8 can send ($, %, [ and others) | low | confirmed |
 | B-23 | F63, F72 | A message that's too long freezes the frame count instead of saying so | low | confirmed |
 | B-24 | F74, F76 | A QSO left unlogged stays first in Log QSO for good | low | confirmed |
@@ -162,6 +162,8 @@ FT8 too).
 
 ### B-03. Heartbeat offset chosen differently from desktop — low, confirmed
 
+**Fixed in 4140fbb** (package 3): a heartbeat stays on your own offset when it is 1000 Hz or below; the free spot is chosen from every decode of the last 30 s, not only the Stations list. Desktop's other rule (a QSO partner's offset counts as free) isn't ported: at `d9c50510` `markOffsetDirected()` is only called for dummy data, so it never applies on desktop either.
+
 **Where:** `src/dialog_js8.c:2627-2638` (`free_hb_offset`),
 `src/js8/commands.cpp:67-81` (`find_free_offset`).
 
@@ -189,6 +191,8 @@ Compared with desktop JS8Call-improved at `d9c50510` (two commits after the
 
 ### B-04. Automatic replies go out while a message to us is still arriving — medium, confirmed
 
+**Fixed in 4140fbb** (package 3, D3: as desktop): the dialog tracks multi-frame directed messages still arriving; a reply is decided once its decode cycle has ended (desktop processes the whole cycle first) and dropped if a message to us is open then, an HB ACK if any is. Queued replies also wait while one to us is open. Harness `ONLY_REPLYQ`.
+
 **Where:** `src/dialog_js8.c:2949-2970` (`auto_send`), `:3099-3132`
 (`hb_tick`), `:3068-3081` (`push_tick`): they wait only for our own TX,
 the keyboard and popups.
@@ -213,6 +217,8 @@ and HB ACKs while it has any open multi-frame command. The partial rows
 
 ### B-05. Heartbeat ACKs every 15 min per station; desktop waits 55 — medium, confirmed
 
+**Fixed in 4140fbb** (package 3, D4): 55 min, not kept across power-off.
+
 **Where:** `src/js8/autoreply.hpp:107` (`HB_ACK_REPEAT_MS = 15 min`),
 `AutoPolicy::decide()` (`autoreply.cpp:349-352`).
 
@@ -231,6 +237,8 @@ it's here too.)
 they survive a restart.
 
 ### B-06. Our 5-minute guard drops a repeated AGN? and relayed questions — low, confirmed
+
+**Fixed in 4140fbb** (package 3, D6: as desktop): the guard is gone; every question is answered.
 
 **Where:** `AutoPolicy::decide()` (`autoreply.cpp:357-358`), keyed by
 `r.to + "|" + r.command`; `make()` (`:82-86`) sets `r.to` to the station
@@ -263,6 +271,8 @@ signal's width) with a message, and stop auto CQ/HB there.
 
 ### B-08. Heartbeat and auto CQ timing follow the older desktop — low, confirmed
 
+**Fixed in 4140fbb** (package 3, D5): heartbeats on desktop's TxLoop schedule (the first an interval after switching on, on the slot grid; each next an interval after the one scheduled). Auto CQ keeps "N minutes after each CQ ends" (your choice), counted only from our CQs.
+
 **Where:** `next_heartbeat_ms()` (`autoreply.cpp:367-376`), `hb_tick()`;
 auto CQ in `cq_hold_cb()` / `ui_tx_done()` (`dialog_js8.c:1529-1533`).
 
@@ -282,6 +292,8 @@ switching on, and nothing restarts it after other transmissions.
 
 ### B-09. Holding CQ while sending: first CQ a whole interval later — low, confirmed
 
+**Won't fix** (your call, 2026-09-28): the comment in `cq_hold_cb()` now says what it does.
+
 **Where:** `src/dialog_js8.c:2582-2588` (`cq_hold_cb`).
 
 **What goes wrong:** the comment says "Busy sending: the first CQ right
@@ -294,6 +306,8 @@ right after it.
 message (e.g. a flag `ui_tx_done` honours), or fix the comment.
 
 ### B-10. An `@APRSIS MSG` without `TO:` is kept and ACKed — low, confirmed
+
+**Fixed in 4140fbb** (package 3).
 
 **Where:** `src/js8/autoreply.cpp:194-205`.
 
@@ -446,6 +460,8 @@ tries again later.
 
 ### B-18. QUERY CALL about a station heard only through a relay gets no answer — low, confirmed
 
+**Fixed in 4140fbb** (package 3): `YES (5m)` without an SNR, as desktop.
+
 **Where:** `src/js8/autoreply.cpp:250-264` (`QUERY CALL`).
 
 **What goes wrong:** a station we only heard through a relay is listed
@@ -491,6 +507,8 @@ per-dial), and look the call up by key (see I-17).
 ## Batch 7: Sending by hand
 
 ### B-21. AGN? repeats what we last queued, not what went out — low, confirmed
+
+**Fixed in 4140fbb** (package 3): set when the first frame keys; cleared on a change of band or frequency.
 
 **Where:** `src/dialog_js8.c:1682` (`tx_queue_at` sets `last_tx_text`
 when a message is queued); `src/js8/autoreply.cpp:187-191`.
