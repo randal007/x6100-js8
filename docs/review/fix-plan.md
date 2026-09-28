@@ -24,11 +24,11 @@ Nothing in WP1, WP2 or WP7 waits on these; WP3 does. D1 is decided.
 | # | Question | My recommendation |
 |---|---|---|
 | D1 | BH-7: when does HB pause, and does it come back? | **Decided 2026-09-28** (relayed by the builder session): HB and HB ACK **pause** (they stay switched on; the button shows "HB: paused") only when you send something **by hand** that isn't a heartbeat (Reply, Send..., a Query item, CQ, HW CPY?). Nothing heard pauses them, and nothing AUTO sends counts (SNR answers, MSG ACKs, relays, HB ACKs). They resume by themselves 10 min after your last hand-sent message (each new one restarts the 10 min). Not on deselect or unlock (unlike desktop). |
-| D2 | BH-12: may automatic replies go out while a **list** is open (Log popup, Inbox, Settings)? Desktop only holds them while you're typing. | Yes: only the keyboard holds them. |
-| D3 | B-04: while a message to us is still arriving, **hold** our automatic replies until it ends, or **drop** them as desktop does? | Hold (up to the usual 2 minutes); HB ACKs dropped, as desktop. |
-| D4 | B-05: HB ACK / @ALLCALL cooldown 55 min like desktop? Keep it across power-off (desktop does)? | 55 min yes; across power-off not now. |
-| D5 | B-08: heartbeats on desktop's fixed schedule? Auto CQ: keep "N minutes after each CQ ends" (your choice) but count only from our CQs, not every transmission? | Yes to both. |
-| D6 | B-06: keep our 5-minute "don't answer the same question twice" guard (fixed), or drop it like desktop? | Keep it, keyed by the real asker, AGN? left out. |
+| D2 | BH-12: may automatic replies go out while a **list** is open (Log popup, Inbox, Settings)? Desktop only holds them while you're typing. | **Decided 2026-09-28: yes**, only the keyboard holds them. |
+| D3 | B-04: while a message to us is still arriving, **hold** our automatic replies until it ends, or **drop** them as desktop does? | **Decided 2026-09-28: as desktop**: automatic replies dropped while a message to us is arriving; HB ACKs dropped while any message is arriving. |
+| D4 | B-05: HB ACK / @ALLCALL cooldown 55 min like desktop? Keep it across power-off (desktop does)? | **Decided 2026-09-28:** 55 min; not kept across power-off. |
+| D5 | B-08: heartbeats on desktop's fixed schedule? Auto CQ: keep "N minutes after each CQ ends" (your choice) but count only from our CQs, not every transmission? | **Decided 2026-09-28: yes to both.** |
+| D6 | B-06: keep our 5-minute "don't answer the same question twice" guard (fixed), or drop it like desktop? | **Decided 2026-09-28: as desktop**: the guard goes; every question is answered. |
 | D7 | BH-5: remember one offered answer per station (so Reply works for each), or keep desktop's single outgoing box? | One per station: small, and our Reply is per station. |
 | D8 | B-14: an Inbox file that can't be read: move it aside, or refuse to save? | **Decided 2026-09-28: A**, move it aside (`<name>.unreadable-<date>`) and say so; refuse to save only if it can't even be moved. |
 | D9 | I-21: pin the buildroot commit CI builds with? (Updates become deliberate.) | Yes. |
@@ -77,7 +77,7 @@ backup the flash script makes.
 them fixed in bugs.md. `src/js8/datafile.cpp` holds the safe reader and
 writer; unit tests `[files]`, harness `ONLY_BADFILES`.
 
-### WP3: The unattended station, as desktop (effort L; needs D1–D7)
+### WP3: The unattended station, as desktop (effort L; D1–D6 decided, D7 open)
 
 One rework of the automatic-reply path, which fixes most of these at once.
 Today a reply is decided when it's decoded, then waits in one slot
@@ -98,18 +98,18 @@ Today a reply is decided when it's decoded, then waits in one slot
 | **BH-2** one delivery tracked | **Fix** | A short list of in-flight deliveries keyed by sent text. |
 | **BH-S6** busy cleared before the UI hears "done" | **Fix** | The dialog's own `tx_active` flag for queuing decisions. |
 | **I-08** decide once, at send time | **Fix** | As above. |
-| **B-04** replies while a message to us is arriving | **Fix** (D3) | Track open partials (`msg_id`, to us?, last frame time) in `add_message()`; closed by their final message or 60 s. |
+| **B-04** replies while a message to us is arriving | **Fix** (D3: as desktop) | Track open partials (`msg_id`, to us?, last frame time) in `add_message()`; closed by their final message or 60 s. Automatic replies are dropped while one to us is open, HB ACKs while any is open. |
 | **B-05** HB ACK cooldown 15 → 55 min | **Fix** (D4) | `HB_ACK_REPEAT_MS = 55 min`; unit test. |
 | **I-09** prune the rate-limit map | **Fix, small** | Drop entries older than 55 min in `sent()`. |
 | **BH-7** any message to us switches HB off | **Fix** (D1, decided) | Drop the `handle_incoming()` → `js8_starts_qso()` → `qso_started()` path for HB; pause HB and HB ACK (not off) from the hand-sent paths (`tx_queue_at(..., automatic=false)` for anything but a heartbeat); resume 10 min after the last one; the HB button shows "HB: paused". **Fixed** (see the commit after 3a2f878; harness ONLY_HBPAUSE). Pressing HB while paused resumes at once. |
 | **BH-12** Log prompt holds up auto TX | **Fix** (D2) | Automatic transmissions don't count as our side of a QSO (`js8_qsos_sent` only for yours); lists don't hold replies. |
-| **B-06** our 5-min guard | **Fix, small** (D6) | Key by the reply's addressee (the asker or its relay path); AGN? exempt. |
+| **B-06** our 5-min guard | **Fix, small** (D6: as desktop) | Remove `QUERY_REPEAT_MS`: answer every question, as desktop does. |
 | **B-10** `@APRSIS MSG` without `TO:` | **Fix, small** | Return nothing when the pattern doesn't match. |
 | **B-18** QUERY CALL for relay-only stations | **Fix, small** | Answer `YES (5m)` without the SNR, as desktop. |
 | **B-21** AGN? repeats the last queued text | **Fix, small** | Set `last_tx_text` when the first frame keys; clear it in `retuned()`. |
 | **B-03** heartbeat offset rules | **Fix, small** | Your own offset if ≤ 1000 Hz; your offset and your QSO partner's count as free; activity from all recent decodes (the history ring), not just Stations. |
 | **B-08** HB / auto CQ timing | **Fix** (D5) | HB: next = last scheduled + N min, on the slot grid. Auto CQ: restart only after our CQ. |
-| **B-09** CQ hold while sending | **Fix, small** | A "first CQ after this message" flag honoured in `ui_tx_done()`. |
+| **B-09** CQ hold while sending | **Won't fix** (your call, 2026-09-28) | Not worth the effort; the comment in `cq_hold_cb()` should say what it does. |
 | **BH-5** one offered answer | **Fix, small** (D7) | Offers kept per station (8, 5 min each). |
 | **I-07** desktop-parity test table | **Fix** | Each fix above adds its rows (incoming text, switches → desktop's answer). |
 
@@ -203,7 +203,7 @@ arriving, QUERY MSGS / relays.
 | B-06 | Fix, small (D6) | WP3 | S |
 | B-07 | Won't fix (your call) | — | — |
 | B-08 | Fix (D5) | WP3 | S |
-| B-09 | Fix, small | WP3 | S |
+| B-09 | Won't fix (your call) | — | — |
 | B-10 | Fix, small | WP3 | S |
 | B-11 | Later | — | S |
 | B-12 | Fix, small | WP5 | S |
