@@ -6,7 +6,8 @@ for **bugs** (written up in [bugs.md](bugs.md)) and for **improvements**
 (efficiency, simpler or safer code, tests: [improvements.md](improvements.md)).
 The review reads code only: **no code is changed**.
 
-- Started 2026-09-28 on `main` at `9391f80`.
+- Started 2026-09-28 on `main` at `9391f80`. Second pass with a fix
+  plan for every finding: [fix-plan.md](fix-plan.md).
 - Done about 10 features at a time, in the batches below, riskiest first:
   anything that transmits or changes the radio, then automatic sending,
   then receiving, then stored data, then the screen.
