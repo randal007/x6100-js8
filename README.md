@@ -187,12 +187,12 @@ to go back a page. In JS8 a hold is half a second.
 
 | Page | Button | Does |
 |---|---|---|
-| 1 | **CQ** | `CQ CQ CQ <grid>`. Pauses heartbeats for 10 minutes, like anything you send (see [Transmitting](#transmitting)). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
-| 1 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. With HB on, the automatic ones count again from this one. |
+| 1 | **CQ** | `CQ CQ CQ <grid>`. Pauses heartbeats for 10 minutes, like anything you send (see [Transmitting](#transmitting)). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it; answers and heartbeats sent in between don't move it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
+| 1 | **Heartbeat** | One heartbeat now: on your own offset if that is 1000 Hz or below, else at a free spot in the 500–1000 Hz heartbeat sub-band (clear of anything heard in the last 30 s), as desktop. With HB on, the automatic ones count again from this one. |
 | 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…? |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. |
-| 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead. |
+| 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead (each station its own, for 5 minutes). |
 | 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
 | 3 | **Time Sync** | Shift JS8's timing to match the last 2 minutes of decodes (needs 3 or more; with 3 or more stations, each counts once), like desktop's time drift; the radio's clock isn't changed. Pressing it again right after is safe. Not while sending. Hold to reset the drift. |
@@ -237,8 +237,18 @@ button just closes it; press again to do the thing. ESC closes lists too.
     those don't wait). With AUTO on it also tells a station you hold a
     message for, when you hear them, with `W1ABC RETRIEVE MSG 3` (at most
     every 15 minutes, once per message every 8 hours).
-  - **HB** sends heartbeats on desktop's schedule; **HB ACK** acknowledges
-    others' heartbeats.
+  - Automatic answers take turns: several can wait while you're sending or
+    typing (up to 2 minutes each), and go out one after another. Lists
+    (Inbox, Log, Settings…) don't hold them up. As on desktop, a question
+    asked again is answered again, a station's `@ALLCALL` or heartbeat is
+    answered at most once every 55 minutes, and **nothing automatic
+    answers while a message to you is still arriving** (you can't hear its
+    next frames while you send); no HB ACK goes out while anyone's message
+    is still arriving.
+  - **HB** sends heartbeats on desktop's fixed schedule: every N minutes on
+    the slot grid, the first N minutes after you switch it on; one that had
+    to wait doesn't move the ones after it. **HB ACK** acknowledges others'
+    heartbeats.
   - Anything you send yourself except a heartbeat (Reply, Send…, a Query
     item, CQ, HW CPY? …) **pauses** HB and HB ACK, so heartbeats don't cut
     into a QSO. The buttons show *paused* and the status line when they
@@ -599,8 +609,8 @@ Done for beta 4 so far:
 - [x] The band keys wait until you stop sending ("Not while sending"), as
   the Freq list does; they used to send the rest of the message on the new
   band
-- [x] After a change of band or frequency, an automatic answer still
-  waiting (behind a list) is dropped instead of going out on the new one
+- [x] After a change of band or frequency, automatic answers still
+  waiting are dropped instead of going out on the new one
 - [x] Heartbeats **pause** for 10 minutes after anything you send yourself
   (not a heartbeat), then carry on by themselves; press HB to resume
   sooner. Before, any message to you (even an automatic query or a garbled
@@ -613,14 +623,27 @@ Done for beta 4 so far:
   `<name>.unreadable-<date>` and you're told, instead of the next save
   writing over it; a message that couldn't be saved gets no ACK, so the
   sender's station knows it didn't arrive; room for ten groups
+- [x] **Automatic replies as desktop sends them:** answers queue (before,
+  a second question or heartbeat while one answer waited replaced it, so
+  a message's ACK could be lost); nothing automatic keys over a message
+  to you that is still arriving; the Log prompt or any other list no
+  longer holds up an unattended station, and AUTO's answers don't count
+  as a QSO for the Log prompt; each station's answer waits on Reply (AUTO
+  off), not just the last one; several held messages can be on their way
+  at once; HB ACKs at most every 55 minutes per station and a question
+  asked again answered again (desktop's rules); heartbeats on desktop's
+  fixed schedule and offset; auto CQ counts only from our CQs; AGN? repeats
+  what actually went out; `QUERY CALL` about a station heard only through
+  a relay is answered; an `@APRSIS MSG` without `TO:` is no longer kept
+  or ACKed
 
 Still to do:
 
 - [ ] Fix the rest of the bugs found by reading the code: the plan, in
   order, is [docs/review/fix-plan.md](docs/review/fix-plan.md) (from the
   full review in [docs/review](docs/review/) and the first
-  [bug hunt](docs/bug-hunt-2026-09-28.md); next: the rest of the
-  unattended-station package, automatic replies as desktop sends them)
+  [bug hunt](docs/bug-hunt-2026-09-28.md); next: a smoother screen and
+  lighter work)
 - [ ] SMS: show the gateway's receipt (`ACK04}`) as "delivered" on the
   message you sent, instead of as a new Inbox message
 - [ ] On-air tests: relays and store and forward with desktop JS8Call

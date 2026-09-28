@@ -4,7 +4,7 @@
  *  Xiegu X6100 LVGL GUI - JS8 auto-reply, heartbeat acks and heartbeat timing
  *
  *  Behaviour follows desktop JS8Call's MainWindow::processCommandActivity()
- *  and scheduleHeartbeat(). The switches (AUTO, HB, HB ACK) are the user's,
+ *  and its TxLoop heartbeat schedule. The switches (AUTO, HB, HB ACK) are the user's,
  *  all off by default.
  */
 
@@ -13,7 +13,6 @@
 #include <cstdint>
 #include <map>
 #include <optional>
-#include <random>
 #include <string>
 #include <vector>
 
@@ -103,20 +102,21 @@ bool starts_qso(const Incoming &in);
 /// Rate limits and switches for automatic replies.
 class AutoPolicy {
 public:
-    static constexpr std::int64_t QUERY_REPEAT_MS = 5 * 60 * 1000;  ///< same station and command
-    static constexpr std::int64_t HB_ACK_REPEAT_MS = 15 * 60 * 1000; ///< desktop's @ALLCALL cache (HB acks too)
+    /// Desktop's @ALLCALL reply cooldown (HBBlockingDB): one answer per
+    /// station per 55 min to anything sent to everyone, heartbeats included.
+    static constexpr std::int64_t HB_ACK_REPEAT_MS = 55 * 60 * 1000;
     static constexpr std::int64_t IDLE_MS          = 60 * 60 * 1000; ///< desktop's idle watchdog default
 
     enum class Action { Ignore, Send, Offer };
 
-    /// Send if the switches allow it and the rate limits pass; Offer a query
-    /// reply when AUTO is off (desktop puts it in the outgoing box instead),
-    /// except what desktop only answers with AUTO on. Only simple queries
-    /// wait QUERY_REPEAT_MS for the same station (our own limit); ACKs,
-    /// relays and held messages go every time, as on desktop.
+    /// Send if the switches allow it and the @ALLCALL cooldown passes; Offer
+    /// a reply when AUTO is off (desktop puts it in the outgoing box
+    /// instead), except what desktop only answers with AUTO on. Everything
+    /// else goes every time, as on desktop: a question asked again gets its
+    /// answer again, a resend its ACK.
     Action decide(const AutoReply &r, const AutoSettings &s, std::int64_t now_ms);
 
-    /// Record that `r` was queued, for the rate limits.
+    /// Record that `r` was queued, for the cooldown.
     void sent(const AutoReply &r, std::int64_t now_ms);
 
     /// Any key, button or knob. Automatic transmissions stop after
@@ -125,14 +125,17 @@ public:
     bool idle(std::int64_t now_ms) const { return now_ms - last_user_ms_ >= IDLE_MS; }
 
 private:
-    std::map<std::string, std::int64_t> last_sent_; // "CALL|CMD" or "@ALLCALL|CALL" -> when
+    std::map<std::string, std::int64_t> last_sent_; // "@ALLCALL|CALL" -> when; pruned in sent()
     std::int64_t                        last_user_ms_ = 0;
 };
 
-/// When the next heartbeat is due, as desktop's scheduleHeartbeat() computes
-/// it: the next 15 s boundary + 1 s + `interval_min`, and 25 % of the time
-/// one slot later so stations don't stay in step.
-std::int64_t next_heartbeat_ms(std::int64_t now_ms, int interval_min, std::mt19937 &rng);
+/// Heartbeats every `interval_min` (clamped to 5-30), as desktop's TxLoop
+/// schedules them. The first: `interval_min` from now, rounded up to the
+/// speed's slot (`period_ms`).
+std::int64_t next_heartbeat_ms(std::int64_t now_ms, int interval_min, std::int64_t period_ms);
+/// The one after `scheduled_ms`: `interval_min` later, and whole intervals
+/// more while that is already past (a pause, a long transmission).
+std::int64_t following_heartbeat_ms(std::int64_t scheduled_ms, std::int64_t now_ms, int interval_min);
 
 constexpr int HB_MIN_INTERVAL     = 5;
 constexpr int HB_MAX_INTERVAL     = 30;

@@ -126,6 +126,7 @@ typedef struct {
     js8_reply_kind_t  kind;
     bool              hb_ack;  /* a heartbeat ack: send in the HB sub-band */
     bool              allcall; /* answers an @ALLCALL (rate limit) */
+    bool              auto_only; /* desktop sends it only with AUTO on (QUERY MSGS, QUERY CALL): never offered */
     char              text[JS8_RX_TEXT_LEN];
     char              to[JS8_RX_CALL_LEN];
     char              command[16];
@@ -159,6 +160,11 @@ void        js8_auto_destroy(js8_auto_t *a);
 void js8_process(js8_auto_t *a, const js8_rx_msg_t *msg, const js8_auto_settings_t *s, const js8_heard_t *heard,
                  unsigned n_heard, const char *last_tx, int64_t now_ms, js8_inbox_t *inbox, js8_stored_t *stored,
                  js8_auto_result_t *out);
+/* Decide again, when a reply that waited (TX busy, the keyboard) can go:
+ * the switches, the idle watchdog and the @ALLCALL cooldown as they are
+ * now. */
+js8_auto_action_t js8_auto_decide(js8_auto_t *a, const js8_auto_result_t *r, const js8_auto_settings_t *s,
+                                  int64_t now_ms);
 /* Record that a reply was queued (rate limits). */
 void js8_auto_sent(js8_auto_t *a, const js8_auto_result_t *r, int64_t now_ms);
 /* Any key, button or knob; automatic TX stops after an hour without one. */
@@ -168,8 +174,12 @@ bool js8_auto_idle(js8_auto_t *a, int64_t now_ms);
 /* Does this message start a QSO with us? */
 bool js8_starts_qso(const js8_rx_msg_t *msg);
 
-/* Desktop's heartbeat schedule; interval clamped to 5-30 min. */
-int64_t js8_next_heartbeat_ms(int64_t now_ms, int interval_min);
+/* Heartbeats as desktop's TxLoop schedules them: the first `interval_min`
+ * (5-30) from now, rounded up to the speed's slot (`period_s`); each next
+ * one `interval_min` after the one scheduled, pushed on by whole intervals
+ * while that is already past. */
+int64_t js8_next_heartbeat_ms(int64_t now_ms, int interval_min, int period_s);
+int64_t js8_following_heartbeat_ms(int64_t scheduled_ms, int64_t now_ms, int interval_min);
 
 /* Time Sync from decodes, like desktop JS8Call's drift. One decode: its
  * station, when it was decoded, the drift it suggests (js8_rx_msg_t.drift_ms)

@@ -163,8 +163,12 @@ static void        hb_ack_cb(button_data_t *btn);
 static void        texts_cb(button_data_t *btn);
 static bool        tx_queue_at(const char *text, int offset_hz, bool automatic);
 static void        user_touch(void);
-static void        auto_send(const js8_auto_result_t *r);
+static void        auto_queue(const js8_auto_result_t *r);
+static void        auto_try_send(void);
+static void        auto_clear(void);
+static int         offer_find(const char *call);
 static void        hb_tick(void);
+static int64_t     hb_first_ms(void);
 static void        load_texts(void);
 static void        data_file_notice(const char *notice);
 static void        save_texts(void);
@@ -303,14 +307,15 @@ static struct {
     char group_call[JS8_RX_CALL_LEN];  /* a group message: who it's for */
     char text[JS8_RX_TEXT_LEN];
 } deliver_pending;
-/* A held message on the air: delivered once it has gone out in full.
- * Desktop marks it as soon as it starts sending; stopped halfway here, it
- * stays held and is offered again when they next ask. */
+/* Held messages on their way: each is delivered once it has gone out in
+ * full. Desktop marks it as soon as it starts sending; stopped halfway
+ * here, it stays held and is offered again when they next ask. */
+#define DELIVERIES 4
 static struct {
-    int  id;
+    int  id; /* 0: a free entry */
     char group_call[JS8_RX_CALL_LEN];
     char text[JS8_RX_TEXT_LEN];
-} deliver_tx;
+} deliveries[DELIVERIES];
 /* How a message ended, from the transmitter's thread to ours. */
 typedef struct {
     bool completed;
@@ -343,19 +348,56 @@ static char        spot_mode[8] = "DATA";
 static int32_t     spot_typed_hz;  /* last frequency typed in the form, 0 = none */
 static bool        spot_use_typed; /* spot that one, not the JS8 dial */
 static char        spot_note[32];
-static char        last_tx_text[JS8_RX_TEXT_LEN]; /* for AGN? */
+static char        last_tx_text[JS8_RX_TEXT_LEN]; /* for AGN?: set when its first frame keys */
+/* Our message on the air, from queueing it until ui_tx_done hears it
+ * ended (the transmitter says "not busy" a moment before that). */
+static bool        tx_active;
+static bool        tx_auto;        /* it's automatic: not our side of a QSO */
+static bool        tx_cq;          /* it's a CQ: auto CQ counts from its end */
+static int64_t     tx_quiet_ms;    /* tx_active but the transmitter idle since then */
+#define TX_DONE_LOST_MS  5000      /* then the "done" was lost: not active */
+/* AUTO off: answers waiting for Reply, one per station (desktop has one
+ * outgoing box). */
+#define OFFERS 8
 static struct {
-    char    call[JS8_RX_CALL_LEN];
+    char    call[JS8_RX_CALL_LEN]; /* "": a free entry */
     char    text[JS8_RX_TEXT_LEN];
     int64_t ms;
     int     deliver_id; /* the held message it delivers, or 0 */
     char    deliver_group_call[JS8_RX_CALL_LEN];
-} offer; /* AUTO off: a reply waiting for Reply, like desktop's outgoing box */
-static js8_auto_result_t pending_auto;       /* arrived while TX was busy */
-static bool              pending_auto_valid;
-static int64_t           push_next_ms; /* next look for RETRIEVE MSG notices, 0: 15 min from now */
-static int64_t           pending_auto_ms;    /* when it was put off */
-#define PENDING_AUTO_MS  (2 * 60 * 1000)     /* then it's too late to answer */
+} offers[OFFERS];
+/* Automatic replies waiting for their turn (the end of their decode
+ * cycle, our TX, the keyboard, a message to us still arriving): oldest
+ * first, the same text once. */
+#define REPLIES          8
+#define REPLY_WAIT_MS    (2 * 60 * 1000) /* then it's too late to answer */
+#define CYCLE_WAIT_MS    5000            /* no end of cycle heard by then: go on */
+static struct {
+    js8_auto_result_t r;
+    int64_t           ms;
+    unsigned          cycle;   /* `cycles` when it was decided */
+    bool              checked; /* its cycle ended and it wasn't dropped */
+} replies[REPLIES];
+static int     n_replies;
+static int64_t push_next_ms; /* next look for RETRIEVE MSG notices, 0: 15 min from now */
+/* Multi-frame messages still arriving, as desktop's open message buffers:
+ * while one to us is open nothing automatic answers anyone, and while any
+ * is open no HB ACK goes out, so we don't key over its next frames. */
+#define OPEN_MSGS        8
+#define OPEN_MSG_MS      60000 /* no frame for this long: it ended */
+static struct {
+    uint32_t id; /* 0: a free entry */
+    bool     to_me;
+    int64_t  ms; /* its last frame */
+} open_msgs[OPEN_MSGS];
+/* Band activity for heartbeat offsets (desktop's isFreqOffsetFree): every
+ * decode's offset and time; the last 30 s counts. */
+#define ACTIVITY         128
+static struct {
+    float   hz;
+    int64_t ms;
+} activity[ACTIVITY];
+static int activity_head;
 static int               edit_target;        /* 0 compose, else an edit_t */
 static lv_obj_t         *texts_list;
 
@@ -752,10 +794,50 @@ static void update_slot(int slot, const js8_rx_msg_t *m) {
     if (scroll) follow();
 }
 
+/* After every frame heard (a message, or the text so far of one still
+ * arriving): the band activity, and which messages are still open. Before
+ * the message is acted on, so a message to us that has just ended no
+ * longer holds up its own answer. */
+static void track_incoming(const js8_rx_msg_t *m) {
+    int64_t now = now_wall_ms();
+    activity[activity_head].hz = m->freq_hz;
+    activity[activity_head].ms = now;
+    activity_head              = (activity_head + 1) % ACTIVITY;
+
+    if (!m->msg_id) return;
+    int slot = -1, spare = 0; /* spare: a free entry, else the oldest */
+    for (int i = 0; i < OPEN_MSGS; i++) {
+        if (open_msgs[i].id == m->msg_id) slot = i;
+        if (!open_msgs[spare].id) continue;
+        if (!open_msgs[i].id || open_msgs[i].ms < open_msgs[spare].ms) spare = i;
+    }
+    if (!m->partial) { /* it ended */
+        if (slot >= 0) open_msgs[slot].id = 0;
+        return;
+    }
+    if (!m->to[0]) return; /* desktop opens a buffer only for a directed command */
+    if (slot < 0) slot = spare;
+    open_msgs[slot].id    = m->msg_id;
+    open_msgs[slot].to_me = m->to_me;
+    open_msgs[slot].ms    = now;
+}
+
+/* Is a message still arriving (to us only, or any)? */
+static bool message_open(bool to_me) {
+    int64_t now = now_wall_ms();
+    for (int i = 0; i < OPEN_MSGS; i++) {
+        if (!open_msgs[i].id) continue;
+        if (now - open_msgs[i].ms > OPEN_MSG_MS) open_msgs[i].id = 0;
+        else if (open_msgs[i].to_me || !to_me) return true;
+    }
+    return false;
+}
+
 static void add_message(const js8_rx_msg_t *msg) {
     js8_rx_msg_t  copy = *msg;
     js8_rx_msg_t *m    = &copy;
 
+    if (!m->tx) track_incoming(m);
     int existing = m->tx ? -1 : find_partial(m->msg_id);
     if (!m->partial) process_message(m);
     if (existing >= 0) {
@@ -1253,6 +1335,7 @@ static void ui_cycle_done(void *arg) {
     cycles++;
     cycle_decodes = *(unsigned *)arg;
     update_status();
+    auto_try_send(); /* the cycle's replies, now that all of it is in */
 }
 
 static void on_cycle_done(unsigned decodes, void *ctx) {
@@ -1515,8 +1598,14 @@ static void ui_tx_status(void *arg) {
         m.submode      = (uint8_t)js8_speed_submode(st->speed);
         snprintf(m.text, sizeof(m.text), "%s", tx_preview[0] ? tx_preview : st->text);
         add_message(&m);
+        /* AGN? repeats what went out, as desktop: not a message stopped
+         * before it keyed. */
+        snprintf(last_tx_text, sizeof(last_tx_text), "%s", st->text);
+        /* Only what you send is your side of a QSO: an unattended station
+         * answering SNR? and hearing "TNX 73" hasn't had one. */
         char ended[JS8_RX_CALL_LEN];
-        if (js8_qsos_sent(qsos, m.text, params.callsign.x, now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
+        if (!tx_auto && js8_qsos_sent(qsos, m.text, params.callsign.x, now_wall_ms(), ended, sizeof(ended)))
+            log_offer(ended);
     }
     tx_status = *st;
     update_tx_bar();
@@ -1534,20 +1623,19 @@ static void ui_tx_done(void *arg) {
     if (!completed) add_info_row("TX stopped");
     deliver_end(done->text, completed);
     memset(&tx_status, 0, sizeof(tx_status));
+    tx_active = false;
     update_tx_bar();
-    /* Auto CQ counts its minute from the end of what we sent, as desktop
-     * restarts its CQ timer after any transmission. */
-    if (auto_cq) {
+    /* Auto CQ counts its minutes from the end of our CQ (your choice);
+     * replies and heartbeats in between don't move it. */
+    if (auto_cq && tx_cq) {
         auto_cq_from_ms = now_wall_ms();
         auto_cq_next_ms = auto_cq_from_ms + cq_interval_ms();
         if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
     }
+    tx_cq = false;
 
-    /* An auto-reply that arrived while we were sending. */
-    if (pending_auto_valid) {
-        pending_auto_valid = false;
-        auto_send(&pending_auto);
-    }
+    /* Replies that arrived while we were sending. */
+    auto_try_send();
 }
 
 static void on_tx_done(const char *text, bool completed, void *ctx) {
@@ -1674,7 +1762,7 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
         msg_update_text_fmt("JS8: transmitter not running - close JS8 and open it again");
         return false;
     }
-    if (js8_tx_busy(tx)) {
+    if (tx_active || js8_tx_busy(tx)) {
         msg_update_text_fmt("Already sending - Stop TX first");
         return false;
     }
@@ -1693,9 +1781,12 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
         msg_update_text_fmt("JS8: %s", err);
         return false;
     }
+    tx_active   = true;
+    tx_auto     = automatic;
+    tx_cq       = false;
+    tx_quiet_ms = 0;
     msg_update_text_fmt("%sQueued: %d frame%s, %.0f s", automatic ? "Auto: " : "", pv.frames,
                         pv.frames == 1 ? "" : "s", pv.seconds);
-    snprintf(last_tx_text, sizeof(last_tx_text), "%s", text);
 
     /* A directed message you sent yourself starts a QSO. */
     char call[JS8_RX_CALL_LEN];
@@ -1743,7 +1834,7 @@ static void rotary_cb(int32_t diff) {
         params_uint16_set(&params.js8_hb_interval, (uint16_t)v);
         hb_adjust_ms = now_wall_ms();
         if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
-        if (params.js8_hb.x && hb_next_ms) hb_next_ms = js8_next_heartbeat_ms(now_wall_ms(), v);
+        if (params.js8_hb.x && hb_next_ms) hb_next_ms = hb_first_ms();
         update_tx_bar();
         update_status();
         return;
@@ -2011,11 +2102,11 @@ static js8_stations_t *stations_for_band(void) {
 /* After any change of dial frequency. */
 static void retuned(void) {
     auto_cq_stop("band changed");
-    /* A reply still waiting (behind a list or the keyboard) or offered on
-     * Reply answered a station on the old frequency: never send it here. */
-    pending_auto_valid = false;
-    memset(&offer, 0, sizeof(offer));
-    deliver_pending.id = 0;
+    /* Replies still waiting (behind our TX or the keyboard) or offered on
+     * Reply answered stations on the old frequency: never send them here.
+     * AGN? there isn't asking for what we sent here. */
+    auto_clear();
+    last_tx_text[0] = '\0';
 
     js8_rx_clear(rx);
     stations = stations_for_band(); /* that band's list, as we left it */
@@ -2266,8 +2357,8 @@ static void construct_cb(lv_obj_t *parent) {
         data_file_notice(js8_held_notice(held));
     }
     if (!autop) autop = js8_auto_create();
-    deliver_tx.id      = 0;
-    deliver_pending.id = 0;
+    memset(deliveries, 0, sizeof(deliveries));
+    tx_active = tx_auto = tx_cq = false;
     inbox_refresh_button();
     user_touch();
     load_texts();
@@ -2276,8 +2367,8 @@ static void construct_cb(lv_obj_t *parent) {
     push_next_ms       = 0;
     apply_station_keep();
     hb_adjusting       = false;
-    pending_auto_valid = false;
-    memset(&offer, 0, sizeof(offer));
+    auto_clear();
+    last_tx_text[0] = '\0';
     tx_timer = lv_timer_create(tx_timer_cb, 250, NULL);
     update_tx_bar();
 }
@@ -2471,13 +2562,14 @@ static void reply_cb(button_data_t *btn) {
         return;
     }
     /* AUTO off and this station asked us something: offer the answer. */
-    if (offer.text[0] && now_wall_ms() - offer.ms < OFFER_MS && strcmp(offer.call, call) == 0) {
+    int o = offer_find(call);
+    if (o >= 0) {
         char text[JS8_RX_TEXT_LEN];
-        snprintf(text, sizeof(text), "%s", offer.text);
-        deliver_pending.id = offer.deliver_id;
-        snprintf(deliver_pending.group_call, sizeof(deliver_pending.group_call), "%s", offer.deliver_group_call);
-        snprintf(deliver_pending.text, sizeof(deliver_pending.text), "%s", offer.text);
-        offer.text[0] = '\0';
+        snprintf(text, sizeof(text), "%s", offers[o].text);
+        deliver_pending.id = offers[o].deliver_id;
+        snprintf(deliver_pending.group_call, sizeof(deliver_pending.group_call), "%s", offers[o].deliver_group_call);
+        snprintf(deliver_pending.text, sizeof(deliver_pending.text), "%s", offers[o].text);
+        offers[o].call[0] = '\0';
         apply_hold(freq);
         compose_open(text);
         speed_warn();
@@ -2534,6 +2626,7 @@ static bool send_cq(bool automatic) {
     char text[32];
     snprintf(text, sizeof(text), "CQ CQ CQ %.4s", params.qth.x);
     if (!tx_queue_at(text, params.js8_tx_freq.x, automatic)) return false;
+    tx_cq = true;
     if (automatic) hb_pause("CQ"); /* by hand, tx_queue_at did it */
     return true;
 }
@@ -2618,13 +2711,15 @@ static void cq_hold_cb(button_data_t *btn) {
         cq_adjust_start();
         return;
     }
-    /* Busy sending: the first CQ right after. Otherwise one now; the
-     * interval starts when it ends (ui_tx_done). */
-    int64_t now = now_wall_ms();
-    if (!js8_tx_busy(tx) && !send_cq(false)) return;
+    /* Busy sending: the first CQ comes an interval from now (not right
+     * after; left so, your call). Otherwise one now, and the interval
+     * starts when it ends (ui_tx_done). */
+    int64_t now  = now_wall_ms();
+    bool    busy = tx_active;
+    if (!busy && !send_cq(false)) return;
     auto_cq         = true;
     auto_cq_from_ms = now;
-    auto_cq_next_ms = js8_tx_busy(tx) ? now + cq_interval_ms() : now;
+    auto_cq_next_ms = busy ? now + cq_interval_ms() : now;
     buttons_refresh(btn);
     add_info_row("Auto CQ on");
     cq_adjust_start();
@@ -2651,7 +2746,9 @@ static void auto_cq_tick(void) {
         return;
     }
     if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
-    if (now < auto_cq_next_ms || js8_tx_busy(tx) || composing || any_popup()) return;
+    /* Lists don't hold it up, only the keyboard. Waiting replies went
+     * first (hb_tick runs before this). */
+    if (now < auto_cq_next_ms || tx_active || composing) return;
     if (send_cq(true)) {
         auto_cq_from_ms = now;
         auto_cq_next_ms = now + cq_interval_ms(); /* restarted when it ends */
@@ -2660,20 +2757,19 @@ static void auto_cq_tick(void) {
     }
 }
 
-/* One heartbeat now, at a free spot in the 500-1000 Hz heartbeat sub-band
- * (desktop's rule: clear of anything heard in the last 30 s). Our chat
- * offset (the red band) doesn't move. */
-static int free_hb_offset(void) {
-    static js8_station_t heard[MAX_ROWS];
-    float                offsets[MAX_ROWS];
-    int64_t              times[MAX_ROWS];
-    int64_t              now = now_wall_ms();
-    int                  n   = js8_stations_list(stations, now, heard, MAX_ROWS);
-    for (int i = 0; i < n; i++) {
-        offsets[i] = heard[i].freq_hz;
-        times[i]   = heard[i].heard_ms;
+/* Where a heartbeat or HB ACK goes, as desktop: a free spot in the
+ * 500-1000 Hz heartbeat sub-band, clear of anything decoded in the last
+ * 30 s (call or not). A heartbeat stays on our own offset when that is
+ * 1000 Hz or below. Our chat offset (the red band) doesn't move. */
+static int free_hb_offset(bool heartbeat) {
+    if (heartbeat && params.js8_tx_freq.x <= 1000) return params.js8_tx_freq.x;
+    float   offsets[ACTIVITY];
+    int64_t times[ACTIVITY];
+    for (int i = 0; i < ACTIVITY; i++) {
+        offsets[i] = activity[i].hz;
+        times[i]   = activity[i].ms; /* unused entries: 0, long ago */
     }
-    return js8_heartbeat_offset(offsets, times, (unsigned)n, now);
+    return js8_heartbeat_offset(offsets, times, ACTIVITY, now_wall_ms());
 }
 
 static bool send_heartbeat(bool automatic) {
@@ -2683,7 +2779,13 @@ static bool send_heartbeat(bool automatic) {
     }
     char text[48];
     js8_heartbeat_text(params.callsign.x, params.qth.x, text, sizeof(text));
-    return tx_queue_at(text, free_hb_offset(), automatic);
+    return tx_queue_at(text, free_hb_offset(true), automatic);
+}
+
+/* The first automatic heartbeat: an interval from now, on the slot grid
+ * (desktop's TxLoop). */
+static int64_t hb_first_ms(void) {
+    return js8_next_heartbeat_ms(now_wall_ms(), params.js8_hb_interval.x, js8_speed_period_s(cur_speed()));
 }
 
 /* One now. With HB on, the automatic ones count again from this one, so
@@ -2693,7 +2795,7 @@ static void heartbeat_cb(button_data_t *btn) {
     if (popup_guard()) return;
     (void)btn;
     if (!send_heartbeat(false) || !params.js8_hb.x) return;
-    hb_next_ms = js8_next_heartbeat_ms(now_wall_ms(), params.js8_hb_interval.x);
+    hb_next_ms = hb_first_ms();
     add_info_row("HB timer restarted: next in %u min", params.js8_hb_interval.x);
     update_status();
 }
@@ -2985,28 +3087,128 @@ static unsigned heard_stations(js8_heard_t *out, unsigned max) {
     return k;
 }
 
-static void auto_send(const js8_auto_result_t *r) {
-    int64_t now = now_wall_ms();
-    /* The switches may have changed while it waited. */
-    bool allowed = r->hb_ack ? (params.js8_auto.x && params.js8_hb.x && params.js8_hb_ack.x && !hb_paused())
-                             : params.js8_auto.x;
-    if (!allowed || js8_auto_idle(autop, now)) return;
+/* The switches as they are now, for deciding again at send time. */
+static js8_auto_settings_t auto_settings(void) {
+    js8_auto_settings_t st = {
+        .autoreply = params.js8_auto.x,
+        .heartbeat = params.js8_hb.x && !hb_paused(),
+        .hb_ack    = params.js8_hb_ack.x && !hb_paused(),
+        .relay     = params.js8_relay.x,
+        .my_call   = params.callsign.x,
+        .my_grid   = params.qth.x,
+        .info      = info_text,
+        .status    = status_text,
+        .groups    = groups_text,
+        .held      = held,
+    };
+    return st;
+}
 
-    if (js8_tx_busy(tx) || composing || any_popup()) {
-        if (!pending_auto_valid || strcmp(pending_auto.text, r->text) != 0) pending_auto_ms = now;
-        pending_auto       = *r; /* newest wins */
-        pending_auto_valid = true;
+static void reply_drop(int i) {
+    memmove(&replies[i], &replies[i + 1], (size_t)(n_replies - i - 1) * sizeof(replies[0]));
+    n_replies--;
+}
+
+/* An automatic reply: in the queue, then out at the first chance. */
+static void auto_queue(const js8_auto_result_t *r) {
+    for (int i = 0; i < n_replies; i++)
+        if (strcmp(replies[i].r.text, r->text) == 0) return; /* already waiting */
+    if (n_replies == REPLIES) {
+        add_info_row("Auto: too many replies waiting, not sent: %s", r->text);
         return;
     }
-    if (r->hb_ack && !js8_speed_heartbeats(cur_speed())) return; /* desktop: no HB ACKs in Turbo */
-    int offset = r->hb_ack ? free_hb_offset() : params.js8_tx_freq.x;
-    LV_LOG_USER("JS8 auto: '%s' at %d Hz", r->text, offset);
-    if (tx_queue_at(r->text, offset, true)) {
-        js8_auto_sent(autop, r, now);
-        if (r->deliver_id) deliver_start(r->deliver_id, r->deliver_group_call, r->text);
-        if (r->kind == JS8_REPLY_RELAY) msg_update_text_fmt("Relaying %s's message", r->to);
-        add_info_row("Auto: %s", r->text);
+    replies[n_replies].r       = *r;
+    replies[n_replies].ms      = now_wall_ms();
+    replies[n_replies].cycle   = cycles;
+    replies[n_replies].checked = false;
+    n_replies++;
+}
+
+/* The oldest reply that may go now, decided again as things are now: the
+ * switches, the idle watchdog and the @ALLCALL cooldown. Waits for our own
+ * TX and the keyboard (not a list, your choice); while a message to us is
+ * still arriving nothing goes, and while any is arriving no HB ACK. */
+static void auto_try_send(void) {
+    int64_t now = now_wall_ms();
+    for (int i = 0; i < n_replies;) {
+        if (now - replies[i].ms > REPLY_WAIT_MS) {
+            reply_drop(i);
+            continue;
+        }
+        /* Desktop answers once all of a cycle's decodes are in, and drops
+         * the answer if a message to us is still arriving then (an HB ACK
+         * if any message is): we can't hear its next frames while we send
+         * (D3: as desktop). */
+        bool ended = replies[i].cycle != cycles || now - replies[i].ms > CYCLE_WAIT_MS;
+        if (!replies[i].checked && ended) {
+            replies[i].checked = true;
+            if (message_open(true) || (replies[i].r.hb_ack && message_open(false))) {
+                add_info_row("Auto: %s not sent, a message is still arriving", replies[i].r.text);
+                reply_drop(i);
+                continue;
+            }
+        }
+        i++;
     }
+    if (!n_replies || tx_active || composing || message_open(true)) return;
+
+    js8_auto_settings_t st = auto_settings();
+    for (int i = 0; i < n_replies;) {
+        js8_auto_result_t r = replies[i].r;
+        if (!replies[i].checked || (r.hb_ack && message_open(false))) {
+            i++; /* it waits; the others may go */
+            continue;
+        }
+        reply_drop(i);
+        if (js8_auto_decide(autop, &r, &st, now) != JS8_AUTO_SEND) continue; /* switched off meanwhile */
+        if (r.hb_ack && !js8_speed_heartbeats(cur_speed())) continue;        /* desktop: no HB ACKs in Turbo */
+        int offset = r.hb_ack ? free_hb_offset(false) : params.js8_tx_freq.x;
+        LV_LOG_USER("JS8 auto: '%s' at %d Hz", r.text, offset);
+        if (!tx_queue_at(r.text, offset, true)) continue;
+        js8_auto_sent(autop, &r, now);
+        if (r.deliver_id) deliver_start(r.deliver_id, r.deliver_group_call, r.text);
+        if (r.kind == JS8_REPLY_RELAY) msg_update_text_fmt("Relaying %s's message", r.to);
+        add_info_row("Auto: %s", r.text);
+        return; /* one at a time: the next when this one ends */
+    }
+}
+
+/* AUTO off: the answer offered to a station, if it's still fresh. */
+static int offer_find(const char *call) {
+    int64_t now = now_wall_ms();
+    for (int i = 0; i < OFFERS; i++)
+        if (offers[i].call[0] && strcmp(offers[i].call, call) == 0 && now - offers[i].ms < OFFER_MS) return i;
+    return -1;
+}
+
+/* One per station: a newer answer to the same station replaces its old
+ * one; with all taken, the oldest goes. */
+static void offer_add(const js8_auto_result_t *r) {
+    int slot = 0;
+    for (int i = 0; i < OFFERS; i++) {
+        if (offers[i].call[0] && strcmp(offers[i].call, r->to) == 0) {
+            slot = i;
+            break;
+        }
+        if (!offers[slot].call[0]) continue;
+        if (!offers[i].call[0] || offers[i].ms < offers[slot].ms) slot = i;
+    }
+    snprintf(offers[slot].call, sizeof(offers[slot].call), "%s", r->to);
+    snprintf(offers[slot].text, sizeof(offers[slot].text), "%s", r->text);
+    offers[slot].ms         = now_wall_ms();
+    offers[slot].deliver_id = r->deliver_id;
+    snprintf(offers[slot].deliver_group_call, sizeof(offers[slot].deliver_group_call), "%s", r->deliver_group_call);
+}
+
+/* Everything that answered stations on this frequency: waiting replies,
+ * offers, the offer taken into the keyboard, messages still arriving and
+ * the band activity. */
+static void auto_clear(void) {
+    n_replies = 0;
+    memset(offers, 0, sizeof(offers));
+    deliver_pending.id = 0;
+    memset(open_msgs, 0, sizeof(open_msgs));
+    memset(activity, 0, sizeof(activity));
 }
 
 /* Heartbeats and HB ACKs pause while you're busy: anything you send by
@@ -3049,33 +3251,18 @@ static void handle_incoming(const js8_rx_msg_t *m) {
     js8_heard_t heard[32];
     unsigned    n = heard_stations(heard, 32);
 
-    js8_auto_settings_t st = {
-        .autoreply = params.js8_auto.x,
-        .heartbeat = params.js8_hb.x && !hb_paused(),
-        .hb_ack    = params.js8_hb_ack.x && !hb_paused(),
-        .relay     = params.js8_relay.x,
-        .my_call   = params.callsign.x,
-        .my_grid   = params.qth.x,
-        .info      = info_text,
-        .status    = status_text,
-        .groups    = groups_text,
-        .held      = held,
-    };
-    js8_stored_t      kept;
-    js8_auto_result_t r;
+    js8_auto_settings_t st = auto_settings();
+    js8_stored_t        kept;
+    js8_auto_result_t   r;
     js8_process(autop, m, &st, heard, n, last_tx_text, now_wall_ms(), inbox, &kept, &r);
     stored_received(&kept);
 
     switch (r.action) {
     case JS8_AUTO_SEND:
-        auto_send(&r);
+        auto_queue(&r); /* goes when this decode cycle ends (auto_try_send) */
         break;
     case JS8_AUTO_OFFER:
-        snprintf(offer.call, sizeof(offer.call), "%s", r.to);
-        snprintf(offer.text, sizeof(offer.text), "%s", r.text);
-        offer.ms         = now_wall_ms();
-        offer.deliver_id = r.deliver_id;
-        snprintf(offer.deliver_group_call, sizeof(offer.deliver_group_call), "%s", r.deliver_group_call);
+        offer_add(&r);
         if (r.kind == JS8_REPLY_RELAY) {
             char dest[JS8_RX_CALL_LEN];
             snprintf(dest, sizeof(dest), "%.*s", (int)strcspn(r.text, ">"), r.text);
@@ -3118,7 +3305,7 @@ static void push_tick(void) {
     if (now < push_next_ms) return;
     push_next_ms = now + PUSH_INTERVAL_MS;
     if (!params.js8_auto.x || !held || js8_auto_idle(autop, now) || !params.callsign.x[0]) return;
-    if (js8_tx_busy(tx) || pending_auto_valid || composing || any_popup()) return;
+    if (tx_active || n_replies || composing) return;
     js8_heard_t heard[32];
     unsigned    n = heard_stations(heard, 32);
     char        text[64];
@@ -3146,15 +3333,17 @@ static void msg_age_tick(void) {
 static void hb_tick(void) {
     beep_log_level();
     if (hb_adjusting && now_wall_ms() - hb_adjust_ms > HB_ADJUST_MS) hb_adjust_end();
-    /* An automatic reply put off by a list or the keyboard: send it once
-     * they close (after a transmission, ui_tx_done does the same). */
-    if (pending_auto_valid) {
-        if (now_wall_ms() - pending_auto_ms > PENDING_AUTO_MS) pending_auto_valid = false;
-        else if (!js8_tx_busy(tx) && !composing && !any_popup()) {
-            pending_auto_valid = false;
-            auto_send(&pending_auto);
-        }
+    /* The transmitter is idle but ui_tx_done never came (its message was
+     * lost): don't wait for it for ever. */
+    if (tx_active && !js8_tx_busy(tx)) {
+        if (!tx_quiet_ms) tx_quiet_ms = now_wall_ms();
+        else if (now_wall_ms() - tx_quiet_ms > TX_DONE_LOST_MS) tx_active = false;
+    } else {
+        tx_quiet_ms = 0;
     }
+    /* Replies that waited for the keyboard or a message still arriving
+     * (after a transmission, ui_tx_done does the same). */
+    auto_try_send();
     push_tick();
     msg_age_tick();
     if (hb_paused_until && !hb_paused()) hb_resume();
@@ -3168,14 +3357,18 @@ static void hb_tick(void) {
     /* As on desktop, the first one comes an interval after switching on;
      * page 1's Heartbeat sends one now. */
     if (hb_next_ms == 0) {
-        hb_next_ms = js8_next_heartbeat_ms(now, params.js8_hb_interval.x);
+        hb_next_ms = hb_first_ms();
         update_status();
     }
     if (now < hb_next_ms - 5000) return;   /* desktop prepares it 5 s early */
-    if (js8_tx_busy(tx) || composing || any_popup() || !params.callsign.x[0]) return;
+    /* Lists don't hold it up, only the keyboard. Waiting replies went
+     * first (auto_try_send above). */
+    if (tx_active || composing || !params.callsign.x[0]) return;
     LV_LOG_USER("JS8 auto: heartbeat (due %lld)", (long long)hb_next_ms);
     if (send_heartbeat(true)) {
-        hb_next_ms = js8_next_heartbeat_ms(now, params.js8_hb_interval.x);
+        /* On desktop's fixed schedule: an interval after the one due, not
+         * after this one went (later if it waited). */
+        hb_next_ms = js8_following_heartbeat_ms(hb_next_ms, now, params.js8_hb_interval.x);
         update_status();
     }
 }
@@ -4475,26 +4668,37 @@ static bool same_tx_text(const char *a, const char *b) {
     return la == lb && strncasecmp(a, b, la) == 0;
 }
 
-/* A held message's delivery was queued: it counts once it has all gone. */
+/* A held message's delivery was queued: it counts once it has all gone.
+ * A few can be on their way; with all taken, the oldest is forgotten. */
 static void deliver_start(int id, const char *group_call, const char *text) {
-    deliver_tx.id = id;
-    snprintf(deliver_tx.group_call, sizeof(deliver_tx.group_call), "%s", group_call ? group_call : "");
-    snprintf(deliver_tx.text, sizeof(deliver_tx.text), "%s", text);
+    int slot = 0;
+    while (slot < DELIVERIES - 1 && deliveries[slot].id) slot++;
+    if (deliveries[slot].id) { /* all taken */
+        memmove(&deliveries[0], &deliveries[1], (DELIVERIES - 1) * sizeof(deliveries[0]));
+        slot = DELIVERIES - 1;
+    }
+    deliveries[slot].id = id;
+    snprintf(deliveries[slot].group_call, sizeof(deliveries[slot].group_call), "%s", group_call ? group_call : "");
+    snprintf(deliveries[slot].text, sizeof(deliveries[slot].text), "%s", text);
 }
 
-/* A message ended. If it was the delivery, sent in full it's delivered;
+/* A message ended. If it was a delivery, sent in full it's delivered;
  * stopped halfway, it stays held, and their next QUERY MSGS or heartbeat
  * is offered it again. */
 static void deliver_end(const char *text, bool completed) {
-    if (!deliver_tx.id || !same_tx_text(text, deliver_tx.text)) return;
-    if (completed) {
-        if (deliver_tx.group_call[0]) js8_held_group_delivered(held, deliver_tx.id, deliver_tx.group_call);
-        else js8_held_delivered(held, deliver_tx.id);
-        add_info_row("Held message %d delivered", deliver_tx.id);
-    } else {
-        add_info_row("Held message %d stopped before the end: still held", deliver_tx.id);
+    for (int i = 0; i < DELIVERIES; i++) {
+        if (!deliveries[i].id || !same_tx_text(text, deliveries[i].text)) continue;
+        int id = deliveries[i].id;
+        if (completed) {
+            if (deliveries[i].group_call[0]) js8_held_group_delivered(held, id, deliveries[i].group_call);
+            else js8_held_delivered(held, id);
+            add_info_row("Held message %d delivered", id);
+        } else {
+            add_info_row("Held message %d stopped before the end: still held", id);
+        }
+        deliveries[i].id = 0;
+        return;
     }
-    deliver_tx.id = 0;
 }
 
 static void inbox_close(void) {

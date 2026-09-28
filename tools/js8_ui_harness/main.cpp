@@ -340,7 +340,7 @@ int main() {
 
     ui_init();
     if (getenv("ONLY_MODE")) stub_mode_setup();
-    if (getenv("ONLY_INBOX") || getenv("ONLY_SMS")) unlink(JS8_INBOX_PATH); // before the dialog loads it
+    if (getenv("ONLY_INBOX") || getenv("ONLY_SMS") || getenv("ONLY_REPLYQ")) unlink(JS8_INBOX_PATH); // before the dialog loads it
     if (getenv("ONLY_HELD")) unlink(JS8_HELD_PATH);
     if (getenv("ONLY_RELAY")) {
         unlink(JS8_INBOX_PATH);
@@ -1222,23 +1222,117 @@ int main() {
         return 0;
     }
     if (getenv("ONLY_RETUNE")) {
-        // A reply that waited behind a popup must not go out after a change
-        // of band or frequency: it answered a station on the old one.
+        // A reply that waited behind the keyboard must not go out after a
+        // change of band or frequency: it answered a station on the old one.
         pump(300);
         ui_page(4);
         ui_press(1); // AUTO on
         pump(200);
-        ui_page(6);
-        ui_press(4); // Freq: a popup, so the reply waits
+        ui_page(2);
+        ui_press(3); // Send...: the keyboard, so the reply waits
         pump(300);
         int frames = stub_tx_frames;
         feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ SNR?", 1320, 0.05f}});
-        printf("[retune] SNR? arrived with the Freq list open: frames %d (want %d: waiting)\n", stub_tx_frames, frames);
-        ui_click_focused(); // JS8Call frequencies: retunes (to the same preset)
+        printf("[retune] SNR? arrived while typing: frames %d (want %d: waiting)\n", stub_tx_frames, frames);
+        ui_compose_cancel();
+        printf("[retune] the SNR? was heard: %d (want 1)\n", ui_list_has("N0XYZ: K2XYZ SNR?"));
+        ui_band_up(); // another band, before the reply's next chance
         pump(300);
         for (int i = 0; i < 200 && stub_tx_frames == frames; i++) pump(100);
-        printf("[retune] after the retune: frames %d (want %d: the old frequency's reply dropped)\n", stub_tx_frames,
+        printf("[retune] after the band change: frames %d (want %d: the old band's reply dropped)\n", stub_tx_frames,
                frames);
+        return 0;
+    }
+    if (getenv("ONLY_REPLYQ")) {
+        // Package 3: automatic replies queue, wait for a message to us that
+        // is still arriving, and don't wait for lists; offers per station.
+        auto wait_idle = [&]() { // until nothing has keyed for 20 s
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 200 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        pump(300);
+        // AUTO off: two stations ask; each one's answer is on Reply.
+        feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ SNR?", 1500, 0.05f},
+                   {"N0XYZ", "EN34", "K2XYZ", "K2XYZ GRID?", 1320, 0.05f}});
+        ui_select_row_from("W1ABC");
+        ui_page(2);
+        ui_press(2); // Reply
+        pump(200);
+        printf("[replyq] Reply to W1ABC offers '%s' (want W1ABC SNR ...)\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(200);
+        ui_select_row_from("N0XYZ");
+        ui_page(2);
+        ui_press(2);
+        pump(200);
+        printf("[replyq] Reply to N0XYZ offers '%s' (want N0XYZ GRID FN42AB)\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(200);
+
+        // AUTO on: two questions in one slot; both answered, in turn.
+        ui_page(4);
+        ui_press(1); // AUTO on
+        pump(200);
+        feed_band({{"W7DEF", "DM43", "K2XYZ", "K2XYZ SNR?", 1700, 0.05f},
+                   {"VE7ABC", "CN89", "K2XYZ", "K2XYZ GRID?", 900, 0.05f}});
+        wait_idle();
+        printf("[replyq] both answered: W7DEF %d, VE7ABC %d (want 1, 1)\n", ui_list_has("W7DEF SNR"),
+               ui_list_has("VE7ABC GRID"));
+
+        // A question while a message to us is still arriving: dropped, as
+        // desktop, so we don't key over the message; the message gets its ACK.
+        int frames = stub_tx_frames;
+        feed_band({{"N7EAL", "DN17", "K2XYZ", "K2XYZ MSG MEET ON 40M AT 1800Z TOMORROW IF THE BAND IS OPEN", 1320,
+                    0.05f},
+                   {"KK6WVY", "CM87", "K2XYZ", "K2XYZ SNR?", 2100, 0.05f}},
+                  0, 1);
+        pump(3000);
+        printf("[replyq] SNR? during the first frame of a MSG to us: frames sent %d (want 0)\n",
+               stub_tx_frames - frames);
+        feed_band({{"N7EAL", "DN17", "K2XYZ", "K2XYZ MSG MEET ON 40M AT 1800Z TOMORROW IF THE BAND IS OPEN", 1320,
+                    0.05f}},
+                  1);
+        wait_idle();
+        printf("[replyq] MSG ACKed %d, SNR? not answered %d, frames sent %d (want 1, 1, 1: the ACK)\n",
+               ui_list_has("K2XYZ: N7EAL ACK"), ui_list_has("not sent, a message is still arriving"),
+               stub_tx_frames - frames);
+
+        // Lists don't hold replies (only the keyboard does).
+        ui_page(3);
+        ui_press(4); // Inbox: a list
+        pump(300);
+        frames = stub_tx_frames;
+        feed_band({{"W9GHI", "EN52", "K2XYZ", "K2XYZ SNR?", 1100, 0.05f}});
+        for (int i = 0; i < 200 && stub_tx_frames == frames; i++) pump(100);
+        printf("[replyq] SNR? with the Inbox open: answered %d (want 1)\n", stub_tx_frames > frames);
+        ui_key(LV_KEY_ESC);
+        wait_idle();
+
+        // HB ACK: not while any message is still arriving (to anyone).
+        ui_page(4);
+        ui_press(2); // HB on (and the knob)
+        ui_press(2); // done
+        ui_press(3); // HB ACK on
+        pump(300);
+        frames = stub_tx_frames;
+        feed_band({{"N0ABC", "EM12", "W7AAA", "W7AAA MSG THE NET MOVES TO 7.078 TONIGHT AT THE USUAL TIME", 1320,
+                    0.05f},
+                   {"KE7XYZ", "DN06", "", "KE7XYZ: HEARTBEAT DN06", 700, 0.05f}},
+                  0, 1);
+        pump(3000);
+        printf("[replyq] heartbeat during a MSG to someone else: frames sent %d (want 0)\n", stub_tx_frames - frames);
+        feed_band({{"N0ABC", "EM12", "W7AAA", "W7AAA MSG THE NET MOVES TO 7.078 TONIGHT AT THE USUAL TIME", 1320,
+                    0.05f}},
+                  1);
+        feed_band({{"WA7JKL", "CN87", "", "WA7JKL: HEARTBEAT CN87", 700, 0.05f}});
+        wait_idle();
+        printf("[replyq] heartbeat on a quiet band: HB ACK %d, none to KE7XYZ %d, frames sent %d (want 1, 0, 1)\n",
+               ui_list_has("K2XYZ: WA7JKL HEARTBEAT SNR"), ui_list_has("K2XYZ: KE7XYZ HEARTBEAT SNR"),
+               stub_tx_frames - frames);
         return 0;
     }
     if (getenv("ONLY_BANDS")) {

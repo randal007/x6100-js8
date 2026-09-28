@@ -1295,12 +1295,13 @@ TEST_CASE("the switches: AUTO sends, off offers; HB ACK needs AUTO and HB", "[js
     CHECK(p.decide(ack, s, t) == AutoPolicy::Action::Ignore);
     s.autoreply = true;
 
-    // Rate limits: same station and command within 5 min; acks within 15 min.
+    // A question asked again gets its answer again, as on desktop (no
+    // repeat guard); heartbeat acks: one per station per 55 min (desktop's
+    // @ALLCALL cooldown).
     p.sent(query, t);
-    CHECK(p.decide(query, s, t + 60'000) == AutoPolicy::Action::Ignore);
-    CHECK(p.decide(query, s, t + AutoPolicy::QUERY_REPEAT_MS + 1) == AutoPolicy::Action::Send);
+    CHECK(p.decide(query, s, t + 60'000) == AutoPolicy::Action::Send);
     p.sent(ack, t);
-    CHECK(p.decide(ack, s, t + 10 * 60'000) == AutoPolicy::Action::Ignore);
+    CHECK(p.decide(ack, s, t + 50 * 60'000) == AutoPolicy::Action::Ignore);
     CHECK(p.decide(ack, s, t + AutoPolicy::HB_ACK_REPEAT_MS + 1) == AutoPolicy::Action::Send);
 
     // Idle watchdog: an hour without a key press stops automatic TX.
@@ -1320,23 +1321,85 @@ TEST_CASE("a QSO starts with any message to us except a heartbeat ack", "[js8][t
     CHECK_FALSE(starts_qso(incoming("N0XYZ", "W1ABC HELLO", -5)));
 }
 
-TEST_CASE("heartbeat timing follows desktop's scheduleHeartbeat", "[js8][t4]") {
-    std::mt19937       rng(3);
+TEST_CASE("heartbeat timing follows desktop's TxLoop", "[js8][t4]") {
     const std::int64_t now = 1'700'000'007'400; // 7.4 s past a 15 s boundary
-    int                later = 0;
-    for (int i = 0; i < 400; i++) {
-        auto t = next_heartbeat_ms(now, 10, rng);
-        // next boundary (…015 s) + 1 s + 10 min, sometimes one slot later
-        const std::int64_t base = (now / 1000 + 14) / 15 * 15 * 1000 + 1000 + 10 * 60'000;
-        CHECK((t == base || t == base + 15'000));
-        later += t != base;
-    }
-    CHECK(later > 60);  // about 25 %
-    CHECK(later < 140);
+    // The first: 10 min from now, up to the next slot of the speed.
+    auto first = next_heartbeat_ms(now, 10, 15'000);
+    CHECK(first % 15'000 == 0);
+    CHECK(first >= now + 10 * 60'000);
+    CHECK(first < now + 10 * 60'000 + 15'000);
+    CHECK(next_heartbeat_ms(now, 10, 30'000) % 30'000 == 0); // Slow's 30 s slots
+    // Then every 10 min after the one scheduled: on the grid, no jitter.
+    CHECK(following_heartbeat_ms(first, first + 2'000, 10) == first + 10 * 60'000);
+    // After a pause or a long message: whole intervals on, never in the past.
+    CHECK(following_heartbeat_ms(first, first + 25 * 60'000, 10) == first + 30 * 60'000);
+    CHECK(following_heartbeat_ms(first, first + 10 * 60'000, 10) == first + 20 * 60'000);
     // Interval clamped to 5-30 min.
-    auto lo = next_heartbeat_ms(now, 1, rng), hi = next_heartbeat_ms(now, 99, rng);
-    CHECK(lo - now < 6 * 60'000 + 20'000);
-    CHECK(hi - now > 29 * 60'000);
+    CHECK(next_heartbeat_ms(now, 1, 15'000) - now < 5 * 60'000 + 15'000);
+    CHECK(next_heartbeat_ms(now, 99, 15'000) - now >= 30 * 60'000);
+    CHECK(following_heartbeat_ms(first, first, 1) == first + 5 * 60'000);
+}
+
+TEST_CASE("auto-reply answers as desktop's processCommandActivity does", "[js8][t4][parity]") {
+    // What arrives (from, text as desktop sends it, checksum good) and the
+    // reply desktop JS8Call-improved (d9c50510,
+    // JS8_Mainwindow/processCommandActivity.cpp) queues for it, or nothing.
+    // Heard: W1ABC 5 min ago at -05, VE7ABC only through a relay (-64).
+    struct Row {
+        const char *from, *text, *reply;
+    };
+    const Row rows[] = {
+        {"N0XYZ", "K2XYZ SNR?", "N0XYZ SNR -12"},
+        {"N0XYZ", "K2XYZ GRID?", "N0XYZ GRID FN42AB"},
+        {"N0XYZ", "K2XYZ INFO?", "N0XYZ INFO X6100 5W EFHW"},
+        {"N0XYZ", "K2XYZ STATUS?", "N0XYZ STATUS IDLE"},
+        {"N0XYZ", "K2XYZ AGN?", "N0XYZ HELLO FROM K2XYZ"},        // our last message again
+        {"N0XYZ", "K2XYZ HEARING?", "N0XYZ HEARING W1ABC VE7ABC"}, // up to 4, not the asker
+        {"N0XYZ", "@ALLCALL SNR?", nullptr},                       // questions never to everyone
+        {"N0XYZ", "K2XYZ MSG HELLO THERE", "N0XYZ ACK"},
+        {"N0XYZ", "@APRSIS MSG HELLO", nullptr}, // not a gateway's MSG TO: form: for the gateway
+        {"N0XYZ", "K2XYZ QUERY MSGS", "N0XYZ NO"},
+        {"N0XYZ", "@ALLCALL QUERY MSGS", nullptr}, // never NO to everyone
+        {"N0XYZ", "K2XYZ QUERY CALL W1ABC?", "N0XYZ YES -05 (5m)"},
+        {"N0XYZ", "K2XYZ QUERY CALL VE7ABC?", "N0XYZ YES (5m)"}, // relay-only: no SNR
+        {"N0XYZ", "K2XYZ QUERY CALL ZZ9ZZ?", nullptr},             // never heard
+        {"N0XYZ", "K2XYZ>W1ABC HELLO THERE", "W1ABC>HELLO THERE *DE* N0XYZ"},
+        {"K9ABC", "K9ABC: HEARTBEAT EN52", "K9ABC HEARTBEAT SNR -12"},
+    };
+    const std::int64_t       now   = 1'000'000'000;
+    const std::vector<Heard> heard = {Heard("W1ABC", -5, now - 300'000), Heard("VE7ABC", -64, now - 300'000)};
+    for (auto &row : rows) {
+        INFO(row.from << ": " << row.text);
+        auto in        = incoming(row.from, row.text, -12);
+        in.checksum_ok = true;
+        in.when_ms     = now;
+        auto r         = build_reply(in, settings(), heard, "N0XYZ HELLO FROM K2XYZ");
+        if (!row.reply) {
+            CHECK_FALSE(r);
+            continue;
+        }
+        REQUIRE(r);
+        CHECK(r->text == row.reply);
+    }
+
+    // And when desktop sends them: every time (a question asked again is
+    // answered again), @ALLCALL and heartbeat answers once per station per
+    // 55 min, QUERY MSGS / QUERY CALL only with AUTO on.
+    AutoPolicy p;
+    auto       s = settings();
+    s.autoreply = s.heartbeat = s.hb_ack = true;
+    p.user_activity(now);
+    auto snr = *build_reply(incoming("N0XYZ", "K2XYZ SNR?", -12), s, {}, "");
+    p.sent(snr, now);
+    CHECK(p.decide(snr, s, now + 1000) == AutoPolicy::Action::Send);
+    auto hb = *build_reply(incoming("K9ABC", "K9ABC: HEARTBEAT EN52", -12), s, {}, "");
+    p.sent(hb, now);
+    CHECK(p.decide(hb, s, now + 54 * 60'000) == AutoPolicy::Action::Ignore);
+    CHECK(p.decide(hb, s, now + 56 * 60'000) == AutoPolicy::Action::Send);
+    auto msgs = *build_reply(incoming("N0XYZ", "K2XYZ QUERY MSGS", -12), s, {}, "");
+    s.autoreply = false;
+    CHECK(p.decide(msgs, s, now) == AutoPolicy::Action::Ignore);
+    CHECK(p.decide(snr, s, now) == AutoPolicy::Action::Offer);
 }
 
 // ---- QSO log ---------------------------------------------------------------
@@ -2320,9 +2383,8 @@ TEST_CASE("store and forward replies follow desktop", "[js8][held]") {
     CHECK_FALSE(build_reply(other, s, {}, ""));
     auto bad = incoming("W1ABC", "K2XYZ QUERY MSG " + std::to_string(id), -5);
     CHECK_FALSE(build_reply(bad, s, {}, ""));
-    // Asked again within the repeat guard: it didn't get there, so AUTO sends
-    // it again (a plain query would wait QUERY_REPEAT_MS). Desktop answers
-    // QUERY MSGS every time too, but only with AUTO on.
+    // Asked again: it didn't get there, so AUTO sends it again, as desktop
+    // does (it answers every time; QUERY MSGS only with AUTO on).
     {
         AutoPolicy p;
         auto       s2 = s;

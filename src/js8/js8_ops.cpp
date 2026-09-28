@@ -340,13 +340,30 @@ extern "C" void js8_process(js8_auto_t *a, const js8_rx_msg_t *msg, const js8_au
                   : act == AutoPolicy::Action::Offer ? JS8_AUTO_OFFER
                                                      : JS8_AUTO_IGNORE;
     out->kind    = c_kind(r.kind);
-    out->hb_ack  = r.kind == ReplyKind::HeartbeatAck;
-    out->allcall = r.allcall;
+    out->hb_ack    = r.kind == ReplyKind::HeartbeatAck;
+    out->allcall   = r.allcall;
+    out->auto_only = r.auto_only;
     copy_str(out->text, sizeof(out->text), r.text);
     copy_str(out->to, sizeof(out->to), r.to);
     copy_str(out->command, sizeof(out->command), r.command);
     out->deliver_id = r.deliver_id;
     copy_str(out->deliver_group_call, sizeof(out->deliver_group_call), r.deliver_group_call);
+}
+
+extern "C" js8_auto_action_t js8_auto_decide(js8_auto_t *a, const js8_auto_result_t *r,
+                                             const js8_auto_settings_t *s, int64_t now_ms) {
+    if (!a || !r || !s) return JS8_AUTO_IGNORE;
+    AutoReply reply{r->text, r->to, r->command, cpp_kind(r->kind)};
+    reply.allcall   = r->allcall;
+    reply.auto_only = r->auto_only;
+    AutoSettings settings;
+    settings.autoreply = s->autoreply;
+    settings.heartbeat = s->heartbeat;
+    settings.hb_ack    = s->hb_ack;
+    auto act           = a->policy.decide(reply, settings, now_ms);
+    return act == AutoPolicy::Action::Send    ? JS8_AUTO_SEND
+           : act == AutoPolicy::Action::Offer ? JS8_AUTO_OFFER
+                                              : JS8_AUTO_IGNORE;
 }
 
 extern "C" void js8_auto_sent(js8_auto_t *a, const js8_auto_result_t *r, int64_t now_ms) {
@@ -368,9 +385,12 @@ extern "C" bool js8_starts_qso(const js8_rx_msg_t *msg) {
     return msg && !msg->tx && starts_qso(to_incoming(msg));
 }
 
-extern "C" int64_t js8_next_heartbeat_ms(int64_t now_ms, int interval_min) {
-    static std::mt19937 rng{std::random_device{}()};
-    return next_heartbeat_ms(now_ms, interval_min, rng);
+extern "C" int64_t js8_next_heartbeat_ms(int64_t now_ms, int interval_min, int period_s) {
+    return next_heartbeat_ms(now_ms, interval_min, (int64_t)period_s * 1000);
+}
+
+extern "C" int64_t js8_following_heartbeat_ms(int64_t scheduled_ms, int64_t now_ms, int interval_min) {
+    return following_heartbeat_ms(scheduled_ms, now_ms, interval_min);
 }
 
 extern "C" bool js8_sync_drift(const js8_sync_sample_t *s, unsigned n, int64_t now_ms, int64_t window_ms,

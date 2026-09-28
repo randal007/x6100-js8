@@ -37,9 +37,19 @@ run faster.)
   refused, dial unchanged), then `dialog_destruct()` as GEN, APP or another
   app does (the frame must be aborted, PTT off, no crash: it crashed in
   `js8_tx_stopping()` before the fix); reopened, a CQ goes out again.
-- `ONLY_RETUNE=1`: AUTO on and the Freq list open, a station asks us
-  `SNR?` (the answer waits behind the list); then a retune: the waiting
-  answer must not go out on the new frequency.
+- `ONLY_RETUNE=1`: AUTO on and the keyboard open (Send...), a station
+  asks us `SNR?` (the answer waits behind the keyboard); then a band key:
+  the waiting answer must not go out on the new band.
+
+## Automatic replies
+
+- `ONLY_REPLYQ=1`: AUTO off, two stations ask: Reply offers each one its
+  own answer. AUTO on, two questions in one slot: both answered in turn.
+  A `SNR?` in the same slot as the first frame of a `MSG` to us: not
+  answered (as desktop), nothing keys over the message, which gets its
+  ACK. A `SNR?` with the Inbox open: answered (lists don't hold replies).
+  HB and HB ACK on: a heartbeat while a `MSG` to someone else is arriving
+  gets no HB ACK; one on a quiet band does.
 
 ## Data files
 

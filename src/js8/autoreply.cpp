@@ -193,9 +193,12 @@ Processed handle(const Directed &d, const std::string &relay_path, const Ctx &c)
     // MSG: into the inbox (from our group too), ACKed along the path.
     if (cmd == " MSG" && !c.allcall) {
         if (c.in.to == "@APRSIS") {
+            // Only a gateway's "MSG TO:CALL text DE SENDER"; desktop ignores
+            // any other MSG to @APRSIS (it's for the gateway, not for us).
             static const std::regex to_re("^TO:\\s*(\\S+)\\s+(.*)$");
             std::smatch             m;
             if (std::regex_match(d.text, m, to_re)) return aprs_to_inbox(c, m.str(1), m.str(2));
+            return {};
         }
         auto      calls = relay_path_calls(d.from, d.text);
         Processed p;
@@ -247,6 +250,8 @@ Processed handle(const Directed &d, const std::string &relay_path, const Ctx &c)
     }
 
     // QUERY CALL W1ABC?: "YES -12 (5m)" if we've heard them; else nothing.
+    // Only heard through a relay (SNR -64): no SNR, "YES (5m)", as desktop's
+    // "%1 (%2)" with an empty formatSNR() comes out after trimmed().
     if (cmd == " QUERY CALL") {
         auto calls = parse_callsigns(d.text);
         if (calls.empty()) return {};
@@ -254,9 +259,9 @@ Processed handle(const Directed &d, const std::string &relay_path, const Ctx &c)
         for (auto &h : c.heard) {
             if (h.call != want && base_callsign(h.call) != want) continue;
             std::string snr = desktop_snr(h.snr);
-            if (snr.empty()) break;
-            AutoReply r = make(c, back + " YES " + snr + " (" + since(h.heard_ms, c.in.when_ms) + ")",
-                               "QUERY CALL", ReplyKind::Stored);
+            std::string ago = "(" + since(h.heard_ms, c.in.when_ms) + ")";
+            AutoReply   r   = make(c, back + " YES " + (snr.empty() ? ago : snr + " " + ago), "QUERY CALL",
+                                   ReplyKind::Stored);
             r.auto_only = true;
             return with(r);
         }
@@ -344,35 +349,50 @@ AutoPolicy::Action AutoPolicy::decide(const AutoReply &r, const AutoSettings &s,
         // QUERY MSGS or QUERY CALL, which it answers only with AUTO on.
         return r.auto_only || r.allcall ? Action::Ignore : Action::Offer;
     }
-    // Desktop's @ALLCALL cache: one answer per station per 15 min to
+    // Desktop's @ALLCALL cooldown: one answer per station per 55 min to
     // anything sent to everyone, heartbeats included.
     if (r.allcall || r.kind == ReplyKind::HeartbeatAck) {
         auto it = last_sent_.find("@ALLCALL|" + r.to);
         return it != last_sent_.end() && now_ms - it->second < HB_ACK_REPEAT_MS ? Action::Ignore : Action::Send;
     }
-    // ACKs (a resend wants its ACK too), relays and held messages (asking
-    // again means it didn't get there) go every time, as on desktop.
-    if (r.kind != ReplyKind::Query) return Action::Send;
-
-    auto it = last_sent_.find(r.to + "|" + r.command);
-    if (it != last_sent_.end() && now_ms - it->second < QUERY_REPEAT_MS) return Action::Ignore;
+    // Everything else every time, as on desktop: a question asked again
+    // gets its answer again, a resend its ACK, a relay or a held message
+    // asked for again (it didn't get there) goes again.
     return Action::Send;
 }
 
 void AutoPolicy::sent(const AutoReply &r, std::int64_t now_ms) {
+    // Forget what's past the cooldown: a station left running for days
+    // would otherwise keep every station it ever answered.
+    for (auto it = last_sent_.begin(); it != last_sent_.end();)
+        it = now_ms - it->second >= HB_ACK_REPEAT_MS ? last_sent_.erase(it) : std::next(it);
     if (r.allcall || r.kind == ReplyKind::HeartbeatAck) last_sent_["@ALLCALL|" + r.to] = now_ms;
-    else last_sent_[r.to + "|" + r.command] = now_ms;
 }
 
-std::int64_t next_heartbeat_ms(std::int64_t now_ms, int interval_min, std::mt19937 &rng) {
+namespace {
+std::int64_t interval_ms(int interval_min) {
     if (interval_min < HB_MIN_INTERVAL) interval_min = HB_MIN_INTERVAL;
     if (interval_min > HB_MAX_INTERVAL) interval_min = HB_MAX_INTERVAL;
+    return (std::int64_t)interval_min * 60'000;
+}
+} // namespace
 
-    std::int64_t secs = now_ms / 1000;
-    std::int64_t up   = (secs + 14) / 15 * 15; // round up to a 15 s boundary
-    std::int64_t next = up + 1 + interval_min * 60;
-    if (std::uniform_real_distribution<float>(0, 1)(rng) < 0.25f) next += 15;
-    return next * 1000;
+// Desktop's TxLoop::onTxLoopPeriodChangeStart(): now + the period, rounded
+// up to the speed's slot.
+std::int64_t next_heartbeat_ms(std::int64_t now_ms, int interval_min, std::int64_t period_ms) {
+    if (period_ms <= 0) period_ms = 15'000;
+    std::int64_t earliest = now_ms + interval_ms(interval_min);
+    std::int64_t rem      = earliest % period_ms;
+    return rem ? earliest + period_ms - rem : earliest;
+}
+
+// TxLoop::onTimer(): the last one + the period (whole minutes, so still on
+// the slot grid), pushed on by whole periods while it's already past.
+std::int64_t following_heartbeat_ms(std::int64_t scheduled_ms, std::int64_t now_ms, int interval_min) {
+    std::int64_t step = interval_ms(interval_min);
+    std::int64_t next = scheduled_ms + step;
+    if (next <= now_ms) next += ((now_ms - next) / step + 1) * step;
+    return next;
 }
 
 } // namespace x6100::js8
