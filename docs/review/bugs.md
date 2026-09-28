@@ -34,6 +34,9 @@ Findings from the earlier hunt ([bug-hunt-2026-09-28.md](../bug-hunt-2026-09-28.
 | B-15 | F38, F41 | `js8_texts.txt` is rewritten in place: a power cut can wipe the settings | low | confirmed |
 | B-16 | F40, F63 | Without a callsign the keyboard never opens, and leaves a stale edit mode behind | low | confirmed |
 | B-17 | F34, F41 | A message that couldn't be saved is still ACKed | low | confirmed |
+| B-18 | F12, F62 | QUERY CALL about a station heard only through a relay gets no answer | low | confirmed |
+| B-19 | F56 | The VOL knob does nothing while most popups are open | low | confirmed |
+| B-20 | F60, F83 | "New station" alerts again for a station that dropped off the list | low | likely |
 
 ## Batch 1: Transmitting and the radio
 
@@ -408,3 +411,49 @@ delivered; it's only in memory here and is lost at power-off.
 
 **Fix:** drop the ACK when the store failed, so the sender's station
 tries again later.
+
+## Batch 6: Selecting, navigating, Stations
+
+### B-18. QUERY CALL about a station heard only through a relay gets no answer — low, confirmed
+
+**Where:** `src/js8/autoreply.cpp:250-264` (`QUERY CALL`).
+
+**What goes wrong:** a station we only heard through a relay is listed
+with SNR −64 (desktop's value). `desktop_snr(-64)` is empty (outside
+−60..+60), and our code then `break`s: no answer. Desktop builds
+`QString("%1 (%2)").arg(formatSNR(cd.snr)).arg(since(...)).trimmed()`,
+i.e. `"(5m)"`, and answers `N0XYZ YES (5m)` (`processCommandActivity.cpp:1100-1113`).
+
+**Fix:** answer without the SNR when it's out of range, as desktop does.
+
+### B-19. The VOL knob does nothing while most popups are open — low, confirmed
+
+**Where:** the popups' key callbacks: `texts_key_cb`, `aprs_key_cb`,
+`log_key_cb`, `inbox_key_cb`, `alerts_key_cb`, `freq_key_cb`,
+`spot_key_cb`.
+
+**What goes wrong:** the VOL knob is a keypad (`main.c:90-94`): its turns
+arrive as `KEY_VOL_*` key events at whatever has the focus. The message
+list (`key_cb`) and the Query list (`query_key_cb`) pass them to
+`radio_change_vol()`; the other seven popups only handle ESC and the
+arrows, so the volume can't be changed while reading the Inbox, the Log
+form, Settings and so on.
+
+**Fix:** one shared popup key handler that also does the volume (fits
+with I-05's single popup table).
+
+### B-20. "New station" alerts again for a station that dropped off the list — low, likely
+
+**Where:** `src/dialog_js8.c:696` (`process_message`), `:3969-3979`
+(`find_station`), `:4899-4903` (`alert_check`).
+
+**What goes wrong:** "New station (not in log)" means "not in the
+Stations list right now, and not in the log for this band". Stations
+leave the list an hour after they were last heard (the default), so a
+regular who isn't in the log beeps as new each time they come back after
+an hour. Also, `find_station()` only looks at the first 200 stations of
+the sorted list: past that (a busy band with "Stations kept: 6 hours" or
+"always"), stations already heard count as new.
+
+**Fix:** keep a separate "heard since power-on" set of calls (or
+per-dial), and look the call up by key (see I-17).

@@ -29,7 +29,7 @@ The review reads code only: **no code is changed**.
 | 3 | Receiving and decoding | F21–F31 | ✅ 2026-09-28: 3 bugs (all low), 2 improvements |
 | 4 | Inbox, saved data, settings | F32–F41 | ✅ 2026-09-28: 4 bugs (1 medium), 2 improvements |
 | 5 | The screen | F42–F52 | ✅ 2026-09-28: no new bugs, 3 improvements (1 high) |
-| 6 | Selecting, navigating, Stations | F53–F62 | |
+| 6 | Selecting, navigating, Stations | F53–F62 | ✅ 2026-09-28: 3 bugs (all low), 1 improvement |
 | 7 | Sending by hand | F63–F72 | |
 | 8 | Logging and APRS | F73–F82 | |
 | 9 | Alerts, time, app life cycle, firmware hooks | F83–F92 | |
@@ -235,26 +235,36 @@ What an unattended station sends by itself.
 
 ## Batch 6: Selecting, navigating, Stations
 
-- [ ] **F53. Selecting a station**: `select_row`, `select_at_cursor`,
+- [x] **F53. Selecting a station**: `select_row`, `select_at_cursor`,
   `table_select_cb`, `table_press_cb`, `show_selection`,
   `clear_selection`, `sel_call`.
-- [ ] **F54. Lock (hold MFK)**: `table_hold_cb`, `sel_locked`,
+  → nothing new. Fine: knob and press select, press announces, the green line follows the station's offset.
+- [x] **F54. Lock (hold MFK)**: `table_hold_cb`, `sel_locked`,
   `press_on_locked`, `press_held`.
-- [ ] **F55. Rows without a callsign, marked by frequency**:
+  → nothing new. Fine: lock, unlock, another station unlocks; BH-14 fixed (the Stations view unlocks).
+- [x] **F55. Rows without a callsign, marked by frequency**:
   `callless_cursor_freq`, `row_on_freq`, `cursor_freq`.
-- [ ] **F56. Knob and keys**: `rotary_cb`, `key_cb`, `user_touch`.
-- [ ] **F57. Button pages**: six pages, next/previous, hold time
+  → nothing new. Fine: marks by the row speed's rxThreshold, no new selection.
+- [x] **F56. Knob and keys**: `rotary_cb`, `key_cb`, `user_touch`.
+  → B-19. Fine: MFK steps count as activity for the idle watchdog (the table gets the key events).
+- [x] **F57. Button pages**: six pages, next/previous, hold time
   500 ms (`keypad_set_long_time`), label getters.
-- [ ] **F58. Stations store**: `StationList` (`src/js8/stations.cpp`),
+  → nothing new. Fine: popups closed on page change, hold = back, 500 ms hold only while open.
+- [x] **F58. Stations store**: `StationList` (`src/js8/stations.cpp`),
   1 h expiry, `band_lists` per dial kHz and slot reuse.
-- [ ] **F59. Stations view**: `rebuild_station_rows`, `station_fields`
+  → I-17. Fine: per-dial lists, slot reuse, a relay-only entry never overwrites one heard directly.
+- [x] **F59. Stations view**: `rebuild_station_rows`, `station_fields`
   (SNR, age, grid, km/miles, bearing). Earlier: BH-14 (fixed), BH-17.
-- [ ] **F60. Worked-before ★ and alert marks in Stations**:
+  → I-15 (batch 5). BH-17 still there. Fine: the cursor stays on the selected station across rebuilds.
+- [x] **F60. Worked-before ★ and alert marks in Stations**:
   `qso_log_search_worked`, `st_worked`, `st_alert`.
-- [ ] **F61. Stations heard through relays**: `js8_relay_stations`,
+  → B-20. BH-17 still there.
+- [x] **F61. Stations heard through relays**: `js8_relay_stations`,
   `add_via`.
-- [ ] **F62. The heard list for automatic replies**: `heard_stations`
+  → nothing new. Fine: only relays ending here, Relay switch respected, SNR −64, as desktop.
+- [x] **F62. The heard list for automatic replies**: `heard_stations`
   → `js8_heard_t`.
+  → B-18, I-17. Fine: most recent first, per dial, includes relay-only stations as desktop's call activity does.
 
 ## Batch 7: Sending by hand
 

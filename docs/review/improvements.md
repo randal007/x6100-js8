@@ -32,6 +32,7 @@ numbers refer to that commit.
 | I-14 | F51 | Restyle the TX bar and the waterfall frame only when they change | efficiency | high |
 | I-15 | F45, F46, F59 | Work out each row's colours and fields once, not on every redraw | efficiency | medium |
 | I-16 | F42, F43 | Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes | efficiency | low |
+| I-17 | F58, F62 | Forget expired stations; look one up without copying the list | efficiency | medium |
 
 ## Batch 1: Transmitting and the radio
 
@@ -217,3 +218,20 @@ allocates two buffers per row and `qsort`s all 771 values to find the
 `lv_img_buf_set_px_color()` (format checks per call); writing the row as a
 `lv_color_t` array is simpler. `line_buf` (`lv_waterfall.c:90`) is
 allocated and never read (already so upstream).
+
+## Batch 6: Selecting, navigating, Stations
+
+### I-17. Forget expired stations; look one up without copying the list — efficiency, medium
+
+`StationList` (`src/js8/stations.cpp`) never erases anything: expired
+stations are only filtered out when read (`sorted()`, `:85-97`), and the
+lists live while the radio is on. Every read copies and `stable_sort`s all
+of them into `js8_station_t`s (`js8_ops.cpp:159-180`), and that happens
+several times per decoded message on the LVGL thread: `find_station()`
+(which lists 200 stations to find one), `heard_stations()` in
+`handle_incoming()`, `free_hb_offset()` for every heartbeat and HB ACK,
+and `rebuild_station_rows()` every 5 s in the Stations view. After days
+on a busy band that's thousands of entries copied and sorted per message.
+Erase entries past the expiry in `add()` (or every few minutes), and add a
+`js8_stations_find(call)` that looks the key up directly. It also fixes
+the 200-station blind spot in B-20.
