@@ -412,6 +412,15 @@ them); they come back to the radio only if a JS8Call-improved station with
 from *APRS*, and **Reply by APRS** answers it. Older desktop JS8Call never
 passes APRS messages back. APRS text is limited to 67 characters.
 
+**Two-way SMS works** (confirmed on the air 2026-09-28 with the beta 4
+test build, through NR4U's gateway on 40 m): texts from a phone arrive in
+the Inbox as `@6045551234 <text> DE SMS`, and a reply goes back to the
+phone. For now, **Reply by APRS** on an SMS opens the SMS gateway's line
+empty: type `@`, the phone number (shown in the message) and your text.
+The gateway's receipt for your reply (`ACK04}`) also arrives, as an Inbox
+message for now. Beta 3 drops all of these messages (see
+[Known issues](#known-issues-in-beta-3)).
+
 **Position with a message:** Spot my grid and Spot GPS position open a
 text box. Press Enter on it empty for the plain position beacon (2 frames),
 or type a message first (up to 43 characters, e.g. `MADE IT TO CAMP`): it
@@ -422,10 +431,10 @@ frames, about 20 letters 5. The line above the keyboard shows the frame
 count as you type. (JS8's `GRID` command can't carry a message, so this
 one goes as a raw APRS packet through `CMD`.) ESC sends nothing.
 
-So far only the plain **Spot my grid** has been confirmed on the air; the
-other items follow desktop JS8Call's, JS8Spotter's and the gateways' own
-formats (and survive JS8 encoding in our tests) but still need testing
-through the gateways.
+Confirmed on the air so far: the plain **Spot my grid** and **SMS** (both
+ways). The other items follow desktop JS8Call's, JS8Spotter's and the
+gateways' own formats (and survive JS8 encoding in our tests) but still
+need testing through the gateways.
 
 ### POTA and SOTA spots
 
@@ -527,10 +536,11 @@ gain the relay path from then on.
 - **Relays and store and forward** follow desktop JS8Call's code but are
   new: they haven't been tried on the air with desktop stations yet.
   Reports welcome.
-- **APRS:** the grid spot and SMS are confirmed on the air. POTA and SOTA
-  spots, position messages, email and Winlink are untested through the
-  gateways. Replies come back to the radio only through a station that
-  relays inbound APRS (see [APRS](#aprs)).
+- **APRS:** the grid spot and sending an SMS are confirmed on the air. POTA
+  and SOTA spots, position messages, email and Winlink are untested through
+  the gateways. **Replies relayed back over JS8 (an SMS answer) are
+  dropped** in beta 3: gateways send them without the checksum beta 3
+  expects. Fixed for beta 4, where two-way SMS is confirmed.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
 - The main screen's waterfall, seen through JS8's buttons, stands still
@@ -566,12 +576,23 @@ Done for beta 4 so far:
   (2E0ABC) named the wrong station, and messages naming a callsign
   sometimes took an extra frame at Normal speed
 - [x] APRS replies relayed back over JS8 (e.g. an SMS answer) reach the
-  Inbox; desktop sends them without the checksum we expected
+  Inbox; desktop sends them without the checksum we expected. **Two-way
+  SMS confirmed on the air** (2026-09-28, through NR4U's gateway)
 
 Still to do:
 
+- [ ] Fix the bugs found by reading the code in
+  [docs/bug-hunt-2026-09-28.md](docs/bug-hunt-2026-09-28.md) (18 of them,
+  worst first: a full Inbox stops saving new messages, the band keys work
+  in the middle of a transmission, heartbeats switch off after automated
+  traffic)
+- [ ] SMS: **Reply by APRS** fills in the phone number, so you only type
+  the text
+- [ ] SMS: show the gateway's receipt (`ACK04}`) as "delivered" on the
+  message you sent, instead of as a new Inbox message
 - [ ] On-air tests: relays and store and forward with desktop JS8Call
-  stations, the APRS gateways, a long message watched to the end
+  stations, the other APRS gateways (POTA, SOTA, email, Winlink), a long
+  message watched to the end
 - [ ] Performance: measure each part's CPU use on the radio and spread the
   work over its four cores (the screen drawing and the JS8 decoder each
   lean on one core today)
@@ -611,6 +632,10 @@ JS8 app by VE7NHW.
 - **Design notes:** [docs/RESEARCH.md](docs/RESEARCH.md) (JS8 vs FT8, why
   this engine), [docs/TX_PLAN.md](docs/TX_PLAN.md) (transmitting),
   [docs/T6_PLAN.md](docs/T6_PLAN.md) (speeds).
+- **Known bugs:** [docs/bug-hunt-2026-09-28.md](docs/bug-hunt-2026-09-28.md)
+  (found by reading the code, not yet fixed); bugs found in the js8core
+  engine, reported upstream, in
+  [docs/js8core-bug-reports.md](docs/js8core-bug-reports.md).
 - **Code:** `src/js8/` (no LVGL, host-testable: receive, transmit, auto-reply,
   inbox, log, alerts), `src/dialog_js8.c` (the app), vendored engine in
   `third-party/js8core` with local patches listed in
