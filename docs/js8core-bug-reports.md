@@ -15,6 +15,10 @@ understood by desktop stations.
 **When a new bug turns up in js8core: fix it in `third-party/js8core`, add it
 to `UPSTREAM.md`, and add it here.**
 
+**Reported:** bugs 1–4 (with the others listed) in
+[Android-port#104](https://github.com/JS8Call-improved/Android-port/issues/104),
+2026-09-28.
+
 ## Bugs
 
 | # | Bug | Who it hits | Status here |
