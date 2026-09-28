@@ -97,7 +97,7 @@ Today a reply is decided when it's decoded, then waits in one slot
 | **B-04** replies while a message to us is arriving | **Fix** (D3) | Track open partials (`msg_id`, to us?, last frame time) in `add_message()`; closed by their final message or 60 s. |
 | **B-05** HB ACK cooldown 15 → 55 min | **Fix** (D4) | `HB_ACK_REPEAT_MS = 55 min`; unit test. |
 | **I-09** prune the rate-limit map | **Fix, small** | Drop entries older than 55 min in `sent()`. |
-| **BH-7** any message to us switches HB off | **Fix** (D1, decided) | Drop the `handle_incoming()` → `js8_starts_qso()` → `qso_started()` path for HB; pause HB and HB ACK (not off) from the hand-sent paths (`tx_queue_at(..., automatic=false)` for anything but a heartbeat); resume 10 min after the last one; the HB button shows "HB: paused". Being done by the builder session on top of WP1. |
+| **BH-7** any message to us switches HB off | **Fix** (D1, decided) | Drop the `handle_incoming()` → `js8_starts_qso()` → `qso_started()` path for HB; pause HB and HB ACK (not off) from the hand-sent paths (`tx_queue_at(..., automatic=false)` for anything but a heartbeat); resume 10 min after the last one; the HB button shows "HB: paused". **Fixed** (see the commit after 3a2f878; harness ONLY_HBPAUSE). Pressing HB while paused resumes at once. |
 | **BH-12** Log prompt holds up auto TX | **Fix** (D2) | Automatic transmissions don't count as our side of a QSO (`js8_qsos_sent` only for yours); lists don't hold replies. |
 | **B-06** our 5-min guard | **Fix, small** (D6) | Key by the reply's addressee (the asker or its relay path); AGN? exempt. |
 | **B-10** `@APRSIS MSG` without `TO:` | **Fix, small** | Return nothing when the pattern doesn't match. |

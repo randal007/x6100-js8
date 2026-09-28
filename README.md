@@ -187,7 +187,7 @@ to go back a page. In JS8 a hold is half a second.
 
 | Page | Button | Does |
 |---|---|---|
-| 1 | **CQ** | `CQ CQ CQ <grid>`. Switches heartbeats off (answers to a CQ start a QSO). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
+| 1 | **CQ** | `CQ CQ CQ <grid>`. Pauses heartbeats for 10 minutes, like anything you send (see [Transmitting](#transmitting)). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
 | 1 | **Heartbeat** | One heartbeat now, at a free spot in the 500–1000 Hz heartbeat sub-band. With HB on, the automatic ones count again from this one. |
 | 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…? |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
@@ -200,7 +200,7 @@ to go back a page. In JS8 a hold is half a second.
 | 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off an hour after it was last heard. |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
-| 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. |
+| 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. Shows *paused* for 10 minutes after you send something; press it then to resume at once. |
 | 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and HB on, as on desktop). |
 | 4 | **Settings…** | INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay on/off and your groups: see [Settings](#settings). |
 | 5 | **APRS >** | [APRS](#aprs) spots and messages. |
@@ -239,9 +239,13 @@ button just closes it; press again to do the thing. ESC closes lists too.
     every 15 minutes, once per message every 8 hours).
   - **HB** sends heartbeats on desktop's schedule; **HB ACK** acknowledges
     others' heartbeats.
-  - A message to you turns HB and HB ACK off, so heartbeats don't cut into
-    a QSO. After an hour without touching the radio, automatic sending
-    pauses until you press something.
+  - Anything you send yourself except a heartbeat (Reply, Send…, a Query
+    item, CQ, HW CPY? …) **pauses** HB and HB ACK, so heartbeats don't cut
+    into a QSO. The buttons show *paused* and the status line when they
+    resume: 10 minutes after the last message you sent. They stay switched
+    on; press HB to resume sooner. Messages you receive and AUTO's answers
+    don't pause them. After an hour without touching the radio, automatic
+    sending pauses until you press something.
 
 ## Speeds
 
@@ -591,6 +595,10 @@ Done for beta 4 so far:
   band
 - [x] After a change of band or frequency, an automatic answer still
   waiting (behind a list) is dropped instead of going out on the new one
+- [x] Heartbeats **pause** for 10 minutes after anything you send yourself
+  (not a heartbeat), then carry on by themselves; press HB to resume
+  sooner. Before, any message to you (even an automatic query or a garbled
+  one) switched HB and HB ACK off until you turned them back on
 
 Still to do:
 

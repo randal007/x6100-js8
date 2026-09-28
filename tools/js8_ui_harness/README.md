@@ -41,6 +41,14 @@ run faster.)
   `SNR?` (the answer waits behind the list); then a retune: the waiting
   answer must not go out on the new frequency.
 
+## Heartbeat pause
+
+- `ONLY_HBPAUSE=1`: AUTO, HB and HB ACK on; a message to us, an automatic
+  SNR reply and a manual heartbeat must not pause heartbeats; `HW CPY?` by
+  hand does (both buttons `paused`, switches still on, no HB ACK to a
+  heartbeat heard meanwhile); 11 min later (JS8 drift moved forward) they
+  resume by themselves; pressing HB while paused resumes at once.
+
 ## Waterfall measurements
 
 Build without sanitizers for timings

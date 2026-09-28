@@ -81,6 +81,7 @@
 #define WF_QUEUE         16     /* rows waiting to be drawn (jitter buffer) */
 #define WF_TICK_MS       5      /* how often the drawing timer looks at the clock */
 #define HB_ADJUST_MS     8000   /* setting the HB interval ends after this idle */
+#define HB_PAUSE_MS      (10 * 60 * 1000) /* heartbeats wait this long after you send */
 #define ALERT_COLOR      0x6a2ca0 /* rows matching an alert word */
 /* params.js8_alerts bits: what beeps (alert words always highlight). */
 #define JS8_ALERT_BEEP     0x01 /* beeping at all */
@@ -326,6 +327,7 @@ static lv_obj_t      *log_grid_btn;    /* the popup's Grid item */
  * js8_hb, js8_hb_ack, js8_hb_interval), all off by default. */
 static js8_auto_t *autop;
 static int64_t     hb_next_ms;       /* 0: send the first one at the next chance */
+static int64_t     hb_paused_until;  /* HB and HB ACK wait until then; 0: not paused */
 static bool        auto_cq;          /* hold CQ: a CQ every js8_cq_interval min until answered */
 static int64_t     auto_cq_next_ms;
 static int64_t     auto_cq_from_ms;  /* the interval counts from here: our last TX's end */
@@ -536,6 +538,7 @@ static void format_row(const js8_rx_msg_t *m, char *buf, size_t size) {
 static bool auto_selecting; /* follow() is moving the selection, not the user */
 
 static int64_t now_wall_ms(void);
+static bool    hb_paused(void);
 static void    show_selection(void);
 
 /* Keep following new rows if the cursor is on the last one, or once the
@@ -1213,6 +1216,11 @@ static void update_status(void) {
             char hb[40];
             if (!js8_speed_heartbeats(cur_speed())) {
                 snprintf(hb, sizeof(hb), "HB paused (Turbo)  ");
+            } else if (hb_paused()) {
+                time_t    t = (time_t)(hb_paused_until / 1000);
+                struct tm nt;
+                gmtime_r(&t, &nt);
+                snprintf(hb, sizeof(hb), "HB paused to %02d:%02d  ", nt.tm_hour, nt.tm_min);
             } else if (hb_next_ms > now_ms) {
                 time_t    t = (time_t)(hb_next_ms / 1000);
                 struct tm nt;
@@ -1642,7 +1650,6 @@ static void update_tx_bar(void) {
 
 /* Queue `text` at our offset. Returns false (with a message shown) if it
  * can't be sent, e.g. a bad character or something already sending. */
-static void qso_started(const char *call);
 static void hb_pause(const char *why);
 
 /* "N0XYZ ..." with a real-looking call first: a directed message. */
@@ -1691,9 +1698,12 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
 
     /* A directed message you sent yourself starts a QSO. */
     char call[JS8_RX_CALL_LEN];
-    if (!automatic && starts_with_call(text, call, sizeof(call))) {
-        auto_cq_stop("replying");
-        qso_started(call);
+    if (!automatic && starts_with_call(text, call, sizeof(call))) auto_cq_stop("replying");
+    /* Anything you send by hand, except a heartbeat, pauses heartbeats. */
+    if (!automatic) {
+        char hb[48];
+        js8_heartbeat_text(params.callsign.x, params.qth.x, hb, sizeof(hb));
+        if (strcmp(text, hb) != 0) hb_pause(strncmp(text, "CQ ", 3) == 0 ? "CQ" : "you sent");
     }
     return true;
 }
@@ -2253,6 +2263,7 @@ static void construct_cb(lv_obj_t *parent) {
     user_touch();
     load_texts();
     hb_next_ms         = 0;
+    hb_paused_until    = 0;
     push_next_ms       = 0;
     apply_station_keep();
     hb_adjusting       = false;
@@ -2514,7 +2525,7 @@ static bool send_cq(bool automatic) {
     char text[32];
     snprintf(text, sizeof(text), "CQ CQ CQ %.4s", params.qth.x);
     if (!tx_queue_at(text, params.js8_tx_freq.x, automatic)) return false;
-    hb_pause("CQ");
+    if (automatic) hb_pause("CQ"); /* by hand, tx_queue_at did it */
     return true;
 }
 
@@ -2968,7 +2979,8 @@ static unsigned heard_stations(js8_heard_t *out, unsigned max) {
 static void auto_send(const js8_auto_result_t *r) {
     int64_t now = now_wall_ms();
     /* The switches may have changed while it waited. */
-    bool allowed = r->hb_ack ? (params.js8_auto.x && params.js8_hb.x && params.js8_hb_ack.x) : params.js8_auto.x;
+    bool allowed = r->hb_ack ? (params.js8_auto.x && params.js8_hb.x && params.js8_hb_ack.x && !hb_paused())
+                             : params.js8_auto.x;
     if (!allowed || js8_auto_idle(autop, now)) return;
 
     if (js8_tx_busy(tx) || composing || any_popup()) {
@@ -2988,26 +3000,34 @@ static void auto_send(const js8_auto_result_t *r) {
     }
 }
 
-/* Desktop pauses heartbeats during a QSO; here they switch off until you
- * turn them back on (the user's choice). A CQ does the same: its answers
- * start a QSO. */
+/* Heartbeats and HB ACKs pause while you're busy: anything you send by
+ * hand except a heartbeat (Reply, Send..., Query, CQ ...) pauses them until
+ * HB_PAUSE_MS after the last one; they resume by themselves (the user's
+ * choice: nothing heard or sent automatically pauses them, and selecting
+ * or unlocking a station doesn't resume them, unlike desktop). The
+ * switches stay on. */
+static bool hb_paused(void) {
+    return hb_paused_until && now_wall_ms() < hb_paused_until;
+}
+
 static void hb_pause(const char *why) {
     if (!params.js8_hb.x && !params.js8_hb_ack.x) return;
-    params_bool_set(&params.js8_hb, false);
-    params_bool_set(&params.js8_hb_ack, false);
-    hb_next_ms   = 0;
-    hb_adjusting = false;
+    bool was = hb_paused();
+    hb_paused_until = now_wall_ms() + HB_PAUSE_MS;
+    if (hb_adjusting) hb_adjust_end();
     if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
-    msg_update_text_fmt("Heartbeats off: %s", why);
-    add_info_row("HB and HB ACK off: %s", why);
+    if (!was) add_info_row("HB and HB ACK paused %d min: %s", HB_PAUSE_MS / 60000, why);
     update_status();
 }
 
-static void qso_started(const char *call) {
-    char why[JS8_RX_CALL_LEN + 12];
-    snprintf(why, sizeof(why), "QSO with %s", call);
-    hb_pause(why);
+/* The pause ran out (or HB was pressed): heartbeats carry on. One that fell
+ * due meanwhile goes out at the next chance. */
+static void hb_resume(void) {
+    hb_paused_until = 0;
+    if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
+    if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
+    update_status();
 }
 
 static void handle_incoming(const js8_rx_msg_t *m) {
@@ -3015,7 +3035,6 @@ static void handle_incoming(const js8_rx_msg_t *m) {
         char why[JS8_RX_CALL_LEN + 12];
         snprintf(why, sizeof(why), "%s answered", m->from);
         auto_cq_stop(why);
-        qso_started(m->from);
     }
 
     js8_heard_t heard[32];
@@ -3023,8 +3042,8 @@ static void handle_incoming(const js8_rx_msg_t *m) {
 
     js8_auto_settings_t st = {
         .autoreply = params.js8_auto.x,
-        .heartbeat = params.js8_hb.x,
-        .hb_ack    = params.js8_hb_ack.x,
+        .heartbeat = params.js8_hb.x && !hb_paused(),
+        .hb_ack    = params.js8_hb_ack.x && !hb_paused(),
         .relay     = params.js8_relay.x,
         .my_call   = params.callsign.x,
         .my_grid   = params.qth.x,
@@ -3129,11 +3148,13 @@ static void hb_tick(void) {
     }
     push_tick();
     msg_age_tick();
+    if (hb_paused_until && !hb_paused()) hb_resume();
     if (!params.js8_hb.x) {
         hb_next_ms = 0;
         return;
     }
     int64_t now = now_wall_ms();
+    if (hb_paused()) return;
     if (js8_auto_idle(autop, now) || !js8_speed_heartbeats(cur_speed())) return;
     /* As on desktop, the first one comes an interval after switching on;
      * page 1's Heartbeat sends one now. */
@@ -3168,6 +3189,7 @@ static void auto_cb(button_data_t *btn) {
 static const char *hb_label_getter(void) {
     static char buf[24];
     if (!params.js8_hb.x) return "HB:\nOff";
+    if (hb_paused() && !hb_adjusting) return "HB:\npaused";
     snprintf(buf, sizeof(buf), hb_adjusting ? "HB: knob\n< %u min >" : "HB:\n%u min", params.js8_hb_interval.x);
     return buf;
 }
@@ -3197,8 +3219,14 @@ static void hb_cb(button_data_t *btn) {
         hb_adjust_end();
         return;
     }
+    if (params.js8_hb.x && hb_paused()) {
+        hb_resume();
+        msg_update_text_fmt("Heartbeats resumed");
+        return;
+    }
     params_bool_set(&params.js8_hb, !params.js8_hb.x);
-    hb_next_ms = 0;
+    hb_next_ms      = 0;
+    hb_paused_until = 0;
     buttons_refresh(btn);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
     if (params.js8_hb.x) {
@@ -3217,6 +3245,7 @@ static void hb_hold_cb(button_data_t *btn) {
 
 static const char *hb_ack_label_getter(void) {
     if (!params.js8_hb_ack.x) return "HB ACK:\nOff";
+    if (hb_paused() && params.js8_hb.x) return "HB ACK:\npaused";
     return (params.js8_auto.x && params.js8_hb.x) ? "HB ACK:\nOn" : "HB ACK:\nOn (idle)";
 }
 
