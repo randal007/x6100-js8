@@ -16,3 +16,69 @@ numbers refer to that commit.
 
 | ID | Feature | Improvement | Kind | Worth |
 |---|---|---|---|---|
+| I-01 | F02, F04 | Test closing the app while a frame is keyed | tests | high |
+| I-02 | F02 | Synthesise TX audio without 16 MB of temporary buffers | efficiency | medium |
+| I-03 | F10 | Keep the JS8 presets out of upstream's migration numbers | robustness | medium |
+| I-04 | F03 | Plan each message once, not twice | efficiency | low |
+| I-05 | F05, F89 | One list of popups instead of three | simplify | low |
+| I-06 | F01 | Save the learned TX gain once per message, not per frame | efficiency | low |
+
+## Batch 1: Transmitting and the radio
+
+### I-01. Test closing the app while a frame is keyed — tests, high
+
+`tools/js8_ui_harness` closes the app with popups open (`[gen]`, `[log]`,
+`[inbox]`) but never during a transmission, which is how B-01 went
+unseen. Its `tx_player_play` stub already polls `abort_check`, so a
+scenario "queue a message, wait for `[radio] PTT on`, `dialog_destruct()`"
+would crash under ASan today. Also a unit test: `js8_tx_destroy()` while
+`play` polls `js8_tx_stopping()`.
+
+### I-02. Synthesise TX audio without 16 MB of temporary buffers — efficiency, medium
+
+`synth_frame()` (`src/js8/tx.cpp:138-175`) builds the whole frame's
+phase steps as `double`s, then a `float` waveform, and the play callback
+(`js8_tx.cpp:63-65`) copies it again to `int16_t`. At 44.1 kHz a Slow
+frame (1.11 M samples) needs ~9.1 MB + 4.5 MB + 2.2 MB, Normal half that,
+and every sample does a `std::fmod`. It runs on the TX thread between
+frames (about 1 s of slack at Turbo). The Gaussian pulse spans only three
+symbols, so the phase step can be computed per sample from a 3-symbol
+window, the phase kept in range with a subtraction, and `int16_t`
+written directly: one 2.2 MB buffer (or none, synthesising part by part as
+`tx_player_play` plays), same waveform bit for bit apart from rounding.
+
+### I-03. Keep the JS8 presets out of upstream's migration numbers — robustness, medium
+
+`src/params/migrations.c` adds `_4_add_js8_presets` and
+`_5_add_ghostnet_presets` after upstream's 0–3. `params.db` lives on the
+DATA partition (`/mnt`), which survives reflashing. When upstream adds its
+own migration 4 and 5, a database already at version 5 skips them: after
+we merge upstream (unless we renumber carefully), and whenever someone
+goes back to an upstream image with the same card. The inserts are
+idempotent (`INSERT OR IGNORE` + `UNIQUE(freq, type)`), so they can simply
+run at every start outside the version sequence, or keep their own version
+table.
+
+### I-04. Plan each message once, not twice — efficiency, low
+
+`tx_queue_at()` (`src/dialog_js8.c:1666-1676`) calls `js8_tx_preview()`
+and then `js8_tx_send()`, which runs `plan_message()` again: two frame
+builds and two decode-backs on the LVGL thread for every message. Have
+`js8_tx_send()` return the preview, frame count and seconds (or take the
+plan).
+
+### I-05. One list of popups instead of three — simplify, low
+
+`any_popup()` (`:3965`), `close_popups()` (`:2752`) and `destruct_cb()`
+(`:2263-2294`) each name all eight popups. A popup missing from one of
+them is exactly the "GEN with the Query list open crashed the app" bug
+fixed earlier. One table of `{lv_obj_t **list, close_fn}` used by all
+three keeps them in step.
+
+### I-06. Save the learned TX gain once per message, not per frame — efficiency, low
+
+`tx_player_play()` (`src/tx_player.c:114`) calls `params_float_set()`
+after every frame; the params thread (`params.c:447`, every 100 ms) then
+writes `params.db` on the SD card. A 20-frame message writes it 20
+times. Save when the message ends, or only when the value moved by more
+than ~0.1 dB. Shared with FT8, so a change here touches both apps.

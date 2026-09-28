@@ -24,7 +24,7 @@ The review reads code only: **no code is changed**.
 
 | Batch | Area | Features | Done |
 |---|---|---|---|
-| 1 | Transmitting and the radio | F01–F10 | |
+| 1 | Transmitting and the radio | F01–F10 | ✅ 2026-09-28: 3 bugs (1 high), 6 improvements |
 | 2 | Automatic sending | F11–F20 | |
 | 3 | Receiving and decoding | F21–F31 | |
 | 4 | Inbox, saved data, settings | F32–F41 | |
@@ -40,38 +40,48 @@ The review reads code only: **no code is changed**.
 Anything that keys the transmitter, sets power, or changes the radio's
 frequency, mode or filters.
 
-- [ ] **F01. TX player**: PTT and modem, ALC-driven gain correction,
+- [x] **F01. TX player**: PTT and modem, ALC-driven gain correction,
   5 W cap, dial shifted for the audio tone and put back after, abort
   between parts. `src/tx_player.c`; also used by FT8 (`src/ft8/tx_worker.c`,
   `dialog_ft8.c`). Earlier: BH-10.
-- [ ] **F02. Transmitter**: message → frames (`plan_message`), tone
+  → I-06. Fine: 5 W cap, dial shift and restore, ALC maths (no NaN: ALC is 0–10). BH-10 still there.
+- [x] **F02. Transmitter**: message → frames (`plan_message`), tone
   synthesis, slot timing, Idle/Waiting/Keying states, status, stop.
   `src/js8/tx.cpp`, `src/js8/js8_tx.cpp`.
-- [ ] **F03. The app's send queue**: `tx_queue_at`, `tx_queue`,
+  → **B-01**, I-01, I-02. Fine: slot timing, frame gaps at every speed, status order.
+- [x] **F03. The app's send queue**: `tx_queue_at`, `tx_queue`,
   `tx_start`, `tx_play`, `on_tx_status`/`ui_tx_status`,
   `on_tx_done`/`ui_tx_done`, `last_tx_text`.
-- [ ] **F04. Stop TX**: ESC, top knob, `stop_tx_cb`, `tx_stop_all`,
+  → I-04. Fine: busy check, list row on the first keyed frame. BH smaller item (busy cleared before on_done) still there.
+- [x] **F04. Stop TX**: ESC, top knob, `stop_tx_cb`, `tx_stop_all`,
   `tx_abort_check`, `keyed`.
-- [ ] **F05. Radio set-up on open, put back on close**: USB-D, RX filter
+  → **B-01** (closing mid-frame). Fine: ESC and the VOL knob press both stop first, close second.
+- [x] **F05. Radio set-up on open, put back on close**: USB-D, RX filter
   200–3000 Hz saved and restored, TX filter 160–3000 Hz, NR/NB/DNF off,
   5 W cap. `construct_cb`, `destruct_cb`, `radio_set_tx_filter`,
   `radio_set_rx_dsp_off` (`src/radio.c`).
-- [ ] **F06. Band keys and retuning**: `band_cb`, `load_band`,
+  → **B-01**, B-02. Fine: USB-D, filter saved/restored (USB-D has its own filter group), TX filter, DSP off/on, power cap and restore.
+- [x] **F06. Band keys and retuning**: `band_cb`, `load_band`,
   `retuned`, `stations_for_band`, `js8_usb_dig`. Earlier: BH-10, BH-11.
-- [ ] **F07. Freq popup**: JS8Call presets, GhostNet, custom kHz.
+  → nothing new. BH-10 and BH-11 still there.
+- [x] **F07. Freq popup**: JS8Call presets, GhostNet, custom kHz.
   `freq_show`, `use_presets`, `parse_custom`, `tune_custom`,
   `freq_item_cb`; params `js8_ghostnet`, `js8_custom_on`, `js8_custom_hz`.
-- [ ] **F08. TX offset**: where it comes from (`js8_tx_freq`), Hold
+  → nothing new. Fine: kHz/MHz parsing, 1.8–54 MHz is inside the radio's 0.5–55 MHz, busy checks.
+- [x] **F08. TX offset**: where it comes from (`js8_tx_freq`), Hold
   (`js8_hold_offset`, `hold_cb`), the heartbeat's free offset
   (`free_hb_offset`, `js8_heartbeat_offset`, `find_free_offset`), the top
   limit per speed.
-- [ ] **F09. Alert beep and the TX interlock**: `beep_play`,
+  → B-03. Fine: offset clamped per speed on open, on speed change and on the knob.
+- [x] **F09. Alert beep and the TX interlock**: `beep_play`,
   `beep_thread`, `speaker_lock`, `keyed`, `beep_guard`,
   `radio_speaker_play`.
-- [ ] **F10. Frequency presets in the database**: `sql/digital_modes.csv`,
+  → nothing new. Fine: the beep stops when TX keys and drains before TX takes the speaker lock.
+- [x] **F10. Frequency presets in the database**: `sql/digital_modes.csv`,
   migrations 4 and 5 (`src/params/migrations.c`),
   `cfg/digital_modes.h` types 2 and 3, and whether FT8's band stepping
   can land on JS8 rows.
+  → I-03. Fine: UNIQUE(freq, type) makes the inserts idempotent; FT8 only steps through its own types.
 
 ## Batch 2: Automatic sending
 
