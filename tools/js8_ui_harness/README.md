@@ -31,6 +31,16 @@ it must on the radio, so feeding faster than real time breaks decoding by
 design. (The library tests in `tests/test_js8.cpp` switch that guard off to
 run faster.)
 
+## Transmitting safely
+
+- `ONLY_TXSAFE=1`: a CQ; while the stub radio is keyed, a band key (must be
+  refused, dial unchanged), then `dialog_destruct()` as GEN, APP or another
+  app does (the frame must be aborted, PTT off, no crash: it crashed in
+  `js8_tx_stopping()` before the fix); reopened, a CQ goes out again.
+- `ONLY_RETUNE=1`: AUTO on and the Freq list open, a station asks us
+  `SNR?` (the answer waits behind the list); then a retune: the waiting
+  answer must not go out on the new frequency.
+
 ## Waterfall measurements
 
 Build without sanitizers for timings

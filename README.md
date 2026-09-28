@@ -583,14 +583,22 @@ Done for beta 4 so far:
 - [x] SMS: **Reply by SMS to @number** in the Inbox fills in the phone
   number, so you only type the text (not yet on the air: after the beta 4
   test build)
+- [x] **Closing JS8 while it transmits is safe:** GEN, APP or another app
+  in the middle of a frame used to crash the app with the radio still
+  keyed until it restarted; now the frame stops and PTT drops at once
+- [x] The band keys wait until you stop sending ("Not while sending"), as
+  the Freq list does; they used to send the rest of the message on the new
+  band
+- [x] After a change of band or frequency, an automatic answer still
+  waiting (behind a list) is dropped instead of going out on the new one
 
 Still to do:
 
-- [ ] Fix the bugs found by reading the code in
-  [docs/bug-hunt-2026-09-28.md](docs/bug-hunt-2026-09-28.md) (18 of them,
-  worst first: a full Inbox stops saving new messages, the band keys work
-  in the middle of a transmission, heartbeats switch off after automated
-  traffic)
+- [ ] Fix the rest of the bugs found by reading the code: the plan, in
+  order, is [docs/review/fix-plan.md](docs/review/fix-plan.md) (from the
+  full review in [docs/review](docs/review/) and the first
+  [bug hunt](docs/bug-hunt-2026-09-28.md); next: a full Inbox stops saving
+  new messages, and heartbeats switch off after automated traffic)
 - [ ] SMS: show the gateway's receipt (`ACK04}`) as "delivered" on the
   message you sent, instead of as a new Inbox message
 - [ ] On-air tests: relays and store and forward with desktop JS8Call
@@ -635,9 +643,11 @@ JS8 app by VE7NHW.
 - **Design notes:** [docs/RESEARCH.md](docs/RESEARCH.md) (JS8 vs FT8, why
   this engine), [docs/TX_PLAN.md](docs/TX_PLAN.md) (transmitting),
   [docs/T6_PLAN.md](docs/T6_PLAN.md) (speeds).
-- **Known bugs:** [docs/bug-hunt-2026-09-28.md](docs/bug-hunt-2026-09-28.md)
-  (found by reading the code, not yet fixed); bugs found in the js8core
-  engine, reported upstream, in
+- **Known bugs:** found by reading the code, in
+  [docs/review/](docs/review/) (a feature-by-feature review: bugs,
+  improvements, and the [fix plan](docs/review/fix-plan.md) in work
+  packages) and the first [bug hunt](docs/bug-hunt-2026-09-28.md); bugs
+  found in the js8core engine, reported upstream, in
   [docs/js8core-bug-reports.md](docs/js8core-bug-reports.md).
 - **Code:** `src/js8/` (no LVGL, host-testable: receive, transmit, auto-reply,
   inbox, log, alerts), `src/dialog_js8.c` (the app), vendored engine in

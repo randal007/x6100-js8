@@ -11,6 +11,7 @@
 #include "classify.hpp"
 #include "receiver.hpp"
 #include "js8_ops.h"
+#include "js8_tx.h"
 #include "qsolog.hpp"
 #include "inbox.hpp"
 #include "alerts.hpp"
@@ -989,6 +990,42 @@ TEST_CASE("Transmitter stop abandons the rest of the message", "[js8][tx]") {
     REQUIRE(cv.wait_for(l, std::chrono::seconds(10), [&] { return done; }));
     CHECK(played == 1);
     CHECK_FALSE(completed);
+}
+
+namespace {
+js8_tx_t        *g_close_tx; // the dialog's global, as its tx_abort_check reads it
+std::atomic<int> g_close_keyed{0};
+std::atomic<int> g_close_saw_stop{0};
+
+bool close_play(int16_t *, unsigned, int, int, void *) {
+    g_close_keyed = 1;
+    for (int k = 0; k < 300; k++) { // tx_player: an abort check between parts
+        if (js8_tx_stopping(g_close_tx)) {
+            g_close_saw_stop = 1;
+            return false;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(20));
+    }
+    return true;
+}
+} // namespace
+
+TEST_CASE("closing the app while a frame is on the air stops it cleanly", "[js8][tx]") {
+    // The dialog's tx_abort_check polls js8_tx_stopping(tx) on the TX thread
+    // while destruct_cb runs js8_tx_destroy(tx) (GEN, APP or another app
+    // mid-frame). It used to clear the Transmitter pointer before joining the
+    // thread, and the poll crashed the app with the radio keyed.
+    js8_tx_cb_t cb{};
+    cb.play    = close_play;
+    g_close_tx = js8_tx_create(48000, 1325, &cb);
+    REQUIRE(g_close_tx);
+    char err[64] = "";
+    REQUIRE(js8_tx_send(g_close_tx, "VE7NHW", "CN89", "CQ CQ CQ", 1500, JS8_SPEED_TURBO, err, sizeof err));
+    for (int i = 0; i < 800 && !g_close_keyed; i++) std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    REQUIRE(g_close_keyed); // a Turbo slot comes within 6 s
+    js8_tx_destroy(g_close_tx); // what tx_stop_all() does
+    g_close_tx = nullptr;
+    CHECK(g_close_saw_stop);
 }
 
 TEST_CASE("Transmitter rejects out-of-range offsets", "[js8][tx]") {

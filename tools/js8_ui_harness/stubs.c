@@ -166,10 +166,13 @@ int32_t  stub_tx_offset;
 uint32_t stub_tx_samples;
 int16_t  stub_tx_peak;
 int64_t stub_tx_start_sys_ms;
+volatile int stub_tx_keyed;   /* inside tx_player_play: PTT on */
+int          stub_tx_aborted; /* frames cut short by abort_check */
 bool tx_player_play(int16_t *samples, uint32_t n, int32_t offset, float gain, tx_abort_fn_t abort_check, void *ctx) {
     (void)gain;
     int16_t peak = 0;
     for (uint32_t i = 0; i < n; i++) if (samples[i] > peak) peak = samples[i];
+    stub_tx_keyed = 1;
     stub_tx_frames++;
     {   /* when the frame started, by the PC's own clock (no JS8 drift) */
         struct timespec ts;
@@ -184,11 +187,14 @@ bool tx_player_play(int16_t *samples, uint32_t n, int32_t offset, float gain, tx
     for (int i = 0; i < 30; i++) {
         if (abort_check && abort_check(ctx)) {
             printf("[radio] PTT off: aborted\n");
+            stub_tx_aborted++;
+            stub_tx_keyed = 0;
             return false;
         }
         usleep(100000);
     }
     printf("[radio] PTT off\n");
+    stub_tx_keyed = 0;
     return true;
 }
 void params_bool_set(params_bool_t *var, bool x) { var->x = x; }

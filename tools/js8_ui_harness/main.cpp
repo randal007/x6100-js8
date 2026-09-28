@@ -57,6 +57,8 @@ extern uint32_t stub_tx_samples;
 extern int64_t stub_tx_start_sys_ms;
 int64_t js8_drift_ms(void);
 extern int16_t stub_tx_peak;
+extern volatile int stub_tx_keyed;
+extern int stub_tx_aborted;
 }
 
 #include "js8core/decoder.hpp"
@@ -1154,6 +1156,54 @@ int main() {
         ui_click_focused();
         pump(300);
         printf("[freq] JS8: '%s' dial %d (want 14078000)\n", ui_button_label(4), stub_dial_hz());
+        return 0;
+    }
+    if (getenv("ONLY_TXSAFE")) {
+        // Transmitting safely: a band key while sending is refused, and
+        // closing the app while a frame is keyed (GEN, APP, another app)
+        // stops the frame instead of crashing with PTT on.
+        pump(300);
+        int dial = stub_dial_hz();
+        ui_page(1);
+        ui_press(1); // CQ
+        for (int i = 0; i < 200 && !stub_tx_keyed; i++) pump(100);
+        printf("[txsafe] keyed: %d (want 1)\n", stub_tx_keyed);
+        ui_band_up();
+        pump(200);
+        printf("[txsafe] band key while sending: dial %d, was %d (want the same)\n", stub_dial_hz(), dial);
+        int aborted = stub_tx_aborted;
+        dialog_destruct(); // what GEN, APP or another app does
+        printf("[txsafe] closed while keyed: running=%d keyed=%d aborted=%d (want 0, 0, 1)\n", ui_running(),
+               stub_tx_keyed, stub_tx_aborted - aborted);
+        pump(500);
+        ui_open();
+        pump(500);
+        ui_page(1);
+        ui_press(1); // CQ again: the transmitter works after reopening
+        int frames = stub_tx_frames;
+        for (int i = 0; i < 200 && stub_tx_frames == frames; i++) pump(100);
+        printf("[txsafe] reopened, CQ keyed: %d (want 1)\n", stub_tx_frames > frames);
+        pump(3500);
+        return 0;
+    }
+    if (getenv("ONLY_RETUNE")) {
+        // A reply that waited behind a popup must not go out after a change
+        // of band or frequency: it answered a station on the old one.
+        pump(300);
+        ui_page(4);
+        ui_press(1); // AUTO on
+        pump(200);
+        ui_page(6);
+        ui_press(4); // Freq: a popup, so the reply waits
+        pump(300);
+        int frames = stub_tx_frames;
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ SNR?", 1320, 0.05f}});
+        printf("[retune] SNR? arrived with the Freq list open: frames %d (want %d: waiting)\n", stub_tx_frames, frames);
+        ui_click_focused(); // JS8Call frequencies: retunes (to the same preset)
+        pump(300);
+        for (int i = 0; i < 200 && stub_tx_frames == frames; i++) pump(100);
+        printf("[retune] after the retune: frames %d (want %d: the old frequency's reply dropped)\n", stub_tx_frames,
+               frames);
         return 0;
     }
     if (getenv("ONLY_BANDS")) {

@@ -19,11 +19,11 @@ Written 2026-09-28 against `main` at `8896823`.
 
 ## Decisions needed
 
-Nothing in WP1, WP2 or WP7 waits on these; WP3 does.
+Nothing in WP1, WP2 or WP7 waits on these; WP3 does. D1 is decided.
 
 | # | Question | My recommendation |
 |---|---|---|
-| D1 | BH-7: when a real QSO starts, heartbeats switch **off** (your beta 2 choice). Keep that, or **pause and resume** like desktop? | Keep *off* for a real QSO, but stop automated and garbled messages from triggering it (the actual bug). |
+| D1 | BH-7: when does HB pause, and does it come back? | **Decided 2026-09-28** (relayed by the builder session): HB and HB ACK **pause** (they stay switched on; the button shows "HB: paused") only when you send something **by hand** that isn't a heartbeat (Reply, Send..., a Query item, CQ, HW CPY?). Nothing heard pauses them, and nothing AUTO sends counts (SNR answers, MSG ACKs, relays, HB ACKs). They resume by themselves 10 min after your last hand-sent message (each new one restarts the 10 min). Not on deselect or unlock (unlike desktop). |
 | D2 | BH-12: may automatic replies go out while a **list** is open (Log popup, Inbox, Settings)? Desktop only holds them while you're typing. | Yes: only the keyboard holds them. |
 | D3 | B-04: while a message to us is still arriving, **hold** our automatic replies until it ends, or **drop** them as desktop does? | Hold (up to the usual 2 minutes); HB ACKs dropped, as desktop. |
 | D4 | B-05: HB ACK / @ALLCALL cooldown 55 min like desktop? Keep it across power-off (desktop does)? | 55 min yes; across power-off not now. |
@@ -36,7 +36,7 @@ Nothing in WP1, WP2 or WP7 waits on these; WP3 does.
 
 ## Work packages, in order
 
-### WP1: Safe transmitting — next build (effort M)
+### WP1: Safe transmitting — done 2026-09-28
 
 Anything that can leave the radio keyed or on the wrong frequency.
 
@@ -46,13 +46,16 @@ Anything that can leave the radio keyed or on the wrong frequency.
 | **I-01** test for it | **Fix** | Catch2 test: a `play` that polls `js8_tx_stopping()`, `js8_tx_destroy()` mid-play (ASan catches today's crash). Harness `ONLY_CLOSETX`: queue a message, wait for `[radio] PTT on`, `dialog_destruct()`, check PTT off and the app survived. |
 | **BH-10** band keys mid-transmission | **Fix** | `band_cb()`: the Freq popup's "Not while sending - Stop TX first" check. |
 | **BH-11** a waiting reply goes out on the new band | **Fix** | `retuned()` clears the waiting reply(s), the offer and `deliver_pending`. |
-| **B-07** no WSPR guard | **Fix, small** | A pure `js8_tx_allowed(dial, offset)` in `js8_ops` (10 139 900–10 140 320 Hz, as desktop checks dial + offset); `tx_queue_at()` refuses with a message and stops auto CQ/HB. Unit test. |
-| **B-02** power off skips the app's close | **Fix, small** | In `main_screen.c`, both callers of `radio_poweroff()` (POWER hold, low-battery timer: both on the LVGL thread) call `dialog_destruct()` first. Fixes FT8's leftovers too. README known issue updated. |
+| **B-07** no WSPR guard | **Won't fix** (your call, 2026-09-28) | Custom frequencies stay free anywhere. For the record: our 17 m preset (18.104) puts JS8 on 17 m WSPR (18.1060–18.1062) at offsets of about 1950–2200 Hz, as desktop JS8Call does. |
+| **B-02** power off skips the app's close | **Won't fix** (your call, 2026-09-28) | No changes to the power-off path; the README's known issue will say that holding POWER does the same as a power cut (WP8). |
 | **BH-S5** garbage error text | **Fix, small** | `char err[...] = ""`, and `tx_queue_at()` says "transmitter not running" when `tx` is NULL. |
 
 **On the radio after the build:** into the dummy load with the amp on
 standby: GEN during a frame (app closes, PTT drops at once), a band key
 during a message (refused), a heartbeat and a reply still going out.
+
+**Status:** B-01, I-01, BH-10, BH-11, BH-S5 done (see the commit that
+marks them fixed in bugs.md); B-02 and B-07 dropped by your decision.
 
 ### WP2: No lost data (effort M)
 
@@ -94,7 +97,7 @@ Today a reply is decided when it's decoded, then waits in one slot
 | **B-04** replies while a message to us is arriving | **Fix** (D3) | Track open partials (`msg_id`, to us?, last frame time) in `add_message()`; closed by their final message or 60 s. |
 | **B-05** HB ACK cooldown 15 → 55 min | **Fix** (D4) | `HB_ACK_REPEAT_MS = 55 min`; unit test. |
 | **I-09** prune the rate-limit map | **Fix, small** | Drop entries older than 55 min in `sent()`. |
-| **BH-7** any message to us switches HB off | **Fix** (D1) | `starts_qso()`: not low-confidence, not a command answered automatically (SNR?, QUERY…, relays passing through, MSG TO: for others); only free text to us or an answer to someone we called. |
+| **BH-7** any message to us switches HB off | **Fix** (D1, decided) | Drop the `handle_incoming()` → `js8_starts_qso()` → `qso_started()` path for HB; pause HB and HB ACK (not off) from the hand-sent paths (`tx_queue_at(..., automatic=false)` for anything but a heartbeat); resume 10 min after the last one; the HB button shows "HB: paused". Being done by the builder session on top of WP1. |
 | **BH-12** Log prompt holds up auto TX | **Fix** (D2) | Automatic transmissions don't count as our side of a QSO (`js8_qsos_sent` only for yours); lists don't hold replies. |
 | **B-06** our 5-min guard | **Fix, small** (D6) | Key by the reply's addressee (the asker or its relay path); AGN? exempt. |
 | **B-10** `@APRSIS MSG` without `TO:` | **Fix, small** | Return nothing when the pattern doesn't match. |
@@ -189,12 +192,12 @@ arriving, QUERY MSGS / relays.
 | ID | Verdict | Package | Effort |
 |---|---|---|---|
 | B-01 | Fix | WP1 | S |
-| B-02 | Fix, small | WP1 | S |
+| B-02 | Won't fix (your call) | — | — |
 | B-03 | Fix, small | WP3 | S |
 | B-04 | Fix (D3) | WP3 | M |
 | B-05 | Fix (D4) | WP3 | S |
 | B-06 | Fix, small (D6) | WP3 | S |
-| B-07 | Fix, small | WP1 | S |
+| B-07 | Won't fix (your call) | — | — |
 | B-08 | Fix (D5) | WP3 | S |
 | B-09 | Fix, small | WP3 | S |
 | B-10 | Fix, small | WP3 | S |
@@ -246,7 +249,7 @@ arriving, QUERY MSGS / relays.
 | BH-4 | Fix, small | WP5 | S |
 | BH-5 | Fix, small (D7) | WP3 | S |
 | BH-6 | Fix | WP5 | M |
-| BH-7 | Fix (D1) | WP3 | S |
+| BH-7 | Fix (D1 decided) | WP3 | S |
 | BH-8 | Fix | WP2 | S |
 | BH-9 | Fix, small | WP5 | S |
 | BH-10 | Fix | WP1 | S |
@@ -267,5 +270,6 @@ arriving, QUERY MSGS / relays.
 | BH-S7 SMS receipt as a message | Fix | WP6 | M |
 
 **In numbers:** 77 findings (27 + 25 from this review, 18 + 7 from the
-bug hunt): 68 to fix in 8 packages, 5 later, 3 not now, 1 done. 10
-decisions for you, each with a recommendation.
+bug hunt): 66 to fix in 8 packages, 5 later, 5 not now (B-02 and B-07
+by your decision), 1 done. 10 decisions for you, each with a
+recommendation.

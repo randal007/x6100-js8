@@ -1459,6 +1459,8 @@ static void audio_cb(unsigned int n, float *samples) {
 
 /* ---- Transmit ---------------------------------------------------------- */
 
+/* TX thread. Reading `tx` here is safe: tx_stop_all() clears it only after
+ * js8_tx_destroy() has stopped and joined this thread. */
 static bool tx_abort_check(void *ctx) {
     (void)ctx;
     return js8_tx_stopping(tx);
@@ -1559,7 +1561,9 @@ static void tx_start(void) {
 }
 
 static void tx_stop_all(void) {
-    js8_tx_destroy(tx); /* stops and waits for the current frame to end */
+    /* Stops the current frame (tx_player drops PTT within one part) and
+     * waits for the TX thread; only then is `tx` cleared. */
+    js8_tx_destroy(tx);
     tx = NULL;
     atomic_store(&keyed, false);
 }
@@ -1658,6 +1662,10 @@ static bool starts_with_call(const char *text, char *call, size_t len) {
 }
 
 static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
+    if (!tx) { /* js8_tx_create() failed when the app opened */
+        msg_update_text_fmt("JS8: transmitter not running - close JS8 and open it again");
+        return false;
+    }
     if (js8_tx_busy(tx)) {
         msg_update_text_fmt("Already sending - Stop TX first");
         return false;
@@ -1670,7 +1678,7 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
         return false;
     }
 
-    char err[JS8_TX_ERR_LEN];
+    char err[JS8_TX_ERR_LEN] = "";
     atomic_store(&tx_offset_active, offset_hz);
     snprintf(tx_preview, sizeof(tx_preview), "%s", pv.preview);
     if (!js8_tx_send(tx, params.callsign.x, params.qth.x, text, (float)offset_hz, cur_speed(), err, sizeof(err))) {
@@ -1992,6 +2000,11 @@ static js8_stations_t *stations_for_band(void) {
 /* After any change of dial frequency. */
 static void retuned(void) {
     auto_cq_stop("band changed");
+    /* A reply still waiting (behind a list or the keyboard) or offered on
+     * Reply answered a station on the old frequency: never send it here. */
+    pending_auto_valid = false;
+    memset(&offer, 0, sizeof(offer));
+    deliver_pending.id = 0;
 
     js8_rx_clear(rx);
     stations = stations_for_band(); /* that band's list, as we left it */
@@ -2004,8 +2017,14 @@ static void retuned(void) {
     update_status();
 }
 
-/* Band keys leave a custom frequency for the preset list. */
+/* Band keys leave a custom frequency for the preset list. Not while
+ * sending, as the Freq list: the rest of the message would go out on the
+ * new band, and tx_player puts the old dial back after each frame. */
 static void band_cb(lv_event_t *e) {
+    if (js8_tx_busy(tx)) {
+        msg_update_text_fmt("Not while sending - Stop TX first");
+        return;
+    }
     if (!load_band(lv_event_get_code(e) == EVENT_BAND_UP ? 1 : -1)) {
         msg_update_text_fmt("End of the %s list", params.js8_ghostnet.x ? "GhostNet" : "JS8");
         return;

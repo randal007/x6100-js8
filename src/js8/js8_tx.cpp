@@ -118,6 +118,12 @@ extern "C" bool js8_tx_stopping(js8_tx_t *t) {
 
 extern "C" void js8_tx_destroy(js8_tx_t *t) {
     if (!t) return;
-    t->tx.reset(); // stops and joins
+    // Stop and wait for the TX thread while t->tx is still set: a frame on
+    // the air polls js8_tx_stopping(t) until it sees the stop. reset() alone
+    // cleared the pointer before ~Transmitter() joined, and that poll then
+    // crashed the app with the radio keyed.
+    t->tx->stop();
+    t->tx->join();
+    t->tx.reset();
     delete t;
 }

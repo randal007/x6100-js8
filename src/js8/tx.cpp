@@ -191,7 +191,7 @@ Transmitter::Transmitter(int rate, Callbacks callbacks, Clock *clock)
 
 Transmitter::~Transmitter() {
     stop();
-    if (thread_.joinable()) thread_.join();
+    join();
 }
 
 bool Transmitter::send(const TxPlan &plan, double offset_hz, std::string *why, double synth_hz) {
@@ -206,7 +206,7 @@ bool Transmitter::send(const TxPlan &plan, double offset_hz, std::string *why, d
                       " Hz in " + speed(plan.speed).name);
     if (busy_.exchange(true)) return reject("already sending");
 
-    if (thread_.joinable()) thread_.join(); // previous message's thread has finished
+    join(); // the previous message's thread has finished
     stop_   = false;
     thread_ = std::thread(&Transmitter::run, this, plan, offset_hz, synth_hz > 0 ? synth_hz : offset_hz);
     return true;
@@ -216,6 +216,10 @@ bool Transmitter::send(const TxPlan &plan, double offset_hz, std::string *why, d
 // The thread is joined by the next send() or the destructor.
 void Transmitter::stop() {
     stop_ = true;
+}
+
+void Transmitter::join() {
+    if (thread_.joinable()) thread_.join();
 }
 
 Transmitter::Status Transmitter::status() const {
@@ -257,6 +261,7 @@ void Transmitter::run(TxPlan plan, double offset_hz, double synth_hz) {
         st.next_ms = start;
         set_status(st);
         if (!clock_->wait_until(start, stop_)) break;
+        if (stop_) break; // stopped just as the slot came: don't key at all
 
         st.state = State::Keying;
         set_status(st);

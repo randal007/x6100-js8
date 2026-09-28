@@ -128,6 +128,10 @@ public:
     /// the current frame's play() has returned.
     void stop();
 
+    /// Wait until the current message's thread has ended (stop() first to
+    /// end it early). Not from the transmitter's own callbacks.
+    void join();
+
     bool   busy() const { return busy_; }
     bool   stopping() const { return stop_; }
     Status status() const;
