@@ -91,7 +91,28 @@ Each one is its own commit on top of the pristine import, so
     delay plus `xdt`, so it comes out one start delay short (500 ms for
     Normal and Slow, 200 Fast, 100 Turbo): signals 1.5 s late give -1000.
 
-All ten are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
+11. **A directed message's number only after SNR, as desktop.** The
+    directed pattern took `\s*[+-]?\d{1,3}` after *any* command as its
+    number, where desktop's `optional_num_pattern` is
+    `(?<=SNR)\s?[-+]?(?:3[01]|[0-2]?[0-9])`. So "N0XYZ RR 73" went out as
+    RR with a number (desktop shows "RR 31"), "MSG 73 GOOD DAY" lost its
+    73, and a relay or `MSG TO:` / `QUERY CALL` to a call starting with a
+    digit ("N0XYZ>2E0ABC ...") named "E0ABC". `pack_directed_message()` now
+    takes desktop's number only after a command ending in SNR (std::regex
+    has no lookbehind), and consumes only that. Also in
+    `build_message_frames()`: desktop's `isCommandBuffered()` counts any
+    command with a space (" RR", " YES", " HEARTBEAT SNR" ...) as buffered
+    there, so the text after it is left-stripped ("RR 73" sends "73", not
+    " 73"); ours only did that for truly buffered commands. Normal-speed
+    data frames: `pack_data_message()` only used JSC, where desktop's
+    `packDataMessage()` also tries its Huffman table and keeps whichever
+    fits more characters (text with callsigns took an extra frame). And
+    desktop sends `@APRSIS MSG` / `MSG TO:` without a checksum. With all
+    of these, frames match desktop's `buildMessageFrames()` bit for bit at
+    all four speeds for 50 typical messages (checked against its code
+    built with Qt; `tests/test_js8.cpp` "[desktop]" keeps 24 of them).
+
+All eleven are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 

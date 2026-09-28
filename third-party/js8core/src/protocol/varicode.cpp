@@ -1034,9 +1034,25 @@ std::string pack_directed_message(std::string const& text, std::string const& my
 
   auto to = match[1].str();
   auto cmd = match.size() > 2 ? match[2].str() : std::string{};
-  auto num = match.size() > 3 ? match[3].str() : std::string{};
 
   if (cmd.empty()) { if (n) *n = 0; return {}; }
+
+  // Desktop's number: only right after SNR (its optional_num_pattern,
+  // (?<=SNR)\s?[-+]?(?:3[01]|[0-2]?[0-9]); std::regex has no lookbehind).
+  // Taking digits after any command dropped them from the text: "RR 73"
+  // went out as RR with a number, a relay to 2E0ABC as one to E0ABC.
+  // (Local patch 11, see UPSTREAM.md.)
+  std::string num;
+  std::size_t consumed = static_cast<std::size_t>(match.position(2) + match.length(2));
+  if (cmd.size() >= 3 && cmd.compare(cmd.size() - 3, 3, "SNR") == 0) {
+    static const std::regex kSnrNum(R"(^\s?[-+]?(?:3[01]|[0-2]?[0-9]))");
+    std::smatch num_match;
+    auto rest = text.substr(consumed);
+    if (std::regex_search(rest, num_match, kSnrNum)) {
+      num = num_match.str(0);
+      consumed += static_cast<std::size_t>(num_match.length(0));
+    }
+  }
 
   bool isToCompound = false;
   bool validTo = (to != mycall) && is_valid_callsign(to, &isToCompound);
@@ -1087,7 +1103,7 @@ std::string pack_directed_message(std::string const& text, std::string const& my
   bits.insert(bits.end(), to_bits.begin(), to_bits.end());
   bits.insert(bits.end(), cmd_bits.begin(), cmd_bits.end());
 
-  if (n) *n = static_cast<int>(match.length(0));
+  if (n) *n = static_cast<int>(consumed);
   return pack72bits(bits_to_int(bits), packed_extra);
 }
 std::vector<std::string> unpack_directed_message(std::string const& text, std::uint8_t* pType) {
@@ -1142,7 +1158,56 @@ static std::string to_upper(std::string const& s) {
   return result;
 }
 
+namespace {
+// Desktop's packHuffMessage(): the default Huffman table with a [1][0]
+// prefix, only when every character has a code; chars packed into *n.
+std::string pack_huff_message(std::string const& text, int* n) {
+  constexpr int frameSize = 72;
+  auto table = default_huff_table();
+  auto valid = huff_valid_chars(table);
+  for (char ch : text) {
+    if (!valid.count(std::string(1, static_cast<char>(std::toupper(static_cast<unsigned char>(ch)))))) {
+      if (n) *n = 0;
+      return {};
+    }
+  }
+  std::vector<bool> frameBits{true, false};
+  int chars_used = 0;
+  for (auto const& [chars, bits] : huff_encode(table, text)) {
+    if (static_cast<int>(frameBits.size() + bits.size()) < frameSize) {
+      frameBits.insert(frameBits.end(), bits.begin(), bits.end());
+      chars_used += chars;
+      continue;
+    }
+    break;
+  }
+  int pad = frameSize - static_cast<int>(frameBits.size());
+  for (int i = 0; i < pad; ++i) frameBits.push_back(i == 0 ? false : true);
+  auto value = bits_to_int(std::vector<bool>(frameBits.begin(), frameBits.begin() + 64));
+  auto rem = static_cast<std::uint8_t>(bits_to_int(std::vector<bool>(frameBits.begin() + 64, frameBits.end())));
+  if (n) *n = chars_used;
+  return pack72bits(static_cast<std::uint64_t>(value), rem);
+}
+} // namespace
+
+std::string pack_jsc_data_message(std::string const& text, int* n);
+
+// Desktop's packDataMessage(): Huffman or JSC, whichever fits more
+// characters (JSC on a tie). JSC alone put callsigns in more frames than
+// desktop does (local patch 11).
 std::string pack_data_message(std::string const& text, int* n) {
+  int huff_chars = 0, jsc_chars = 0;
+  auto huff = pack_huff_message(to_upper(text), &huff_chars);
+  auto jsc  = pack_jsc_data_message(text, &jsc_chars);
+  if (huff_chars > jsc_chars) {
+    if (n) *n = huff_chars;
+    return huff;
+  }
+  if (n) *n = jsc_chars;
+  return jsc;
+}
+
+std::string pack_jsc_data_message(std::string const& text, int* n) {
   // Legacy data frames use a 2-bit prefix: [data=1][compressed=1] + payload.
   // JSC dictionary only contains uppercase, so convert input first
   std::string upperText = to_upper(text);
@@ -1399,9 +1464,17 @@ std::vector<std::pair<std::string, int>> build_message_frames(std::string const&
           lineFrames.push_back({frame, 0});
         }
         line = line.substr(nlen);
-        if (is_command_buffered(dirCmd) && !line.empty()) {
+        // Desktop's isCommandBuffered() here also counts any command with a
+        // space in it (" RR", " YES", " HEARTBEAT SNR" ...), so the text
+        // after it loses its leading space: "RR 73" sends "73", not " 73"
+        // (local patch 11).
+        bool desktopBuffered = is_command_buffered(dirCmd) ||
+                               (dirCmd.find(' ') != std::string::npos && is_command_allowed(dirCmd));
+        if (desktopBuffered && !line.empty()) {
           line = lstrip(line);
-          int checksumSize = is_command_checksummed(dirCmd);
+          // Desktop sends @APRSIS MSG / MSG TO: without a checksum.
+          bool skipAprsChecksum = to_upper(dirTo) == "@APRSIS" && (dirCmd == " MSG" || dirCmd == " MSG TO:");
+          int checksumSize = skipAprsChecksum ? 0 : is_command_checksummed(dirCmd);
           if (checksumSize == 32) {
             line = line + " " + checksum32(line);
           } else if (checksumSize == 16) {
