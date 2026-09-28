@@ -31,7 +31,7 @@ The review reads code only: **no code is changed**.
 | 5 | The screen | F42–F52 | ✅ 2026-09-28: no new bugs, 3 improvements (1 high) |
 | 6 | Selecting, navigating, Stations | F53–F62 | ✅ 2026-09-28: 3 bugs (all low), 1 improvement |
 | 7 | Sending by hand | F63–F72 | ✅ 2026-09-28: 3 bugs (all low), 1 improvement |
-| 8 | Logging and APRS | F73–F82 | |
+| 8 | Logging and APRS | F73–F82 | ✅ 2026-09-28: no new bugs, 1 improvement |
 | 9 | Alerts, time, app life cycle, firmware hooks | F83–F92 | |
 | 10 | Engine, build, tests, tools, docs | F93–F101 | |
 
@@ -297,28 +297,38 @@ What an unattended station sends by itself.
 
 ## Batch 8: Logging and APRS
 
-- [ ] **F73. QSO tracker**: `QsoTracker`, `js8_qsos_*` (reports, grids,
+- [x] **F73. QSO tracker**: `QsoTracker`, `js8_qsos_*` (reports, grids,
   end of QSO). `src/js8/qsolog.cpp`. Earlier: BH-6, BH-13.
-- [ ] **F74. Log popup**: `log_cb`, `log_prepare`, `log_list_open`,
+  → nothing new. BH-6 and BH-13 still there. Fine: HB acks aren't QSOs, base calls, expiry, one offer per QSO.
+- [x] **F74. Log popup**: `log_cb`, `log_prepare`, `log_list_open`,
   `log_item_cb`, `log_edit_done`, `log_save`, `my_log_grid`,
   `log_reports_*`.
-- [ ] **F75. ADIF file and log database**: `adif_record`,
+  → nothing new. Fine: a typed grid is upper-cased by the keyboard (the bug hunt's "cn89" can't happen; "HOME" still can), reports refreshed while open, Save is a separate step.
+- [x] **F75. ADIF file and log database**: `adif_record`,
   `adif_append`, `js8_log_append`, `js8_log_band`; `src/adif.c`
   (MODE_JS8, and the SSB fall-through fix), `qso_log.h`.
-- [ ] **F76. Log prompt**: `log_offer`, `prompt_cb`, `js8_log_prompt`.
+  → I-19. Fine: fsync'd append, header once, MFSK/JS8 written and read back, our SSB fall-through fix, OPERATOR = station call when unset (desktop).
+- [x] **F76. Log prompt**: `log_offer`, `prompt_cb`, `js8_log_prompt`.
   Earlier: BH-12.
-- [ ] **F77. POTA/SOTA activation**: `act_cb`, `act_hold_cb`, MY_SIG
+  → nothing new. BH-12 still there.
+- [x] **F77. POTA/SOTA activation**: `act_cb`, `act_hold_cb`, MY_SIG
   fields.
-- [ ] **F78. Operator callsign**: `EDIT_OPERATOR`,
+  → nothing new. Fine: MY_SIG/MY_SIG_INFO for POTA, MY_SOTA_REF for SOTA.
+- [x] **F78. Operator callsign**: `EDIT_OPERATOR`,
   `js8_operator_call_valid`.
-- [ ] **F79. APRS menu and message format**: `aprs_cb`,
+  → nothing new. Fine: 3+ characters, letters/digits/'/', a digit.
+- [x] **F79. APRS menu and message format**: `aprs_cb`,
   `aprs_item_cb`, `aprs_prepare`, `aprs_compose` (SMS, email, Winlink,
   67 characters, `{NN}` IDs).
-- [ ] **F80. Grid spot**: `aprs_grid` (`@APRSIS GRID`).
-- [ ] **F81. Position beacon (grid or GPS)**: `aprs_gps`,
+  → nothing new. The bug hunt's "length check counts the {NN} ID" still there. Fine: IDs 1–99, 9-character addressee, gateway prefills.
+- [x] **F80. Grid spot**: `aprs_grid` (`@APRSIS GRID`).
+  → nothing new.
+- [x] **F81. Position beacon (grid or GPS)**: `aprs_gps`,
   `aprs_position`, `beacon_text`, `aprs_beacon`, `beacon_changed_cb`,
   `js8_latlon_to_grid`, `gps_last_fix` (`src/gps.c`).
-- [ ] **F82. POTA/SOTA spot form**: the `spot_*` functions.
+  → nothing new. Fine: 10-character GPS grid, APRS position ambiguity (8 + 9 characters), 2-minute fix age, live frame count.
+- [x] **F82. POTA/SOTA spot form**: the `spot_*` functions.
+  → nothing new. Fine: APSPOT and APRS2SOTA formats, MHz formatting to 1.3 GHz, the K-/VE- park hint.
 
 ## Batch 9: Alerts, time, app life cycle, firmware hooks
 

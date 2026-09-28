@@ -34,6 +34,7 @@ numbers refer to that commit.
 | I-16 | F42, F43 | Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes | efficiency | low |
 | I-17 | F58, F62 | Forget expired stations; look one up without copying the list | efficiency | medium |
 | I-18 | F63, F67, F40 | One "from a popup into the keyboard" helper | simplify | medium |
+| I-19 | F75 | Keep `MODE_JS8`'s number clear of upstream's | robustness | low |
 
 ## Batch 1: Transmitting and the radio
 
@@ -251,3 +252,27 @@ remove their buttons from the group first"), and none of them undoes
 `edit_target` when `compose_open()` refuses (B-16). One
 `popup_to_keyboard(list, target, prefill, hint)` would hold the rule and
 the reset in one place.
+
+## Batch 8: Logging and APRS
+
+No new bugs: the QSO tracker, the ADIF record, the Log popup, the APRS
+formats (message IDs, position ambiguity, the POTA and SOTA gateways'
+formats) and the Maidenhead conversion all read correctly. Still there
+from the bug hunt: BH-6 (grids from any grid-shaped word), BH-12 (the log
+prompt holds up automatic TX), BH-13 ("73" anywhere ends the QSO), and the
+APRS length check counting the `{NN}` ID. Correction to the bug hunt's
+"typed log grid" item: a typed grid *is* upper-cased (the keyboard turns
+lowercase into capitals as it's typed), but it still isn't checked, so
+"HOME" can reach the log.
+
+### I-19. Keep `MODE_JS8`'s number clear of upstream's — robustness, low
+
+`qso_log.db` (on the DATA partition, kept across reflashing) stores the
+mode as an integer (`qso_log.c:188`, `mode INT NOT NULL`), and we appended
+`MODE_JS8` to `qso_log_mode_t` (`qso_log.h:40`), so it's 8. Upstream's
+enum stops at `MODE_RTTY` = 7; the next mode they add will also be 8.
+Merging upstream then needs `MODE_JS8` kept at 8 and theirs moved, and a
+card used with an upstream image would show our JS8 QSOs as their new mode
+(worked-before marks, ADIF export). Same kind of risk as I-03: a fixed,
+high value (e.g. 100) for `MODE_JS8` now, before more records are written,
+avoids it; the few existing records would need a one-off update.
