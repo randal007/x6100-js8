@@ -11,6 +11,7 @@
 #include "autoreply.hpp"
 #include "classify.hpp"
 #include "commands.hpp"
+#include "datafile.hpp"
 #include "directed.hpp"
 #include "inbox.hpp"
 #include "qsolog.hpp"
@@ -49,12 +50,27 @@ struct js8_stations {
 struct js8_held {
     HeldMessages held;
     std::string  path;
+    bool         unsaved = false; ///< a change the card hasn't got yet
 };
 
 struct js8_inbox {
     Inbox       box;
     std::string path;
+    bool        unsaved = false;
 };
+
+namespace {
+// Write the store to the card; remember a failure so the next change or
+// resend tries again.
+bool sync(js8_inbox *b) {
+    b->unsaved = !b->box.save(b->path);
+    return !b->unsaved;
+}
+bool sync(js8_held *h) {
+    h->unsaved = !h->held.save(h->path);
+    return !h->unsaved;
+}
+} // namespace
 
 extern "C" const char *js8_query_label(js8_query_t q) {
     return (unsigned)q < JS8_Q_COUNT ? LABELS[q] : "";
@@ -237,19 +253,22 @@ std::vector<Heard> heard_list(const js8_heard_t *heard, unsigned n) {
 
 // Keep what desktop keeps: the inbox for us, held for someone else.
 void keep(const StoreAction &a, std::int64_t now_ms, js8_inbox_t *inbox, js8_held_t *held, js8_stored_t *out) {
+    // New messages count as new even in a full store (the oldest makes room;
+    // comparing sizes took every one for a resend). A new one, or any change
+    // an earlier save didn't get onto the card, is written now; id -1 = not
+    // on the card.
     js8_stored_t st{};
+    bool         added = false;
     if (a.kind == StoreAction::Kind::Inbox && inbox) {
-        auto before = inbox->box.size();
-        st.kind     = JS8_STORED_INBOX;
-        st.id       = inbox->box.add(a.from, a.text, now_ms, a.to, a.path);
-        st.resend   = inbox->box.size() == before;
-        if (!st.resend && !inbox->box.save(inbox->path)) st.id = -1;
+        st.kind   = JS8_STORED_INBOX;
+        st.id     = inbox->box.add(a.from, a.text, now_ms, a.to, a.path, &added);
+        st.resend = !added;
+        if ((added || inbox->unsaved) && !sync(inbox)) st.id = -1;
     } else if (a.kind == StoreAction::Kind::Held && held) {
-        auto before = held->held.size();
-        st.kind     = JS8_STORED_HELD;
-        st.id       = held->held.add(a.from, a.to, a.text, now_ms, a.path);
-        st.resend   = held->held.size() == before;
-        if (!st.resend && !held->held.save(held->path)) st.id = -1;
+        st.kind   = JS8_STORED_HELD;
+        st.id     = held->held.add(a.from, a.to, a.text, now_ms, a.path, &added);
+        st.resend = !added;
+        if ((added || held->unsaved) && !sync(held)) st.id = -1;
     } else {
         return;
     }
@@ -306,11 +325,16 @@ extern "C" void js8_process(js8_auto_t *a, const js8_rx_msg_t *msg, const js8_au
 
     Incoming in = to_incoming(msg);
     in.when_ms  = now_ms;
-    auto p      = process(in, settings, heard_list(heard, n_heard), last_tx ? last_tx : "");
-    keep(p.store, now_ms, inbox, s->held, stored);
+    auto         p = process(in, settings, heard_list(heard, n_heard), last_tx ? last_tx : "");
+    js8_stored_t kept{};
+    keep(p.store, now_ms, inbox, s->held, &kept);
+    if (stored) *stored = kept;
 
     if (!p.reply || !out) return;
-    auto &r     = *p.reply;
+    auto &r = *p.reply;
+    // An ACK says "I have it": not for a message the card didn't take, so
+    // their station knows it didn't arrive and can send it again.
+    if (r.kind == ReplyKind::MsgAck && kept.kind != JS8_STORED_NONE && kept.id < 0) return;
     auto  act   = a->policy.decide(r, settings, now_ms);
     out->action = act == AutoPolicy::Action::Send    ? JS8_AUTO_SEND
                   : act == AutoPolicy::Action::Offer ? JS8_AUTO_OFFER
@@ -526,8 +550,12 @@ extern "C" js8_inbox_t *js8_inbox_open(const char *path) {
     auto *b = new (std::nothrow) js8_inbox;
     if (!b) return nullptr;
     b->path = path ? path : "";
-    b->box.load(b->path);
+    b->box.load(b->path); // an unreadable file is moved aside (or never written): notice()
     return b;
+}
+
+extern "C" const char *js8_inbox_notice(js8_inbox_t *b) {
+    return b ? b->box.notice().c_str() : "";
 }
 
 extern "C" void js8_inbox_close(js8_inbox_t *b) {
@@ -537,7 +565,7 @@ extern "C" void js8_inbox_close(js8_inbox_t *b) {
 extern "C" int js8_inbox_add(js8_inbox_t *b, const char *from, const char *text, int64_t utc_ms) {
     if (!b || !from || !text) return -1;
     int id = b->box.add(from, text, utc_ms);
-    return b->box.save(b->path) ? id : -1;
+    return sync(b) ? id : -1;
 }
 
 extern "C" int js8_inbox_list(js8_inbox_t *b, js8_inbox_msg_t *out, int max) {
@@ -559,11 +587,11 @@ extern "C" bool js8_inbox_get(js8_inbox_t *b, int id, js8_inbox_msg_t *out) {
 }
 
 extern "C" void js8_inbox_mark_read(js8_inbox_t *b, int id) {
-    if (b && b->box.mark_read(id)) b->box.save(b->path);
+    if (b && b->box.mark_read(id)) sync(b);
 }
 
 extern "C" void js8_inbox_delete(js8_inbox_t *b, int id) {
-    if (b && b->box.remove(id)) b->box.save(b->path);
+    if (b && b->box.remove(id)) sync(b);
 }
 
 extern "C" int js8_inbox_unread(js8_inbox_t *b) {
@@ -615,8 +643,12 @@ extern "C" js8_held_t *js8_held_open(const char *path) {
     auto *h = new (std::nothrow) js8_held;
     if (!h) return nullptr;
     h->path = path ? path : "";
-    h->held.load(h->path);
+    h->held.load(h->path); // as js8_inbox_open()
     return h;
+}
+
+extern "C" const char *js8_held_notice(js8_held_t *h) {
+    return h ? h->held.notice().c_str() : "";
 }
 
 extern "C" void js8_held_close(js8_held_t *h) {
@@ -626,7 +658,7 @@ extern "C" void js8_held_close(js8_held_t *h) {
 extern "C" int js8_held_add(js8_held_t *h, const char *from, const char *to, const char *text, int64_t utc_ms) {
     if (!h || !from || !to || !text) return -1;
     int id = h->held.add(from, to, text, utc_ms);
-    return h->held.save(h->path) ? id : -1;
+    return sync(h) ? id : -1;
 }
 
 extern "C" int js8_held_list(js8_held_t *h, js8_held_msg_t *out, int max) {
@@ -648,11 +680,11 @@ extern "C" bool js8_held_get(js8_held_t *h, int id, js8_held_msg_t *out) {
 }
 
 extern "C" void js8_held_delivered(js8_held_t *h, int id) {
-    if (h && h->held.mark_delivered(id)) h->held.save(h->path);
+    if (h && h->held.mark_delivered(id)) sync(h);
 }
 
 extern "C" void js8_held_group_delivered(js8_held_t *h, int id, const char *call) {
-    if (h && call && h->held.mark_group_delivered(id, call)) h->held.save(h->path);
+    if (h && call && h->held.mark_group_delivered(id, call)) sync(h);
 }
 
 extern "C" bool js8_held_push_due(js8_held_t *h, const js8_heard_t *heard, unsigned n_heard, int64_t now_ms,
@@ -660,13 +692,13 @@ extern "C" bool js8_held_push_due(js8_held_t *h, const js8_heard_t *heard, unsig
     if (!h) return false;
     auto due = h->held.push_due(heard_list(heard, n_heard), now_ms);
     if (!due) return false;
-    h->held.save(h->path);
+    sync(h);
     copy_str(text, text_len, due->second);
     return true;
 }
 
 extern "C" void js8_held_delete(js8_held_t *h, int id) {
-    if (h && h->held.remove(id)) h->held.save(h->path);
+    if (h && h->held.remove(id)) sync(h);
 }
 
 extern "C" int js8_held_waiting(js8_held_t *h) {
@@ -709,7 +741,28 @@ extern "C" void js8_groups_normalise(const char *typed, char *out, unsigned out_
         if (groups.size() >= 10) break;
         groups.push_back(g);
     }
+    // Whole groups only: one cut short would match nothing (or another group).
     std::string joined;
-    for (auto &g : groups) joined += (joined.empty() ? "" : " ") + g;
+    for (auto &g : groups) {
+        std::string next = joined + (joined.empty() ? "" : " ") + g;
+        if (next.size() + 1 > out_len) break;
+        joined = next;
+    }
     copy_str(out, out_len, joined);
+}
+
+// ---- Data files (js8_texts.txt) --------------------------------------------
+
+extern "C" bool js8_file_read(const char *path, char *buf, unsigned len, char *notice, unsigned notice_len) {
+    if (buf && len) buf[0] = '\0';
+    if (notice && notice_len) notice[0] = '\0';
+    if (!path) return false;
+    auto file = read_data_file(path);
+    copy_str(buf, len, file.text);
+    copy_str(notice, notice_len, file.notice);
+    return file.writable;
+}
+
+extern "C" bool js8_file_write(const char *path, const char *text) {
+    return path && text && write_data_file(path, text);
 }

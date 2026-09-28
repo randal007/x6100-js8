@@ -138,7 +138,7 @@ typedef enum { JS8_STORED_NONE, JS8_STORED_INBOX, JS8_STORED_HELD } js8_stored_k
 /* What js8_process() kept from a message. */
 typedef struct {
     js8_stored_kind_t kind;
-    int               id;     /* -1: couldn't save the file (kept in memory) */
+    int               id;     /* -1: couldn't save the file (kept in memory, and no ACK sent) */
     bool              resend; /* the same message again: nothing new */
     char              from[JS8_RX_CALL_LEN];
     char              to[JS8_RX_CALL_LEN];
@@ -268,8 +268,13 @@ typedef struct {
     bool    read;
 } js8_inbox_msg_t;
 
-/* Loads `path` (missing = empty); every change is saved back to it. */
+/* Loads `path` (missing = empty); every change is saved back to it,
+ * safely (a power cut leaves the old file or the new one). A file that
+ * can't be read is moved aside as `path.unreadable-<date>` and a new one
+ * started; if it can't even be moved, nothing is saved over it. */
 js8_inbox_t *js8_inbox_open(const char *path);
+/* What opening had to do with an unreadable file, for the screen; "" normally. */
+const char  *js8_inbox_notice(js8_inbox_t *b);
 void         js8_inbox_close(js8_inbox_t *b);
 /* Save a message; returns its id (a resend within 30 min keeps the first),
  * or -1 if the file can't be written (the message is still in memory). */
@@ -296,7 +301,8 @@ typedef struct {
     int     got;   /* group message: how many have fetched it */
 } js8_held_msg_t;
 
-js8_held_t *js8_held_open(const char *path);
+js8_held_t *js8_held_open(const char *path); /* as js8_inbox_open() */
+const char *js8_held_notice(js8_held_t *h);
 void        js8_held_close(js8_held_t *h);
 /* Hold a message; returns its id (a resend keeps the first), -1 if unsaved. */
 int  js8_held_add(js8_held_t *h, const char *from, const char *to, const char *text, int64_t utc_ms);
@@ -326,8 +332,17 @@ void js8_path_display(const char *path, char *out, unsigned out_len);
 /* A delivered message's "... FROM N0XYZ [NEXT MSG ID 4 [+2]]": the original
  * sender, and the next id (0 if none). */
 bool js8_delivered_signature(const char *text, char *from, unsigned from_len, int *next_id);
-/* Groups as typed -> "@GROUP1 @GROUP2" (upper case, '@' added, at most 10). */
+/* Groups as typed -> "@GROUP1 @GROUP2" (upper case, '@' added, at most 10,
+ * and only as many whole groups as fit in out_len). */
 void js8_groups_normalise(const char *typed, char *out, unsigned out_len);
+
+/* Small data files on the DATA partition (js8_texts.txt). Read `path` into
+ * buf: a save cut short by a power cut is put back; a file that can't be
+ * read is moved aside (`notice` says so). False only if it can't be read or
+ * moved: then don't write to it. */
+bool js8_file_read(const char *path, char *buf, unsigned len, char *notice, unsigned notice_len);
+/* Write `text` safely: a power cut leaves the old file or the new one. */
+bool js8_file_write(const char *path, const char *text);
 
 /* ---- Alerts ----------------------------------------------------------- */
 

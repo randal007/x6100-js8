@@ -7,14 +7,12 @@
 #include "inbox.hpp"
 
 #include "classify.hpp"
+#include "datafile.hpp"
 
 #include <algorithm>
 #include <cctype>
-#include <cstdio>
-#include <fstream>
 #include <regex>
 #include <sstream>
-#include <unistd.h>
 
 namespace x6100::js8 {
 
@@ -70,9 +68,11 @@ std::vector<std::string> split(const std::string &s, char sep) {
 
 bool Inbox::load(const std::string &path) {
     msgs_.clear();
-    next_id_ = 1;
-    std::ifstream f(path);
-    if (!f) return access(path.c_str(), F_OK) != 0; // missing: empty inbox
+    next_id_  = 1;
+    auto file = read_data_file(path); // missing: empty inbox
+    writable_ = file.writable;
+    notice_   = file.notice;
+    std::istringstream f(file.text);
     for (std::string line; std::getline(f, line);) {
         if (line.empty() || line[0] == '#') continue;
         // v1: id, utc, U/R, from, text; v2 adds to and path before the text.
@@ -96,33 +96,25 @@ bool Inbox::load(const std::string &path) {
         next_id_ = std::max(next_id_, m.id + 1);
         msgs_.push_back(m);
     }
-    return true;
+    return writable_;
 }
 
 bool Inbox::save(const std::string &path) const {
-    std::string tmp = path + ".tmp";
-    FILE       *f   = std::fopen(tmp.c_str(), "w");
-    if (!f) return false;
-    bool ok = std::fputs(HEADER, f) >= 0;
+    if (!writable_) return false; // an unreadable file we couldn't move aside: never write over it
+    std::string out = HEADER;
     for (auto &m : msgs_) {
-        ok = ok && std::fprintf(f, "%d\t%lld\t%s\t%s\t%s\t%s\t%s\n", m.id, (long long)m.utc_ms, m.read ? "R" : "U",
-                                one_line(m.from).c_str(), one_line(m.to).c_str(), one_line(m.path).c_str(),
-                                one_line(m.text).c_str()) >= 0;
+        out += std::to_string(m.id) + '\t' + std::to_string(m.utc_ms) + '\t' + (m.read ? "R" : "U") + '\t' +
+               one_line(m.from) + '\t' + one_line(m.to) + '\t' + one_line(m.path) + '\t' + one_line(m.text) + '\n';
     }
-    ok = ok && std::fflush(f) == 0;
-    fsync(fileno(f));
-    ok = std::fclose(f) == 0 && ok;
-    if (!ok || std::rename(tmp.c_str(), path.c_str()) != 0) {
-        std::remove(tmp.c_str());
-        return false;
-    }
-    return true;
+    return write_data_file(path, out);
 }
 
 int Inbox::add(const std::string &from, const std::string &text, std::int64_t utc_ms, const std::string &to,
-               const std::string &path) {
+               const std::string &path, bool *added) {
+    if (added) *added = false;
     for (auto &m : msgs_)
         if (m.from == from && m.text == text && utc_ms - m.utc_ms < REPEAT_MS) return m.id;
+    if (added) *added = true;
 
     InboxMessage m;
     m.id     = next_id_++;
@@ -180,9 +172,11 @@ const char *const HELD_HEADER =
 
 bool HeldMessages::load(const std::string &path) {
     msgs_.clear();
-    next_id_ = 1;
-    std::ifstream f(path);
-    if (!f) return access(path.c_str(), F_OK) != 0;
+    next_id_  = 1;
+    auto file = read_data_file(path);
+    writable_ = file.writable;
+    notice_   = file.notice;
+    std::istringstream f(file.text);
     for (std::string line; std::getline(f, line);) {
         if (line.empty() || line[0] == '#') continue;
         // v1: id, utc, H/D, from, for, text; v2 adds path, notified, got.
@@ -208,35 +202,27 @@ bool HeldMessages::load(const std::string &path) {
         next_id_ = std::max(next_id_, m.id + 1);
         msgs_.push_back(m);
     }
-    return true;
+    return writable_;
 }
 
 bool HeldMessages::save(const std::string &path) const {
-    std::string tmp = path + ".tmp";
-    FILE       *f   = std::fopen(tmp.c_str(), "w");
-    if (!f) return false;
-    bool ok = std::fputs(HELD_HEADER, f) >= 0;
+    if (!writable_) return false; // as Inbox::save()
+    std::string out = HELD_HEADER;
     for (auto &m : msgs_) {
-        ok = ok && std::fprintf(f, "%d\t%lld\t%s\t%s\t%s\t%s\t%lld\t%s\t%s\n", m.id, (long long)m.utc_ms,
-                                m.delivered ? "D" : "H", one_line(m.from).c_str(), one_line(m.to).c_str(),
-                                one_line(m.path).c_str(), (long long)m.notified_ms, join(m.got, ',').c_str(),
-                                one_line(m.text).c_str()) >= 0;
+        out += std::to_string(m.id) + '\t' + std::to_string(m.utc_ms) + '\t' + (m.delivered ? "D" : "H") + '\t' +
+               one_line(m.from) + '\t' + one_line(m.to) + '\t' + one_line(m.path) + '\t' +
+               std::to_string(m.notified_ms) + '\t' + join(m.got, ',') + '\t' + one_line(m.text) + '\n';
     }
-    ok = ok && std::fflush(f) == 0;
-    fsync(fileno(f));
-    ok = std::fclose(f) == 0 && ok;
-    if (!ok || std::rename(tmp.c_str(), path.c_str()) != 0) {
-        std::remove(tmp.c_str());
-        return false;
-    }
-    return true;
+    return write_data_file(path, out);
 }
 
 int HeldMessages::add(const std::string &from, const std::string &to, const std::string &text, std::int64_t utc_ms,
-                      const std::string &path) {
+                      const std::string &path, bool *added) {
     const std::string dest = base_callsign(to);
+    if (added) *added = false;
     for (auto &m : msgs_)
         if (m.from == from && m.to == dest && m.text == text && utc_ms - m.utc_ms < Inbox::REPEAT_MS) return m.id;
+    if (added) *added = true;
     HeldMessage m;
     m.id     = next_id_++;
     m.utc_ms = utc_ms;

@@ -30,7 +30,7 @@ Nothing in WP1, WP2 or WP7 waits on these; WP3 does. D1 is decided.
 | D5 | B-08: heartbeats on desktop's fixed schedule? Auto CQ: keep "N minutes after each CQ ends" (your choice) but count only from our CQs, not every transmission? | Yes to both. |
 | D6 | B-06: keep our 5-minute "don't answer the same question twice" guard (fixed), or drop it like desktop? | Keep it, keyed by the real asker, AGN? left out. |
 | D7 | BH-5: remember one offered answer per station (so Reply works for each), or keep desktop's single outgoing box? | One per station: small, and our Reply is per station. |
-| D8 | B-14: an Inbox file that can't be read: **move it aside** and start fresh, or **refuse to save** until it reads? | Move it aside (`js8_inbox.txt.unreadable-<date>`), tell you on screen. |
+| D8 | B-14: an Inbox file that can't be read: move it aside, or refuse to save? | **Decided 2026-09-28: A**, move it aside (`<name>.unreadable-<date>`) and say so; refuse to save only if it can't even be moved. |
 | D9 | I-21: pin the buildroot commit CI builds with? (Updates become deliberate.) | Yes. |
 | D10 | I-03 / I-19: our migration numbers and `MODE_JS8 = 8` will collide with upstream's future ones. Renumber now, or write the rule down for the next upstream merge? | Write the rule down; renumbering needs database surgery on your card. |
 
@@ -57,7 +57,7 @@ during a message (refused), a heartbeat and a reply still going out.
 **Status:** B-01, I-01, BH-10, BH-11, BH-S5 done (see the commit that
 marks them fixed in bugs.md); B-02 and B-07 dropped by your decision.
 
-### WP2: No lost data (effort M)
+### WP2: No lost data — done 2026-09-28
 
 | Item | Verdict | The fix |
 |---|---|---|
@@ -72,6 +72,10 @@ marks them fixed in bugs.md); B-02 and B-07 dropped by your decision.
 
 **On the radio:** nothing special; the harness covers it. Keep the DATA
 backup the flash script makes.
+
+**Status:** all eight done (D8 = A, your call); see the commit that marks
+them fixed in bugs.md. `src/js8/datafile.cpp` holds the safe reader and
+writer; unit tests `[files]`, harness `ONLY_BADFILES`.
 
 ### WP3: The unattended station, as desktop (effort L; needs D1–D7)
 

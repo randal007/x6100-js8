@@ -166,6 +166,7 @@ static void        user_touch(void);
 static void        auto_send(const js8_auto_result_t *r);
 static void        hb_tick(void);
 static void        load_texts(void);
+static void        data_file_notice(const char *notice);
 static void        save_texts(void);
 static void        compose_open(const char *prefill);
 static void        update_tx_bar(void);
@@ -292,7 +293,7 @@ static lv_obj_t      *alerts_list;     /* Alerts popup, when open */
 static lv_obj_t      *freq_list;       /* Freq popup, when open */
 static lv_obj_t      *spot_list;       /* POTA / SOTA spot form, when open */
 static char           alert_words[128]; /* "VE7ABC @POTA SOTA", ALERTS= in JS8_TEXTS_PATH */
-static char           groups_text[96];  /* "@NET @GROUP2": groups we're in, GROUPS= in JS8_TEXTS_PATH */
+static char           groups_text[160]; /* "@NET @GROUP2": groups we're in (10 at most), GROUPS= in JS8_TEXTS_PATH */
 static char           operator_call[JS8_RX_CALL_LEN]; /* logged as OPERATOR ("": the station call), OPERATOR= */
 static bool           st_alert[MAX_ROWS]; /* st_rows matching an alert word */
 static js8_inbox_t   *inbox;           /* MSGs to us, JS8_INBOX_PATH */
@@ -2254,8 +2255,16 @@ static void construct_cb(lv_obj_t *parent) {
      * drop off an hour after they were last heard (StationList::EXPIRE_MS). */
     stations = stations_for_band();
     if (!qsos) qsos = js8_qsos_create();
-    if (!inbox) inbox = js8_inbox_open(JS8_INBOX_PATH);
-    if (!held) held = js8_held_open(JS8_HELD_PATH);
+    /* Opened once per power-on; a file that couldn't be read was moved
+     * aside (or is left alone): say so. */
+    if (!inbox) {
+        inbox = js8_inbox_open(JS8_INBOX_PATH);
+        data_file_notice(js8_inbox_notice(inbox));
+    }
+    if (!held) {
+        held = js8_held_open(JS8_HELD_PATH);
+        data_file_notice(js8_held_notice(held));
+    }
     if (!autop) autop = js8_auto_create();
     deliver_tx.id      = 0;
     deliver_pending.id = 0;
@@ -3262,14 +3271,27 @@ static void hb_ack_cb(button_data_t *btn) {
 
 /* ---- INFO / STATUS texts -------------------------------------------- */
 
+/* js8_texts.txt couldn't be read or moved aside: never write over it. */
+static bool texts_writable = true;
+
+/* A data file was moved aside (or can't be written): say so on the screen
+ * and in the log. */
+static void data_file_notice(const char *notice) {
+    if (!notice || !notice[0]) return;
+    LV_LOG_USER("JS8: %s", notice);
+    msg_update_text_fmt("%s", notice);
+    add_info_row("%s", notice);
+}
+
 static void load_texts(void) {
     info_text[0] = status_text[0] = last_pota[0] = last_sota[0] = alert_words[0] = spot_note[0] = '\0';
     groups_text[0] = operator_call[0] = '\0';
-    FILE *f = fopen(JS8_TEXTS_PATH, "r");
-    if (!f) return;
-    char line[sizeof(alert_words) + 16];
-    while (fgets(line, sizeof(line), f)) {
-        line[strcspn(line, "\r\n")] = '\0';
+    char buf[2048], notice[160];
+    texts_writable = js8_file_read(JS8_TEXTS_PATH, buf, sizeof(buf), notice, sizeof(notice));
+    data_file_notice(notice);
+    char *save = NULL;
+    for (char *line = strtok_r(buf, "\n", &save); line; line = strtok_r(NULL, "\n", &save)) {
+        line[strcspn(line, "\r")] = '\0';
         if (strncmp(line, "INFO=", 5) == 0) snprintf(info_text, sizeof(info_text), "%s", line + 5);
         if (strncmp(line, "STATUS=", 7) == 0) snprintf(status_text, sizeof(status_text), "%s", line + 7);
         if (strncmp(line, "POTA=", 5) == 0) snprintf(last_pota, sizeof(last_pota), "%s", line + 5);
@@ -3284,21 +3306,23 @@ static void load_texts(void) {
         if (strncmp(line, "SPOTNOTE=", 9) == 0) snprintf(spot_note, sizeof(spot_note), "%s", line + 9);
     }
     if (!spot_typed_hz) spot_use_typed = false;
-    fclose(f);
 }
 
+/* Written safely (js8_file_write): a power cut during a save used to leave
+ * the file empty, losing every setting in it. */
 static void save_texts(void) {
-    FILE *f = fopen(JS8_TEXTS_PATH, "w");
-    if (!f) {
-        msg_update_text_fmt("Can't write %s", JS8_TEXTS_PATH);
+    if (!texts_writable) {
+        msg_update_text_fmt("Not saved: %s can't be read or moved (check the SD card)", JS8_TEXTS_PATH);
         return;
     }
-    fprintf(f, "INFO=%s\nSTATUS=%s\nPOTA=%s\nSOTA=%s\nALERTS=%s\n", info_text, status_text, last_pota, last_sota,
-            alert_words);
-    fprintf(f, "SPOTMODE=%s\nSPOTHZ=%d\nSPOTTYPED=%d\nSPOTNOTE=%s\n", spot_mode, (int)spot_typed_hz, spot_use_typed ? 1 : 0,
-            spot_note);
-    fprintf(f, "GROUPS=%s\nOPERATOR=%s\n", groups_text, operator_call);
-    fclose(f);
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+             "INFO=%s\nSTATUS=%s\nPOTA=%s\nSOTA=%s\nALERTS=%s\n"
+             "SPOTMODE=%s\nSPOTHZ=%d\nSPOTTYPED=%d\nSPOTNOTE=%s\n"
+             "GROUPS=%s\nOPERATOR=%s\n",
+             info_text, status_text, last_pota, last_sota, alert_words, spot_mode, (int)spot_typed_hz,
+             spot_use_typed ? 1 : 0, spot_note, groups_text, operator_call);
+    if (!js8_file_write(JS8_TEXTS_PATH, buf)) msg_update_text_fmt("Can't write %s", JS8_TEXTS_PATH);
 }
 
 static void texts_close(void) {
@@ -4424,7 +4448,7 @@ static void stored_received(const js8_stored_t *k) {
     js8_path_display(k->path[0] ? k->path : k->from, from, sizeof(from));
     if (k->kind == JS8_STORED_INBOX) {
         bool group = k->to[0] == '@';
-        if (k->id < 0) msg_update_text_fmt("Message from %s - can't save %s", from, JS8_INBOX_PATH);
+        if (k->id < 0) msg_update_text_fmt("Message from %s: can't save %s, so no ACK sent", from, JS8_INBOX_PATH);
         else if (!k->resend && group) msg_update_text_fmt("New message to %s from %s - Inbox on page 3", k->to, from);
         else if (!k->resend) msg_update_text_fmt("New message from %s - Inbox on page 3", from);
         if (!k->resend) add_info_row("Message from %s in the Inbox: %s", from, k->text);
@@ -4432,8 +4456,11 @@ static void stored_received(const js8_stored_t *k) {
         inbox_refresh_button();
         update_status();
     } else if (k->kind == JS8_STORED_HELD && !k->resend) {
-        if (k->id < 0) msg_update_text_fmt("Can't save %s", JS8_HELD_PATH);
-        else msg_update_text_fmt("Holding a message from %s for %s (Inbox)", from, k->to);
+        if (k->id < 0) {
+            msg_update_text_fmt("Message from %s for %s: can't save %s, so no ACK sent", from, k->to, JS8_HELD_PATH);
+            return;
+        }
+        msg_update_text_fmt("Holding a message from %s for %s (Inbox)", from, k->to);
         add_info_row("Holding message %d from %s for %s: %s", k->id, from, k->to, k->text);
     }
 }

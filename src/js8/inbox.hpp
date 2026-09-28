@@ -34,16 +34,21 @@ public:
     static constexpr std::size_t  MAX_MESSAGES = 200;          ///< oldest go first
     static constexpr std::int64_t REPEAT_MS    = 30 * 60 * 1000; ///< same message again: a resend
 
-    /// A missing file is an empty inbox (true); an unreadable one is false.
+    /// A missing file is an empty inbox. One that can't be read is moved
+    /// aside (read_data_file) and the inbox starts empty; if it can't even be
+    /// moved, nothing is ever saved over it: false, and save() refuses.
+    /// notice() says what happened.
     bool load(const std::string &path);
     /// Write via a temporary file and rename, so a power cut keeps the old one.
     bool save(const std::string &path) const;
+    /// What load() had to do with an unreadable file, for the screen; "" normally.
+    const std::string &notice() const { return notice_; }
 
     /// Returns the id. The same text from the same station within REPEAT_MS
-    /// is a resend (they didn't get our ACK): the existing id, not a copy.
-    /// `path` empty: the message came straight from `from`.
+    /// is a resend (they didn't get our ACK): the existing id, not a copy,
+    /// and `*added` false. `path` empty: the message came straight from `from`.
     int add(const std::string &from, const std::string &text, std::int64_t utc_ms, const std::string &to = "",
-            const std::string &path = "");
+            const std::string &path = "", bool *added = nullptr);
 
     /// Newest first.
     std::vector<InboxMessage> list() const;
@@ -56,6 +61,8 @@ public:
 private:
     std::vector<InboxMessage> msgs_; ///< oldest first
     int                       next_id_ = 1;
+    bool                      writable_ = true;
+    std::string               notice_;
 };
 
 /// A message held here for another station, as desktop JS8Call stores
@@ -82,13 +89,15 @@ public:
     static constexpr std::int64_t PUSH_SEEN_MS    = 15 * 60 * 1000;          ///< heard this recently
     static constexpr std::int64_t PUSH_REPEAT_MS  = 8LL * 60 * 60 * 1000;    ///< once per 8 h per message
 
+    /// As Inbox::load() / save() / notice().
     bool load(const std::string &path);
     bool save(const std::string &path) const;
+    const std::string &notice() const { return notice_; }
 
     /// Hold `text` from `from` for `to` (stored as its base call). A resend
-    /// within Inbox::REPEAT_MS returns the first one's id.
+    /// within Inbox::REPEAT_MS returns the first one's id, `*added` false.
     int add(const std::string &from, const std::string &to, const std::string &text, std::int64_t utc_ms,
-            const std::string &path = "");
+            const std::string &path = "", bool *added = nullptr);
 
     /// The oldest undelivered message for `call` (or its base call), as
     /// desktop's getNextMessageIdForCallsign().
@@ -124,6 +133,8 @@ public:
 private:
     std::vector<HeldMessage> msgs_; ///< oldest first
     int                      next_id_ = 1;
+    bool                     writable_ = true;
+    std::string              notice_;
 };
 
 /// "FROM: MYCALL MSG TO:W1ABC HELLO" (or "MSG TO: W1ABC HELLO") to my_call:

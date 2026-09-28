@@ -18,6 +18,8 @@
 #include "speeds.hpp"
 
 #include <unistd.h>
+#include <glob.h>
+#include <sys/stat.h>
 #include "tx.hpp"
 #include "render.hpp"
 #include "resampler.hpp"
@@ -1684,6 +1686,211 @@ TEST_CASE("the inbox C API", "[js8][inbox]") {
     CHECK(js8_inbox_count(b) == 0);
     js8_inbox_close(b);
     unlink(path);
+}
+
+// ---- Data files: full, unreadable, cut short ------------------------------------
+
+namespace {
+// A fresh directory for one test's data files, removed with them at the end.
+struct TempDir {
+    std::string path;
+    TempDir() {
+        char t[] = "/tmp/js8_files_XXXXXX";
+        path     = mkdtemp(t);
+    }
+    ~TempDir() {
+        chmod(path.c_str(), 0755);
+        std::string cmd = "chmod -R u+rwX '" + path + "' && rm -rf '" + path + "'";
+        (void)std::system(cmd.c_str());
+    }
+    std::string file(const char *name) const { return path + "/" + name; }
+};
+
+std::string slurp(const std::string &path) {
+    std::ifstream     f(path);
+    std::stringstream s;
+    s << f.rdbuf();
+    return s.str();
+}
+
+bool exists(const std::string &path) {
+    return access(path.c_str(), F_OK) == 0;
+}
+
+// Files matching a glob pattern.
+std::vector<std::string> matching(const std::string &pattern) {
+    glob_t g{};
+    std::vector<std::string> out;
+    if (glob(pattern.c_str(), 0, nullptr, &g) == 0)
+        for (std::size_t i = 0; i < g.gl_pathc; i++) out.push_back(g.gl_pathv[i]);
+    globfree(&g);
+    return out;
+}
+
+// "FROM: K2XYZ MSG text" as the receiver hands it over, checksum good.
+js8_rx_msg_t msg_to_k2xyz(const char *from, const char *text) {
+    js8_rx_msg_t m{};
+    auto         plan = plan_message(from, "EN52", text);
+    REQUIRE(plan.ok());
+    auto mc = classify(plan.preview, "K2XYZ");
+    snprintf(m.from, sizeof(m.from), "%s", from);
+    snprintf(m.to, sizeof(m.to), "%s", mc.to.c_str());
+    snprintf(m.text, sizeof(m.text), "%s", plan.preview.c_str());
+    m.to_me    = mc.to_me;
+    m.checksum = 1;
+    m.snr      = -6;
+    return m;
+}
+
+js8_auto_settings_t auto_on(js8_held_t *held) {
+    js8_auto_settings_t st{};
+    st.autoreply = true;
+    st.relay     = true;
+    st.my_call   = "K2XYZ";
+    st.my_grid   = "FN42";
+    st.held      = held;
+    return st;
+}
+
+const char *const OLD_INBOX = "# X6100 JS8 inbox v2: id, UTC ms, U(nread)/R(ead), from, to, path, message\n"
+                              "1\t1000\tU\tN0XYZ\tK2XYZ\tN0XYZ\tTHE OLD MESSAGE\n";
+} // namespace
+
+TEST_CASE("a full inbox still saves, announces and ACKs a new message", "[js8][inbox][files]") {
+    // Bug hunt 8: once the inbox held 200 messages, a new one left its size
+    // unchanged and was taken for a resend: not saved, not announced, but ACKed.
+    TempDir      d;
+    auto         ipath = d.file("js8_inbox.txt");
+    js8_inbox_t *inbox = js8_inbox_open(ipath.c_str());
+    js8_held_t  *held  = js8_held_open(d.file("js8_held.txt").c_str());
+    for (int i = 0; i < 200; i++) js8_inbox_add(inbox, "N0XYZ", ("OLD " + std::to_string(i)).c_str(), i);
+    REQUIRE(js8_inbox_count(inbox) == 200);
+
+    js8_auto_t *a  = js8_auto_create();
+    auto        st = auto_on(held);
+    js8_auto_user_activity(a, 1000);
+    auto              m = msg_to_k2xyz("W1ABC", "K2XYZ MSG ONE MORE MESSAGE");
+    js8_stored_t      kept;
+    js8_auto_result_t r;
+    js8_process(a, &m, &st, nullptr, 0, "", 5000, inbox, &kept, &r);
+    CHECK(kept.kind == JS8_STORED_INBOX);
+    CHECK_FALSE(kept.resend); // announced as new
+    CHECK(kept.id > 0);
+    CHECK(std::string(r.text) == "W1ABC ACK");
+    CHECK(js8_inbox_count(inbox) == 200); // the oldest made room
+    CHECK(slurp(ipath).find("ONE MORE MESSAGE") != std::string::npos); // and it's on the card
+
+    js8_auto_destroy(a);
+    js8_inbox_close(inbox);
+    js8_held_close(held);
+}
+
+TEST_CASE("an inbox file that can't be read is moved aside, not written over", "[js8][inbox][files]") {
+    if (geteuid() == 0) SKIP("root can read any file");
+    TempDir d;
+    auto    ipath = d.file("js8_inbox.txt");
+    { std::ofstream(ipath) << OLD_INBOX; }
+    chmod(ipath.c_str(), 0); // exists, can't be read (an SD card read error)
+
+    js8_inbox_t *b = js8_inbox_open(ipath.c_str());
+    CHECK(std::string(js8_inbox_notice(b)).find("couldn't be read") != std::string::npos);
+    CHECK(js8_inbox_count(b) == 0);
+    auto aside = matching(ipath + ".unreadable-*");
+    REQUIRE(aside.size() == 1);
+    chmod(aside[0].c_str(), 0600);
+    CHECK(slurp(aside[0]).find("THE OLD MESSAGE") != std::string::npos); // kept for the user
+
+    CHECK(js8_inbox_add(b, "W1ABC", "A NEW ONE", 2000) > 0); // a new inbox from here on
+    CHECK(slurp(ipath).find("A NEW ONE") != std::string::npos);
+    CHECK(slurp(aside[0]).find("THE OLD MESSAGE") != std::string::npos);
+    js8_inbox_close(b);
+
+    // Held messages the same way.
+    auto hpath = d.file("js8_held.txt");
+    { std::ofstream(hpath) << "1\t1000\tH\tN0XYZ\tW1ABC\tMEET AT THE PARK\n"; }
+    chmod(hpath.c_str(), 0);
+    js8_held_t *h = js8_held_open(hpath.c_str());
+    CHECK(std::string(js8_held_notice(h)).find("couldn't be read") != std::string::npos);
+    CHECK(matching(hpath + ".unreadable-*").size() == 1);
+    js8_held_close(h);
+}
+
+TEST_CASE("an inbox that can't be read or moved is never written over, and gets no ACK", "[js8][inbox][files]") {
+    if (geteuid() == 0) SKIP("root can read any file");
+    TempDir d;
+    auto    ipath = d.file("js8_inbox.txt");
+    { std::ofstream(ipath) << OLD_INBOX; }
+    chmod(ipath.c_str(), 0);
+    chmod(d.path.c_str(), 0555); // nor can it be renamed
+
+    js8_inbox_t *inbox = js8_inbox_open(ipath.c_str());
+    CHECK(std::string(js8_inbox_notice(inbox)).find("can't be read or moved") != std::string::npos);
+    js8_auto_t *a  = js8_auto_create();
+    auto        st = auto_on(nullptr);
+    js8_auto_user_activity(a, 1000);
+    auto              m = msg_to_k2xyz("W1ABC", "K2XYZ MSG CAN YOU HEAR ME");
+    js8_stored_t      kept;
+    js8_auto_result_t r;
+    js8_process(a, &m, &st, nullptr, 0, "", 5000, inbox, &kept, &r);
+    CHECK(kept.kind == JS8_STORED_INBOX);
+    CHECK(kept.id == -1);                // not on the card...
+    CHECK(r.action == JS8_AUTO_IGNORE); // ...so no ACK: their station can send it again
+    js8_inbox_msg_t list[2];
+    CHECK(js8_inbox_list(inbox, list, 2) == 1); // still shown until power-off
+
+    chmod(d.path.c_str(), 0755);
+    chmod(ipath.c_str(), 0600);
+    CHECK(slurp(ipath) == OLD_INBOX); // untouched
+    js8_auto_destroy(a);
+    js8_inbox_close(inbox);
+}
+
+TEST_CASE("a save cut short by a power cut: the .tmp is put back", "[js8][inbox][files]") {
+    TempDir d;
+    auto    ipath = d.file("js8_inbox.txt");
+    js8_inbox_t *b = js8_inbox_open(ipath.c_str());
+    REQUIRE(js8_inbox_add(b, "N0XYZ", "KEEP ME", 1000) > 0);
+    js8_inbox_close(b);
+    CHECK_FALSE(exists(ipath + ".tmp")); // renamed into place after each save
+    // Power cut on FAT32 after the old file went but before the new one
+    // took its name: only the .tmp is left.
+    REQUIRE(std::rename(ipath.c_str(), (ipath + ".tmp").c_str()) == 0);
+
+    b = js8_inbox_open(ipath.c_str());
+    CHECK(js8_inbox_count(b) == 1);
+    CHECK(std::string(js8_inbox_notice(b)).empty());
+    CHECK(exists(ipath));
+    CHECK_FALSE(exists(ipath + ".tmp"));
+    js8_inbox_close(b);
+}
+
+TEST_CASE("js8_texts.txt is written safely and read back", "[js8][files]") {
+    TempDir     d;
+    auto        p = d.file("js8_texts.txt");
+    char        buf[256], notice[160];
+    const char *text = "INFO=X6100 5W EFHW\nGROUPS=@NET @PNW\n";
+
+    CHECK(js8_file_read(p.c_str(), buf, sizeof(buf), notice, sizeof(notice))); // none yet: empty
+    CHECK(std::string(buf).empty());
+    REQUIRE(js8_file_write(p.c_str(), text));
+    CHECK_FALSE(exists(p + ".tmp"));
+    CHECK(js8_file_read(p.c_str(), buf, sizeof(buf), notice, sizeof(notice)));
+    CHECK(std::string(buf) == text);
+    CHECK(std::string(notice).empty());
+
+    REQUIRE(std::rename(p.c_str(), (p + ".tmp").c_str()) == 0); // a save cut short
+    CHECK(js8_file_read(p.c_str(), buf, sizeof(buf), notice, sizeof(notice)));
+    CHECK(std::string(buf) == text);
+    CHECK(exists(p));
+}
+
+TEST_CASE("groups: only whole groups are kept when they don't all fit", "[js8][files]") {
+    char out[40];
+    js8_groups_normalise("GROUPONE GROUPTWO GROUPTHREE GROUPFOUR", out, sizeof(out));
+    CHECK(std::string(out) == "@GROUPONE @GROUPTWO @GROUPTHREE"); // not "... @GROUPF"
+    char big[160];
+    js8_groups_normalise("A1 B2 C3 D4 E5 F6 G7 H8 I9 J10 K11", big, sizeof(big));
+    CHECK(std::string(big) == "@A1 @B2 @C3 @D4 @E5 @F6 @G7 @H8 @I9 @J10"); // ten at most
 }
 
 // ---- Alerts ------------------------------------------------------------------

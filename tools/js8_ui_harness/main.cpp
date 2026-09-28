@@ -76,6 +76,8 @@ extern int stub_tx_aborted;
 #include <string>
 #include <thread>
 #include <unistd.h>
+#include <glob.h>
+#include <sys/stat.h>
 #include <vector>
 
 namespace vc = js8core::protocol::varicode;
@@ -346,6 +348,18 @@ int main() {
         unlink(JS8_TEXTS_PATH);
     }
     if (getenv("ONLY_APRS")) unlink(JS8_TEXTS_PATH); // no park or spot settings yet
+    if (getenv("ONLY_BADFILES")) {
+        // An SD card read error: the Inbox and the settings file exist but
+        // can't be read (before package 2 the next save wrote over them).
+        FILE *f = fopen(JS8_INBOX_PATH, "w");
+        fputs("1\t1000\tU\tN0XYZ\tK2XYZ\tN0XYZ\tTHE OLD MESSAGE\n", f);
+        fclose(f);
+        chmod(JS8_INBOX_PATH, 0);
+        f = fopen(JS8_TEXTS_PATH, "w");
+        fputs("INFO=THE OLD INFO\n", f);
+        fclose(f);
+        chmod(JS8_TEXTS_PATH, 0);
+    }
     ui_open();
     if (getenv("ONLY_GEN")) {
         // GEN / APP on the radio close the app with a list popup open.
@@ -1157,6 +1171,26 @@ int main() {
         ui_click_focused();
         pump(300);
         printf("[freq] JS8: '%s' dial %d (want 14078000)\n", ui_button_label(4), stub_dial_hz());
+        return 0;
+    }
+    if (getenv("ONLY_BADFILES")) {
+        pump(300);
+        auto aside = [](const char *path) {
+            glob_t      g{};
+            std::string pattern = std::string(path) + ".unreadable-*";
+            int         n       = glob(pattern.c_str(), 0, nullptr, &g) == 0 ? (int)g.gl_pathc : 0;
+            for (int i = 0; i < n; i++) { // tidy up for the next run
+                chmod(g.gl_pathv[i], 0600);
+                unlink(g.gl_pathv[i]);
+            }
+            globfree(&g);
+            return n;
+        };
+        printf("[badfiles] inbox notice row: %d (want 1)\n", ui_list_has("js8_inbox.txt couldn't be read"));
+        printf("[badfiles] texts notice row: %d (want 1)\n", ui_list_has("js8_texts.txt couldn't be read"));
+        screenshot("60_badfiles.ppm");
+        printf("[badfiles] inbox kept aside: %d, texts kept aside: %d (want 1, 1)\n", aside(JS8_INBOX_PATH),
+               aside(JS8_TEXTS_PATH));
         return 0;
     }
     if (getenv("ONLY_TXSAFE")) {

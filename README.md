@@ -487,6 +487,12 @@ All on the **DATA** partition, readable on a PC:
 | `params.db`, `qso_log.db` | the radio's settings and QSO database |
 | `incoming_log.adi` | put an ADIF log here to import it (worked-before marks) at the next start |
 
+JS8 writes its files through a temporary `<name>.tmp` and renames it, so a
+power cut leaves the old version or the new one; a `.tmp` left behind is
+picked up at the next start. A file JS8 couldn't read (an SD card error)
+is kept as `<name>.unreadable-<date>` and a new one started: your old
+messages or settings are in it, readable on a PC.
+
 ## New in beta 3
 
 New:
@@ -599,14 +605,22 @@ Done for beta 4 so far:
   (not a heartbeat), then carry on by themselves; press HB to resume
   sooner. Before, any message to you (even an automatic query or a garbled
   one) switched HB and HB ACK off until you turned them back on
+- [x] **Your messages and settings are safer on the SD card:** a full Inbox
+  (200 messages) no longer stops saving and announcing new ones (they were
+  ACKed but lost); the Inbox, held messages and `js8_texts.txt` are written
+  so that a power cut leaves the old or the new version, never an empty
+  file; a file that can't be read is kept aside as
+  `<name>.unreadable-<date>` and you're told, instead of the next save
+  writing over it; a message that couldn't be saved gets no ACK, so the
+  sender's station knows it didn't arrive; room for ten groups
 
 Still to do:
 
 - [ ] Fix the rest of the bugs found by reading the code: the plan, in
   order, is [docs/review/fix-plan.md](docs/review/fix-plan.md) (from the
   full review in [docs/review](docs/review/) and the first
-  [bug hunt](docs/bug-hunt-2026-09-28.md); next: a full Inbox stops saving
-  new messages, and heartbeats switch off after automated traffic)
+  [bug hunt](docs/bug-hunt-2026-09-28.md); next: the rest of the
+  unattended-station package, automatic replies as desktop sends them)
 - [ ] SMS: show the gateway's receipt (`ACK04}`) as "delivered" on the
   message you sent, instead of as a new Inbox message
 - [ ] On-air tests: relays and store and forward with desktop JS8Call

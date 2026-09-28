@@ -41,6 +41,13 @@ run faster.)
   `SNR?` (the answer waits behind the list); then a retune: the waiting
   answer must not go out on the new frequency.
 
+## Data files
+
+- `ONLY_BADFILES=1`: the Inbox and `js8_texts.txt` exist but can't be read
+  (chmod 000) when JS8 opens: each gets a notice row, is kept aside as
+  `*.unreadable-<date>` (checked, then removed), and JS8 starts afresh
+  instead of later saving over them.
+
 ## Heartbeat pause
 
 - `ONLY_HBPAUSE=1`: AUTO, HB and HB ACK on; a message to us, an automatic
