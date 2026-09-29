@@ -47,6 +47,8 @@ bool dialog_js8_selected_call(char *call, unsigned len);
 unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
 bool     dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_paths, int *qrz);
 const char *dialog_js8_map_stats(void);
+int         dialog_js8_map_extra(int *talks, int *my_dot_x, int *in_dots, const char **strip0, const char **strip1,
+                                 bool *follow);
 void ui_usb_event(uint32_t key, int value);
 void ui_mfk_turn(int32_t diff);
 void ui_mfk_set(bool down);
@@ -2397,6 +2399,7 @@ int main() {
         printf("[map] stations button: '%s'\n", ui_button_label(3));
         ui_press(3); // Show Stations
         pump(300);
+        screenshot("89_stations_cq.ppm"); // K5LOW called CQ: its row is green for 5 min
         printf("[map] then: '%s' (want Show Map)\n", ui_button_label(3));
         ui_press(3); // Show Map
         pump(500);
@@ -2404,6 +2407,16 @@ int main() {
         printf("[map] view button: '%s' (want Map: Auto), stations button '%s' (want Show Messages)\n",
                ui_button_label(1), ui_button_label(3));
         printf("[map] stats: '%s' (want 6 heard  2 hear you  DX ...)\n", dialog_js8_map_stats());
+        auto extra = [](const char *what) {
+            int         talks = 0, dot = -1, in = 0;
+            const char *s0 = "", *s1 = "";
+            bool        follow = false;
+            dialog_js8_map_extra(&talks, &dot, &in, &s0, &s1, &follow);
+            printf("[map] %s: %d grey line(s), my dot %s%d, %d incoming dot(s) so far%s\n      strip: '%s'\n             '%s'\n",
+                   what, talks, dot < 0 ? "hidden " : "at x ", dot, in, follow ? ", following" : "", s0, s1);
+            return dot;
+        };
+        extra("opened (want the strip: K2XYZ SNR? from VE6ABC last... as the list shows)");
         screenshot("90_map.ppm");
         ui_mfk_turn(1);
         pump(400);
@@ -2430,6 +2443,13 @@ int main() {
         screenshot("93_map_world.ppm");
         ui_press(1); // back to Auto
         pump(300);
+        // Other stations' QSOs: grey lines, a relay's hops too.
+        feed_band({{"W7XYZ", "DM43", "K9DEF", "K9DEF HW CPY?", 800, 0.05f},
+                   {"VE3KP", "FN03", "N0XYZ", "N0XYZ>K5LOW HELLO", 1600, 0.05f}},
+                  0, 99, 0, 0);
+        pump(600);
+        extra("W7XYZ to K9DEF, VE3KP relays via N0XYZ to K5LOW (want 3 grey lines, strip = those two)");
+        screenshot("9b_map_talk.ppm");
         // Transmitting: our square gets a red outline, gone when it ends.
         ui_page(1);
         int frames = stub_tx_frames;
@@ -2447,22 +2467,32 @@ int main() {
                    {"VE3KP", "FN03", "K2XYZ", "K2XYZ HEARTBEAT SNR -05", 1700, 0.05f}},
                   0, 99, 0, 0);
         pump(600);
+        extra("just after (want 4 so far: K9DEF's frames and VE3KP's reply, one dot each)");
         // (VE3KP's one-frame reply came in the first slot: its 30 s of red
         // are over by the end of K9DEF's three frames, and it never rang.)
         state("K9DEF messaged us, VE3KP HB reply (want 1 red path, 1 ring, QRZ 1)");
         screenshot("98_map_incoming.ppm");
         for (int i = 0; i < 40; i++) pump(1000); // past the 30 s
         state("40 s later (want no red path)");
-        // We message the selected station: its path is red while we send.
+        // We message the selected station (K5LOW): its path is red while
+        // we send, and a white dot runs along it as the message goes out.
         frames = stub_tx_frames;
         ui_press(4); // HW CPY? to W7XYZ
         for (int i = 0; i < 200 && !stub_tx_keyed; i++) pump(100);
         pump(600);
-        state("HW CPY? to W7XYZ keyed (want TX outline, 1 red path)");
+        state("HW CPY? to K5LOW keyed (want TX outline, 1 red path)");
+        int dot0 = extra("keyed (want my dot on the path to the selected station, K5LOW)");
         screenshot("99_map_outgoing.ppm");
+        int dot1 = dot0;
+        for (int i = 0; i < 20 && stub_tx_keyed; i++) {
+            pump(500);
+            int x = extra("sending");
+            if (x >= 0) dot1 = x;
+        }
+        printf("[map] my dot moved %d px while keyed (want < 0: west, toward K5LOW)\n", dot1 - dot0);
         for (int i = 0; i < 300 && (stub_tx_keyed || stub_tx_frames == frames); i++) pump(100);
         pump(1500);
-        state("sent (want no red path, QRZ still 1: W7XYZ didn't call)");
+        state("sent (want no red path, QRZ still 1: K5LOW didn't call)");
         // A station in Japan: Auto switches to the world, and it pops up.
         feed_band({{"JA1ABC", "PM95", "", "@HB HEARTBEAT PM95", 1400, 0.05f}}, 0, 99, 0, 0);
         pump(300);
@@ -2472,6 +2502,21 @@ int main() {
         pump(9000);
         state("9 s later");
         screenshot("95_map_popup_gone.ppm");
+        // Follow (hold Map:): you and the selected station, JA1ABC.
+        for (int i = 0; i < 20 && strcmp(sel, "JA1ABC") != 0; i++) {
+            ui_mfk_turn(i < 10 ? 1 : -1); // down the list, then up
+            pump(300);
+            dialog_js8_selected_call(sel, sizeof(sel));
+        }
+        ui_page(3);
+        ui_hold(1);
+        pump(500);
+        printf("[map] held Map: '%s' (want Map: Follow), selected %s\n", ui_button_label(1), sel);
+        extra("following");
+        screenshot("9c_map_follow.ppm");
+        ui_press(1); // leaves Follow
+        pump(300);
+        printf("[map] pressed: '%s' (want Map: Auto)\n", ui_button_label(1));
         // Half an hour on: the others fade; a fresh one doesn't; K5LOW's CQ
         // tag is long gone.
         js8_set_drift_ms(30 * 60 * 1000);

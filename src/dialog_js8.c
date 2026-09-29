@@ -61,6 +61,7 @@
 #define WF_HEIGHT        325
 #define WF_VISIBLE       55     /* waterfall rows left uncovered by the list */
 #define TX_BAR_H         30     /* TX status line between waterfall and list */
+#define TX_BAR_IDLE      0x000000 /* its background when idle, half see-through */
 #define TX_TEXT_MAX      160    /* longest message the compose window takes */
 #define OFFER_MS         (5 * 60 * 1000) /* how long an offered reply stays on Reply */
 #define TEXT_MAX         64     /* INFO / STATUS */
@@ -146,12 +147,14 @@ static void        time_sync_now(void);
 static void        time_sync_reset(void);
 static const char *map_view_label_getter(void);
 static void        map_view_cb(button_data_t *btn);
+static void        map_follow_cb(button_data_t *btn);
 static void        map_update(bool force);
 static void        map_popup_add(const char *call);
 static void        map_qso_add(const char *call, bool ring);
 static void        map_qrz_add(const char *call);
-static void        map_cq_add(const char *call);
 static void        map_status_changed(void);
+static void        map_talk_note(const js8_rx_msg_t *m);
+static void        map_pulse_add(const char *call);
 static void        map_qrz_clear(const char *call);
 static void        map_show(bool on);
 static void        map_free(void);
@@ -316,11 +319,18 @@ static bool           map_heard_me_only; /* Show in the map: All heard / Heard m
 static lv_obj_t      *wf_box;           /* the waterfall's opaque box (hidden under the map) */
 static lv_obj_t      *map_box, *map_canvas, *map_status; /* made when the map first opens */
 static lv_obj_t      *map_qrz_label;    /* "QRZ 2  W7XYZ K9DEF" under the status line */
-static lv_obj_t      *map_stats_label;  /* "14 heard  5 heard you  best DX ..." top left */
+static lv_obj_t      *map_stats_label;  /* "14 heard  5 hear you  DX ..." top left */
+/* Stations that called CQ lately: green in the Stations view, a "CQ" tag
+ * on the map, for 5 min (VE7NHW). */
+#define CQ_HEARD_N  16
+#define CQ_HEARD_MS 300000
 static struct {
     char    call[JS8_RX_CALL_LEN];
     int64_t until_ms; /* monotonic */
-} map_cq[8];
+} cq_heard[CQ_HEARD_N];
+static void cq_heard_add(const char *call);
+static bool cq_heard_on(const char *call, int64_t now);
+static int64_t now_mono_ms(void);
 /* QRZ: stations that sent something to your call (not heartbeat replies)
  * while the message list wasn't showing, newest last. On the map until you
  * select them, send to them, or go back to the message list. */
@@ -560,7 +570,7 @@ static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press =
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
 static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_4, .prev = &page_2};
-static button_data_t btn_map_view = {.type = BTN_TEXT_FN, .label_fn = map_view_label_getter, .press = map_view_cb};
+static button_data_t btn_map_view = {.type = BTN_TEXT_FN, .label_fn = map_view_label_getter, .press = map_view_cb, .hold = map_follow_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
 static button_data_t btn_inbox     = {.type = BTN_TEXT_FN, .label_fn = inbox_label_getter, .press = inbox_cb};
@@ -950,9 +960,12 @@ static void add_message(const js8_rx_msg_t *msg) {
     js8_rx_msg_t *m    = &copy;
 
     if (!m->tx) track_incoming(m);
-    if (!m->tx && m->to_me && m->from[0]) /* their path turns red on the map; a real message also rings */
+    if (!m->tx && m->to_me && m->from[0]) { /* their path turns red on the map; a real message also rings */
         map_qso_add(m->from, !m->heartbeat && !m->snr_report);
-    if (!m->tx && !m->partial && m->cq && m->from[0]) map_cq_add(m->from); /* a "CQ" tag on the map for 2 min */
+        map_pulse_add(m->from); /* and a dot runs from them to you, each frame */
+    }
+    map_talk_note(m); /* other stations' QSOs: grey lines */
+    if (!m->tx && !m->partial && m->cq && m->from[0]) cq_heard_add(m->from); /* green in Stations, "CQ" on the map */
     if (!m->tx && !m->partial && m->to_me && m->from[0] && !m->heartbeat && !m->snr_report && view_stations)
         map_qrz_add(m->from); /* QRZ on the map (the message list shows it anyway) */
     int existing = m->tx ? -1 : find_partial(m->msg_id);
@@ -1105,6 +1118,26 @@ static bool worked_before(const char *call) {
     return worked;
 }
 
+static void cq_heard_add(const char *call) {
+    int slot = 0;
+    for (int i = 0; i < CQ_HEARD_N; i++) {
+        if (strcasecmp(cq_heard[i].call, call) == 0) {
+            slot = i;
+            break;
+        }
+        if (cq_heard[i].until_ms < cq_heard[slot].until_ms) slot = i;
+    }
+    snprintf(cq_heard[slot].call, sizeof(cq_heard[slot].call), "%s", call);
+    cq_heard[slot].until_ms = now_mono_ms() + CQ_HEARD_MS;
+    if (view_stations) lv_obj_invalidate(table); /* its row turns green */
+}
+
+static bool cq_heard_on(const char *call, int64_t now) {
+    for (int i = 0; i < CQ_HEARD_N; i++)
+        if (cq_heard[i].until_ms > now && strcasecmp(cq_heard[i].call, call) == 0) return true;
+    return false;
+}
+
 static void worked_forget(void) {
     memset(worked_cache, 0, sizeof(worked_cache));
 }
@@ -1205,10 +1238,12 @@ static void table_draw_cb(lv_event_t *e) {
         dsc->label_dsc->align   = LV_TEXT_ALIGN_CENTER;
         dsc->rect_dsc->bg_color = lv_color_hex(0x303030);
     } else if (view_stations) {
-        /* Stations that heard us stand out, like desktop's star. */
-        dsc->rect_dsc->bg_color = st_alert[h]           ? lv_color_hex(ALERT_COLOR)
-                                  : st_rows[h].heard_me ? lv_color_hex(0x5a4400)
-                                                        : lv_color_black();
+        /* Stations that heard us stand out, like desktop's star; those who
+         * called CQ in the last 5 min are green, as CQ rows in the list. */
+        dsc->rect_dsc->bg_color = st_alert[h]                                  ? lv_color_hex(ALERT_COLOR)
+                                  : cq_heard_on(st_rows[h].call, now_mono_ms()) ? lv_color_hex(0x006000)
+                                  : st_rows[h].heard_me                        ? lv_color_hex(0x5a4400)
+                                                                               : lv_color_black();
     } else {
         const js8_rx_msg_t *m = &history[h];
         if (m->tx) { /* red: transmitting, as the TX bar */
@@ -2049,7 +2084,12 @@ static struct {
 
 static void tx_bar_set(uint32_t bg, bool recolor, const char *text) {
     bool fresh = tx_bar_shown.fresh;
-    if (fresh || tx_bar_shown.bg != bg) lv_obj_set_style_bg_color(tx_bar, lv_color_hex(bg), 0);
+    if (fresh || tx_bar_shown.bg != bg) {
+        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(bg), 0);
+        /* Waiting and sending stay bold enough to catch the eye; idle is
+         * as see-through as the list's rows. */
+        lv_obj_set_style_bg_opa(tx_bar, bg == TX_BAR_IDLE ? LV_OPA_50 : LV_OPA_70, 0);
+    }
     if (fresh || tx_bar_shown.recolor != recolor) lv_label_set_recolor(tx_bar, recolor);
     if (fresh || strcmp(tx_bar_shown.text, text) != 0) lv_label_set_text(tx_bar, text);
     tx_bar_shown.bg      = bg;
@@ -2116,7 +2156,7 @@ static void update_tx_bar(void) {
         if (sel_call[0]) strncat(line, sel_call, sizeof(line) - strlen(line) - 1);
         if (sel_call[0] && sel_locked) strncat(line, "#", sizeof(line) - strlen(line) - 1);
         if (auto_cq) strncat(line, "      auto CQ", sizeof(line) - strlen(line) - 1);
-        bg = 0x202020;
+        bg = TX_BAR_IDLE;
         break;
     }
     tx_bar_set(bg, tx_status.state != JS8_TX_WAITING && tx_status.state != JS8_TX_KEYING && sel_locked, line);
@@ -2712,7 +2752,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_text_font(tx_bar, &sony_22, 0);
     lv_obj_set_style_pad_left(tx_bar, 6, 0);
     lv_obj_set_style_pad_top(tx_bar, 3, 0);
-    lv_obj_set_style_bg_opa(tx_bar, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_opa(tx_bar, LV_OPA_50, 0); /* see-through, as the list: the waterfall or map shows (VE7NHW) */
     lv_label_set_long_mode(tx_bar, LV_LABEL_LONG_DOT);
     tx_bar_shown.fresh = true;
 
@@ -2875,7 +2915,9 @@ static void destruct_cb(void) {
 #define MAP_W          WIDTH
 #define MAP_H          WF_HEIGHT
 #define MAP_LEGEND_H   26
-#define MAP_FIT_H      (MAP_H - TX_BAR_H - MAP_LEGEND_H) /* stations fit above the legend and TX bar */
+#define MAP_STRIP_H    40 /* the last two messages, above the legend */
+#define MAP_FIT_H      (MAP_H - TX_BAR_H - MAP_LEGEND_H - MAP_STRIP_H) /* stations fit above those and the TX bar */
+#define MAP_LABEL_BOTTOM MAP_FIT_H /* labels stay above them too */
 #define MAP_POPUPS     8
 #define MAP_POPUP_MS   8000
 #define MAP_PATH_N     48
@@ -2892,10 +2934,15 @@ static void destruct_cb(void) {
 #define MAP_QRZ_COLOR  0xFFFF00 /* GridTracker's QRZ ("calling me") yellow */
 #define MAP_NEW_BORDER 0xFFFFFF /* a grid or country you've never worked */
 #define MAP_CQ_BG      0x00E000 /* the "CQ" tag: black on the heard green */
-#define MAP_CQ_MS      120000   /* the CQ tag stays this long after their CQ */
 #define MAP_FADE_MIN   45       /* squares fade to 30 % over this many minutes unheard */
 #define MAP_SQUARE_OPA 136      /* GridTracker's grid alpha */
 #define MAP_TAKEN      32       /* label boxes placed per redraw */
+#define MAP_TALK       16       /* the band's other conversations remembered */
+#define MAP_TALK_MS    600000   /* their grey lines fade out over 10 min */
+#define MAP_TALK_COLOR 0xC8C8C8
+#define MAP_PULSE_MS   2000     /* a frame to you: a dot runs from them to you */
+#define MAP_DOTS       4        /* incoming dots at once; one more for yours */
+#define MAP_PATHS      8        /* red paths remembered for the dots */
 
 static uint32_t       *map_base, *map_px; /* the base map, and base + stations as shown */
 static js8_map_data_t *map_data;
@@ -2911,6 +2958,28 @@ static bool      map_tx_drawn; /* the red "transmitting" outline is on the map (
 static int       map_qso_drawn; /* red paths drawn (harness) */
 static lv_area_t map_taken[MAP_TAKEN];
 static int       map_ntaken;
+static struct {
+    char    a[JS8_RX_CALL_LEN], b[JS8_RX_CALL_LEN];
+    int64_t ms; /* monotonic, last heard; 0: free */
+} map_talk[MAP_TALK];
+static int map_talk_drawn; /* grey lines drawn (harness) */
+static struct {
+    char       call[JS8_RX_CALL_LEN];
+    lv_point_t p[MAP_PATH_N + 1]; /* from you to them, as drawn */
+    float      len[MAP_PATH_N + 1]; /* along the path to each point */
+} map_paths[MAP_PATHS];
+static int map_npaths;
+static struct {
+    char    call[JS8_RX_CALL_LEN];
+    int64_t start_ms; /* monotonic */
+    bool    seen;     /* its dot has shown (harness count) */
+} map_pulses[MAP_DOTS];
+static int map_pulses_seen;
+static lv_obj_t   *map_dots[MAP_DOTS + 1]; /* [0]: yours, along the path while you send */
+static lv_timer_t *map_anim;               /* moves them, while the map shows */
+static lv_obj_t   *map_strip_box, *map_strip[2];
+static char        map_strip_src[2][JS8_RX_TEXT_LEN + 24]; /* each line before it was cut to fit */
+static bool        map_follow; /* the view frames you and the selected station (hold Map:) */
 
 static const char *const map_mode_names[3] = {"Auto", "Close-in", "World"};
 
@@ -2996,24 +3065,6 @@ static void map_qso_add(const char *call, bool ring) {
     if (ring) map_qso[slot].ring_ms = now_mono_ms() + MAP_RING_MS;
 }
 
-static void map_cq_add(const char *call) {
-    int slot = 0;
-    for (int i = 0; i < 8; i++) {
-        if (strcasecmp(map_cq[i].call, call) == 0) {
-            slot = i;
-            break;
-        }
-        if (map_cq[i].until_ms < map_cq[slot].until_ms) slot = i;
-    }
-    snprintf(map_cq[slot].call, sizeof(map_cq[slot].call), "%s", call);
-    map_cq[slot].until_ms = now_mono_ms() + MAP_CQ_MS;
-}
-
-static bool map_cq_on(const char *call, int64_t now) {
-    for (int i = 0; i < 8; i++)
-        if (map_cq[i].until_ms > now && strcasecmp(map_cq[i].call, call) == 0) return true;
-    return false;
-}
 
 static bool map_ring_on(const char *call, int64_t now) {
     for (int i = 0; i < MAP_POPUPS; i++)
@@ -3051,6 +3102,171 @@ static bool map_popup_on(const char *call, int64_t now) {
 }
 
 /* Objects and buffers, made the first time the map opens. */
+/* ---- Moving dots, other QSOs, the message strip ---- */
+
+static void map_pulse_add(const char *call) {
+    int slot = 0;
+    for (int i = 1; i < MAP_DOTS; i++)
+        if (map_pulses[i].start_ms < map_pulses[slot].start_ms) slot = i;
+    snprintf(map_pulses[slot].call, sizeof(map_pulses[slot].call), "%s", call);
+    map_pulses[slot].start_ms = now_mono_ms();
+    map_pulses[slot].seen     = false;
+}
+
+static void map_talk_add(const char *a, const char *b) {
+    if (!a[0] || !b[0] || strcasecmp(a, b) == 0) return;
+    int slot = 0;
+    for (int i = 0; i < MAP_TALK; i++) {
+        bool same = (strcasecmp(map_talk[i].a, a) == 0 && strcasecmp(map_talk[i].b, b) == 0) ||
+                    (strcasecmp(map_talk[i].a, b) == 0 && strcasecmp(map_talk[i].b, a) == 0);
+        if (same) {
+            slot = i;
+            break;
+        }
+        if (map_talk[i].ms < map_talk[slot].ms) slot = i;
+    }
+    snprintf(map_talk[slot].a, sizeof(map_talk[slot].a), "%s", a);
+    snprintf(map_talk[slot].b, sizeof(map_talk[slot].b), "%s", b);
+    map_talk[slot].ms = now_mono_ms();
+}
+
+/* Other stations talking to each other ("W7XYZ: K9DEF HW CPY?"), and a
+ * relay's hops beyond ("VE3KP: N0XYZ > K5LOW HELLO", as decoded:
+ * VE3KP-N0XYZ, N0XYZ-K5LOW). Not groups, not you (that's the red path). */
+static void map_talk_note(const js8_rx_msg_t *m) {
+    if (m->tx || m->to_me || m->to_group || !m->from[0] || !m->to[0] || m->to[0] == '@') return;
+    map_talk_add(m->from, m->to);
+    const char *p = strstr(m->text, ": ");
+    size_t      tl = strlen(m->to);
+    if (!p || strncasecmp(p + 2, m->to, tl) != 0) return;
+    char prev[JS8_RX_CALL_LEN];
+    snprintf(prev, sizeof(prev), "%s", m->to);
+    p += 2 + tl;
+    for (int hop = 0; hop < 3; hop++) {
+        while (*p == ' ') p++;
+        if (*p != '>') return;
+        p++;
+        while (*p == ' ') p++;
+        char   next[JS8_RX_CALL_LEN];
+        size_t n = 0;
+        while (*p && *p != ' ' && *p != '>' && n + 1 < sizeof(next)) next[n++] = *p++;
+        next[n] = '\0';
+        if (!n || !strpbrk(next, "0123456789") || strcasecmp(next, params.callsign.x) == 0) return;
+        map_talk_add(prev, next);
+        snprintf(prev, sizeof(prev), "%s", next);
+    }
+}
+
+/* A red path as drawn, for the dots: from you (0) to them (1). */
+static void map_path_keep(const char *call, const lv_point_t *p) {
+    if (map_npaths == MAP_PATHS) return;
+    snprintf(map_paths[map_npaths].call, sizeof(map_paths[0].call), "%s", call);
+    memcpy(map_paths[map_npaths].p, p, sizeof(map_paths[0].p));
+    float len = 0;
+    for (int k = 0; k <= MAP_PATH_N; k++) {
+        if (k) len += sqrtf((float)((p[k].x - p[k - 1].x) * (p[k].x - p[k - 1].x) +
+                                    (p[k].y - p[k - 1].y) * (p[k].y - p[k - 1].y)));
+        map_paths[map_npaths].len[k] = len;
+    }
+    map_npaths++;
+}
+
+/* Put dot `i` at fraction `f` along the red path to `call`, or hide it;
+ * true if shown. */
+static bool map_dot_at(int i, const char *call, float f) {
+    lv_obj_t *d = map_dots[i];
+    for (int k = 0; call && call[0] && k < map_npaths; k++) {
+        if (strcasecmp(map_paths[k].call, call) != 0) continue;
+        const float *len  = map_paths[k].len;
+        float        want = LV_CLAMP(0.0f, f, 1.0f) * len[MAP_PATH_N];
+        int          j    = 1;
+        while (j < MAP_PATH_N && len[j] < want) j++;
+        float seg = len[j] - len[j - 1], t = seg > 0 ? (want - len[j - 1]) / seg : 0;
+        int   x = (int)(map_paths[k].p[j - 1].x + t * (map_paths[k].p[j].x - map_paths[k].p[j - 1].x) + 0.5f);
+        int   y = (int)(map_paths[k].p[j - 1].y + t * (map_paths[k].p[j].y - map_paths[k].p[j - 1].y) + 0.5f);
+        lv_obj_set_pos(d, x - lv_obj_get_width(d) / 2, y - lv_obj_get_height(d) / 2);
+        lv_obj_clear_flag(d, LV_OBJ_FLAG_HIDDEN);
+        return true;
+    }
+    if (!lv_obj_has_flag(d, LV_OBJ_FLAG_HIDDEN)) lv_obj_add_flag(d, LV_OBJ_FLAG_HIDDEN);
+    return false;
+}
+
+/* 25 times a second while the map shows: your dot runs from you to the
+ * station you're sending to as the message goes out (frame by frame, like
+ * a progress bar); a frame to you sends a yellow one from them to you. */
+static void map_anim_cb(lv_timer_t *t) {
+    (void)t;
+    if (!view_map || !map_dots[0]) return;
+    bool sending = tx_status.state == JS8_TX_KEYING || (tx_status.state == JS8_TX_WAITING && tx_status.frame > 1);
+    char to[JS8_RX_CALL_LEN] = "";
+    if (sending && tx_status.frames > 0) map_tx_target(tx_status.text, to, sizeof(to));
+    float f = 0;
+    if (to[0]) {
+        int64_t period = (int64_t)js8_speed_period_s(tx_status.speed) * 1000;
+        float   frac   = 0;
+        if (tx_status.state == JS8_TX_KEYING && period > 0)
+            frac = (float)LV_CLAMP(0, now_wall_ms() - tx_status.next_ms, period) / (float)period;
+        f = (tx_status.frame - 1 + frac) / (float)tx_status.frames;
+    }
+    map_dot_at(0, to, f);
+    int64_t now = now_mono_ms();
+    for (int i = 0; i < MAP_DOTS; i++) {
+        bool on = map_pulses[i].start_ms && now - map_pulses[i].start_ms < MAP_PULSE_MS;
+        if (map_dot_at(1 + i, on ? map_pulses[i].call : NULL,
+                       1.0f - (float)(now - map_pulses[i].start_ms) / MAP_PULSE_MS) &&
+            !map_pulses[i].seen) {
+            map_pulses[i].seen = true;
+            map_pulses_seen++;
+        }
+    }
+}
+
+/* The strip: the last two messages the list would show (its Show filter),
+ * older on top; yours light red, to you yellow. */
+static void map_strip_update(void) {
+    if (!map_strip_box) return;
+    const js8_rx_msg_t *last[2] = {NULL, NULL};
+    int                 found   = 0;
+    for (int k = 0; k < hist_count && found < 2; k++) {
+        const js8_rx_msg_t *m = &history[(hist_head - 1 - k + HISTORY) % HISTORY];
+        if (passes_filter(m)) last[found++] = m;
+    }
+    for (int line = 0; line < 2; line++) {
+        const js8_rx_msg_t *m        = last[1 - line];
+        char                buf[JS8_RX_TEXT_LEN + 24] = "";
+        uint32_t            color    = 0xE0E0E0;
+        if (m) {
+            int hh = m->utc / 10000, mm = (m->utc / 100) % 100;
+            if (m->tx) snprintf(buf, sizeof(buf), "%02d:%02d  TX   %s", hh, mm, m->text);
+            else snprintf(buf, sizeof(buf), "%02d:%02d %+3d  %s%s", hh, mm, m->snr, m->text, m->partial ? " ..." : "");
+            color = m->tx ? 0xFF9090 : m->to_me ? MAP_QRZ_COLOR : 0xE0E0E0;
+        }
+        if (strcmp(map_strip_src[line], buf) == 0) continue; /* as shown (checked 4 times a second) */
+        snprintf(map_strip_src[line], sizeof(map_strip_src[line]), "%s", buf);
+        if (buf[0]) {
+            /* Too long for the screen: cut, with "..." (its box only as
+             * wide as the text, so LVGL's own dots can't be used). */
+            lv_point_t sz;
+            size_t     len = strlen(buf);
+            lv_txt_get_size(&sz, buf, &sony_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            while (sz.x > MAP_W - 20 && len > 4) {
+                len -= 2;
+                memcpy(buf + len - 3, "...", 4);
+                lv_txt_get_size(&sz, buf, &sony_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+            }
+        }
+        if (strcmp(lv_label_get_text(map_strip[line]), buf) != 0) lv_label_set_text(map_strip[line], buf);
+        if (!buf[0] != lv_obj_has_flag(map_strip[line], LV_OBJ_FLAG_HIDDEN)) { /* no empty box */
+            if (buf[0]) lv_obj_clear_flag(map_strip[line], LV_OBJ_FLAG_HIDDEN);
+            else lv_obj_add_flag(map_strip[line], LV_OBJ_FLAG_HIDDEN);
+        }
+        lv_obj_set_style_text_color(map_strip[line], lv_color_hex(color), 0);
+    }
+    if (found && lv_obj_has_flag(map_strip_box, LV_OBJ_FLAG_HIDDEN)) lv_obj_clear_flag(map_strip_box, LV_OBJ_FLAG_HIDDEN);
+    if (!found && !lv_obj_has_flag(map_strip_box, LV_OBJ_FLAG_HIDDEN)) lv_obj_add_flag(map_strip_box, LV_OBJ_FLAG_HIDDEN);
+}
+
 static bool map_ensure(void) {
     if (map_box) return true;
     map_base = malloc((size_t)MAP_W * MAP_H * sizeof(uint32_t));
@@ -3104,13 +3320,55 @@ static bool map_ensure(void) {
     lv_obj_set_style_bg_opa(map_qrz_label, LV_OPA_70, 0);
     lv_obj_set_style_pad_hor(map_qrz_label, 4, 0);
     lv_obj_add_flag(map_qrz_label, LV_OBJ_FLAG_HIDDEN);
+
+    /* The last two messages, as the list shows them, above the legend:
+     * see-through like the status line, a dark box only behind the text. */
+    map_strip_box = lv_obj_create(map_box);
+    lv_obj_remove_style_all(map_strip_box);
+    lv_obj_clear_flag(map_strip_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(map_strip_box, MAP_W, MAP_STRIP_H);
+    memset(map_strip_src, 0, sizeof(map_strip_src));
+    lv_obj_set_pos(map_strip_box, 0, MAP_FIT_H);
+    lv_obj_add_flag(map_strip_box, LV_OBJ_FLAG_HIDDEN);
+    for (int i = 0; i < 2; i++) {
+        map_strip[i] = lv_label_create(map_strip_box);
+        lv_obj_set_style_text_font(map_strip[i], &sony_16, 0);
+        lv_obj_set_style_bg_color(map_strip[i], lv_color_black(), 0);
+        lv_obj_set_style_bg_opa(map_strip[i], LV_OPA_50, 0);
+        lv_obj_set_style_pad_hor(map_strip[i], 4, 0);
+        lv_obj_set_pos(map_strip[i], 4, 2 + i * (MAP_STRIP_H - 4) / 2);
+        lv_label_set_text(map_strip[i], "");
+        lv_obj_add_flag(map_strip[i], LV_OBJ_FLAG_HIDDEN);
+    }
+
+    /* The dots running along red paths: yours white, theirs yellow. */
+    for (int i = 0; i <= MAP_DOTS; i++) {
+        lv_obj_t *d = map_dots[i] = lv_obj_create(map_box);
+        lv_obj_remove_style_all(d);
+        lv_obj_set_size(d, i ? 11 : 13, i ? 11 : 13);
+        lv_obj_set_style_radius(d, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(d, lv_color_hex(i ? MAP_QRZ_COLOR : 0xFFFFFF), 0);
+        lv_obj_set_style_bg_opa(d, LV_OPA_COVER, 0);
+        lv_obj_set_style_border_color(d, lv_color_hex(i ? 0x000000 : MAP_TX), 0);
+        lv_obj_set_style_border_width(d, 2, 0);
+        lv_obj_clear_flag(d, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+        lv_obj_add_flag(d, LV_OBJ_FLAG_HIDDEN);
+    }
+    map_anim = lv_timer_create(map_anim_cb, 40, NULL);
+    lv_timer_pause(map_anim);
     map_view_ok = false;
     return true;
 }
 
 static void map_free(void) {
     /* The objects go with dialog.obj. */
-    map_box = map_canvas = map_status = map_qrz_label = map_stats_label = NULL;
+    map_box = map_canvas = map_status = map_qrz_label = map_stats_label = map_strip_box = NULL;
+    map_strip[0] = map_strip[1] = NULL;
+    memset(map_dots, 0, sizeof(map_dots));
+    if (map_anim) lv_timer_del(map_anim);
+    map_anim   = NULL;
+    map_npaths = 0;
+    map_follow = false;
     free(map_base);
     free(map_px);
     map_base = map_px = NULL;
@@ -3138,7 +3396,10 @@ static void map_show(bool on) {
         update_status();
         map_qrz_show();
         map_update(true);
+        lv_timer_resume(map_anim);
     } else {
+        if (map_anim) lv_timer_pause(map_anim);
+        map_follow = false;
         if (map_box) lv_obj_add_flag(map_box, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(tx_bar, 13, 13 + WF_VISIBLE);
@@ -3198,7 +3459,7 @@ static void map_label(int x, int y, const char *text, uint32_t fg, uint32_t bg, 
     (!map_overlaps(&(b)) && !((b).x1 < own.x2 && own.x1 < (b).x2 && (b).y1 < own.y2 && own.y1 < (b).y2))
     for (int k = 0; k < 4 && !found; k++) {
         bx = LV_CLAMP(4, places[k][0], MAP_W - sz.x - 4);
-        by = LV_CLAMP(2, places[k][1], MAP_H - TX_BAR_H - MAP_LEGEND_H - sz.y - 2);
+        by = LV_CLAMP(2, places[k][1], MAP_LABEL_BOTTOM - sz.y - 2);
         box   = (lv_area_t){bx - 4, by - 2, bx + sz.x + 4, by + sz.y + 2};
         found = MAP_LABEL_FREE(box);
         if (force && !found && k == 0) { /* forced: keep the first place unless another is free */
@@ -3206,7 +3467,7 @@ static void map_label(int x, int y, const char *text, uint32_t fg, uint32_t bg, 
             int       fx = bx, fy = by;
             for (int j = 1; j < 4 && !found; j++) {
                 bx    = LV_CLAMP(4, places[j][0], MAP_W - sz.x - 4);
-                by    = LV_CLAMP(2, places[j][1], MAP_H - TX_BAR_H - MAP_LEGEND_H - sz.y - 2);
+                by    = LV_CLAMP(2, places[j][1], MAP_LABEL_BOTTOM - sz.y - 2);
                 box   = (lv_area_t){bx - 4, by - 2, bx + sz.x + 4, by + sz.y + 2};
                 found = MAP_LABEL_FREE(box);
             }
@@ -3230,8 +3491,8 @@ static void map_label(int x, int y, const char *text, uint32_t fg, uint32_t bg, 
 }
 
 /* A station's square, centred in its 4-character grid square (which is
- * 2 x 1 degrees, a rectangle on the map: the mark is a true square, as big
- * as the grid square on average, 7-26 px, `grow` px more or less), or,
+ * 2 x 1 degrees, a rectangle on the map: the mark is a true square, 3/4 of
+ * the grid square's mean side, 6-20 px, `grow` px more or less), or,
  * placed by callsign, a hollow box; `border`/`line_opa` its outline. Its
  * centre in *cx, *cy; returns its side. */
 static int map_station_mark(const char *grid, const js8_map_place_t *pl, uint32_t color, lv_opa_t opa,
@@ -3241,16 +3502,16 @@ static int map_station_mark(const char *grid, const js8_map_place_t *pl, uint32_
     if (!pl->approx && strlen(grid) >= 4) snprintf(g4, sizeof(g4), "%.4s", grid);
     if (g4[0] && js8_map_grid_rect(&map_view, g4, &x0, &y0, &x1, &y1)) {
         float mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-        int   side = (int)((x1 - x0 + y1 - y0) / 2 + 0.5f);
-        side       = LV_CLAMP(7, side, 26) + grow;
-        side       = LV_CLAMP(6, side, 29);
+        int   side = (int)((x1 - x0 + y1 - y0) * 0.375f + 0.5f); /* a little smaller than the square (VE7NHW) */
+        side       = LV_CLAMP(6, side, 20) + grow;
+        side       = LV_CLAMP(5, side, 22);
         *cx        = (int)(mx + 0.5f);
         *cy        = (int)(my + 0.5f);
         map_rect_ex(*cx - side / 2, *cy - side / 2, side, side, color, opa, border, line_opa, 1, 0);
         return side;
     }
     float x, y;
-    int   side = LV_CLAMP(8, 11 + grow, 14);
+    int   side = LV_CLAMP(7, 9 + grow, 12);
     js8_map_project(&map_view, pl->lat, pl->lon, &x, &y);
     map_rect_ex((int)x - side / 2, (int)y - side / 2, side, side, color, LV_OPA_TRANSP, border == color ? color : border,
                 line_opa, 2, 0);
@@ -3266,9 +3527,9 @@ static uint32_t map_hash(uint32_t h, const void *p, size_t n) {
 }
 
 static void map_legend(bool have_home) {
+    /* See-through, as the status line: a dark box only behind the text,
+     * the map all around (VE7NHW: "makes the screen look bigger"). */
     int y0 = MAP_H - TX_BAR_H - MAP_LEGEND_H, cy = y0 + MAP_LEGEND_H / 2;
-    map_rect(0, y0, MAP_W, MAP_LEGEND_H, 0x000000, 130, 0, 0, 0);
-    map_take(0, y0, MAP_W, MAP_H);
     lv_draw_label_dsc_t ld;
     lv_draw_label_dsc_init(&ld);
     ld.color = lv_color_hex(0xDDDDDD);
@@ -3283,7 +3544,14 @@ static void map_legend(bool have_home) {
                  {MAP_HEARD, 2, "by call prefix"},
                  {MAP_SELECT, 0, "selected"},
                  {MAP_HOME, 0, "you"}};
-    int x = 8;
+    int x = 8, w = 0;
+    for (unsigned i = 0; i < sizeof(items) / sizeof(items[0]); i++) {
+        lv_point_t sz;
+        lv_txt_get_size(&sz, items[i].text, &sony_18, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        w += 16 + sz.x + (i + 1 < sizeof(items) / sizeof(items[0]) ? 16 : 0);
+    }
+    map_rect(x - 4, y0 + 2, w + 8, MAP_LEGEND_H - 3, 0x000000, LV_OPA_50, 0, 0, 0);
+    map_take(x - 4, y0 + 2, x + w + 4, y0 + MAP_LEGEND_H);
     for (unsigned i = 0; i < sizeof(items) / sizeof(items[0]); i++) {
         if (items[i].kind == 0) map_rect(x, cy - 5, 10, 10, items[i].color, MAP_SQUARE_OPA + 60, items[i].color, 1, 0);
         else if (items[i].kind == 2) map_rect(x, cy - 5, 10, 10, items[i].color, LV_OPA_TRANSP, items[i].color, 2, 0);
@@ -3302,6 +3570,7 @@ static void map_legend(bool have_home) {
                        : strcmp(map_my_cont, "OC") == 0 ? "Oceania"
                                                         : "Your continent";
     if (!have_home) snprintf(right, sizeof(right), "Set your grid: APP > QTH");
+    else if (map_follow) snprintf(right, sizeof(right), sel_call[0] ? "Following %s" : "Following: select one", sel_call);
     else if (params.js8_map_mode.x == JS8_MAP_WORLD) snprintf(right, sizeof(right), "World");
     else if (map_world) snprintf(right, sizeof(right), "World (DX heard)");
     else snprintf(right, sizeof(right), "%s%s", cont, params.js8_map_mode.x == JS8_MAP_CLOSE ? " (close-in)" : "");
@@ -3309,10 +3578,11 @@ static void map_legend(bool have_home) {
     lv_point_t sz;
     lv_txt_get_size(&sz, right, &sony_18, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     ld.color = lv_color_white();
+    map_rect(MAP_W - 12 - sz.x, y0 + 2, sz.x + 8, MAP_LEGEND_H - 3, 0x000000, LV_OPA_50, 0, 0, 0);
+    map_take(MAP_W - 12 - sz.x, y0 + 2, MAP_W, y0 + MAP_LEGEND_H);
     lv_canvas_draw_text(map_canvas, MAP_W - 8 - sz.x, cy - sz.y / 2, sz.x + 4, &ld, right);
 }
 
-/* "  1234 km" (or mi) from home to a place, for labels. */
 /* A small tag ("CQ") pinned on the top right corner of a station's mark
  * (x, y its centre, `side` its size): map_badge_box() reserves the place
  * before the labels are placed, map_badge() draws it last, over rings and
@@ -3322,7 +3592,7 @@ static bool map_badge_box(int x, int y, int side, const char *text, lv_area_t *b
     lv_txt_get_size(&sz, text, &sony_14, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     int h  = LV_MAX(side / 2, 6);
     int bx = LV_CLAMP(2, x + h - 3, MAP_W - sz.x - 8);
-    int by = LV_CLAMP(2, y - h + 3 - sz.y - 2, MAP_H - TX_BAR_H - MAP_LEGEND_H - sz.y - 4);
+    int by = LV_CLAMP(2, y - h + 3 - sz.y - 2, MAP_LABEL_BOTTOM - sz.y - 4);
     *box   = (lv_area_t){bx, by, bx + sz.x + 6, by + sz.y + 2};
     if (map_overlaps(box)) return false;
     map_take(box->x1, box->y1, box->x2, box->y2);
@@ -3392,6 +3662,7 @@ static void map_stats(const js8_map_place_t *home) {
              lv_obj_get_y(map_stats_label) + lv_obj_get_height(map_stats_label) + 2);
 }
 
+/* "  1234 km" (or mi) from home to a place, for labels. */
 static void map_dist(char *buf, size_t size, const js8_map_place_t *home, const js8_map_place_t *p) {
     double km = js8_map_distance_km(home->lat, home->lon, p->lat, p->lon);
     snprintf(buf, size, "  %.0f %s", params.js8_miles.x ? km * 0.621371 : km, params.js8_miles.x ? "mi" : "km");
@@ -3428,15 +3699,27 @@ static void map_update(bool force) {
         age[i]       = (uint8_t)LV_CLAMP(0, mins * 8 / MAP_FADE_MIN, 8);
         grow[i]      = (int8_t)LV_CLAMP(-2, (st->snr + 10 + 60) / 6 - 10, 3); /* -24 dB -2 px ... +8 dB +3 px */
         new_kind[i]  = (uint8_t)js8_map_new_kind(st->call, st->grid, NULL, 0);
-        cq[i]        = map_cq_on(st->call, now);
+        cq[i]        = cq_heard_on(st->call, now);
         pts[n].lat = pl[i].lat;
         pts[n].lon = pl[i].lon;
         memcpy(pts[n].continent, pl[i].continent, sizeof(pts[n].continent));
         n++;
     }
+    /* Following: you and the selected station only, however far. */
+    int follow_i = -1;
+    for (int i = 0; map_follow && sel_call[0] && i < st_count; i++)
+        if (shown[i] && strcasecmp(st_rows[i].call, sel_call) == 0) follow_i = i;
+    js8_map_point_t fp;
+    if (follow_i >= 0) {
+        fp.lat = pl[follow_i].lat;
+        fp.lon = pl[follow_i].lon;
+        memcpy(fp.continent, pl[follow_i].continent, sizeof(fp.continent));
+    }
     js8_map_view_t v;
-    bool world = js8_map_choose_view((js8_map_mode_t)params.js8_map_mode.x, have_home ? home.lat : 0,
-                                     have_home ? home.lon : 0, map_my_cont, pts, n, MAP_W, MAP_FIT_H, &v);
+    bool world = follow_i >= 0 ? js8_map_choose_view(JS8_MAP_AUTO, have_home ? home.lat : 0, have_home ? home.lon : 0,
+                                                     map_my_cont, &fp, 1, MAP_W, MAP_FIT_H, &v)
+                               : js8_map_choose_view((js8_map_mode_t)params.js8_map_mode.x, have_home ? home.lat : 0,
+                                                     have_home ? home.lon : 0, map_my_cont, pts, n, MAP_W, MAP_FIT_H, &v);
     /* Drawn over the whole area; the fitted part sits above the legend. */
     v.merc_c -= (MAP_H / 2.0 - MAP_FIT_H / 2.0) / v.px_deg;
     v.height = MAP_H;
@@ -3452,9 +3735,28 @@ static void map_update(bool force) {
                     world ? ", world" : "");
     }
 
+    map_strip_update();
+
     /* Everything drawn below, hashed: unchanged means nothing to redraw. */
     bool     blink = (now / 500) % 2 == 0;
     uint32_t sig   = 2166136261u;
+    sig            = map_hash(sig, &map_follow, sizeof(map_follow));
+    static int8_t talk_ia[MAP_TALK], talk_ib[MAP_TALK];
+    static uint8_t talk_age[MAP_TALK];
+    for (int t = 0; t < MAP_TALK; t++) { /* both ends on the map, else not drawn */
+        talk_ia[t] = talk_ib[t] = -1;
+        if (!map_talk[t].ms || now - map_talk[t].ms >= MAP_TALK_MS) continue;
+        for (int i = 0; i < st_count; i++) {
+            if (!shown[i]) continue;
+            if (strcasecmp(st_rows[i].call, map_talk[t].a) == 0) talk_ia[t] = (int8_t)i;
+            if (strcasecmp(st_rows[i].call, map_talk[t].b) == 0) talk_ib[t] = (int8_t)i;
+        }
+        talk_age[t] = (uint8_t)((now - map_talk[t].ms) * 8 / MAP_TALK_MS);
+        if (talk_ia[t] < 0 || talk_ib[t] < 0) continue;
+        sig = map_hash(sig, map_talk[t].a, strlen(map_talk[t].a));
+        sig = map_hash(sig, map_talk[t].b, strlen(map_talk[t].b));
+        sig = map_hash(sig, &talk_age[t], sizeof(talk_age[t]));
+    }
     sig            = map_hash(sig, &transmitting, sizeof(transmitting));
     sig            = map_hash(sig, sel_call, strlen(sel_call));
     sig            = map_hash(sig, &map_heard_me_only, sizeof(map_heard_me_only));
@@ -3496,10 +3798,33 @@ static void map_update(bool force) {
      * on the air right now. */
     lv_draw_line_dsc_t line;
     lv_draw_line_dsc_init(&line);
-    line.width       = 3;
     line.round_start = 1;
     line.round_end   = 1;
+
+    /* The band's other conversations: thin grey great circles between the
+     * two stations, fading over 10 min. */
+    line.width     = 2;
+    line.color     = lv_color_hex(MAP_TALK_COLOR);
+    map_talk_drawn = 0;
+    for (int t = 0; t < MAP_TALK; t++) {
+        if (talk_ia[t] < 0 || talk_ib[t] < 0) continue;
+        float      xs[MAP_PATH_N + 1], ys[MAP_PATH_N + 1];
+        lv_point_t p[MAP_PATH_N + 1];
+        const js8_map_place_t *a = &pl[talk_ia[t]], *b = &pl[talk_ib[t]];
+        js8_map_path(&map_view, a->lat, a->lon, b->lat, b->lon, MAP_PATH_N, xs, ys);
+        for (int k = 0; k <= MAP_PATH_N; k++) {
+            p[k].x = (lv_coord_t)LV_CLAMP(-4000, (int)xs[k], 4000);
+            p[k].y = (lv_coord_t)LV_CLAMP(-4000, (int)ys[k], 4000);
+        }
+        line.opa = (lv_opa_t)(190 - talk_age[t] * 140 / 8);
+        lv_canvas_draw_line(map_canvas, p, MAP_PATH_N + 1, &line);
+        map_talk_drawn++;
+    }
+    line.opa = LV_OPA_COVER;
+
+    line.width    = 3;
     map_qso_drawn = 0;
+    map_npaths    = 0;
     for (int pass = 0; have_home && pass < 2; pass++) for (int i = 0; i < st_count; i++) {
         if (!shown[i] || (pass == 0 ? !st_rows[i].heard_me || qso[i] : !qso[i])) continue;
         map_qso_drawn += pass;
@@ -3512,6 +3837,7 @@ static void map_update(bool force) {
             p[k].y = (lv_coord_t)LV_CLAMP(-4000, (int)ys[k], 4000);
         }
         lv_canvas_draw_line(map_canvas, p, MAP_PATH_N + 1, &line);
+        if (pass) map_path_keep(st_rows[i].call, p); /* for the running dots */
     }
 
     /* The stations: squares, hollow boxes, the far ends' dots. */
@@ -3531,7 +3857,7 @@ static void map_update(bool force) {
                                    fresh && !sel ? MAP_NEW_BORDER : sel ? MAP_SELECT : MAP_HEARD,
                                    (lv_opa_t)(255 * f / 100), sel ? 0 : grow[i], &cx[i], &cy[i]);
         if (have_home && (st_rows[i].heard_me || qso[i]))
-            map_rect(cx[i] - 3, cy[i] - 3, 7, 7, qso[i] ? MAP_QSO : MAP_PATH, LV_OPA_COVER, 0, 0, LV_RADIUS_CIRCLE);
+            map_rect(cx[i] - 2, cy[i] - 2, 5, 5, qso[i] ? MAP_QSO : MAP_PATH, LV_OPA_COVER, 0, 0, LV_RADIUS_CIRCLE);
     }
 
     /* You; outlined red while transmitting (as the TX bar turns red), also
@@ -3541,25 +3867,25 @@ static void map_update(bool force) {
         js8_map_place_t me = home;
         me.approx          = strlen(params.qth.x) < 4;
         map_station_mark(params.qth.x, &me, MAP_HOME, 220, MAP_HOME, LV_OPA_COVER, 0, &hx, &hy);
-        if (transmitting) map_rect(hx - 12, hy - 12, 25, 25, 0, LV_OPA_TRANSP, MAP_TX, 3, 0);
+        if (transmitting) map_rect(hx - 10, hy - 10, 21, 21, 0, LV_OPA_TRANSP, MAP_TX, 3, 0);
         map_tx_drawn = transmitting;
-        map_take(hx - 7, hy - 7, hx + 7, hy + 7); /* no label over you */
-        map_label(hx, hy, params.callsign.x, MAP_HOME, 0x000000, 170, 9, true);
+        map_take(hx - 6, hy - 6, hx + 6, hy + 6); /* no label over you */
+        map_label(hx, hy, params.callsign.x, MAP_HOME, 0x000000, 170, 8, true);
     }
 
-    /* "CQ" on the corner of stations that called CQ in the last 2 min:
+    /* "CQ" on the corner of stations that called CQ in the last 5 min:
      * reserved now, before the labels, drawn last. */
     static bool      badge[MAX_ROWS];
     static lv_area_t badge_box[MAX_ROWS];
     for (int i = 0; i < st_count; i++)
-        badge[i] = shown[i] && cq[i] && map_badge_box(cx[i], cy[i], i == sel_i ? 23 : side[i], "CQ", &badge_box[i]);
+        badge[i] = shown[i] && cq[i] && map_badge_box(cx[i], cy[i], i == sel_i ? 19 : side[i], "CQ", &badge_box[i]);
 
     /* The selected station, red, with its label. */
     char dist[24] = "";
     if (sel_i >= 0) {
         const js8_station_t *st = &st_rows[sel_i];
-        map_rect(cx[sel_i] - 11, cy[sel_i] - 11, 23, 23, 0, LV_OPA_TRANSP, MAP_SELECT, 2, 0);
-        map_take(cx[sel_i] - 12, cy[sel_i] - 12, cx[sel_i] + 12, cy[sel_i] + 12);
+        map_rect(cx[sel_i] - 9, cy[sel_i] - 9, 19, 19, 0, LV_OPA_TRANSP, MAP_SELECT, 2, 0);
+        map_take(cx[sel_i] - 10, cy[sel_i] - 10, cx[sel_i] + 10, cy[sel_i] + 10);
         char text[112];
         int  len = snprintf(text, sizeof(text), "%s  %s  %+d dB", st->call, pl[sel_i].where, st->snr);
         if (st->heard_me && st->has_reported_snr)
@@ -3567,11 +3893,12 @@ static void map_update(bool force) {
         if (have_home) {
             map_dist(dist, sizeof(dist), &home, &pl[sel_i]);
             len += snprintf(text + len, sizeof(text) - len, "%s", dist);
-            if (len < (int)sizeof(text)) /* beam heading, short path */
-                snprintf(text + len, sizeof(text) - len, "  az %.0f",
-                         js8_map_bearing_deg(home.lat, home.lon, pl[sel_i].lat, pl[sel_i].lon));
+            double az = js8_map_bearing_deg(home.lat, home.lon, pl[sel_i].lat, pl[sel_i].lon);
+            if (len < (int)sizeof(text)) /* beam heading, short path; following, the long path's too */
+                snprintf(text + len, sizeof(text) - len, map_follow ? "  az %.0f  LP %.0f" : "  az %.0f", az,
+                         fmod(az + 180.0, 360.0));
         }
-        map_label(cx[sel_i], cy[sel_i], text, 0xFFFFFF, 0x6E0000, 225, 15, true);
+        map_label(cx[sel_i], cy[sel_i], text, 0xFFFFFF, 0x6E0000, 225, 13, true);
     }
 
     /* The flashing ring: a station calling you (while its message comes
@@ -3581,8 +3908,8 @@ static void map_update(bool force) {
         bool ring = map_ring_on(st_rows[i].call, now), fresh = map_popup_on(st_rows[i].call, now);
         if (!shown[i] || (!ring && !fresh)) continue;
         if (blink) {
-            map_rect(cx[i] - 10, cy[i] - 10, 21, 21, 0, LV_OPA_TRANSP, 0xFFFFFF, 2, LV_RADIUS_CIRCLE);
-            map_rect(cx[i] - 14, cy[i] - 14, 29, 29, 0, LV_OPA_TRANSP, 0x9A9A9A, 2, LV_RADIUS_CIRCLE);
+            map_rect(cx[i] - 9, cy[i] - 9, 19, 19, 0, LV_OPA_TRANSP, 0xFFFFFF, 2, LV_RADIUS_CIRCLE);
+            map_rect(cx[i] - 13, cy[i] - 13, 27, 27, 0, LV_OPA_TRANSP, 0x9A9A9A, 2, LV_RADIUS_CIRCLE);
         }
         if (!fresh || i == sel_i) continue;
         char text[112];
@@ -3597,7 +3924,7 @@ static void map_update(bool force) {
         if (kind == JS8_MAP_NEW_GRID) snprintf(head, sizeof(head), "NEW GRID");
         snprintf(text, sizeof(text), "%s  %s  %s  %+d dB%s", head, st_rows[i].call, pl[i].where, st_rows[i].snr,
                  dist);
-        map_label(cx[i], cy[i], text, 0xFFFFFF, 0x005A00, 225, 17, false); /* only where it fits: the ring shows anyway */
+        map_label(cx[i], cy[i], text, 0xFFFFFF, 0x005A00, 225, 15, false); /* only where it fits: the ring shows anyway */
     }
 
     for (int i = 0; i < st_count; i++)
@@ -3619,6 +3946,22 @@ bool dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_p
     return view_map;
 }
 
+/* For tools/js8_ui_harness: grey conversation lines drawn, your dot (-1
+ * hidden, else its x), incoming dots shown so far, the strip's lines,
+ * following. */
+int dialog_js8_map_extra(int *talks, int *my_dot_x, int *in_dots, const char **strip0, const char **strip1,
+                         bool *follow) {
+    int n = map_pulses_seen;
+    if (talks) *talks = map_talk_drawn;
+    if (my_dot_x)
+        *my_dot_x = !map_dots[0] || lv_obj_has_flag(map_dots[0], LV_OBJ_FLAG_HIDDEN) ? -1 : lv_obj_get_x(map_dots[0]);
+    if (in_dots) *in_dots = n;
+    if (strip0) *strip0 = map_strip[0] ? lv_label_get_text(map_strip[0]) : "";
+    if (strip1) *strip1 = map_strip[1] ? lv_label_get_text(map_strip[1]) : "";
+    if (follow) *follow = map_follow;
+    return view_map;
+}
+
 /* For tools/js8_ui_harness: the stats line. */
 const char *dialog_js8_map_stats(void) {
     return map_stats_label ? lv_label_get_text(map_stats_label) : "";
@@ -3627,7 +3970,8 @@ const char *dialog_js8_map_stats(void) {
 static const char *map_view_label_getter(void) {
     static char buf[24];
     if (!view_map) return ""; /* only while the map shows */
-    snprintf(buf, sizeof(buf), "Map:\n%s", map_mode_names[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
+    snprintf(buf, sizeof(buf), "Map:\n%s",
+             map_follow ? "Follow" : map_mode_names[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
     return buf;
 }
 
@@ -3636,12 +3980,33 @@ static void map_view_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
     if (!view_map) return;
+    if (map_follow) { /* a press leaves Follow, back to the view it was on */
+        map_follow = false;
+        buttons_refresh(btn);
+        map_update(true);
+        msg_update_text_fmt("Map: %s", map_mode_names[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
+        return;
+    }
     params_uint8_set(&params.js8_map_mode, (params.js8_map_mode.x + 1) % 3);
     buttons_refresh(btn);
     map_update(true);
     static const char *const what[3] = {"Map: your continent, the world when DX is heard",
                                         "Map: your continent only", "Map: the whole world"};
     msg_update_text_fmt("%s", what[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
+}
+
+/* Hold: follow the selected station (the view frames you and them, the
+ * label adds the long path); hold or press again to stop. */
+static void map_follow_cb(button_data_t *btn) {
+    user_touch();
+    if (popup_guard()) return;
+    if (!view_map) return;
+    map_follow = !map_follow;
+    buttons_refresh(btn);
+    map_update(true);
+    if (!map_follow) msg_update_text_fmt("Map: %s", map_mode_names[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
+    else if (sel_call[0]) msg_update_text_fmt("Map: following %s (press Map to stop)", sel_call);
+    else msg_update_text_fmt("Map: following the selected station: turn the MFK to pick one");
 }
 
 /* ---- Buttons ---------------------------------------------------------- */

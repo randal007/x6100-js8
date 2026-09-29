@@ -209,8 +209,10 @@ uses). *Heard me* adds the path.
    age (`st->heard_ms`, 8 steps to 30 % at 45 min; not the selected one,
    pop-ups or QSOs); **size by SNR**, -2 px at -24 dB to +3 px at +8 dB,
    never past 29 px; a **CQ** tag (black on green, `sony_14`) on the
-   corner of stations whose CQ was decoded in the last 2 min (`m->cq`,
-   `map_cq_add()`), its place reserved before the labels and drawn last;
+   corner of stations whose CQ was decoded in the last 5 min (the user
+   asked for 5; `m->cq`, `cq_heard_add()`, shared with the Stations view,
+   where those rows are CQ green `#006000`), its place reserved before the
+   labels and drawn last;
    **NEW DXCC / NEW GRID** from the radio's QSO log (`/mnt/qso_log.db`,
    read-only with sqlite when the map opens: `js8_map_load_worked()`,
    countries by cty.dat, 4-character grids; a QSO logged in JS8 counts at
@@ -218,10 +220,24 @@ uses). *Heard me* adds the path.
    station's square and the pop-up says what's new; **stats** top left
    (beside the status line, or under it when that's long); the **beam
    heading** in the selected label (`az 252`, `js8_map_bearing_deg()`).
-   Batch B still to come: a dot travelling along the red path while a
-   message goes out (and in), the band's other conversations as dim lines,
-   the last two decodes as a strip over the map, and *follow selected*
-   (hold the view button: frame you and the selected station).
+   Batch B: **your dot** (an LVGL object over the canvas, moved by a 40 ms
+   timer that runs only while the map shows) runs along the red path to
+   the station you're sending to, at `(frame - 1 + time into the frame /
+   period) / frames` (`tx_status.next_ms` is the frame's start while
+   keyed); **incoming dots** (yellow, 2 s from them to you) for each frame
+   to you; the red paths as drawn are kept for them (`map_path_keep()`).
+   **Other QSOs:** grey (`#C8C8C8`, 2 px) great circles between two
+   stations on the map talking to each other, relays' hops included
+   ("VE3KP: N0XYZ > K5LOW", as decoded), fading over 10 min
+   (`map_talk_note()`). **The strip:** the list's last two rows (its Show
+   filter) above the legend, 40 px reserved under the fitted area.
+   **Follow:** hold *Map:*; the view is chosen for you and the selected
+   station only; the label adds the long path (`LP`), the legend says
+   *Following CALL*. After using it (VE7NHW): the legend, the strip and the
+   TX bar see-through (a 50 % black box only behind the text, as the
+   status line; the TX bar 50 % idle, 70 % waiting or sending, on every
+   page); squares 3/4 of the grid square's mean side (6-20 px, was the
+   whole side, 7-26), their dots, outlines and rings smaller to match.
    Still to come: a Setting for your colour.
 5. **On the air**, then a beta.
 

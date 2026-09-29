@@ -234,11 +234,26 @@ GridTracker's *Dark Gray* look.
   log, the one FT8 and JS8 log to): **NEW DXCC Japan** or **NEW GRID**
   in the pop-up, and a **white outline** on the square until you log a
   QSO with them.
-- **Squares fade** the longer a station goes unheard (to 30 % after 45
+- Squares are a little smaller than their grid square. **They fade** the longer a station goes unheard (to 30 % after 45
   minutes; the selected one and a QSO never fade), and are **a little
   bigger for a strong signal**, a little smaller for a weak one (a few
   pixels at most, so they don't take over).
-- **CQ** tag: on a station's corner for 2 minutes after it called CQ.
+- **CQ** tag: on a station's corner for 5 minutes after it called CQ (and
+  its row in the Stations view is green for those 5 minutes, the green of
+  CQ rows in the message list).
+- **Grey lines:** other stations talking to each other (`W7XYZ: K9DEF
+  HW CPY?`), a relay's hops too, fading out over 10 minutes; drawn when
+  both ends are on the map.
+- **Moving dots:** while you send to a station (Reply, HW CPY? ...), a
+  white dot runs along the red path from you to them, frame by frame, as a
+  progress bar; each frame to you sends a yellow dot from them to you.
+- **The last two messages** (as the message list shows them, its Show
+  filter too) above the legend; yours light red, to you yellow.
+- **Follow:** hold the **Map:** button: the view frames you and the
+  selected station, however far, and its label adds the long-path heading
+  (`az 335  LP 155`); press Map: to go back.
+- The legend, the message lines, the status line and the TX bar are
+  see-through: the map shows around and under the text.
 - **Stats** (top left): `14 heard  5 hear you  DX JA1ABC 10833 km`, the
   whole Stations list whatever Show picks. The selected station's label
   also has the beam heading (`az 252`, short path).
@@ -253,6 +268,8 @@ GridTracker's *Dark Gray* look.
   the stations shown. **Show** (page 2): *All heard* or only those who
   *Heard me*.
 - The TX bar moves to the bottom of the map; decoding goes on as usual.
+  (The TX bar is half see-through on every page now: the waterfall shows
+  through it on the message and Stations pages.)
 
 ## The buttons
 
@@ -269,7 +286,7 @@ to go back a page. In JS8 a hold is half a second.
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead (each station its own, for 5 minutes). |
 | 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
-| 3 | **Map: Auto / Close-in / World** | Only while [the map](#the-map) shows (blank otherwise): which part of the world it shows. *Time Sync* moved to Settings to make room. |
+| 3 | **Map: Auto / Close-in / World** | Only while [the map](#the-map) shows (blank otherwise): which part of the world it shows. **Hold: Follow** the selected station (you and them framed, the long path too); press to stop. *Time Sync* moved to Settings to make room. |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
 | 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off an hour after it was last heard. |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
