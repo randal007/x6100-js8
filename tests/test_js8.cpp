@@ -3455,6 +3455,7 @@ TEST_CASE("map: C API places stations and picks the view (Auto / Close-in / Worl
     std::vector<js8_map_point_t> na = {pt("CN85", "NA"), pt("FN42", "NA"), pt("EM12", "NA")};
     js8_map_view_t               v;
     CHECK_FALSE(js8_map_choose_view(JS8_MAP_AUTO, home.lat, home.lon, "NA", na.data(), na.size(), 771, 268, &v));
+    CHECK(v.wrap);
     auto dx = na;
     dx.push_back(pt("PM95", "AS"));
     CHECK(js8_map_choose_view(JS8_MAP_AUTO, home.lat, home.lon, "NA", dx.data(), dx.size(), 771, 268, &v));
@@ -3466,9 +3467,15 @@ TEST_CASE("map: C API places stations and picks the view (Auto / Close-in / Worl
     CHECK_FALSE(js8_map_choose_view(JS8_MAP_CLOSE, home.lat, home.lon, "NA", dx.data(), dx.size(), 771, 268, &v));
     js8_map_project(&v, 35.5, 139, &x, &y);
     CHECK((x < 0 || x > 771));
-    // World: the whole world, centred on us.
+    // World: the whole inhabited world in one piece, centred on our longitude.
     CHECK(js8_map_choose_view(JS8_MAP_WORLD, home.lat, home.lon, "NA", na.data(), na.size(), 771, 268, &v));
-    CHECK(v.px_deg == Catch::Approx(771 / 360.0));
+    CHECK_FALSE(v.wrap);
+    CHECK(v.lon_c == Catch::Approx(home.lon));
+    for (auto [lat, lon] : std::vector<std::pair<double, double>>{{70, 25}, {-54, -68}, {-45, 170}, {64, -150}}) {
+        js8_map_project(&v, lat, lon, &x, &y); // North Cape, Tierra del Fuego, New Zealand, Alaska
+        CHECK(y >= 0);
+        CHECK(y <= 268);
+    }
     // A station whose continent is unknown doesn't switch to the world.
     std::vector<js8_map_point_t> unk = {pt("FN42", "NA"), pt("EM12", "")};
     CHECK_FALSE(js8_map_choose_view(JS8_MAP_AUTO, home.lat, home.lon, "NA", unk.data(), unk.size(), 771, 268, &v));
@@ -3486,4 +3493,71 @@ TEST_CASE("map: C API places stations and picks the view (Auto / Close-in / Worl
     CHECK(xs[0] == Catch::Approx(hx).margin(0.01));
     CHECK(ys[32] == Catch::Approx(ty).margin(0.01));
     CHECK(xs[32] == Catch::Approx(tx).margin(0.01));
+}
+
+#include "map_render.hpp"
+
+#ifndef MAP_BIN_PATH
+#define MAP_BIN_PATH "tools/map_data/js8_map.bin"
+#endif
+
+TEST_CASE("map: the base map is drawn right for any view", "[map]") {
+    namespace mr = x6100::js8::map;
+    mr::MapData data;
+    REQUIRE(data.load(MAP_BIN_PATH));
+    CHECK(data.layers().size() == 8);
+    const mr::Style style;
+    const int       W = 771, H = 268;
+    std::vector<uint32_t> px((size_t)W * H);
+    auto at = [&](const geo::View &v, double lat, double lon) {
+        double x, y;
+        v.project({lat, lon}, x, y);
+        REQUIRE(x >= 0);
+        REQUIRE(x < W);
+        REQUIRE(y >= 0);
+        REQUIRE(y < H);
+        return px[(size_t)y * W + (size_t)x];
+    };
+    auto home = *geo::grid_center("CN89");
+
+    // North America close-in: 50m detail; Kansas is land, the Pacific
+    // and Lake Superior are water.
+    auto na = geo::fit(home, {*geo::grid_center("FN42"), *geo::grid_center("EM12")}, W, H);
+    mr::RenderStats st;
+    mr::render(data, na, px.data(), W, style, &st);
+    CHECK(st.detail == 1);
+    CHECK(at(na, 38.5, -98.5) == style.land);
+    CHECK(at(na, 42.5, -135.0) == style.ocean); // (points off the 10/20-degree field lines)
+    CHECK(at(na, 47.7, -87.5) == style.ocean); // Lake Superior
+    CHECK(at(na, 51.5, -106.0) == style.land); // Saskatchewan
+
+    // The whole world in one piece: 110m; Australia is land, ocean beyond
+    // 180 degrees either side of the centre.
+    auto world = geo::whole_world(home.lon, W, H);
+    mr::render(data, world, px.data(), W, style, &st);
+    CHECK(st.detail == 0);
+    CHECK(at(world, -25.0, 134.0) == style.land); // Australia
+    CHECK(at(world, 51.5, 11.0) == style.land);   // Germany
+    CHECK(px[(size_t)(H / 2) * W + 2] == style.ocean);     // left margin
+    CHECK(px[(size_t)(H / 2) * W + W - 3] == style.ocean); // right margin
+
+    // Across the date line: a view centred on 180 draws both sides of it
+    // (Chukotka and Kamchatka are land either side).
+    geo::View pac = geo::fit(*geo::grid_center("RP81"), {*geo::grid_center("AP65"), *geo::grid_center("QO93")}, W, H);
+    mr::render(data, pac, px.data(), W, style, &st);
+    CHECK(at(pac, 66.0, -172.0) == style.land); // Chukotka, west of the date line in longitude terms
+    CHECK(at(pac, 56.0, 159.0) == style.land);  // Kamchatka
+
+    // A bad file isn't taken.
+    mr::MapData bad;
+    CHECK_FALSE(bad.parse(std::vector<uint8_t>{'J', 'S', '8', 'M', 'A', 'P', '1', 0, 99, 0, 0, 0}));
+
+    // The C API.
+    js8_map_data_t *d = js8_map_data_load(MAP_BIN_PATH);
+    REQUIRE(d);
+    js8_map_view_t v{};
+    js8_map_choose_view(JS8_MAP_WORLD, home.lat, home.lon, "NA", nullptr, 0, W, H, &v);
+    CHECK(js8_map_render_base(d, &v, px.data(), W));
+    js8_map_data_free(d);
+    CHECK(js8_map_data_load("/nonexistent/js8_map.bin") == nullptr);
 }

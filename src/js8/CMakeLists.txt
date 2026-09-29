@@ -23,6 +23,7 @@ add_library(JS8 STATIC
     geo.cpp
     callsign_place.cpp
     js8_map.cpp
+    map_render.cpp
 )
 
 # js8core needs C++20. Link it PRIVATE so the requirement stops here: the

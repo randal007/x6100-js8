@@ -62,6 +62,7 @@ struct View {
     double px_deg  = 1;   ///< pixels per degree of longitude
     int    width   = 0;
     int    height  = 0;
+    bool   wrap    = true; ///< the world repeats sideways; false: one copy, ocean beyond
 
     /// Screen position of a point; its longitude is taken within 180
     /// degrees of the centre's.
@@ -77,5 +78,10 @@ struct View {
 /// 180 degrees of home's, so a path across the Pacific stays in one piece.
 View fit(LatLon home, const std::vector<LatLon> &points, int width, int height, double margin = 0.12,
          double min_lon = 40, double min_lat = 18);
+
+/// The whole inhabited world (latitudes -56 to +75) in one piece, centred
+/// on `lon_c`: zoomed out as far as needed, so a wide, low screen shows one
+/// copy of the world with ocean on either side (wrap off).
+View whole_world(double lon_c, int width, int height);
 
 } // namespace x6100::js8::geo

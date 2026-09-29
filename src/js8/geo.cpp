@@ -164,4 +164,16 @@ View fit(LatLon home, const std::vector<LatLon> &points, int width, int height, 
     return v;
 }
 
+View whole_world(double lon_c, int width, int height) {
+    const double top = mercator_y(75), bottom = mercator_y(-56);
+    View         v;
+    v.width  = width;
+    v.height = height;
+    v.px_deg = std::min(width / 360.0, height / (top - bottom));
+    v.lon_c  = unwrap(lon_c, 0);
+    v.merc_c = (top + bottom) / 2;
+    v.wrap   = false;
+    return v;
+}
+
 } // namespace x6100::js8::geo

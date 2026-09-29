@@ -8,10 +8,12 @@
 
 #include "callsign_place.hpp"
 #include "geo.hpp"
+#include "map_render.hpp"
 
 #include <cstdio>
 #include <cstring>
 #include <mutex>
+#include <new>
 
 using namespace x6100::js8;
 
@@ -32,6 +34,7 @@ geo::View to_view(const js8_map_view_t *v) {
     g.px_deg = v->px_deg;
     g.width  = v->width;
     g.height = v->height;
+    g.wrap   = v->wrap;
     return g;
 }
 
@@ -41,6 +44,7 @@ void from_view(const geo::View &g, js8_map_view_t *v) {
     v->px_deg = g.px_deg;
     v->width  = g.width;
     v->height = g.height;
+    v->wrap   = g.wrap;
 }
 
 } // namespace
@@ -110,13 +114,7 @@ extern "C" bool js8_map_choose_view(js8_map_mode_t mode, double my_lat, double m
     if (!out) return false;
     geo::LatLon home{my_lat, my_lon};
     if (mode == JS8_MAP_WORLD) {
-        geo::View v;
-        v.width  = width;
-        v.height = height;
-        v.px_deg = width / 360.0;
-        v.lon_c  = my_lon;
-        v.merc_c = 0;
-        from_view(v, out);
+        from_view(geo::whole_world(my_lon, width, height), out);
         return true;
     }
     bool                     know_mine = my_continent && my_continent[0];
@@ -181,4 +179,29 @@ extern "C" void js8_map_path(const js8_map_view_t *v, double lat1, double lon1, 
 
 extern "C" double js8_map_distance_km(double lat1, double lon1, double lat2, double lon2) {
     return geo::distance_km({lat1, lon1}, {lat2, lon2});
+}
+
+struct js8_map_data {
+    map::MapData data;
+};
+
+extern "C" js8_map_data_t *js8_map_data_load(const char *path) {
+    if (!path) return nullptr;
+    auto *d = new (std::nothrow) js8_map_data;
+    if (!d) return nullptr;
+    if (!d->data.load(path)) {
+        delete d;
+        return nullptr;
+    }
+    return d;
+}
+
+extern "C" void js8_map_data_free(js8_map_data_t *d) {
+    delete d;
+}
+
+extern "C" bool js8_map_render_base(const js8_map_data_t *d, const js8_map_view_t *v, uint32_t *argb, int stride) {
+    if (!d || !v || !argb) return false;
+    map::render(d->data, to_view(v), argb, stride);
+    return true;
 }

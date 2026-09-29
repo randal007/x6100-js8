@@ -4,7 +4,8 @@ A third view next to the message list and the Stations view: a world map
 with the stations heard on this frequency in their grid squares, you at
 yours, and curved paths to the stations that heard you. Inspired by
 GridTracker 2's map ("just the map"). **Status:** phase 1 done (the
-maths and callsign lookups, tested on the PC); nothing on the screen yet.
+maths and callsign lookups, tested on the PC); phase 2 drawing done on
+the PC, its timing on the radio still to do; nothing on the screen yet.
 
 ![North America close-in, then the world view](map-mockups/v2_na_world.png)
 
@@ -137,6 +138,19 @@ uses). *Heard me* adds the path.
    cty.dat and 20 lookups: 19 ms on the PC (debug + ASan build).
 2. **Map data and the drawing test:** `tools/map_data`; draw the base map
    in C; time it on the PC, under ARM emulation, then on the radio.
+   Done on the PC: `tools/map_data/make_map_data.py` → `js8_map.bin`
+   (1.07 MB: 110m 5k land points, 50m 59k, plus lakes, borders, states);
+   `src/js8/map_render.{hpp,cpp}` (even-odd fills with exact coverage
+   across and 4 sub-rows down, 1 px anti-aliased lines, field lines, wrap
+   copies across the date line, 50m from 3.5 px/degree); a **whole-world**
+   view for the World button (latitudes -56 to +75 in one copy centred on
+   your longitude, ocean either side — the screen is too low for the whole
+   Mercator world); `js8_map_render_base()` in the C API; tests draw real
+   views and check land, water, lakes and the date line.
+   Times per view (771 x 268): PC 0.8–2.2 ms; the radio's ARM build under
+   emulation 14–29 ms, pixel-identical to the PC's. **Still to do:** the
+   same benchmark on the radio (`tools/map_data/map_bench.cpp`, copied to
+   the DATA partition at the next flash).
 3. **The view in the app:** the third view, the buttons, Time Sync into
    Settings, selection shared with the list, the TX bar at the bottom, the
    waterfall paused while hidden. Harness scenario `ONLY_MAP` with
