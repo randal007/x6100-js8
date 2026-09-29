@@ -34,7 +34,6 @@ geo::View to_view(const js8_map_view_t *v) {
     g.px_deg = v->px_deg;
     g.width  = v->width;
     g.height = v->height;
-    g.wrap   = v->wrap;
     return g;
 }
 
@@ -44,7 +43,6 @@ void from_view(const geo::View &g, js8_map_view_t *v) {
     v->px_deg = g.px_deg;
     v->width  = g.width;
     v->height = g.height;
-    v->wrap   = g.wrap;
 }
 
 } // namespace

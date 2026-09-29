@@ -151,8 +151,8 @@ private:
     int       w_, h_, stride_;
 };
 
-/// The wrap copies of the world that can show in the view (a view is at
-/// most 360 degrees wide, so three).
+/// The wrap copies of the world that can show in the view: three cover
+/// any view up to 540 degrees across (the whole-world view is about 510).
 std::vector<Xform> xforms(const geo::View &v) {
     std::vector<Xform> out;
     double             s = 360.0 / MapData::WORLD * v.px_deg;
@@ -289,16 +289,6 @@ void render(const MapData &data, const geo::View &view, uint32_t *argb, int stri
         for (int lat = -80; lat <= 80; lat += 10) {
             double y = (view.merc_c - geo::mercator_y(lat)) * view.px_deg + view.height / 2.0;
             tg.hline((int)std::floor(y + 0.5), style.grid, a);
-        }
-    }
-    if (!view.wrap) {
-        // One copy of the world: 180 degrees either side of the centre,
-        // ocean beyond (drawn with the copies above, then cut here).
-        int lo = (int)std::floor(view.width / 2.0 - 180 * view.px_deg), hi = (int)std::ceil(view.width / 2.0 + 180 * view.px_deg);
-        for (int y = 0; y < view.height; y++) {
-            uint32_t *row = argb + (size_t)y * stride;
-            for (int x = 0; x < std::min(lo, view.width); x++) row[x] = style.ocean;
-            for (int x = std::max(hi, 0); x < view.width; x++) row[x] = style.ocean;
         }
     }
 }

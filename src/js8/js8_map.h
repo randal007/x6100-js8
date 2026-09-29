@@ -47,7 +47,6 @@ typedef enum {
 typedef struct {
     double lon_c, merc_c, px_deg;
     int    width, height;
-    bool   wrap; /* the world repeats sideways; false: one copy, ocean beyond */
 } js8_map_view_t;
 
 /* One station for choosing the view. */
@@ -60,8 +59,8 @@ typedef struct {
  *   Auto  - close-in while every station is on `my_continent` (or it's
  *           unknown), else fitted to them all ("world");
  *   Close - fitted to you and the stations on your continent only;
- *   World - the whole inhabited world (-56 to +75 degrees) in one copy,
- *           centred on your longitude.
+ *   World - the whole inhabited world (-56 to +75 degrees), centred on
+ *           your longitude; the world repeats at the sides.
  * Fitted views keep a margin and are never closer in than about 40 x 18
  * degrees. Returns true when the result is a world view (for the legend). */
 bool js8_map_choose_view(js8_map_mode_t mode, double my_lat, double my_lon, const char *my_continent,

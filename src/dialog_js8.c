@@ -2854,6 +2854,7 @@ static void destruct_cb(void) {
 #define MAP_HOME       0xFFA600 /* GridTracker's QTH orange */
 #define MAP_PURPLE     0xAB00B6 /* the paths: VE7NHW's pick */
 #define MAP_SELECT     0xFF3030
+#define MAP_TX         0xFF1010 /* your outline while transmitting */
 #define MAP_SQUARE_OPA 136      /* GridTracker's grid alpha */
 #define MAP_TAKEN      32       /* label boxes placed per redraw */
 
@@ -2867,6 +2868,7 @@ static struct {
     char    call[JS8_RX_CALL_LEN];
     int64_t until_ms; /* monotonic */
 } map_popups[MAP_POPUPS];
+static bool      map_tx_drawn; /* the red "transmitting" outline is on the map (harness) */
 static lv_area_t map_taken[MAP_TAKEN];
 static int       map_ntaken;
 
@@ -3046,7 +3048,9 @@ static void map_label(int x, int y, const char *text, uint32_t fg, uint32_t bg, 
     lv_canvas_draw_text(map_canvas, bx, by, sz.x + 4, &ld, text);
 }
 
-/* A station's square (its 4-character grid) or, placed by callsign, a
+/* A station's square, centred in its 4-character grid square (which is
+ * 2 x 1 degrees, a rectangle on the map: the mark is a true square, as big
+ * as the grid square on average, 7-26 px), or, placed by callsign, a
  * hollow box; its centre in *cx, *cy. */
 static void map_station_mark(const char *grid, const js8_map_place_t *pl, uint32_t color, lv_opa_t opa, int *cx,
                              int *cy) {
@@ -3055,11 +3059,11 @@ static void map_station_mark(const char *grid, const js8_map_place_t *pl, uint32
     if (!pl->approx && strlen(grid) >= 4) snprintf(g4, sizeof(g4), "%.4s", grid);
     if (g4[0] && js8_map_grid_rect(&map_view, g4, &x0, &y0, &x1, &y1)) {
         float mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
-        if (x1 - x0 < 7) x0 = mx - 3.5f, x1 = mx + 3.5f; /* at least 7 px, to be seen */
-        if (y1 - y0 < 7) y0 = my - 3.5f, y1 = my + 3.5f;
-        map_rect((int)x0, (int)y0, (int)(x1 - x0 + 0.5f), (int)(y1 - y0 + 0.5f), color, opa, color, 1, 0);
-        *cx = (int)mx;
-        *cy = (int)my;
+        int   side = (int)((x1 - x0 + y1 - y0) / 2 + 0.5f);
+        side       = LV_CLAMP(7, side, 26);
+        *cx        = (int)(mx + 0.5f);
+        *cy        = (int)(my + 0.5f);
+        map_rect(*cx - side / 2, *cy - side / 2, side, side, color, opa, color, 1, 0);
         return;
     }
     float x, y;
@@ -3156,7 +3160,7 @@ static void map_update(bool force) {
     v.merc_c -= (MAP_H / 2.0 - MAP_FIT_H / 2.0) / v.px_deg;
     v.height = MAP_H;
     bool base_new = !map_view_ok || v.lon_c != map_view.lon_c || v.merc_c != map_view.merc_c ||
-                    v.px_deg != map_view.px_deg || v.wrap != map_view.wrap;
+                    v.px_deg != map_view.px_deg;
     if (base_new) {
         if (!map_data || !js8_map_render_base(map_data, &v, map_base, MAP_W))
             for (size_t i = 0; i < (size_t)MAP_W * MAP_H; i++) map_base[i] = 0xFF000000u | MAP_OCEAN;
@@ -3168,8 +3172,10 @@ static void map_update(bool force) {
     }
 
     /* Everything drawn below, hashed: unchanged means nothing to redraw. */
+    bool transmitting = tx_status.state == JS8_TX_KEYING || (tx_status.state == JS8_TX_WAITING && tx_status.frame > 1);
     bool     blink = (now / 500) % 2 == 0;
     uint32_t sig   = 2166136261u;
+    sig            = map_hash(sig, &transmitting, sizeof(transmitting));
     sig            = map_hash(sig, sel_call, strlen(sel_call));
     sig            = map_hash(sig, &map_heard_me_only, sizeof(map_heard_me_only));
     sig            = map_hash(sig, &have_home, sizeof(have_home));
@@ -3226,12 +3232,15 @@ static void map_update(bool force) {
             map_rect(cx[i] - 3, cy[i] - 3, 7, 7, MAP_PURPLE, LV_OPA_COVER, 0, 0, LV_RADIUS_CIRCLE);
     }
 
-    /* You. */
+    /* You; outlined red while transmitting (as the TX bar turns red), also
+     * between the frames of a longer message. */
     if (have_home) {
         int             hx, hy;
         js8_map_place_t me = home;
         me.approx          = strlen(params.qth.x) < 4;
         map_station_mark(params.qth.x, &me, MAP_HOME, 220, &hx, &hy);
+        if (transmitting) map_rect(hx - 12, hy - 12, 25, 25, 0, LV_OPA_TRANSP, MAP_TX, 3, 0);
+        map_tx_drawn = transmitting;
         map_take(hx - 7, hy - 7, hx + 7, hy + 7); /* no label over you */
         map_label(hx, hy, params.callsign.x, MAP_HOME, 0x000000, 170, 9, true);
     }
@@ -3268,13 +3277,14 @@ static void map_update(bool force) {
 }
 
 /* For tools/js8_ui_harness: is the map showing, is it a world view, how
- * many new-station pop-ups are up. */
-bool dialog_js8_map_state(bool *world, int *popups) {
+ * many new-station pop-ups are up, is the transmitting outline drawn. */
+bool dialog_js8_map_state(bool *world, int *popups, bool *tx_outline) {
     int64_t now = now_mono_ms();
     int     n   = 0;
     for (int i = 0; i < MAP_POPUPS; i++) n += map_popups[i].until_ms > now;
     if (world) *world = map_world || params.js8_map_mode.x == JS8_MAP_WORLD;
     if (popups) *popups = n;
+    if (tx_outline) *tx_outline = map_tx_drawn;
     return view_map;
 }
 

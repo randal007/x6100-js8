@@ -178,6 +178,14 @@ uses). *Heard me* adds the path.
    `ONLY_MAP` (see its README).
 4. **Polish:** pop-up timing and placement, label overlaps, colours
    setting, README.
+   From VE7NHW's first use on the radio (2026-09-29): your square outlined
+   red while transmitting (`JS8_TX_KEYING`, and between a long message's
+   frames); station marks are true squares (a 4-character grid square is
+   2 x 1 degrees, a rectangle in Mercator; the mark is centred in it, its
+   side the rectangle's mean, 7-26 px); the World view repeats the world at
+   the sides instead of grey bars (the `wrap` flag and the one-copy cut
+   are gone; stations stay within 180 degrees of the centre). Still to
+   come: a Setting for your colour.
 5. **On the air**, then a beta.
 
 ## Credits and licences

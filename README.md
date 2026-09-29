@@ -207,14 +207,15 @@ GridTracker's *Dark Gray* look.
 
 ![The map](docs/screenshots/12_map.png)
 
-- **Green squares:** stations heard, in their grid square. **Hollow
+- **Green squares:** stations heard, in the middle of their grid square. **Hollow
   boxes:** no grid heard yet, so placed by callsign — the middle of their
   province, state or call area where the call says (VE7 → British Columbia,
   W6 → US call area 6, VK2 → New South Wales, JA1 → Kanto), else their
   country (AD1C's country file).
 - **Purple curved lines:** great-circle paths to the stations that heard
   you, ending in a purple dot.
-- **Orange:** you (your grid, APP → QTH). **Red:** the selected station,
+- **Orange:** you (your grid, APP → QTH), **outlined in red while you
+  transmit** (as the TX bar turns red: heartbeats, replies, anything). **Red:** the selected station,
   with its call, grid, SNR, how they hear you and the distance. Turn the
   **MFK** to step through the stations: it's the Stations view's selection,
   so Reply, Query, HW CPY? ... work as usual.
@@ -223,7 +224,8 @@ GridTracker's *Dark Gray* look.
 - **Map: Auto** (page 3, second button) shows your continent close-in and
   switches to the world by itself when someone on another continent is
   heard, back again when they age off the Stations list. **Close-in** stays
-  on your continent; **World** shows the whole world. Each view zooms to fit
+  on your continent; **World** shows the whole world (it repeats at the
+  sides, as a web map does, so there are no empty bars). Each view zooms to fit
   the stations shown. **Show** (page 2): *All heard* or only those who
   *Heard me*.
 - The TX bar moves to the bottom of the map; decoding goes on as usual.

@@ -44,7 +44,7 @@ int  ui_kb_select_ok(void);
 void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
-bool     dialog_js8_map_state(bool *world, int *popups);
+bool     dialog_js8_map_state(bool *world, int *popups, bool *tx_outline);
 void ui_usb_event(uint32_t key, int value);
 void ui_mfk_turn(int32_t diff);
 void ui_mfk_set(bool down);
@@ -2361,11 +2361,11 @@ int main() {
         // grid or callsign, the view button, the Show filter, DX switching
         // to the world view, new-station pop-ups, Time Sync in Settings.
         auto state = [](const char *what) {
-            bool world = false;
+            bool world = false, tx = false;
             int  pops  = 0;
-            bool on    = dialog_js8_map_state(&world, &pops);
-            printf("[map] %s: map %s, %s view, %d pop-up(s)\n", what, on ? "on" : "off", world ? "world" : "close-in",
-                   pops);
+            bool on    = dialog_js8_map_state(&world, &pops, &tx);
+            printf("[map] %s: map %s, %s view, %d pop-up(s)%s\n", what, on ? "on" : "off",
+                   world ? "world" : "close-in", pops, tx ? ", TX outline" : "");
         };
         ui_indevs_init(); // the MFK
         pump(300);
@@ -2413,6 +2413,17 @@ int main() {
         screenshot("93_map_world.ppm");
         ui_press(1); // back to Auto
         pump(300);
+        // Transmitting: our square gets a red outline, gone when it ends.
+        ui_page(1);
+        int frames = stub_tx_frames;
+        ui_press(1); // CQ
+        for (int i = 0; i < 200 && !stub_tx_keyed; i++) pump(100);
+        pump(600);
+        state("CQ keyed (want TX outline)");
+        screenshot("97_map_tx.ppm");
+        for (int i = 0; i < 300 && (stub_tx_keyed || stub_tx_frames == frames); i++) pump(100);
+        pump(1500);
+        state("CQ sent (want no outline)");
         // A station in Japan: Auto switches to the world, and it pops up.
         feed_band({{"JA1ABC", "PM95", "", "@HB HEARTBEAT PM95", 1400, 0.05f}}, 0, 99, 0, 0);
         pump(300);

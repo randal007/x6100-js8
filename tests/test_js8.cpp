@@ -3455,7 +3455,6 @@ TEST_CASE("map: C API places stations and picks the view (Auto / Close-in / Worl
     std::vector<js8_map_point_t> na = {pt("CN85", "NA"), pt("FN42", "NA"), pt("EM12", "NA")};
     js8_map_view_t               v;
     CHECK_FALSE(js8_map_choose_view(JS8_MAP_AUTO, home.lat, home.lon, "NA", na.data(), na.size(), 771, 268, &v));
-    CHECK(v.wrap);
     auto dx = na;
     dx.push_back(pt("PM95", "AS"));
     CHECK(js8_map_choose_view(JS8_MAP_AUTO, home.lat, home.lon, "NA", dx.data(), dx.size(), 771, 268, &v));
@@ -3467,9 +3466,8 @@ TEST_CASE("map: C API places stations and picks the view (Auto / Close-in / Worl
     CHECK_FALSE(js8_map_choose_view(JS8_MAP_CLOSE, home.lat, home.lon, "NA", dx.data(), dx.size(), 771, 268, &v));
     js8_map_project(&v, 35.5, 139, &x, &y);
     CHECK((x < 0 || x > 771));
-    // World: the whole inhabited world in one piece, centred on our longitude.
+    // World: the whole inhabited world, centred on our longitude.
     CHECK(js8_map_choose_view(JS8_MAP_WORLD, home.lat, home.lon, "NA", na.data(), na.size(), 771, 268, &v));
-    CHECK_FALSE(v.wrap);
     CHECK(v.lon_c == Catch::Approx(home.lon));
     for (auto [lat, lon] : std::vector<std::pair<double, double>>{{70, 25}, {-54, -68}, {-45, 170}, {64, -150}}) {
         js8_map_project(&v, lat, lon, &x, &y); // North Cape, Tierra del Fuego, New Zealand, Alaska
@@ -3531,15 +3529,21 @@ TEST_CASE("map: the base map is drawn right for any view", "[map]") {
     CHECK(at(na, 47.7, -87.5) == style.ocean); // Lake Superior
     CHECK(at(na, 51.5, -106.0) == style.land); // Saskatchewan
 
-    // The whole world in one piece: 110m; Australia is land, ocean beyond
-    // 180 degrees either side of the centre.
+    // The whole world: 110m; Australia is land; wider than 360 degrees, so
+    // the world repeats at the sides: Germany shows twice, a turn apart.
     auto world = geo::whole_world(home.lon, W, H);
+    CHECK(W / world.px_deg > 360);
     mr::render(data, world, px.data(), W, style, &st);
     CHECK(st.detail == 0);
     CHECK(at(world, -25.0, 134.0) == style.land); // Australia
     CHECK(at(world, 51.5, 11.0) == style.land);   // Germany
-    CHECK(px[(size_t)(H / 2) * W + 2] == style.ocean);     // left margin
-    CHECK(px[(size_t)(H / 2) * W + W - 3] == style.ocean); // right margin
+    {
+        double y  = (world.merc_c - geo::mercator_y(51.5)) * world.px_deg + H / 2.0;
+        double x1 = (11.0 - world.lon_c) * world.px_deg + W / 2.0, x2 = x1 - 360 * world.px_deg;
+        REQUIRE(x2 >= 0);
+        CHECK(px[(size_t)y * W + (size_t)x1] == style.land);
+        CHECK(px[(size_t)y * W + (size_t)x2] == style.land); // the repeat on the left
+    }
 
     // Across the date line: a view centred on 180 draws both sides of it
     // (Chukotka and Kamchatka are land either side).

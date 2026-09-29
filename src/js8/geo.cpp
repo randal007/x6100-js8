@@ -172,7 +172,6 @@ View whole_world(double lon_c, int width, int height) {
     v.px_deg = std::min(width / 360.0, height / (top - bottom));
     v.lon_c  = unwrap(lon_c, 0);
     v.merc_c = (top + bottom) / 2;
-    v.wrap   = false;
     return v;
 }
 
