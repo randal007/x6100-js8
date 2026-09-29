@@ -51,6 +51,17 @@ public:
         int realign_threshold_ms = 150;
     };
 
+    /// A decode attempt, as desktop's "Show decode attempts" draws them: a
+    /// sync candidate the decoder is trying (with its sync strength), or a
+    /// decode. Only while set_sync_marks(true).
+    struct SyncMark {
+        float freq_hz = 0; ///< audio offset of the lowest tone
+        float dt      = 0; ///< s
+        int   submode = 0; ///< desktop numbering: 0 Normal, 1 Fast, 2 Turbo, 4 Slow
+        int   sync    = 0; ///< candidate's sync strength (7..); 0 for a decode
+        bool  decoded = false;
+    };
+
     struct Callbacks {
         /// Every decoded frame, rendered (band activity).
         std::function<void(const RxFrame &)> on_frame;
@@ -61,6 +72,8 @@ public:
         std::function<void(std::size_t)> on_cycle_done;
         /// Input-rate audio as the worker takes it, for a waterfall.
         std::function<void(const float *, std::size_t)> on_audio;
+        /// Decode attempts (set_sync_marks); many per decode pass.
+        std::function<void(const SyncMark &)> on_sync;
         /// Engine diagnostics. Very chatty; leave empty in production.
         std::function<void(const std::string &)> on_log;
     };
@@ -86,6 +99,10 @@ public:
     /// it are decoded first), as desktop JS8Call passes its filter and freq().
     void set_decode_range(int low_hz, int high_hz);
     void set_qso_offset(int offset_hz);
+
+    /// Report decode attempts through Callbacks::on_sync (js8core patch 12).
+    /// From the next decode pass; off by default.
+    void set_sync_marks(bool on);
 
     /// How often the ring has been re-snapped to the clock since start.
     unsigned realign_count() const { return realigns_.load(); }

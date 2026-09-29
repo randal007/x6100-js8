@@ -43,6 +43,7 @@ void ui_indevs_init(void);
 int  ui_kb_select_ok(void);
 void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
+unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
 void ui_usb_event(uint32_t key, int value);
 void ui_mfk_turn(int32_t diff);
 void ui_mfk_set(bool down);
@@ -181,7 +182,7 @@ struct Station {
 // Synthesise `band` (one slot per frame, starting at the next slot
 // boundary) and feed it through the dialog's audio callback in real time.
 static void feed_band(const std::vector<Station> &band, std::size_t first = 0, std::size_t last = 99,
-                      double late_s = 0) {
+                      double late_s = 0, double tail_s = 3) {
     const auto &costas = js8core::protocol::costas(js8core::protocol::CostasType::Original);
     std::vector<std::vector<std::array<int, js8core::kJs8NumSymbols>>> tones(band.size());
     std::size_t slots = 0;
@@ -198,7 +199,7 @@ static void feed_band(const std::vector<Station> &band, std::size_t first = 0, s
     auto               now  = std::chrono::system_clock::now().time_since_epoch();
     long long          ms   = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
     std::size_t        lead = (std::size_t)((15000 - ms % 15000) * RATE / 1000);
-    std::vector<float> audio(lead + slots * 15 * RATE + 3 * RATE, 0.0f);
+    std::vector<float> audio(lead + slots * 15 * RATE + (std::size_t)(tail_s * RATE), 0.0f);
     for (std::size_t i = 0; i < band.size(); i++)
         for (std::size_t k = 0; k < tones[i].size(); k++) {
             std::size_t start = lead + k * 15 * RATE + RATE / 2 + (std::size_t)(late_s * RATE);
@@ -523,6 +524,11 @@ int main() {
         for (double x : iv.v) var += (x - m) * (x - m);
         int off = 0; // steps more than 20% away from the mean interval
         for (double x : iv.v) off += fabs(x - m) > 0.2 * m;
+        if (getenv("WFTIME_GAPS"))
+            for (size_t i = 1; i < wftime_stamps.size(); i++)
+                if (wftime_stamps[i] - wftime_stamps[i - 1] > 200)
+                    printf("[wftime] gap %.0f ms at row %zu, %.1f s in\n", wftime_stamps[i] - wftime_stamps[i - 1], i,
+                           (wftime_stamps[i] - wftime_stamps[0]) / 1000);
         printf("[wftime] %zu rows: interval mean %.1f ms, sd %.1f, min %.1f, p5 %.1f, p95 %.1f, max %.1f; %d uneven (>20%%)\n",
                iv.v.size() + 1, m, sqrt(var / iv.v.size()), iv.pct(0), iv.pct(0.05), iv.pct(0.95), iv.pct(1), off);
         return 0;
@@ -2033,6 +2039,73 @@ int main() {
         pump(200);
         printf("[hbpause] pressed again: '%s' (want HB Off)\n", ui_button_label(2));
         tx_idle();
+        return 0;
+    }
+    if (getenv("ONLY_MARKS")) {
+        // Decode marks (Settings): brackets where the decoder tries (by sync
+        // strength) and yellow where it decoded; off by default.
+        auto marks = [](const char *what) {
+            float   f[64];
+            uint8_t l[64];
+            unsigned n = dialog_js8_marks(f, l, 64);
+            printf("[marks] %s: %u bracket(s):", what, n);
+            for (unsigned i = 0; i < n; i++) printf(" %.0f/%s", f[i], l[i] == 3 ? "decoded" : l[i] == 2 ? "white" : l[i] == 1 ? "cyan" : "dim");
+            printf("\n");
+            return n;
+        };
+        auto near = [](float hz, int want_level) {
+            float   f[64];
+            uint8_t l[64];
+            unsigned n = dialog_js8_marks(f, l, 64);
+            for (unsigned i = 0; i < n; i++)
+                if (fabsf(f[i] - hz) < 30 && (want_level < 0 ? l[i] != 3 : l[i] == want_level)) return 1;
+            return 0;
+        };
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "", "@HB HEARTBEAT EN34", 1320, 0.05f}});
+        pump(1500);
+        marks("switched off (default)");
+        ui_page(4);
+        ui_press(4); // Settings
+        pump(200);
+        for (int i = 0; i < 14 && !strstr(ui_focused_text(), "Decode marks"); i++) ui_key(LV_KEY_RIGHT);
+        printf("[marks] on '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        printf("[marks] after a press: '%s' (want Decode marks: On)\n", ui_focused_text());
+        screenshot("80_marks_setting.ppm");
+        ui_key(LV_KEY_ESC);
+        pump(200);
+        // A station that decodes, and weaker ones: the decoder finds their
+        // sync but can't decode them (or barely).
+        float weak = getenv("MARKS_WEAK") ? (float)atof(getenv("MARKS_WEAK")) : 0.0022f;
+        feed_band({{"W1ABC", "FN42", "", "@HB HEARTBEAT FN42", 1000, 0.05f},
+                   {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1800, weak},
+                   {"G4XYZ", "IO91", "", "@HB HEARTBEAT IO91", 2300, weak * 0.8f}},
+                  0, 99, 0, 0);
+        // The decode comes as the signals end: its brackets cross the clear
+        // strip at the top in the next ~3 s.
+        for (int i = 0; i < 100 && !near(1000, 3); i++) pump(50);
+        pump(700);
+        screenshot("81_marks.ppm");
+        pump(2900);
+        marks("after a slot");
+        printf("[marks] decoded at 1000 Hz: %d, at 1800 Hz (weak): %d (want 1, 1)\n", near(1000, 3), near(1800, 3));
+        printf("[marks] at 2300 Hz (weaker): tried %d, decoded %d (want 1, 0)\n", near(2300, -1), near(2300, 3));
+        screenshot("82_marks_later.ppm"); // scrolled under the list
+        // Off again: no more brackets.
+        ui_page(4);
+        ui_press(4);
+        pump(200);
+        for (int i = 0; i < 14 && !strstr(ui_focused_text(), "Decode marks"); i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        pump(200);
+        printf("[marks] switched: '%s' (want Off)\n", ui_focused_text());
+        ui_key(LV_KEY_ESC);
+        pump(200);
+        feed_band({{"W1ABC", "FN42", "", "@HB HEARTBEAT FN42", 1000, 0.05f}});
+        pump(2000);
+        marks("off again");
         return 0;
     }
     if (getenv("ONLY_COMPOSE")) {

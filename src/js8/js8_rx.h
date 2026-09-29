@@ -56,6 +56,24 @@ typedef struct {
 } js8_rx_msg_t;
 
 /* All callbacks run on receiver worker threads, never the caller's. */
+/* A decode attempt worth marking on the waterfall, as desktop JS8Call's
+ * "Show decode attempts" draws them: a sync candidate the decoder is trying,
+ * coloured by its sync strength, or a decode. */
+#define JS8_MARK_WEAK    0 /* sync below 10 (desktop: dark cyan) */
+#define JS8_MARK_MEDIUM  1 /* 10-15 (cyan) */
+#define JS8_MARK_STRONG  2 /* 16-21 (white) */
+#define JS8_MARK_DECODED 3 /* decoded (desktop: red) */
+
+typedef struct {
+    float   freq_hz; /* audio offset of the lowest tone */
+    uint8_t submode; /* 0 Normal, 1 Fast, 2 Turbo, 4 Slow */
+    uint8_t level;   /* JS8_MARK_* */
+} js8_rx_mark_t;
+
+/* Desktop's rule: a decode always; a candidate only within 2 s of the slot
+ * (|dt|) and with sync 21 or less (stronger ones decode). -1: not marked. */
+int js8_mark_level(bool decoded, int sync, float dt);
+
 typedef struct {
     void (*on_frame)(const js8_rx_msg_t *msg, void *ctx);   /* every decode */
     /* Assembled messages; also, with msg->partial set, the text so far of a
@@ -65,6 +83,9 @@ typedef struct {
     void (*on_cycle_done)(unsigned decodes, void *ctx);
     /* Input-rate audio off the audio thread, e.g. for a waterfall. */
     void (*on_audio)(const float *samples, unsigned n, void *ctx);
+    /* Decode attempts, only while js8_rx_set_sync_marks(rx, true): many per
+     * decode pass, from the decoder's thread. */
+    void (*on_mark)(const js8_rx_mark_t *mark, void *ctx);
     void *ctx;
 } js8_rx_cb_t;
 
@@ -84,6 +105,8 @@ void js8_rx_set_submodes(js8_rx_t *rx, int submodes);
  * neighbours are decoded first. From any thread. */
 void js8_rx_set_decode_range(js8_rx_t *rx, int low_hz, int high_hz);
 void js8_rx_set_qso_offset(js8_rx_t *rx, int offset_hz);
+/* Report decode attempts through on_mark, from the next decode pass. */
+void js8_rx_set_sync_marks(js8_rx_t *rx, bool on);
 
 /* Test mode: play a 16-bit PCM WAV (any rate; resampled as needed) into the
  * decoder in real time, starting at the next 30 s boundary (a slot start for

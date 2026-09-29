@@ -103,6 +103,15 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
             if (cb_.on_frame) cb_.on_frame(f);
             std::lock_guard<std::mutex> lock(assembler_mutex_);
             assembler_.add(f);
+        } else if (auto s = std::get_if<js8core::events::SyncState>(&ev)) {
+            if (!cb_.on_sync) return;
+            SyncMark m;
+            m.freq_hz = s->frequency;
+            m.dt      = s->dt;
+            m.submode = s->mode;
+            m.decoded = s->kind == js8core::events::SyncState::Kind::Decoded;
+            m.sync    = m.decoded ? 0 : s->sync.candidate;
+            cb_.on_sync(m);
         } else if (auto fin = std::get_if<js8core::events::DecodeFinished>(&ev)) {
             if (cb_.on_cycle_done) cb_.on_cycle_done(fin->decoded);
         }
@@ -144,6 +153,10 @@ void Receiver::set_decode_range(int low_hz, int high_hz) {
 
 void Receiver::set_qso_offset(int offset_hz) {
     engine_->set_qso_offset(offset_hz);
+}
+
+void Receiver::set_sync_marks(bool on) {
+    engine_->set_sync_stats(on);
 }
 
 void Receiver::feed(const float *samples, std::size_t n) {

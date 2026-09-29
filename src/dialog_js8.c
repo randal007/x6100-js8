@@ -1373,6 +1373,106 @@ static void ui_waterfall_add(void *arg) {
     wf_q_count++;
 }
 
+/* ---- Decode marks (Settings: Decode marks) -------------------------------
+ *
+ * Desktop JS8Call's "Show decode attempts": a bracket as wide as the signal
+ * over the newest waterfall rows wherever the decoder found a JS8 sync and
+ * is trying to decode, coloured by the sync's strength, and yellow for what
+ * it decoded (desktop's red is our TX band here). They scroll down with the
+ * waterfall, so weak signals the waterfall barely shows are marked. The
+ * decoder reports them from its thread, many per pass: they wait in their
+ * own queue, not the scheduler's, whose 64 items are for messages. */
+
+#define MARK_QUEUE     128                    /* per 5 ms tick; more are dropped (cosmetic) */
+#define MARK_MEMORY    48                     /* brackets remembered, to recolour in place */
+#define MARK_ROWS      15                     /* bracket height */
+#define MARK_LINE      3                      /* line thickness */
+#define MARK_SAME_ROWS (8 * WF_ROWS_PER_SEC)  /* another pass over the same signal comes sooner */
+
+typedef struct {
+    float    freq_hz;
+    uint32_t row; /* lv_waterfall_get_rows() when drawn */
+    uint8_t  submode;
+    uint8_t  level;
+    bool     used;
+} mark_drawn_t;
+
+static pthread_mutex_t mark_lock = PTHREAD_MUTEX_INITIALIZER;
+static js8_rx_mark_t   mark_queue[MARK_QUEUE];
+static unsigned        mark_count;
+static mark_drawn_t    marks_drawn[MARK_MEMORY];
+static unsigned        marks_next;
+
+static const uint32_t mark_colors[] = {
+    [JS8_MARK_WEAK]    = 0x008ca0, /* dark cyan */
+    [JS8_MARK_MEDIUM]  = 0x00e6ff, /* cyan */
+    [JS8_MARK_STRONG]  = 0xffffff,
+    [JS8_MARK_DECODED] = 0xffd600, /* yellow */
+};
+
+/* The decoder's thread. */
+static void on_mark(const js8_rx_mark_t *m, void *ctx) {
+    (void)ctx;
+    pthread_mutex_lock(&mark_lock);
+    if (mark_count < MARK_QUEUE) mark_queue[mark_count++] = *m;
+    pthread_mutex_unlock(&mark_lock);
+}
+
+static void marks_reset(void) {
+    pthread_mutex_lock(&mark_lock);
+    mark_count = 0;
+    pthread_mutex_unlock(&mark_lock);
+    memset(marks_drawn, 0, sizeof(marks_drawn));
+}
+
+/* |-----| from the lowest tone across the signal's bandwidth, its top `y`
+ * rows below the newest row. */
+static void mark_draw(float freq_hz, int bw_hz, int y, uint8_t level) {
+    int span = filter_high - filter_low;
+    if (span <= 0) return;
+    lv_coord_t x1   = (lv_coord_t)((freq_hz - filter_low) * WIDTH / span);
+    lv_coord_t x2   = (lv_coord_t)((freq_hz + bw_hz - filter_low) * WIDTH / span);
+    lv_coord_t half = MARK_LINE / 2, mid = y + MARK_ROWS / 2;
+    lv_color_t c    = lv_color_hex(mark_colors[level]);
+    lv_waterfall_fill_rect(waterfall, x1 - half, y, x1 + half, y + MARK_ROWS - 1, c);
+    lv_waterfall_fill_rect(waterfall, x2 - half, y, x2 + half, y + MARK_ROWS - 1, c);
+    lv_waterfall_fill_rect(waterfall, x1, mid - half, x2, mid + half, c);
+}
+
+/* A new bracket, unless it's the same signal as one drawn moments ago
+ * (every decode pass reports its candidates again): that one is recoloured
+ * where it has scrolled to, if this is stronger or decoded. */
+static void mark_show(const js8_rx_mark_t *m) {
+    int      bw  = js8_speed_bandwidth_hz(js8_speed_from_submode(m->submode));
+    uint32_t now = lv_waterfall_get_rows(waterfall);
+    for (unsigned i = 0; i < MARK_MEMORY; i++) {
+        mark_drawn_t *d = &marks_drawn[i];
+        if (!d->used || d->submode != m->submode) continue;
+        uint32_t age = now - d->row;
+        if (age > MARK_SAME_ROWS || fabsf(d->freq_hz - m->freq_hz) > bw / 2.0f) continue;
+        if (m->level > d->level) {
+            mark_draw(d->freq_hz, bw, (int)age, m->level);
+            d->level = m->level;
+        }
+        return;
+    }
+    mark_draw(m->freq_hz, bw, 0, m->level);
+    marks_drawn[marks_next] = (mark_drawn_t){.freq_hz = m->freq_hz, .row = now, .submode = m->submode,
+                                             .level = m->level, .used = true};
+    marks_next = (marks_next + 1) % MARK_MEMORY;
+}
+
+static void marks_tick(void) {
+    js8_rx_mark_t batch[MARK_QUEUE];
+    pthread_mutex_lock(&mark_lock);
+    unsigned n = mark_count;
+    memcpy(batch, mark_queue, n * sizeof(batch[0]));
+    mark_count = 0;
+    pthread_mutex_unlock(&mark_lock);
+    if (!params.js8_decode_marks.x || !waterfall) return;
+    for (unsigned i = 0; i < n; i++) mark_show(&batch[i]);
+}
+
 static int64_t now_mono_ms(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -1385,6 +1485,7 @@ static int64_t now_mono_ms(void) {
  * jump. */
 static void wf_timer_cb(lv_timer_t *t) {
     (void)t;
+    marks_tick();
     if (!wf_q_count) return;
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -1502,11 +1603,14 @@ static void rx_start(void) {
         .on_message    = on_message,
         .on_cycle_done = on_cycle_done,
         .on_audio      = on_audio,
+        .on_mark       = on_mark,
     };
+    marks_reset();
     rx = js8_rx_create(SAMPLE_RATE, rx_speed_mask(), params.callsign.x, &cb);
     if (!rx) msg_schedule_text_fmt("JS8: cannot start decoder");
     js8_rx_set_decode_range(rx, filter_low, filter_high);
     js8_rx_set_qso_offset(rx, params.js8_tx_freq.x);
+    js8_rx_set_sync_marks(rx, params.js8_decode_marks.x);
 }
 
 static void rx_stop(void) {
@@ -2112,6 +2216,7 @@ static void retuned(void) {
     stations = stations_for_band(); /* that band's list, as we left it */
     lv_waterfall_clear_data(waterfall);
     wf_queue_clear();
+    marks_reset();
     clear_selection();
     if (view_stations) rebuild_rows();
     add_info_row("%s", where_label());
@@ -2486,6 +2591,7 @@ static void clear_cb(button_data_t *btn) {
     js8_rx_clear(rx);
     lv_waterfall_clear_data(waterfall);
     wf_queue_clear();
+    marks_reset();
     clear_selection();
     rebuild_rows();
     update_status();
@@ -3053,6 +3159,19 @@ bool dialog_js8_selected_call(char *call, unsigned len) {
     return table && selected_station(call, len, &freq, &snr);
 }
 
+/* For tools/js8_ui_harness: the decode marks drawn lately (frequency and
+ * JS8_MARK_* level of each bracket), up to `max`. */
+unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max) {
+    unsigned n = 0;
+    for (unsigned i = 0; i < MARK_MEMORY && n < max; i++) {
+        if (!marks_drawn[i].used) continue;
+        freq_hz[n] = marks_drawn[i].freq_hz;
+        level[n]   = marks_drawn[i].level;
+        n++;
+    }
+    return n;
+}
+
 /* For tools/js8_ui_harness: does message-list row `row` have the green bar? */
 bool dialog_js8_row_marked(unsigned row) {
     return table && row < rows && row_is_selected_station(row_hist[row]);
@@ -3539,6 +3658,7 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_ST_KEEP  101
 #define SETTINGS_MSG_KEEP 102
 #define SETTINGS_MILES    103
+#define SETTINGS_MARKS    104
 
 static const char *relay_label(void) {
     return params.js8_relay.x ? "Relay: On" : "Relay: Off";
@@ -3558,6 +3678,7 @@ static const char *settings_label(int which) {
                  msg_keep_opts[params.js8_msg_keep.x < MSG_KEEP_N ? params.js8_msg_keep.x : 0].label);
         return buf;
     case SETTINGS_MILES: return params.js8_miles.x ? "Distance: miles" : "Distance: km";
+    case SETTINGS_MARKS: return params.js8_decode_marks.x ? "Decode marks: On" : "Decode marks: Off";
     }
     return "";
 }
@@ -3593,6 +3714,14 @@ static void texts_item_cb(lv_event_t *e) {
         case SETTINGS_MILES:
             params_bool_set(&params.js8_miles, !params.js8_miles.x);
             if (view_stations) rebuild_rows();
+            break;
+        case SETTINGS_MARKS:
+            params_bool_set(&params.js8_decode_marks, !params.js8_decode_marks.x);
+            js8_rx_set_sync_marks(rx, params.js8_decode_marks.x);
+            if (!params.js8_decode_marks.x) marks_reset();
+            msg_update_text_fmt(params.js8_decode_marks.x
+                                    ? "Decode marks on: where the decoder is trying (cyan, white) and what it decoded (yellow)"
+                                    : "Decode marks off");
             break;
         }
         lv_label_set_text(lv_obj_get_child(lv_event_get_target(e), 0), settings_label(which));
@@ -3661,6 +3790,7 @@ static void texts_cb(button_data_t *btn) {
     settings_add(settings_label(SETTINGS_ST_KEEP), SETTINGS_ST_KEEP);
     settings_add(settings_label(SETTINGS_MSG_KEEP), SETTINGS_MSG_KEEP);
     settings_add(settings_label(SETTINGS_MILES), SETTINGS_MILES);
+    settings_add(settings_label(SETTINGS_MARKS), SETTINGS_MARKS);
     snprintf(label, sizeof(label), "Operator: %s", operator_call[0] ? operator_call : "(the station call)");
     settings_add(label, EDIT_OPERATOR);
 

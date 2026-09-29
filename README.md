@@ -115,6 +115,18 @@ the image you used before.
 transmit (turn the **main tuning knob** to move it); the **green line**
 marks the selected station.
 
+**Decode marks** (Settings, off to start), as desktop JS8Call's *Show
+decode attempts*: a bracket `|—|` as wide as the signal wherever the
+decoder found a JS8 signal and tried it, drawn as it tries and scrolling
+down with the waterfall. **Yellow** = decoded. **Cyan** or **white** =
+found but not (yet) decoded: someone is there, often too weak to see on
+the waterfall, e.g. an answer on your own offset. Dim cyan = a faint
+maybe, mostly noise (desktop shows those too). With *Decode: All speeds*
+the other speeds' decoders look as well, so a mark can be wider or
+narrower than the signal it sits on.
+
+![Decode marks](docs/screenshots/11_decode_marks.png)
+
 **Selecting a station:** turn the **MFK** onto one of their rows. They
 stay selected while new messages arrive: their rows get a green bar at
 the left, the TX bar says `selected: CALL`, and the green line follows
@@ -369,6 +381,7 @@ Page 4 **Settings…**:
 | **Stations kept: …** | Press to change: how long a station stays in the Stations view after it was last heard (15 min to 6 hours, or always; 1 hour to start). |
 | **Messages kept: …** | Press to change: messages leave the list this long after they arrived (15 min to 2 hours), or *all* (the default: the newest 200 stay). |
 | **Distance: km / miles** | Press to switch the Stations view's distances (km to start). |
+| **Decode marks: On / Off** | Press to switch the [decode marks](#the-screen) on the waterfall (off to start, as desktop). |
 | **Operator: …** | Someone else operating your station (desktop's *Operator Callsign*): their call goes in the log as `OPERATOR`; your station call is still what's sent on the air and logged as `STATION_CALLSIGN`. Empty: the station call. |
 
 ## Logging
@@ -636,6 +649,9 @@ Done for beta 4 so far:
   what actually went out; `QUERY CALL` about a station heard only through
   a relay is answered; an `@APRSIS MSG` without `TO:` is no longer kept
   or ACKed
+- [x] **Decode marks** on the waterfall (Settings), as desktop's *Show
+  decode attempts*: see where the decoder is trying, even signals too
+  weak to see, and in yellow what it decoded
 
 Still to do:
 

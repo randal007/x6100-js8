@@ -29,6 +29,7 @@ void ui_init(void) {
     params.js8_st_keep.x     = 2;
     params.js8_msg_keep.x    = 0;
     params.js8_miles.x       = false;
+    params.js8_decode_marks.x = false;
     params.js8_log_activation.x = 0;
     params.js8_alerts.x = 7;
     params.js8_speed.x  = 0;

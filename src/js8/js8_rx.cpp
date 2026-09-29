@@ -14,6 +14,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <memory>
 #include <new>
@@ -100,6 +101,17 @@ extern "C" js8_rx_t *js8_rx_create(int input_rate, int submodes, const char *my_
     callbacks.on_cycle_done = [rx](std::size_t n) {
         if (rx->cb.on_cycle_done) rx->cb.on_cycle_done((unsigned)n, rx->cb.ctx);
     };
+    if (rx->cb.on_mark) {
+        callbacks.on_sync = [rx](const Receiver::SyncMark &s) {
+            int level = js8_mark_level(s.decoded, s.sync, s.dt);
+            if (level < 0) return;
+            js8_rx_mark_t m{};
+            m.freq_hz = s.freq_hz;
+            m.submode = (uint8_t)s.submode;
+            m.level   = (uint8_t)level;
+            rx->cb.on_mark(&m, rx->cb.ctx);
+        };
+    }
     if (rx->cb.on_audio) {
         callbacks.on_audio = [rx](const float *samples, std::size_t n) {
             rx->cb.on_audio(samples, (unsigned)n, rx->cb.ctx);
@@ -221,6 +233,20 @@ extern "C" void js8_rx_set_decode_range(js8_rx_t *rx, int low_hz, int high_hz) {
 
 extern "C" void js8_rx_set_qso_offset(js8_rx_t *rx, int offset_hz) {
     if (rx) rx->receiver->set_qso_offset(offset_hz);
+}
+
+extern "C" void js8_rx_set_sync_marks(js8_rx_t *rx, bool on) {
+    if (rx) rx->receiver->set_sync_marks(on);
+}
+
+// Desktop mainwindow.cpp, the SyncState case of its decoder events.
+extern "C" int js8_mark_level(bool decoded, int sync, float dt) {
+    if (decoded) return JS8_MARK_DECODED;
+    if (std::abs((int)(dt * 1000)) > 2000) return -1;
+    if (sync < 10) return JS8_MARK_WEAK;
+    if (sync <= 15) return JS8_MARK_MEDIUM;
+    if (sync <= 21) return JS8_MARK_STRONG;
+    return -1;
 }
 
 extern "C" void js8_rx_destroy(js8_rx_t *rx) {

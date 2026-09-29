@@ -733,6 +733,23 @@ void collect_message(const js8_rx_msg_t *m, void *ctx) {
 }
 } // namespace
 
+TEST_CASE("decode marks follow desktop's Show decode attempts colours", "[js8][marks]") {
+    // A decode is always marked, whatever its DT.
+    CHECK(js8_mark_level(true, 0, 0.0f) == JS8_MARK_DECODED);
+    CHECK(js8_mark_level(true, 0, 3.5f) == JS8_MARK_DECODED);
+    // Candidates by sync strength: dark cyan, cyan, white.
+    CHECK(js8_mark_level(false, 7, 0.1f) == JS8_MARK_WEAK);
+    CHECK(js8_mark_level(false, 9, -1.0f) == JS8_MARK_WEAK);
+    CHECK(js8_mark_level(false, 10, 0.0f) == JS8_MARK_MEDIUM);
+    CHECK(js8_mark_level(false, 15, 0.0f) == JS8_MARK_MEDIUM);
+    CHECK(js8_mark_level(false, 16, 0.0f) == JS8_MARK_STRONG);
+    CHECK(js8_mark_level(false, 21, 2.0f) == JS8_MARK_STRONG);
+    // Stronger candidates decode (and are marked then); far off the slot: none.
+    CHECK(js8_mark_level(false, 22, 0.0f) == -1);
+    CHECK(js8_mark_level(false, 12, 2.1f) == -1);
+    CHECK(js8_mark_level(false, 12, -2.5f) == -1);
+}
+
 // Real time: up to 15 s to the slot boundary plus 45 s of audio.
 TEST_CASE("test mode plays a 12 kHz WAV through the decoder", "[js8][wav][.slow]") {
     std::vector<TestStation> band = {

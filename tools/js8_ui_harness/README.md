@@ -58,6 +58,18 @@ run faster.)
   `*.unreadable-<date>` (checked, then removed), and JS8 starts afresh
   instead of later saving over them.
 
+## Decode marks
+
+- `ONLY_MARKS=1`: none while off (the default); Settings > *Decode marks*
+  on; one slot with a station that decodes (1000 Hz), a weak one that
+  still decodes (1800 Hz) and a weaker one the decoder finds but can't
+  decode (2300 Hz): yellow brackets at the first two, a not-yellow one at
+  the third (`dialog_js8_marks()` lists the brackets drawn);
+  `81_marks.ppm` as the decodes land, `82_marks_later.ppm` after they
+  scroll under the list; off again, none. `MARKS_WEAK=` sets the weak
+  station's amplitude (0.0022; the other is 0.8 of it). `feed_band()` takes
+  the trailing silence as its last argument (3 s by default).
+
 ## Heartbeat pause
 
 - `ONLY_HBPAUSE=1`: AUTO, HB and HB ACK on; a message to us, an automatic
@@ -79,5 +91,8 @@ Build without sanitizers for timings
   a gprof build (`-pg`).
 - `ONLY_WFTIME=1`: live audio; records when each new row reaches the screen
   and prints the spread of the intervals (how even the scroll is).
+  `WFTIME_GAPS=1` also lists every gap over 200 ms. A ~1 s gap is the
+  alert beep's waterfall pause (by design): it happens when `js8_texts.txt`
+  in the build directory has `ALERTS=... @POTA` left by other scenarios.
 - `ONLY_WFRING=1`: the waterfall widget's ring buffer against a plain model,
   pixel by pixel as drawn (run it in the ASan build).
