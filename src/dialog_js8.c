@@ -145,6 +145,9 @@ static const char *map_view_label_getter(void);
 static void        map_view_cb(button_data_t *btn);
 static void        map_update(bool force);
 static void        map_popup_add(const char *call);
+static void        map_qso_add(const char *call, bool ring);
+static void        map_qrz_add(const char *call);
+static void        map_qrz_clear(const char *call);
 static void        map_show(bool on);
 static void        map_free(void);
 static void        rotary_cb(int32_t diff);
@@ -307,6 +310,13 @@ static bool           view_map;
 static bool           map_heard_me_only; /* Show in the map: All heard / Heard me */
 static lv_obj_t      *wf_box;           /* the waterfall's opaque box (hidden under the map) */
 static lv_obj_t      *map_box, *map_canvas, *map_status; /* made when the map first opens */
+static lv_obj_t      *map_qrz_label;    /* "QRZ 2  W7XYZ K9DEF" under the status line */
+/* QRZ: stations that sent something to your call (not heartbeat replies)
+ * while the message list wasn't showing, newest last. On the map until you
+ * select them, send to them, or go back to the message list. */
+#define MAP_QRZ 8
+static char map_qrz[MAP_QRZ][JS8_RX_CALL_LEN];
+static int  map_qrz_n;
 static js8_station_t  st_rows[MAX_ROWS];
 static int            st_count;
 static lv_obj_t      *query_list;      /* Query popup, when open */
@@ -930,6 +940,10 @@ static void add_message(const js8_rx_msg_t *msg) {
     js8_rx_msg_t *m    = &copy;
 
     if (!m->tx) track_incoming(m);
+    if (!m->tx && m->to_me && m->from[0]) /* their path turns red on the map; a real message also rings */
+        map_qso_add(m->from, !m->heartbeat && !m->snr_report);
+    if (!m->tx && !m->partial && m->to_me && m->from[0] && !m->heartbeat && !m->snr_report && view_stations)
+        map_qrz_add(m->from); /* QRZ on the map (the message list shows it anyway) */
     int existing = m->tx ? -1 : find_partial(m->msg_id);
     if (!m->partial) process_message(m);
     if (existing >= 0) {
@@ -1297,6 +1311,7 @@ static void table_draw_end_cb(lv_event_t *e) {
 
 /* Show the selected station's offset on the waterfall (the green line). */
 static void show_selection(void) {
+    if (sel_call[0]) map_qrz_clear(sel_call); /* you've seen who called */
     if (qso_freq >= 0) lv_finder_set_cursor(finder, (int16_t)(qso_freq + 0.5f));
     else lv_finder_clear_cursor(finder);
     lv_obj_invalidate(finder);
@@ -2148,6 +2163,7 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
     /* A directed message you sent yourself starts a QSO. */
     char call[JS8_RX_CALL_LEN];
     if (!automatic && starts_with_call(text, call, sizeof(call))) auto_cq_stop("replying");
+    if (!automatic && starts_with_call(text, call, sizeof(call))) map_qrz_clear(call);
     /* Anything you send by hand, except a heartbeat, pauses heartbeats. */
     if (!automatic) {
         char hb[48];
@@ -2852,9 +2868,14 @@ static void destruct_cb(void) {
 #define MAP_OCEAN      0x232227
 #define MAP_HEARD      0x00FF00 /* GridTracker's CQ green */
 #define MAP_HOME       0xFFA600 /* GridTracker's QTH orange */
-#define MAP_PURPLE     0xAB00B6 /* the paths: VE7NHW's pick */
+#define MAP_PATH       0x42A5F5 /* paths to who heard you: a lighter blue (VE7NHW's pick) */
+#define MAP_QSO        0xFF3030 /* ... red while a message to or from you is on the air */
+#define MAP_QSO_MS     30000    /* after their last frame to you */
+#define MAP_RING_MS    16000    /* the flashing ring after each frame to you: a slot and a bit, so it
+                                   keeps flashing through a long message */
 #define MAP_SELECT     0xFF3030
 #define MAP_TX         0xFF1010 /* your outline while transmitting */
+#define MAP_QRZ_COLOR  0xFFFF00 /* GridTracker's QRZ ("calling me") yellow */
 #define MAP_SQUARE_OPA 136      /* GridTracker's grid alpha */
 #define MAP_TAKEN      32       /* label boxes placed per redraw */
 
@@ -2869,10 +2890,56 @@ static struct {
     int64_t until_ms; /* monotonic */
 } map_popups[MAP_POPUPS];
 static bool      map_tx_drawn; /* the red "transmitting" outline is on the map (harness) */
+static int       map_qso_drawn; /* red paths drawn (harness) */
 static lv_area_t map_taken[MAP_TAKEN];
 static int       map_ntaken;
 
 static const char *const map_mode_names[3] = {"Auto", "Close-in", "World"};
+
+/* The QRZ line under the status line: how many called, newest first. */
+static void map_qrz_show(void) {
+    if (!map_qrz_label || !map_status) return;
+    if (!map_qrz_n) {
+        lv_obj_add_flag(map_qrz_label, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    char buf[96];
+    int  len = map_qrz_n > 1 ? snprintf(buf, sizeof(buf), "QRZ %d ", map_qrz_n) : snprintf(buf, sizeof(buf), "QRZ ");
+    for (int i = map_qrz_n - 1, shown = 0; i >= 0 && len < (int)sizeof(buf); i--, shown++) {
+        if (shown == 3) {
+            snprintf(buf + len, sizeof(buf) - len, " +%d", i + 1);
+            break;
+        }
+        len += snprintf(buf + len, sizeof(buf) - len, " %s", map_qrz[i]);
+    }
+    lv_label_set_text(map_qrz_label, buf);
+    lv_obj_clear_flag(map_qrz_label, LV_OBJ_FLAG_HIDDEN);
+    lv_obj_update_layout(map_status); /* its size, before lining up under it */
+    lv_obj_align_to(map_qrz_label, map_status, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 3);
+}
+
+static void map_qrz_add(const char *call) {
+    int at = -1;
+    for (int i = 0; i < map_qrz_n; i++)
+        if (strcasecmp(map_qrz[i], call) == 0) at = i;
+    if (at < 0 && map_qrz_n == MAP_QRZ) at = 0; /* full: the oldest goes */
+    if (at >= 0) { /* to the end: newest */
+        memmove(map_qrz[at], map_qrz[at + 1], (size_t)(map_qrz_n - at - 1) * sizeof(map_qrz[0]));
+        map_qrz_n--;
+    }
+    snprintf(map_qrz[map_qrz_n++], sizeof(map_qrz[0]), "%s", call);
+    map_qrz_show();
+}
+
+static void map_qrz_clear(const char *call) {
+    for (int i = 0; i < map_qrz_n; i++)
+        if (strcasecmp(map_qrz[i], call) == 0) {
+            memmove(map_qrz[i], map_qrz[i + 1], (size_t)(map_qrz_n - i - 1) * sizeof(map_qrz[0]));
+            map_qrz_n--;
+            map_qrz_show();
+            return;
+        }
+}
 
 static void map_popup_add(const char *call) {
     int slot = 0;
@@ -2885,6 +2952,59 @@ static void map_popup_add(const char *call) {
     }
     snprintf(map_popups[slot].call, sizeof(map_popups[slot].call), "%s", call);
     map_popups[slot].until_ms = now_mono_ms() + MAP_POPUP_MS;
+}
+
+/* Stations messaging you: their path is red until MAP_QSO_MS after their
+ * last frame to you (the frames of a long message keep it red). */
+static struct {
+    char    call[JS8_RX_CALL_LEN];
+    int64_t until_ms; /* monotonic */
+    int64_t ring_ms;  /* the new-station ring flashes until then: they're calling you */
+} map_qso[MAP_POPUPS];
+
+/* `ring`: flash the ring too (a real message or command, not a heartbeat
+ * reply: those come automatically, often). */
+static void map_qso_add(const char *call, bool ring) {
+    int slot = 0;
+    for (int i = 0; i < MAP_POPUPS; i++) {
+        if (strcasecmp(map_qso[i].call, call) == 0) {
+            slot = i;
+            break;
+        }
+        if (map_qso[i].until_ms < map_qso[slot].until_ms) slot = i;
+    }
+    snprintf(map_qso[slot].call, sizeof(map_qso[slot].call), "%s", call);
+    map_qso[slot].until_ms = now_mono_ms() + MAP_QSO_MS;
+    if (ring) map_qso[slot].ring_ms = now_mono_ms() + MAP_RING_MS;
+}
+
+static bool map_ring_on(const char *call, int64_t now) {
+    for (int i = 0; i < MAP_POPUPS; i++)
+        if (map_qso[i].ring_ms > now && strcasecmp(map_qso[i].call, call) == 0) return true;
+    return false;
+}
+
+static bool map_qso_on(const char *call, int64_t now) {
+    for (int i = 0; i < MAP_POPUPS; i++)
+        if (map_qso[i].until_ms > now && strcasecmp(map_qso[i].call, call) == 0) return true;
+    return false;
+}
+
+/* Who we're sending to: the call the text starts with ("W7XYZ SNR -12",
+ * "W1ABC>VE7ABC MSG ..." -> W1ABC); "" for CQ, heartbeats, @groups. */
+static void map_tx_target(const char *text, char *call, size_t size) {
+    size_t n = 0;
+    bool   digit = false;
+    call[0]      = '\0';
+    if (!text || text[0] == '@') return;
+    while (text[n] && (isalnum((unsigned char)text[n]) || text[n] == '/') && n + 1 < size) {
+        digit |= isdigit((unsigned char)text[n]) != 0;
+        n++;
+    }
+    if (n < 3 || !digit || (text[n] && text[n] != ' ' && text[n] != '>' && text[n] != ':')) return;
+    memcpy(call, text, n);
+    call[n] = '\0';
+    if (strcmp(call, "CQ") == 0) call[0] = '\0';
 }
 
 static bool map_popup_on(const char *call, int64_t now) {
@@ -2930,13 +3050,21 @@ static bool map_ensure(void) {
     lv_obj_set_style_bg_opa(map_status, LV_OPA_50, 0);
     lv_obj_align(map_status, LV_ALIGN_TOP_RIGHT, -4, 4);
     lv_label_set_text(map_status, "");
+
+    map_qrz_label = lv_label_create(map_box);
+    lv_obj_set_style_text_font(map_qrz_label, &sony_18, 0);
+    lv_obj_set_style_text_color(map_qrz_label, lv_color_hex(MAP_QRZ_COLOR), 0);
+    lv_obj_set_style_bg_color(map_qrz_label, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(map_qrz_label, LV_OPA_70, 0);
+    lv_obj_set_style_pad_hor(map_qrz_label, 4, 0);
+    lv_obj_add_flag(map_qrz_label, LV_OBJ_FLAG_HIDDEN);
     map_view_ok = false;
     return true;
 }
 
 static void map_free(void) {
     /* The objects go with dialog.obj. */
-    map_box = map_canvas = map_status = NULL;
+    map_box = map_canvas = map_status = map_qrz_label = NULL;
     free(map_base);
     free(map_px);
     map_base = map_px = NULL;
@@ -2961,6 +3089,7 @@ static void map_show(bool on) {
         lv_obj_move_foreground(tx_bar);
         map_view_ok = false;
         update_status();
+        map_qrz_show();
         map_update(true);
     } else {
         if (map_box) lv_obj_add_flag(map_box, LV_OBJ_FLAG_HIDDEN);
@@ -3092,7 +3221,8 @@ static void map_legend(bool have_home) {
         int         kind; /* 0 square, 1 line, 2 hollow */
         const char *text;
     } items[] = {{MAP_HEARD, 0, "heard"},
-                 {MAP_PURPLE, 1, "heard you"},
+                 {MAP_PATH, 1, "heard you"},
+                 {MAP_QSO, 1, "QSO"},
                  {MAP_HEARD, 2, "by call prefix"},
                  {MAP_SELECT, 0, "selected"},
                  {MAP_HOME, 0, "you"}};
@@ -3142,11 +3272,16 @@ static void map_update(bool force) {
     static js8_map_place_t pl[MAX_ROWS];
     static bool            shown[MAX_ROWS];
     static js8_map_point_t pts[MAX_ROWS];
+    static bool            qso[MAX_ROWS]; /* a message to or from them is on the air: red path */
     unsigned               n = 0;
+    bool transmitting = tx_status.state == JS8_TX_KEYING || (tx_status.state == JS8_TX_WAITING && tx_status.frame > 1);
+    char tx_to[JS8_RX_CALL_LEN] = "";
+    if (transmitting) map_tx_target(tx_status.text, tx_to, sizeof(tx_to));
     for (int i = 0; i < st_count; i++) {
         const js8_station_t *st  = &st_rows[i];
         bool                 sel = sel_call[0] && strcasecmp(st->call, sel_call) == 0;
-        shown[i] = js8_map_place(st->call, st->grid, &pl[i]) && (!map_heard_me_only || st->heard_me || sel);
+        qso[i] = map_qso_on(st->call, now) || (tx_to[0] && strcasecmp(st->call, tx_to) == 0);
+        shown[i] = js8_map_place(st->call, st->grid, &pl[i]) && (!map_heard_me_only || st->heard_me || sel || qso[i]);
         if (!shown[i]) continue;
         pts[n].lat = pl[i].lat;
         pts[n].lon = pl[i].lon;
@@ -3172,23 +3307,24 @@ static void map_update(bool force) {
     }
 
     /* Everything drawn below, hashed: unchanged means nothing to redraw. */
-    bool transmitting = tx_status.state == JS8_TX_KEYING || (tx_status.state == JS8_TX_WAITING && tx_status.frame > 1);
     bool     blink = (now / 500) % 2 == 0;
     uint32_t sig   = 2166136261u;
     sig            = map_hash(sig, &transmitting, sizeof(transmitting));
     sig            = map_hash(sig, sel_call, strlen(sel_call));
     sig            = map_hash(sig, &map_heard_me_only, sizeof(map_heard_me_only));
     sig            = map_hash(sig, &have_home, sizeof(have_home));
+    sig            = map_hash(sig, &map_qrz_n, sizeof(map_qrz_n)); /* labels keep off the QRZ line */
     for (int i = 0; i < st_count; i++) {
         if (!shown[i]) continue;
         const js8_station_t *st  = &st_rows[i];
-        bool                 pop = map_popup_on(st->call, now);
+        bool                 pop = map_popup_on(st->call, now) || map_ring_on(st->call, now);
         sig                      = map_hash(sig, st->call, strlen(st->call));
         sig                      = map_hash(sig, st->grid, strlen(st->grid));
         sig                      = map_hash(sig, &st->snr, sizeof(st->snr));
         sig                      = map_hash(sig, &st->heard_me, sizeof(st->heard_me));
         sig                      = map_hash(sig, &st->reported_snr, sizeof(st->reported_snr));
         sig                      = map_hash(sig, &pop, sizeof(pop));
+        sig                      = map_hash(sig, &qso[i], sizeof(qso[i]));
         if (pop) sig = map_hash(sig, &blink, sizeof(blink));
     }
     if (!force && !base_new && sig == map_sig) return;
@@ -3198,17 +3334,26 @@ static void map_update(bool force) {
     map_ntaken = 0;
     map_legend(have_home);
     if (map_status) map_take(MAP_W - 8 - lv_obj_get_width(map_status), 0, MAP_W, 4 + lv_obj_get_height(map_status));
+    if (map_qrz_n && map_qrz_label) { /* the QRZ line under it */
+        lv_obj_update_layout(map_qrz_label);
+        map_take(lv_obj_get_x(map_qrz_label) - 4, lv_obj_get_y(map_qrz_label) - 2,
+                 lv_obj_get_x(map_qrz_label) + lv_obj_get_width(map_qrz_label) + 4,
+                 lv_obj_get_y(map_qrz_label) + lv_obj_get_height(map_qrz_label) + 2);
+    }
 
     /* Paths first, under the squares: GridTracker's curves to the stations
-     * that heard you. */
+     * that heard you in blue, then red on top for a message to or from you
+     * on the air right now. */
     lv_draw_line_dsc_t line;
     lv_draw_line_dsc_init(&line);
-    line.color       = lv_color_hex(MAP_PURPLE);
     line.width       = 3;
     line.round_start = 1;
     line.round_end   = 1;
-    for (int i = 0; have_home && i < st_count; i++) {
-        if (!shown[i] || !st_rows[i].heard_me) continue;
+    map_qso_drawn = 0;
+    for (int pass = 0; have_home && pass < 2; pass++) for (int i = 0; i < st_count; i++) {
+        if (!shown[i] || (pass == 0 ? !st_rows[i].heard_me || qso[i] : !qso[i])) continue;
+        map_qso_drawn += pass;
+        line.color = lv_color_hex(pass == 0 ? MAP_PATH : MAP_QSO);
         float      xs[MAP_PATH_N + 1], ys[MAP_PATH_N + 1];
         lv_point_t p[MAP_PATH_N + 1];
         js8_map_path(&map_view, home.lat, home.lon, pl[i].lat, pl[i].lon, MAP_PATH_N, xs, ys);
@@ -3219,7 +3364,7 @@ static void map_update(bool force) {
         lv_canvas_draw_line(map_canvas, p, MAP_PATH_N + 1, &line);
     }
 
-    /* The stations: squares, hollow boxes, the far ends' purple dots. */
+    /* The stations: squares, hollow boxes, the far ends' dots. */
     static int cx[MAX_ROWS], cy[MAX_ROWS];
     int        sel_i = -1;
     for (int i = 0; i < st_count; i++) {
@@ -3228,8 +3373,8 @@ static void map_update(bool force) {
         if (sel) sel_i = i;
         map_station_mark(st_rows[i].grid, &pl[i], sel ? MAP_SELECT : MAP_HEARD, sel ? 200 : MAP_SQUARE_OPA, &cx[i],
                          &cy[i]);
-        if (have_home && st_rows[i].heard_me)
-            map_rect(cx[i] - 3, cy[i] - 3, 7, 7, MAP_PURPLE, LV_OPA_COVER, 0, 0, LV_RADIUS_CIRCLE);
+        if (have_home && (st_rows[i].heard_me || qso[i]))
+            map_rect(cx[i] - 3, cy[i] - 3, 7, 7, qso[i] ? MAP_QSO : MAP_PATH, LV_OPA_COVER, 0, 0, LV_RADIUS_CIRCLE);
     }
 
     /* You; outlined red while transmitting (as the TX bar turns red), also
@@ -3260,13 +3405,17 @@ static void map_update(bool force) {
         map_label(cx[sel_i], cy[sel_i], text, 0xFFFFFF, 0x6E0000, 225, 15, true);
     }
 
-    /* New stations: a flashing ring and their details, for 8 s. */
+    /* The flashing ring: a station calling you (while its message comes
+     * in, selected or not), and new stations, which also get their details
+     * for 8 s. */
     for (int i = 0; i < st_count; i++) {
-        if (!shown[i] || i == sel_i || !map_popup_on(st_rows[i].call, now)) continue;
+        bool ring = map_ring_on(st_rows[i].call, now), fresh = map_popup_on(st_rows[i].call, now);
+        if (!shown[i] || (!ring && !fresh)) continue;
         if (blink) {
             map_rect(cx[i] - 10, cy[i] - 10, 21, 21, 0, LV_OPA_TRANSP, 0xFFFFFF, 2, LV_RADIUS_CIRCLE);
             map_rect(cx[i] - 14, cy[i] - 14, 29, 29, 0, LV_OPA_TRANSP, 0x9A9A9A, 2, LV_RADIUS_CIRCLE);
         }
+        if (!fresh || i == sel_i) continue;
         char text[112];
         dist[0] = '\0';
         if (have_home) map_dist(dist, sizeof(dist), &home, &pl[i]);
@@ -3278,13 +3427,15 @@ static void map_update(bool force) {
 
 /* For tools/js8_ui_harness: is the map showing, is it a world view, how
  * many new-station pop-ups are up, is the transmitting outline drawn. */
-bool dialog_js8_map_state(bool *world, int *popups, bool *tx_outline) {
+bool dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_paths, int *qrz) {
     int64_t now = now_mono_ms();
     int     n   = 0;
-    for (int i = 0; i < MAP_POPUPS; i++) n += map_popups[i].until_ms > now;
+    for (int i = 0; i < MAP_POPUPS; i++) n += (map_popups[i].until_ms > now) + (map_qso[i].ring_ms > now);
     if (world) *world = map_world || params.js8_map_mode.x == JS8_MAP_WORLD;
     if (popups) *popups = n;
     if (tx_outline) *tx_outline = map_tx_drawn;
+    if (qso_paths) *qso_paths = map_qso_drawn;
+    if (qrz) *qrz = map_qrz_n;
     return view_map;
 }
 
@@ -3687,6 +3838,7 @@ static void stations_cb(button_data_t *btn) {
      * view underneath it: the MFK selects there, the map shows it. */
     if (view_map) {
         map_show(false);
+        map_qrz_n = 0; /* the list shows what they sent */
         view_stations = false;
     } else if (view_stations) {
         map_show(true);

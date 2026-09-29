@@ -212,8 +212,18 @@ GridTracker's *Dark Gray* look.
   province, state or call area where the call says (VE7 → British Columbia,
   W6 → US call area 6, VK2 → New South Wales, JA1 → Kanto), else their
   country (AD1C's country file).
-- **Purple curved lines:** great-circle paths to the stations that heard
-  you, ending in a purple dot.
+- **Blue curved lines:** great-circle paths to the stations that heard
+  you, ending in a dot. **Red** while a message to or from you is on the
+  air: from a station's first frame to you until 30 s after its last (it
+  also gets the flashing ring, "calling you", unless it's only a
+  heartbeat reply), and to the station you're sending to (Reply, a query,
+  HW CPY? ...), even if it hasn't heard you yet.
+- **QRZ** (yellow, under the status line, GridTracker's "calling me"):
+  who sent something to your call — a message, a command, free text, not
+  heartbeat replies — while the map or the Stations view was showing, e.g.
+  `QRZ 2  K9DEF W7XYZ`, newest first. For when you've walked away: a
+  station leaves it when you select it or send to it, and it clears when
+  you go back to the message list.
 - **Orange:** you (your grid, APP → QTH), **outlined in red while you
   transmit** (as the TX bar turns red: heartbeats, replies, anything). **Red:** the selected station,
   with its call, grid, SNR, how they hear you and the distance. Turn the

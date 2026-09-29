@@ -25,8 +25,10 @@ the world view when JA1ABC is heard.*
   stations as see-through filled 4-character grid squares.
 - **Colours:** you orange `#FFA600` (GridTracker's QTH colour; a Setting),
   stations heard green `#00FF00`, the **selected station red**, paths
-  **purple `#AB00B6`** (sampled from the reference video: Ham Radio Crash
-  Course, "Make Your WSJT-X & GridTracker Look Awesome and Work Better!").
+  at first purple `#AB00B6` (sampled from the reference video: Ham Radio
+  Crash Course, "Make Your WSJT-X & GridTracker Look Awesome and Work
+  Better!"), then (after using it) a lighter blue `#42A5F5`, red while a
+  message to or from you is on the air.
 - **Paths:** curved great-circle lines from you to every station that heard
   you, with a dot at the far end, as GridTracker draws them.
 - **No grid?** Place the station by its callsign prefix at the centre of
@@ -184,8 +186,25 @@ uses). *Heard me* adds the path.
    2 x 1 degrees, a rectangle in Mercator; the mark is centred in it, its
    side the rectangle's mean, 7-26 px); the World view repeats the world at
    the sides instead of grey bars (the `wrap` flag and the one-copy cut
-   are gone; stations stay within 180 degrees of the centre). Still to
-   come: a Setting for your colour.
+   are gone; stations stay within 180 degrees of the centre). Paths are a
+   lighter blue `#42A5F5` now (the user's change from purple), **red**
+   (`#FF3030`) while a message is on the air: incoming — any message or
+   frame to you (`add_message()`, partials too) keeps its sender's path red
+   for 30 s after the last one, with the new-station ring flashing for 16 s
+   after each frame; outgoing — the call your sending text starts with
+   (`map_tx_target()`: "W7XYZ HW CPY?", "W1ABC>VE7ABC ..." -> W1ABC; not
+   CQ, heartbeats, @groups) while the TX bar is red, drawn even if it
+   hasn't heard you. Legend: heard you (blue), QSO (red). The ring for an
+   incoming message flashes only for real messages and commands, not
+   heartbeat replies (`m->heartbeat`, `m->snr_report`), which still turn
+   the path red. **QRZ** indicator (the user's idea; QRZ = "you are being
+   called by", GridTracker's "calling me" yellow `#FFFF00`): a label under
+   the status line, `QRZ 2  K9DEF W7XYZ` newest first (3 calls, then +n),
+   of stations whose complete message to your call (not a heartbeat reply)
+   arrived while the map or the Stations view was showing; a station leaves
+   it when selected (`show_selection()`) or sent to by hand
+   (`tx_queue_at()`), and all clear on going back to the message list.
+   Still to come: a Setting for your colour.
 5. **On the air**, then a beta.
 
 ## Credits and licences
