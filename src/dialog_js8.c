@@ -41,6 +41,7 @@
 
 #include <liquid/liquid.h>
 
+#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <math.h>
@@ -401,6 +402,19 @@ static int activity_head;
 static int               edit_target;        /* 0 compose, else an edit_t */
 static lv_obj_t         *texts_list;
 
+/* Every list popup: whether it's open and how it closes. any_popup(),
+ * close_popups() and destruct_cb() all go through this table, so a popup
+ * can't be missing from one of them (GEN with the Query list open once
+ * crashed the app that way). */
+static const struct {
+    lv_obj_t **list;
+    void (*close)(void);
+} popups[] = {
+    {&query_list, query_close}, {&texts_list, texts_close},   {&aprs_list, aprs_close}, {&log_list, log_close},
+    {&inbox_list, inbox_close}, {&alerts_list, alerts_close}, {&freq_list, freq_close}, {&spot_list, spot_close},
+};
+#define POPUPS (sizeof(popups) / sizeof(popups[0]))
+
 static lv_obj_t *waterfall;
 static lv_obj_t *finder;
 static lv_obj_t *table;
@@ -445,8 +459,21 @@ LV_FONT_DECLARE(js8_marks_24);
 static lv_font_t    table_font; /* the list's font: sony_24 with js8_marks_24 as fallback */
 static js8_rx_msg_t history[HISTORY];
 static int64_t      hist_ms[HISTORY]; /* when each arrived (JS8 time), for Messages kept */
+static uint32_t     hist_seq[HISTORY]; /* arrival order, shared with info rows */
 static uint16_t     hist_head;  /* next slot to write */
 static uint16_t     hist_count;
+/* Info rows ("Auto: N0XYZ SNR -05", "Held message 3 delivered"), kept
+ * apart from the messages but in arrival order with them (seq), so a
+ * rebuild (the Show filter, leaving Stations, a full list, Messages kept)
+ * shows them again instead of dropping them (bug hunt 18). */
+#define INFO_ROWS 64
+static struct {
+    char     text[128];
+    int64_t  ms;
+    uint32_t seq;
+} info_rows[INFO_ROWS];
+static unsigned info_head, info_count;
+static uint32_t row_seq; /* the last message or info row's */
 static int16_t      row_hist[MAX_ROWS + 1];
 static uint16_t     rows;
 
@@ -636,16 +663,25 @@ static void append_row(const char *text, int16_t hist) {
     rows++;
 }
 
+static void rebuild_rows(void);
+
 static void add_info_row(const char *fmt, ...) {
-    char    buf[128];
+    char   *buf = info_rows[info_head].text;
     va_list args;
     va_start(args, fmt);
-    vsnprintf(buf, sizeof(buf), fmt, args);
+    vsnprintf(buf, sizeof(info_rows[0].text), fmt, args);
     va_end(args);
+    info_rows[info_head].ms  = now_wall_ms();
+    info_rows[info_head].seq = ++row_seq;
+    info_head                = (info_head + 1) % INFO_ROWS;
+    if (info_count < INFO_ROWS) info_count++;
 
-    if (view_stations) return;
+    if (view_stations || !table) return;
+    if (rows >= MAX_ROWS) { /* full: trimmed, this one included (it was dropped) */
+        rebuild_rows();
+        return;
+    }
     bool scroll = at_bottom();
-    if (rows >= MAX_ROWS) return;
     append_row(buf, -1);
     if (scroll) follow();
 }
@@ -686,18 +722,35 @@ static void rebuild_rows(void) {
         if (keep && now - hist_ms[slot] > keep) break; /* older ones too */
         if (passes_filter(&history[slot])) idx[n++] = (int16_t)slot;
     }
+    /* Info rows in between, by arrival, newest first; they age out with
+     * Messages kept as well. */
+    int info[INFO_ROWS], ni = 0;
+    for (unsigned a = 0; a < info_count; a++) {
+        unsigned i = (info_head - 1 - a + INFO_ROWS) % INFO_ROWS;
+        if (keep && now - info_rows[i].ms > keep) break;
+        info[ni++] = (int)i;
+    }
+    /* The newest KEEP_ROWS of both: pick[k] >= 0 a history slot, else
+     * -1 - an info row. */
+    int pick[KEEP_ROWS], np = 0, a = 0, b = 0;
+    while (np < KEEP_ROWS && (a < n || b < ni)) {
+        if (b < ni && (a >= n || info_rows[info[b]].seq > hist_seq[idx[a]])) pick[np++] = -1 - info[b++];
+        else pick[np++] = idx[a++];
+    }
 
     lv_table_set_row_cnt(table, 1);
     lv_table_set_cell_value(table, 0, 0, "");
     rows = 0;
 
     char buf[JS8_RX_TEXT_LEN + 48];
-    if (n == 0) {
-        append_row("Listening for JS8...", -1);
-    }
-    for (int k = n - 1; k >= 0; k--) {
-        format_row(&history[idx[k]], buf, sizeof(buf));
-        append_row(buf, idx[k]);
+    if (n == 0) append_row("Listening for JS8...", -1); /* no messages (yet, or through the filter) */
+    for (int k = np - 1; k >= 0; k--) {
+        if (pick[k] < 0) {
+            append_row(info_rows[-1 - pick[k]].text, -1);
+            continue;
+        }
+        format_row(&history[pick[k]], buf, sizeof(buf));
+        append_row(buf, (int16_t)pick[k]);
     }
     follow();
 }
@@ -734,6 +787,22 @@ static int find_partial(uint32_t msg_id) {
         if (!history[slot].tx && history[slot].partial && history[slot].msg_id == msg_id) return slot;
     }
     return -1;
+}
+
+/* Messages still arriving when the receiver stops listening (a retune, JS8
+ * closing) never will: their rows stop showing " ...". A new message can't
+ * take their rows over either: ids are unique for the whole run now
+ * (B-12). True if there were any. */
+static bool partials_end(void) {
+    bool any = false;
+    for (int age = 0; age < hist_count; age++) {
+        int slot = (hist_head - 1 - age + HISTORY) % HISTORY;
+        if (history[slot].partial && !history[slot].tx) {
+            history[slot].partial = false;
+            any                   = true;
+        }
+    }
+    return any;
 }
 
 /* Everything that acts on a message, once it's complete: never on the text
@@ -849,9 +918,10 @@ static void add_message(const js8_rx_msg_t *msg) {
     }
 
     int slot = hist_head;
-    history[slot] = *m;
-    hist_ms[slot] = now_wall_ms();
-    hist_head     = (hist_head + 1) % HISTORY;
+    history[slot]  = *m;
+    hist_ms[slot]  = now_wall_ms();
+    hist_seq[slot] = ++row_seq;
+    hist_head      = (hist_head + 1) % HISTORY;
     if (hist_count < HISTORY) hist_count++;
 
     /* Rows pointing at the slot we just overwrote would now show the wrong
@@ -2121,10 +2191,12 @@ static void rotary_cb(int32_t diff) {
 static void compose_changed_cb(lv_event_t *e) {
     (void)e;
     js8_tx_preview_t pv;
-    js8_tx_preview(params.callsign.x, params.qth.x, textarea_window_get(), cur_speed(), &pv);
-    if (pv.ok) {
-        msg_update_text_fmt("%d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
-    }
+    const char *typed = textarea_window_get();
+    js8_tx_preview(params.callsign.x, params.qth.x, typed, cur_speed(), &pv);
+    if (pv.ok) msg_update_text_fmt("%d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
+    /* Why it can't go ("too long: 21 frames (max 20)"), as you type, not
+     * the last good count frozen until Enter (B-23). */
+    else if (typed[strspn(typed, " ")]) msg_update_text_fmt("JS8: %s", pv.error);
 }
 
 /* JS8 is capitals only: take lowercase (a USB keyboard without Caps Lock,
@@ -2182,6 +2254,12 @@ static bool compose_ok_cb(void) {
     if (edit_target == EDIT_SPOT_FREQ && !spot_freq_empty(textarea_window_get()) &&
         !spot_parse_freq(textarea_window_get(), NULL))
         return false;
+    /* A typed log grid must be one (or nothing), not "HOME". */
+    if (edit_target == EDIT_LOG_GRID && textarea_window_get()[strspn(textarea_window_get(), " ")] &&
+        !js8_is_grid(textarea_window_get())) {
+        msg_update_text_fmt("Not a grid: 4 or 6 characters, e.g. CN89 or CN89KG");
+        return false;
+    }
     if (edit_target >= EDIT_LOG_GRID) {
         log_edit_done(textarea_window_get());
         return true;
@@ -2244,10 +2322,37 @@ static bool compose_cancel_cb(void) {
     return true;
 }
 
+/* A list popup gives way to the keyboard or another view: its buttons out
+ * of the group now (the list itself goes later: this runs in one of its
+ * callbacks), and the focus not handed back to the table, or the keyboard
+ * opens without it and can't be used. */
+static void popup_leave(lv_obj_t **list) {
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(*list); i++) lv_group_remove_obj(lv_obj_get_child(*list, i));
+    lv_obj_del_async(*list);
+    *list = NULL;
+}
+
+/* From a list (or none) into the keyboard, editing `target` (0: a message
+ * to send) with `prefill`. False if it didn't open (no callsign to send). */
+static bool popup_to_keyboard(lv_obj_t **list, int target, const char *prefill) {
+    if (list && *list) popup_leave(list);
+    edit_target = target;
+    compose_open(prefill);
+    if (!composing) return false;
+    lv_group_set_editing(keyboard_group, true); /* as after Reply / Send... */
+    return true;
+}
+
 static void compose_open(const char *prefill) {
     if (composing) return;
-    if (!params.callsign.x[0]) {
+    /* The callsign only for what sends (a message, an APRS beacon): a
+     * frequency, alert words, INFO or a log field can be typed without one
+     * (B-16). Refused, the edit mode the caller set is undone, or the next
+     * Send... would open in it. */
+    if (!params.callsign.x[0] && (edit_target == 0 || edit_target >= EDIT_BEACON_GRID)) {
         msg_update_text_fmt("Set your callsign first: APP > Callsign");
+        edit_target        = 0;
+        deliver_pending.id = 0;
         return;
     }
     composing = true;
@@ -2255,8 +2360,13 @@ static void compose_open(const char *prefill) {
     lv_obj_set_y(textarea_window_open(compose_ok_cb, compose_cancel_cb), 0);
     compose_layout(true);
 
+    /* Every printable ASCII character: JS8 sends them all (as desktop,
+     * whose text boxes take any), $ % < > [ ] ^ | ~ \ ` included (B-22). */
+    static char printable[96];
+    if (!printable[0])
+        for (int c = ' '; c <= '~'; c++) printable[c - ' '] = (char)c;
     lv_obj_t *text = textarea_window_text();
-    lv_textarea_set_accepted_chars(text, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 .-+?!\"/@:>{}_#&'(),=;*");
+    lv_textarea_set_accepted_chars(text, printable);
     lv_obj_add_event_cb(text, compose_insert_cb, LV_EVENT_INSERT, NULL);
     lv_textarea_set_max_length(text, TX_TEXT_MAX);
     lv_obj_add_event_cb(text, compose_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
@@ -2372,12 +2482,13 @@ static void retuned(void) {
     last_tx_text[0] = '\0';
 
     js8_rx_clear(rx);
-    stations = stations_for_band(); /* that band's list, as we left it */
+    bool ended = partials_end();
+    stations   = stations_for_band(); /* that band's list, as we left it */
     lv_waterfall_clear_data(waterfall);
     wf_queue_clear();
     marks_reset();
     clear_selection();
-    if (view_stations) rebuild_rows();
+    if (view_stations || ended) rebuild_rows();
     add_info_row("%s", where_label());
     if (btn_freq.disp_btn) buttons_refresh(&btn_freq);
     update_status();
@@ -2596,6 +2707,7 @@ static void construct_cb(lv_obj_t *parent) {
 
     cycles = cycle_decodes = 0;
     ev_clear(); /* anything left from the last time JS8 was open */
+    edit_target = 0; /* a keyboard mode left from last time (B-16) */
     worked_forget();
     wf_queue_clear();
     rx_start();
@@ -2658,43 +2770,17 @@ static void destruct_cb(void) {
      * delete: dialog_destruct() frees dialog.obj (their parent) right after
      * this, and the delayed delete would then touch freed memory - GEN or
      * APP with the Query list open crashed the app. */
-    if (query_list) {
-        lv_obj_del(query_list);
-        query_list = NULL;
-    }
-    if (aprs_list) {
-        lv_obj_del(aprs_list);
-        aprs_list = NULL;
-    }
-    if (texts_list) {
-        lv_obj_del(texts_list);
-        texts_list = NULL;
-    }
-    if (log_list) {
-        lv_obj_del(log_list);
-        log_list = NULL;
-    }
-    if (inbox_list) {
-        lv_obj_del(inbox_list);
-        inbox_list = NULL;
-    }
-    if (alerts_list) {
-        lv_obj_del(alerts_list);
-        alerts_list = NULL;
-    }
-    if (freq_list) {
-        lv_obj_del(freq_list);
-        freq_list = NULL;
-    }
-    if (spot_list) {
-        lv_obj_del(spot_list);
-        spot_list = NULL;
+    for (size_t i = 0; i < POPUPS; i++) {
+        if (!*popups[i].list) continue;
+        lv_obj_del(*popups[i].list);
+        *popups[i].list = NULL;
     }
     hb_adjusting = false;
     radio_set_pwr(param_f_get(cfg_pwr));
 
     rx_stop();
     wf_queue_clear();
+    partials_end(); /* shown as ended when JS8 opens again */
 
     dsp_set_waterfall_enabled(true);
     dsp_set_spectrum_enabled(true);
@@ -2750,6 +2836,7 @@ static void clear_cb(button_data_t *btn) {
     if (popup_guard()) return;
     (void)btn;
     hist_head = hist_count = 0;
+    info_head = info_count = 0;
     js8_stations_clear(stations);
     js8_rx_clear(rx);
     lv_waterfall_clear_data(waterfall);
@@ -3133,11 +3220,14 @@ static void query_item_cb(lv_event_t *e) {
     tx_queue(text);
 }
 
-static void query_key_cb(lv_event_t *e) {
+/* Keys in any list popup: ESC does `esc` (closes it), MFK moves, and the
+ * VOL knob (a keypad: its turns arrive as keys at the focus) sets the
+ * volume, which only the Query list and the message list did (B-19). */
+static void popup_key(lv_event_t *e, void (*esc)(void)) {
     uint32_t key = *((uint32_t *)lv_event_get_param(e));
     switch (key) {
     case LV_KEY_ESC:
-        query_close();
+        esc();
         break;
     case LV_KEY_LEFT:
     case LV_KEY_UP:
@@ -3158,17 +3248,14 @@ static void query_key_cb(lv_event_t *e) {
     }
 }
 
+static void query_key_cb(lv_event_t *e) {
+    popup_key(e, query_close);
+}
+
 /* Every list popup that's open. */
 static void close_popups(void) {
-    if (!any_popup()) return;
-    query_close();
-    texts_close();
-    aprs_close();
-    log_close();
-    inbox_close();
-    alerts_close();
-    freq_close();
-    spot_close();
+    for (size_t i = 0; i < POPUPS; i++)
+        if (*popups[i].list) popups[i].close();
 }
 
 /* One-press messages for the selected station: MFK to move, press or tap
@@ -3242,16 +3329,11 @@ static void query_msg_cb(lv_event_t *e) {
         tx_queue(text);
         return;
     }
-    /* Into the keyboard: see texts_item_cb. */
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(query_list); i++) lv_group_remove_obj(lv_obj_get_child(query_list, i));
-    lv_obj_del_async(query_list);
-    query_list = NULL;
+    popup_leave(&query_list); /* into the keyboard */
     apply_hold(freq);
     char prefill[JS8_RX_CALL_LEN + 16];
     snprintf(prefill, sizeof(prefill), query_msg_items[which].prefill, call);
-    compose_open(prefill);
-    lv_group_set_editing(keyboard_group, true);
-    msg_update_text_fmt(query_msg_items[which].hint, call);
+    if (popup_to_keyboard(NULL, 0, prefill)) msg_update_text_fmt(query_msg_items[which].hint, call);
 }
 
 static void query_close_cb(lv_event_t *e) {
@@ -3882,27 +3964,16 @@ static void texts_item_cb(lv_event_t *e) {
         lv_label_set_text(lv_obj_get_child(lv_event_get_target(e), 0), settings_label(which));
         return;
     }
-    /* Straight into the keyboard: take the list's buttons out of the group
-     * now (the list itself goes later, it's running this callback) and
-     * don't hand the focus back to the table, or the keyboard opens
-     * without it and can't be used. */
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(texts_list); i++)
-        lv_group_remove_obj(lv_obj_get_child(texts_list, i));
-    lv_obj_del_async(texts_list);
-    texts_list  = NULL;
-    edit_target = which;
-    compose_open(which == EDIT_INFO     ? info_text
-                 : which == EDIT_STATUS ? status_text
-                 : which == EDIT_GROUPS ? groups_text
-                                        : operator_call);
-    lv_group_set_editing(keyboard_group, true); /* as after Reply / Send... */
+    /* Straight into the keyboard. */
+    popup_to_keyboard(&texts_list, which,
+                      which == EDIT_INFO     ? info_text
+                      : which == EDIT_STATUS ? status_text
+                      : which == EDIT_GROUPS ? groups_text
+                                             : operator_call);
 }
 
 static void texts_key_cb(lv_event_t *e) {
-    uint32_t key = *((uint32_t *)lv_event_get_param(e));
-    if (key == LV_KEY_ESC) texts_close();
-    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
-    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+    popup_key(e, texts_close);
 }
 
 static lv_obj_t *settings_add(const char *label, int which) {
@@ -4164,10 +4235,7 @@ static void aprs_item_cb(lv_event_t *e) {
     aprs_item_t item = (aprs_item_t)(intptr_t)lv_event_get_user_data(e);
     /* Straight into the keyboard for most items: take the buttons out of
      * the group first, as Texts... does, or the keyboard opens unfocused. */
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(aprs_list); i++)
-        lv_group_remove_obj(lv_obj_get_child(aprs_list, i));
-    lv_obj_del_async(aprs_list);
-    aprs_list = NULL;
+    popup_leave(&aprs_list);
 
     switch (item) {
     case APRS_GRID:
@@ -4175,9 +4243,8 @@ static void aprs_item_cb(lv_event_t *e) {
         /* A message to go with it, or just Enter. GPS: a fix first, so
          * nothing is typed for nothing. */
         if (item == APRS_GRID ? !aprs_grid(NULL, NULL, NULL) : !aprs_gps(NULL, NULL, NULL)) break;
-        edit_target = item == APRS_GRID ? EDIT_BEACON_GRID : EDIT_BEACON_GPS;
-        compose_open(NULL);
-        beacon_changed_cb(NULL); /* the plain beacon's length, until you type */
+        if (popup_to_keyboard(NULL, item == APRS_GRID ? EDIT_BEACON_GRID : EDIT_BEACON_GPS, NULL))
+            beacon_changed_cb(NULL); /* the plain beacon's length, until you type */
         break;
     case APRS_POTA:
     case APRS_SOTA:
@@ -4219,10 +4286,7 @@ static void aprs_close_cb(lv_event_t *e) {
 }
 
 static void aprs_key_cb(lv_event_t *e) {
-    uint32_t key = *((uint32_t *)lv_event_get_param(e));
-    if (key == LV_KEY_ESC) aprs_close();
-    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
-    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+    popup_key(e, aprs_close);
 }
 
 static void aprs_cb(button_data_t *btn) {
@@ -4446,12 +4510,8 @@ static void spot_item_cb(lv_event_t *e) {
     /* A field: into the keyboard, then back here (see log_item_cb). */
     char khz[16] = ""; /* the last one typed, even while spotting the dial */
     if (spot_typed_hz) format_khz(spot_typed_hz, khz, sizeof(khz));
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(spot_list); i++) lv_group_remove_obj(lv_obj_get_child(spot_list, i));
-    lv_obj_del_async(spot_list);
-    spot_list   = NULL;
-    edit_target = edit;
-    compose_open(edit == EDIT_SPOT_REF ? (spot_sota ? last_sota : last_pota) : edit == EDIT_SPOT_FREQ ? khz : spot_note);
-    lv_group_set_editing(keyboard_group, true);
+    popup_to_keyboard(&spot_list, edit,
+                      edit == EDIT_SPOT_REF ? (spot_sota ? last_sota : last_pota) : edit == EDIT_SPOT_FREQ ? khz : spot_note);
     if (edit == EDIT_SPOT_REF)
         msg_update_text_fmt(spot_sota ? "Summit, e.g. VE7/LM-001" : "Park, e.g. CA-1234 (POTA uses US- and CA- now, not K- or VE-)");
     else if (edit == EDIT_SPOT_FREQ)
@@ -4461,10 +4521,7 @@ static void spot_item_cb(lv_event_t *e) {
 }
 
 static void spot_key_cb(lv_event_t *e) {
-    uint32_t key = *((uint32_t *)lv_event_get_param(e));
-    if (key == LV_KEY_ESC) spot_close();
-    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
-    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+    popup_key(e, spot_close);
 }
 
 /* `focus`: the item to start on - Send, or the field just edited. */
@@ -4513,7 +4570,9 @@ static void spot_show(bool sota, spot_item_t focus) {
  * logged without Save. */
 
 static bool any_popup(void) {
-    return query_list || texts_list || aprs_list || log_list || inbox_list || alerts_list || freq_list || spot_list;
+    for (size_t i = 0; i < POPUPS; i++)
+        if (*popups[i].list) return true;
+    return false;
 }
 
 static bool find_station(const char *call, js8_station_t *out) {
@@ -4616,19 +4675,19 @@ static void log_item_cb(lv_event_t *e) {
         return;
     }
     /* A field: into the keyboard, then back here (see texts_item_cb). */
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(log_list); i++) lv_group_remove_obj(lv_obj_get_child(log_list, i));
-    lv_obj_del_async(log_list);
-    log_list    = NULL;
-    edit_target = item == LOG_GRID ? EDIT_LOG_GRID : item == LOG_NAME ? EDIT_LOG_NAME : EDIT_LOG_NOTE;
-    compose_open(item == LOG_GRID ? log_entry.grid : item == LOG_NAME ? log_entry.name : log_entry.comment);
-    lv_group_set_editing(keyboard_group, true);
+    popup_to_keyboard(&log_list, item == LOG_GRID ? EDIT_LOG_GRID : item == LOG_NAME ? EDIT_LOG_NAME : EDIT_LOG_NOTE,
+                      item == LOG_GRID ? log_entry.grid : item == LOG_NAME ? log_entry.name : log_entry.comment);
+}
+
+/* ESC on the prompt for a QSO that ended means "not now": Log QSO then
+ * takes the selected station again (B-24, your choice). */
+static void log_esc(void) {
+    if (log_pending[0] && strcmp(log_entry.call, log_pending) == 0) log_pending[0] = '\0';
+    log_close();
 }
 
 static void log_key_cb(lv_event_t *e) {
-    uint32_t key = *((uint32_t *)lv_event_get_param(e));
-    if (key == LV_KEY_ESC) log_close();
-    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
-    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+    popup_key(e, log_esc);
 }
 
 static lv_obj_t *log_add(log_item_t item, const char *label) {
@@ -4719,10 +4778,15 @@ static void log_edit_done(const char *text) {
     compose_close();
     if (value) {
         switch (target) {
-        case EDIT_LOG_GRID:
-            snprintf(log_entry.grid, sizeof(log_entry.grid), "%s", value);
+        case EDIT_LOG_GRID: { /* checked in compose_ok_cb; in capitals, as logs have them */
+            char *g = value + strspn(value, " ");
+            size_t n = strcspn(g, " ");
+            g[n]     = '\0';
+            for (char *c = g; *c; c++) *c = (char)toupper((unsigned char)*c);
+            snprintf(log_entry.grid, sizeof(log_entry.grid), "%s", g);
             log_grid_typed = true;
             break;
+        }
         case EDIT_LOG_NAME:
             snprintf(log_entry.name, sizeof(log_entry.name), "%s", value);
             break;
@@ -4800,12 +4864,18 @@ static void log_cb(button_data_t *btn) {
         msg_update_text_fmt("Set your callsign first: APP > Callsign");
         return;
     }
-    /* A QSO that just ended, else the selected station. */
-    char  call[JS8_RX_CALL_LEN];
-    float freq;
-    int   snr;
-    if (log_pending[0]) snprintf(call, sizeof(call), "%s", log_pending);
-    else if (!selected_station(call, sizeof(call), &freq, &snr)) {
+    /* A QSO that just ended, unless you've selected another station since
+     * (your choice): the ended one is still there when you select it. It's
+     * forgotten with the QSO (30 min), or once logged. */
+    char      call[JS8_RX_CALL_LEN];
+    float     freq;
+    int       snr;
+    js8_qso_t q;
+    bool      selected = selected_station(call, sizeof(call), &freq, &snr);
+    if (log_pending[0] && !js8_qsos_get(qsos, log_pending, now_wall_ms(), &q)) log_pending[0] = '\0';
+    if (log_pending[0] && (!selected || strcmp(call, log_pending) == 0)) {
+        snprintf(call, sizeof(call), "%s", log_pending);
+    } else if (!selected) {
         msg_update_text_fmt("Select a station first (MFK)");
         return;
     }
@@ -4882,9 +4952,7 @@ static void act_hold_cb(button_data_t *btn) {
         msg_update_text_fmt("Press to choose POTA or SOTA first");
         return;
     }
-    edit_target = v == 1 ? EDIT_POTA_REF : EDIT_SOTA_REF;
-    compose_open(v == 1 ? last_pota : last_sota);
-    lv_group_set_editing(keyboard_group, true);
+    popup_to_keyboard(NULL, v == 1 ? EDIT_POTA_REF : EDIT_SOTA_REF, v == 1 ? last_pota : last_sota);
 }
 
 /* ---- Inbox and messages -------------------------------------------------- */
@@ -4894,7 +4962,8 @@ static void act_hold_cb(button_data_t *btn) {
  * The Query list sends messages: MSG for their inbox, MSG TO: to leave one
  * at their station for someone else, QUERY MSGS to ask what they hold. */
 
-#define INBOX_ROWS 50
+#define INBOX_ROWS 200 /* all of them (Inbox::MAX_MESSAGES): an older unread one couldn't be opened (bug hunt 9) */
+#define HELD_ROWS  100 /* HeldMessages::MAX_MESSAGES */
 
 static int inbox_view_id; /* the message shown, 0: the list */
 
@@ -4993,9 +5062,7 @@ static void inbox_close(void) {
 /* Leave the popup from one of its own buttons, going somewhere else (the
  * keyboard, or another view): buttons out of the group now, list later. */
 static void inbox_leave(void) {
-    for (uint32_t i = 0; i < lv_obj_get_child_cnt(inbox_list); i++) lv_group_remove_obj(lv_obj_get_child(inbox_list, i));
-    lv_obj_del_async(inbox_list);
-    inbox_list = NULL;
+    popup_leave(&inbox_list);
 }
 
 /* "CALL MSG " / "CALL MSG TO:" in the keyboard; kind is "MSG " or "MSG TO:".
@@ -5003,8 +5070,7 @@ static void inbox_leave(void) {
 static void msg_compose(const char *call, const char *kind) {
     char prefill[JS8_PATH_LEN + 12];
     snprintf(prefill, sizeof(prefill), "%s %s", call, kind);
-    compose_open(prefill);
-    lv_group_set_editing(keyboard_group, true);
+    if (!popup_to_keyboard(NULL, 0, prefill)) return;
     if (strcmp(kind, "MSG TO:") == 0)
         msg_update_text_fmt("Left at %s for someone: type their call, a space, the message", call);
     else msg_update_text_fmt("Message for %s's inbox: type it and press Enter", call);
@@ -5012,17 +5078,18 @@ static void msg_compose(const char *call, const char *kind) {
 
 static void inbox_show(int id);
 
+/* ESC in a message: back to the list; in the list: close. */
+static void inbox_esc(void) {
+    if (inbox_view_id) {
+        inbox_leave();
+        inbox_show(0);
+    } else {
+        inbox_close();
+    }
+}
+
 static void inbox_key_cb(lv_event_t *e) {
-    uint32_t key = *((uint32_t *)lv_event_get_param(e));
-    if (key == LV_KEY_ESC) {
-        if (inbox_view_id) { /* ESC in a message: back to the list */
-            inbox_leave();
-            inbox_show(0);
-        } else {
-            inbox_close();
-        }
-    } else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
-    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+    popup_key(e, inbox_esc);
 }
 
 typedef enum {
@@ -5114,9 +5181,8 @@ static void inbox_item_cb(lv_event_t *e) {
         } else if (action == INBOX_REPLY_VIA) {
             char prefill[JS8_PATH_LEN + JS8_RX_CALL_LEN + 12];
             snprintf(prefill, sizeof(prefill), "%s MSG TO:%s ", path, orig);
-            compose_open(prefill);
-            lv_group_set_editing(keyboard_group, true);
-            msg_update_text_fmt("Left at %s for %s: type the message and press Enter", path, orig);
+            if (popup_to_keyboard(NULL, 0, prefill))
+                msg_update_text_fmt("Left at %s for %s: type the message and press Enter", path, orig);
         } else {
             /* An SMS: the number filled in, the cursor after it. */
             char head[64], sms[24];
@@ -5137,9 +5203,7 @@ static void inbox_item_cb(lv_event_t *e) {
         if (selected_station(call, sizeof(call), &freq, &snr)) {
             apply_hold(freq);
             msg_compose(call, "MSG ");
-        } else {
-            compose_open(NULL);
-            lv_group_set_editing(keyboard_group, true);
+        } else if (popup_to_keyboard(NULL, 0, NULL)) {
             msg_update_text_fmt("Type their call, then MSG and the message");
         }
         return;
@@ -5281,7 +5345,7 @@ static void inbox_show(int id) {
         first = inbox_add(line, INBOX_NEW);
         lv_obj_set_style_text_color(first, lv_color_hex(0x80ff80), 0);
 
-        lv_obj_t *oldest_new = NULL;
+        lv_obj_t *newest_new = NULL;
         for (int i = 0; i < n; i++) {
             char when[16];
             utc_label(rows[i].utc_ms, when, sizeof(when), "%d %b %H:%M");
@@ -5291,7 +5355,7 @@ static void inbox_show(int id) {
             lv_obj_t *b = inbox_add(line, rows[i].id);
             if (!rows[i].read) {
                 lv_obj_set_style_text_color(b, lv_color_hex(0xffe080), 0);
-                oldest_new = b;
+                if (!newest_new) newest_new = b; /* newest first */
             }
         }
         if (n == 0) {
@@ -5299,8 +5363,8 @@ static void inbox_show(int id) {
             lv_obj_set_style_text_font(t, &sony_22, 0);
         }
         /* Messages held here for others (MSG TO:), until they ask. */
-        static js8_held_msg_t held_rows[INBOX_ROWS];
-        int                   nh = js8_held_list(held, held_rows, INBOX_ROWS);
+        static js8_held_msg_t held_rows[HELD_ROWS];
+        int                   nh = js8_held_list(held, held_rows, HELD_ROWS);
         if (nh > 0) {
             snprintf(line, sizeof(line), "Held for others: %d waiting", js8_held_waiting(held));
             t = lv_list_add_text(inbox_list, line);
@@ -5317,7 +5381,7 @@ static void inbox_show(int id) {
         }
         lv_obj_t *close = inbox_add("Close", INBOX_CLOSE);
         lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
-        if (oldest_new) first = oldest_new; /* straight to what's unread */
+        if (newest_new) first = newest_new; /* straight to the newest unread (your choice) */
     }
     lv_group_set_editing(keyboard_group, false);
     lv_group_focus_obj(first);
@@ -5516,14 +5580,8 @@ static void alerts_item_cb(lv_event_t *e) {
     }
     case AL_WORDS:
         /* Into the keyboard, then back here (see texts_item_cb). */
-        for (uint32_t i = 0; i < lv_obj_get_child_cnt(alerts_list); i++)
-            lv_group_remove_obj(lv_obj_get_child(alerts_list, i));
-        lv_obj_del_async(alerts_list);
-        alerts_list = NULL;
-        edit_target = EDIT_ALERT_WORDS;
-        compose_open(alert_words[0] ? alert_words : NULL);
-        lv_group_set_editing(keyboard_group, true);
-        msg_update_text_fmt("Calls or words to watch for, separated by spaces");
+        if (popup_to_keyboard(&alerts_list, EDIT_ALERT_WORDS, alert_words[0] ? alert_words : NULL))
+            msg_update_text_fmt("Calls or words to watch for, separated by spaces");
         return;
     default: /* a switch: flip it, relabel in place */
         params_uint8_set(&params.js8_alerts, params.js8_alerts.x ^ alert_switches[item].bit);
@@ -5534,10 +5592,7 @@ static void alerts_item_cb(lv_event_t *e) {
 }
 
 static void alerts_key_cb(lv_event_t *e) {
-    uint32_t key = *((uint32_t *)lv_event_get_param(e));
-    if (key == LV_KEY_ESC) alerts_close();
-    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
-    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+    popup_key(e, alerts_close);
 }
 
 static lv_obj_t *alerts_add(alerts_item_t item, const char *label) {
@@ -5595,8 +5650,15 @@ static void alerts_cb(button_data_t *btn) {
  * Turbo, Slow), and the receiver decodes every speed at once unless
  * Decode is set to My speed. Turbo sends no heartbeats or HB acks. */
 
-/* The selected row's speed (station or message). */
+/* The selected station's speed (the one Reply and the green bar are for,
+ * not the row under the cursor: with a station locked they differ, bug
+ * hunt 15); else the cursor row's (a message without a call). */
 static bool selected_speed(js8_speed_t *out) {
+    js8_station_t st;
+    if (sel_call[0] && find_station(sel_call, &st)) {
+        *out = js8_speed_from_submode(st.submode);
+        return true;
+    }
     uint16_t row, col;
     lv_table_get_selected_cell(table, &row, &col);
     if (row >= rows || row_hist[row] < 0) return false;
@@ -5776,16 +5838,9 @@ static void freq_item_cb(lv_event_t *e) {
         return;
     case FQ_CUSTOM: {
         /* Into the keyboard with the last one filled in. */
-        for (uint32_t i = 0; i < lv_obj_get_child_cnt(freq_list); i++)
-            lv_group_remove_obj(lv_obj_get_child(freq_list, i));
-        lv_obj_del_async(freq_list);
-        freq_list = NULL;
         char khz[16] = "";
         if (params.js8_custom_hz.x) format_khz(params.js8_custom_hz.x, khz, sizeof(khz));
-        edit_target = EDIT_FREQ;
-        compose_open(khz);
-        lv_group_set_editing(keyboard_group, true);
-        msg_update_text_fmt("Dial frequency in kHz, then Enter");
+        if (popup_to_keyboard(&freq_list, EDIT_FREQ, khz)) msg_update_text_fmt("Dial frequency in kHz, then Enter");
         return;
     }
     case FQ_CLOSE:
@@ -5795,10 +5850,7 @@ static void freq_item_cb(lv_event_t *e) {
 }
 
 static void freq_key_cb(lv_event_t *e) {
-    uint32_t key = *((uint32_t *)lv_event_get_param(e));
-    if (key == LV_KEY_ESC) freq_close();
-    else if (key == LV_KEY_LEFT || key == LV_KEY_UP) lv_group_focus_prev(keyboard_group);
-    else if (key == LV_KEY_RIGHT || key == LV_KEY_DOWN) lv_group_focus_next(keyboard_group);
+    popup_key(e, freq_close);
 }
 
 static lv_obj_t *freq_add(freq_item_t item, const char *label) {

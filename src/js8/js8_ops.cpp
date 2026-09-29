@@ -85,6 +85,16 @@ extern "C" bool js8_query_text(js8_query_t q, const char *to_call, int their_snr
     return !text.empty();
 }
 
+extern "C" bool js8_is_grid(const char *text) {
+    if (!text) return false;
+    std::string g = text;
+    auto        b = g.find_first_not_of(' '), e = g.find_last_not_of(' ');
+    if (b == std::string::npos) return false;
+    g = g.substr(b, e - b + 1);
+    for (auto &c : g) c = (char)std::toupper((unsigned char)c);
+    return is_grid(g);
+}
+
 extern "C" void js8_heartbeat_text(const char *my_call, const char *my_grid, char *out, unsigned out_len) {
     copy_str(out, out_len, heartbeat_text(my_call ? my_call : "", my_grid ? my_grid : ""));
 }

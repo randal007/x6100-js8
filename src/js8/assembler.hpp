@@ -84,7 +84,6 @@ private:
     Emit                  emit_;
     Emit                  partial_;
     std::map<Key, Buffer> buffers_;
-    std::uint32_t         next_id_ = 1;
 };
 
 /// Drops a frame decoded again in the same slot. The engine retries Turbo

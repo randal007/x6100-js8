@@ -57,6 +57,15 @@ std::string format_alert_words(const std::vector<std::string> &words) {
 std::string alert_word_hit(const std::string &text, const std::string &from, const std::vector<std::string> &words) {
     if (words.empty()) return "";
     auto tokens = split(text, ":> \t");
+    // "SOTA," "(POTA)" "VE7ABC?": punctuation around a word isn't part of
+    // it; @ and / are (groups, portable calls).
+    for (auto &t : tokens) {
+        auto strip = [](char c) { return std::ispunct((unsigned char)c) && c != '@' && c != '/'; };
+        while (!t.empty() && strip(t.back())) t.pop_back();
+        std::size_t b = 0;
+        while (b < t.size() && strip(t[b])) b++;
+        t.erase(0, b);
+    }
     for (auto &w : words) {
         if (std::find(tokens.begin(), tokens.end(), w) != tokens.end()) return w;
         bool call = std::any_of(w.begin(), w.end(), ::isdigit) && w[0] != '@';

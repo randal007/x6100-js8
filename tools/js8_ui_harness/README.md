@@ -50,10 +50,12 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `GEN=query\|aprs\|texts\|alerts` | GEN / APP closing the app with that list open |
 | `HBPAUSE` | heartbeat pause (see below) |
 | `HELD` | messages held for others (store and forward), fetched as desktop does |
+| `KEYS` | the VOL knob in every popup, the keyboard with no callsign, every sendable character, too long |
 | `INBOX` | a message for us saved and ACKed, the Inbox view (don't run while building: real-time feeding starves) |
 | `LOAD` | the GUI thread's work per second, idle and with waterfall rows (see below) |
 | `LOCK` | hold MFK to lock a station; turning only scrolls |
 | `LOG` | a QSO to 73, the Log popup, ADIF |
+| `LOGPEND` | ESC on the log prompt, then Log QSO takes the selected station; a typed grid checked |
 | `LOOKS` | coloured commands, end marks, relay "via" stations, bearing, km/miles, Settings lines |
 | `MARKS` | decode marks (see below) |
 | `MODE` | opened in USB with a custom CB frequency saved: always USB-D |
@@ -64,6 +66,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `RELAY` | relays passed on and received, ACK back along the path |
 | `REPLYQ` | automatic replies queue (see below) |
 | `RETUNE`, `TXSAFE` | transmitting safely (see below) |
+| `ROWS` | info rows survive rebuilds, a cut-off message stops growing, the Inbox lists all 200 |
 | `SMS` | a phone text via an APRS gateway; Reply by SMS fills in the number |
 | `SPEED` | all four speeds decoded together; the Speed button |
 | `STALL` | the GUI stuck for ~50 s while a band's messages arrive: none lost (see below) |

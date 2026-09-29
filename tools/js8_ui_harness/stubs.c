@@ -120,13 +120,16 @@ void mem_save(uint16_t id) { printf("[mem] save %u\n", id); }
 void mem_load(uint16_t id) { printf("[mem] load %u\n", id); }
 void dsp_set_waterfall_enabled(bool v) { (void)v; }
 void dsp_set_spectrum_enabled(bool v) { (void)v; }
-uint16_t radio_change_vol(int16_t d) { printf("[radio] vol %+d\n", d); return 0; }
+int      stub_vol_turns; /* radio_change_vol() calls */
+uint16_t radio_change_vol(int16_t d) { stub_vol_turns++; printf("[radio] vol %+d\n", d); return 0; }
 
-int stub_new_station_alerts; /* "New station: ..." shown */
+int  stub_new_station_alerts; /* "New station: ..." shown */
+char stub_last_msg[512];      /* the message line's last text */
 static void vmsg(const char *tag, const char *fmt, va_list ap) {
     char text[512];
     vsnprintf(text, sizeof(text), fmt, ap);
     if (strncmp(text, "New station: ", 13) == 0) stub_new_station_alerts++;
+    snprintf(stub_last_msg, sizeof(stub_last_msg), "%s", text);
     printf("[%s] %s\n", tag, text);
 }
 void msg_update_text_fmt(const char *fmt, ...) { va_list ap; va_start(ap, fmt); vmsg("msg", fmt, ap); va_end(ap); }

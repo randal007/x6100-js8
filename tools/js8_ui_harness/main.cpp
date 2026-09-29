@@ -52,6 +52,9 @@ int         ui_group_count(void);
 int         ui_marked_rows(char *out, unsigned len);
 void ui_keypad_set(uint32_t key, bool down);
 void ui_set_alerts(unsigned bits);
+void ui_set_callsign(const char *call);
+void ui_vol(int dir);
+const char *ui_compose_placeholder(void);
 extern int stub_tx_frames;
 extern int stub_usb_kbd;
 extern int32_t stub_tx_offset;
@@ -63,6 +66,8 @@ extern int16_t stub_tx_peak;
 extern volatile int stub_tx_keyed;
 extern int stub_tx_aborted;
 extern int stub_new_station_alerts;
+extern char stub_last_msg[512];
+extern int stub_vol_turns;
 }
 
 #include "js8core/decoder.hpp"
@@ -391,6 +396,15 @@ int main() {
     if (getenv("ONLY_MODE")) stub_mode_setup();
     if (getenv("ONLY_INBOX") || getenv("ONLY_SMS") || getenv("ONLY_REPLYQ")) unlink(JS8_INBOX_PATH); // before the dialog loads it
     if (getenv("ONLY_HELD")) unlink(JS8_HELD_PATH);
+    if (getenv("ONLY_ROWS")) {
+        // 60 messages, the oldest and #55 unread: only the newest 50 were
+        // listed (bug hunt 9), so the oldest could never be opened.
+        FILE *f = fopen(JS8_INBOX_PATH, "w");
+        for (int i = 1; i <= 60; i++)
+            fprintf(f, "%d\t%d000\t%s\tN0XYZ\tK2XYZ\tN0XYZ\t%s %d\n", i, i, i == 1 || i == 55 ? "U" : "R",
+                    i == 1 ? "THE OLDEST UNREAD" : i == 55 ? "A NEWER UNREAD" : "READ MESSAGE", i);
+        fclose(f);
+    }
     if (getenv("ONLY_RELAY")) {
         unlink(JS8_INBOX_PATH);
         unlink(JS8_HELD_PATH);
@@ -579,6 +593,171 @@ int main() {
                            (wftime_stamps[i] - wftime_stamps[0]) / 1000);
         printf("[wftime] %zu rows: interval mean %.1f ms, sd %.1f, min %.1f, p5 %.1f, p95 %.1f, max %.1f; %d uneven (>20%%)\n",
                iv.v.size() + 1, m, sqrt(var / iv.v.size()), iv.pct(0), iv.pct(0.05), iv.pct(0.95), iv.pct(1), off);
+        return 0;
+    }
+    if (getenv("ONLY_KEYS")) {
+        // Package 5: the VOL knob in every popup (B-19); the keyboard with
+        // no callsign, and no mode left behind (B-16); every character JS8
+        // sends (B-22); a too-long message says so as you type (B-23).
+        pump(300);
+        struct {
+            int         page, button;
+            const char *name;
+        } pops[] = {{3, 4, "Inbox"}, {4, 4, "Settings"}, {5, 1, "APRS"}, {6, 1, "Alerts"}, {6, 4, "Freq"}};
+        int ok = 0; // (the Query list and the message list had it already)
+        for (auto &p : pops) {
+            ui_page(p.page);
+            ui_press(p.button);
+            pump(200);
+            if (ui_focus_is_table()) { // didn't open: ESC would close JS8
+                printf("[keys] %s didn't open\n", p.name);
+                continue;
+            }
+            int before = stub_vol_turns;
+            ui_vol(+1);
+            ui_vol(-1);
+            printf("[keys] VOL knob in %-8s %d turns (want 2)\n", p.name, stub_vol_turns - before);
+            ok += stub_vol_turns - before == 2;
+            ui_key(LV_KEY_ESC);
+            pump(200);
+        }
+        printf("[keys] VOL in popups: %d of 5 (want 5)\n", ok);
+
+        ui_set_callsign("");
+        ui_page(2);
+        ui_press(3); // Send... needs a callsign
+        pump(200);
+        printf("[keys] Send... with no callsign: %s (want (no compose window))\n", ui_compose_placeholder());
+        ui_page(6);
+        ui_press(4); // Freq
+        pump(200);
+        for (int i = 0; i < 6 && !strstr(ui_focused_text(), "Custom"); i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused(); // Custom kHz...
+        pump(200);
+        printf("[keys] custom frequency with no callsign: '%s' (want the kHz box)\n", ui_compose_placeholder());
+        ui_compose_cancel();
+        pump(200);
+        ui_set_callsign("K2XYZ");
+        ui_page(2);
+        ui_press(3); // Send...
+        pump(200);
+        printf("[keys] Send... after setting the callsign: '%s' (want the message box)\n", ui_compose_placeholder());
+
+        ui_compose_append("COSTS $5, 50% <OK> [A] ^|~\\`");
+        printf("[keys] typed: '%s' (want all of it)\n", ui_compose_text());
+        ui_compose_clear();
+        std::string lots(150, '~');
+        ui_compose_append(lots.c_str());
+        pump(100);
+        printf("[keys] too long: '%s' (want JS8: too long: ...)\n", stub_last_msg);
+        ui_compose_cancel();
+        pump(200);
+        return 0;
+    }
+    if (getenv("ONLY_LOGPEND")) {
+        // B-24 (your choice): ESC on the log prompt means "not now"; Log
+        // QSO then takes the selected station. A typed grid must be one
+        // (BH-S3), in capitals.
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+        ui_page(2);
+        ui_press(3); // Send...
+        pump(200);
+        ui_compose_append("N0XYZ SNR -10");
+        ui_compose_enter();
+        wait_tx();
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ SNR -08 TNX", 1320, 0.05f}});
+        ui_press(3);
+        pump(200);
+        ui_compose_append("N0XYZ TU 73");
+        ui_compose_enter();
+        wait_tx();
+        printf("[logpend] prompt for N0XYZ: %d\n", ui_popup_has("N0XYZ") == 1);
+        ui_key(LV_KEY_ESC); // not now
+        pump(300);
+        feed_band({{"W1ABC", "FN42", "", "W1ABC: @HB HEARTBEAT FN42", 900, 0.05f}});
+        ui_page(2);
+        ui_press(1); // Show: Directed
+        ui_press(1); // All
+        pump(200);
+        ui_select_row_from("W1ABC");
+        ui_page(5);
+        ui_press(2); // Log QSO
+        pump(300);
+        printf("[logpend] W1ABC selected, Log QSO opens W1ABC %d, N0XYZ %d (want 1, 0)\n", ui_popup_has("W1ABC") == 1,
+               ui_popup_has("N0XYZ") == 1);
+        // A typed grid: "HOME" refused, "cn89kg" kept as CN89KG.
+        for (int i = 0; i < 6 && !strstr(ui_focused_text(), "Grid"); i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        pump(200);
+        ui_compose_clear();
+        ui_compose_append("HOME");
+        ui_compose_enter();
+        pump(200);
+        printf("[logpend] grid HOME: '%s', still typing %d (want Not a grid..., 1)\n", stub_last_msg,
+               strcmp(ui_compose_placeholder(), "(no compose window)") != 0);
+        ui_compose_clear();
+        ui_compose_append("cn89kg");
+        ui_compose_enter();
+        pump(300);
+        printf("[logpend] grid cn89kg: shown as CN89KG %d\n", ui_popup_has("Grid: CN89KG") == 1);
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        ui_select_row_from("N0XYZ"); // the ended QSO is still there
+        ui_page(5);
+        ui_press(2);
+        pump(300);
+        printf("[logpend] N0XYZ selected: Log QSO opens N0XYZ %d\n", ui_popup_has("N0XYZ") == 1);
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        return 0;
+    }
+    if (getenv("ONLY_ROWS")) {
+        // Info rows survive a rebuild (bug hunt 18); a message cut off by a
+        // band change stops showing " ..." (B-12); the Inbox lists all
+        // messages, the oldest unread one too (bug hunt 9).
+        pump(300);
+        std::vector<Station> st = {
+            {"VE7ABC", "CN89", "W1XYZ", "W1XYZ THIS IS A LONG MESSAGE THAT TAKES SEVERAL FRAMES TO ARRIVE", 1320, 0.05f}};
+        feed_band(st, 0, 2);
+        printf("[rows] growing: %d\n", ui_list_has(" ...") == 1);
+        ui_band_up();
+        pump(500);
+        printf("[rows] after a band change: still growing %d, the text so far %d (want 0, 1)\n", ui_list_has(" ...") == 1,
+               ui_list_has("VE7ABC: W1XYZ THIS") == 1);
+        ui_page(4);
+        ui_press(2); // HB on (and the knob)
+        ui_press(2); // done
+        pump(200);
+        ui_page(1);
+        ui_press(2); // Heartbeat: "HB timer restarted" is an info row
+        pump(300);
+        int before = ui_list_has("HB timer restarted");
+        ui_page(2);
+        ui_press(1); // Show: Directed (the list is rebuilt)
+        ui_press(1); // All
+        ui_press(1); // No HB
+        pump(300);
+        printf("[rows] info row before %d, after three rebuilds %d (want 1, 1)\n", before, ui_list_has("HB timer restarted"));
+        ui_key(LV_KEY_ESC); // stop the heartbeat
+        pump(500);
+        ui_page(3);
+        ui_press(4); // Inbox
+        pump(300);
+        printf("[rows] Inbox: the oldest unread listed %d, opens on the newest unread %d (want 1, 1)\n",
+               ui_popup_has("THE OLDEST UNREAD") == 1, strstr(ui_focused_text(), "A NEWER UNREAD") != nullptr);
+        ui_key(LV_KEY_ESC);
+        pump(300);
         return 0;
     }
     if (getenv("ONLY_NEWSTN")) {
@@ -1168,7 +1347,7 @@ int main() {
         ui_page(3);
         ui_press(4);
         pump(300);
-        ui_key(LV_KEY_RIGHT); // from the unread one to the older, read one
+        ui_key(LV_KEY_RIGHT); // from the newest unread one to the next one down
         printf("[inbox] on '%s'\n", ui_focused_text());
         ui_click_focused();
         pump(300);

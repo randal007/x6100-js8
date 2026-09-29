@@ -42,6 +42,12 @@ bool is_grid(const std::string &word);
 /// a few km): what logs and the Stations list use.
 std::string find_grid(const std::string &body);
 
+/// The sender's own grid, as desktop takes one: from a heartbeat or a CQ
+/// ("@HB HEARTBEAT FN42", "@ALLCALL CQ CQ CQ FN03") or "GRID xxxx" (the
+/// GRID command, "@APRSIS GRID CN89", or "RR73 GRID EN34KS"), cut to 6
+/// characters; "" otherwise. "MY DAUGHTER LIVES IN EM12" isn't theirs.
+std::string announced_grid(const std::string &body);
+
 /// Which grid to keep: `heard` replaces `known` unless it's a less precise
 /// form of it ("DN17" after "DN17AB" keeps "DN17AB").
 std::string better_grid(const std::string &known, const std::string &heard);

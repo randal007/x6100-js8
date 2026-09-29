@@ -55,8 +55,11 @@ bool is_hb_ack(const std::vector<std::string> &w) {
 }
 
 /// "73", "SK", "TU 73!", "RR73": the QSO is ending.
+// 73, SK or RR73 among the last three words ("TNX QSO 73", "73 GL",
+// "FB OM 73 ES GL"), not anywhere: "73 DEGREES HERE" mid-QSO isn't its end.
 bool ends_qso(const std::vector<std::string> &w) {
-    for (auto s : w) {
+    for (std::size_t i = w.size() > 3 ? w.size() - 3 : 0; i < w.size(); i++) {
+        auto s = w[i];
         while (!s.empty() && std::ispunct((unsigned char)s.back())) s.pop_back();
         if (s == "73" || s == "SK" || s == "RR73") return true;
     }
@@ -115,7 +118,7 @@ std::optional<std::string> QsoTracker::received(const std::string &from, const s
     q.heard_snr = snr;
     if (auto r = find_snr(w)) q.rcvd_snr = r;
     auto colon  = text.find(':');
-    q.grid      = better_grid(q.grid, find_grid(colon == std::string::npos ? text : text.substr(colon + 1)));
+    q.grid      = better_grid(q.grid, announced_grid(colon == std::string::npos ? text : text.substr(colon + 1)));
     if (is_hb_ack(w)) return std::nullopt; // an ack isn't a QSO
     q.they_sent = true;
     return maybe_offer(q, ends_qso(w));

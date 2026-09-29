@@ -13,6 +13,14 @@
 
 extern buttons_page_t *stub_page;
 
+/* The station callsign (APP > Callsign). */
+void ui_set_callsign(const char *call) { snprintf(params.callsign.x, sizeof(params.callsign.x), "%s", call); }
+/* One VOL knob step at the focus (the knob is a keypad). */
+void ui_vol(int dir) {
+    uint32_t key = dir > 0 ? KEY_VOL_RIGHT_EDIT : KEY_VOL_LEFT_EDIT;
+    lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_KEY, &key);
+}
+
 /* JS8's alert switches (params.js8_alerts bits). */
 void ui_set_alerts(unsigned bits) { params.js8_alerts.x = (uint8_t)bits; }
 
@@ -122,6 +130,11 @@ int  ui_focus_is_table(void) {
 #include "textarea_window.h"
 
 void ui_compose_append(const char *text) { lv_textarea_add_text(textarea_window_text(), text); }
+/* The compose box's placeholder: which editor it opened as. */
+const char *ui_compose_placeholder(void) {
+    lv_obj_t *t = textarea_window_text();
+    return (t && lv_obj_is_valid(t)) ? lv_textarea_get_placeholder_text(t) : "(no compose window)";
+}
 void ui_compose_clear(void) { lv_textarea_set_text(textarea_window_text(), ""); }
 const char *ui_compose_text(void) {
     /* textarea_window keeps its pointer after closing; don't read a dead one. */

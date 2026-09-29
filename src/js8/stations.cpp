@@ -53,8 +53,8 @@ void StationList::add(const StationEvent &ev, const std::string &my_call) {
     if (auto colon = body.find(':'); colon != std::string::npos) body = body.substr(colon + 1);
     auto w = words(body);
 
-    // Grid: a heartbeat or CQ ends with one; so does a GRID reply.
-    st.grid = better_grid(st.grid, find_grid(body));
+    // Grid: only from a heartbeat, a CQ or a GRID command, as desktop.
+    st.grid = better_grid(st.grid, announced_grid(body));
 
     // Anything addressed to us means they hear us (desktop sets the ★ the
     // same way). "... SNR -12" or "... HEARTBEAT SNR -12" to us is how they

@@ -221,7 +221,7 @@ to go back a page. In JS8 a hold is half a second.
 | 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and HB on, as on desktop). |
 | 4 | **Settings…** | INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay on/off and your groups: see [Settings](#settings). |
 | 5 | **APRS >** | [APRS](#aprs) spots and messages. |
-| 5 | **Log QSO** | [Log](#logging) the QSO that just ended, or the selected station. |
+| 5 | **Log QSO** | [Log](#logging) the QSO that just ended, or the selected station if you've selected someone else since. |
 | 5 | **Activ.: Off / POTA / SOTA** | Activating a park or summit: added to every log entry. Hold to type it. |
 | 5 | **Log prompt: On / Off** | Offer to log when a QSO ends with 73 or SK. |
 | 6 | **Alerts >** | [Alerts](#alerts): beeps and alert words. |
@@ -308,7 +308,8 @@ of your [groups](#settings) goes to the Inbox too. Messages an APRS
 gateway passes on to you (`@APRSIS MSG TO:<your call> …`) arrive from
 *APRS*, as on desktop, without an ACK.
 
-**The Inbox** opens on the oldest unread message (`*`). Open one to read
+**The Inbox** lists every message (up to 200), newest first, and opens on
+the newest unread one (`*`). Open one to read
 it all. **Reply** writes back the way it came. For a message someone held
 for you (`… FROM N0XYZ`) there are desktop's other two choices as well:
 **Reply to N0XYZ via** the station that held it (`MSG TO:N0XYZ`, held
@@ -395,6 +396,14 @@ The Log popup (page 5 **Log QSO**, or by itself when a QSO ends with 73 or
 SK) is filled in for you: call, band, start and end, reports, frequency,
 power, their grid and yours (from GPS if one is plugged in). Add a name or
 comment, then **Save to log**. Nothing is logged without Save.
+
+A QSO ends when 73, SK or RR73 comes among the last three words of a
+message ("TNX QSO 73", "73 GL"), not anywhere ("73 DEGREES HERE" isn't an
+end). ESC on the prompt means *not now*: **Log QSO** then logs whoever is
+selected, and the ended QSO is still there when you select that station
+(for 30 minutes). A grid you type must be a real one (`CN89`, `CN89KG`); it's
+saved in capitals. A station's grid only comes from its heartbeats, CQs and
+GRID replies, as on desktop, not from any grid-shaped word it sends.
 
 - Saved to **`js8call_log.adi`** on the SD card's DATA partition, in desktop
   JS8Call's ADIF format (`MODE MFSK`, `SUBMODE JS8`), ready for your
@@ -666,14 +675,28 @@ Done for beta 4 so far:
   band); waterfall rows, the station lists and the Stations view's
   worked-before marks cost less; a regular who isn't in your log alerts as
   a new station once per band, not each time they come back after an hour
+- [x] **Screen and keyboard fixes:** the VOL knob works in every list
+  (Inbox, Settings, APRS, Alerts, Freq, Log); a custom frequency, alert
+  words or log fields can be typed before you've set a callsign, and
+  Send… no longer opens in the frequency editor afterwards; the keyboard
+  takes every character JS8 sends (`` $ % < > [ ] ^ | ~ \ ` ``); a message
+  that's too long says so as you type; Log QSO, the end of a QSO and typed
+  grids as described in [Logging](#logging); the Inbox lists all 200;
+  info rows ("Auto: ...", "Held message 3 delivered") no longer vanish
+  when the list is rebuilt; a message cut off by a band change stops
+  showing "..."; as desktop, a message to VE7NHW/P isn't to you as
+  VE7NHW, and "Reply to HOME" is no longer offered for "... AWAY FROM
+  HOME"; alert words match with punctuation around them ("SOTA,"); a
+  message to a CQ7 call isn't a CQ; Hold Speed matches the selected
+  (locked) station
 
 Still to do:
 
 - [ ] Fix the rest of the bugs found by reading the code: the plan, in
   order, is [docs/review/fix-plan.md](docs/review/fix-plan.md) (from the
   full review in [docs/review](docs/review/) and the first
-  [bug hunt](docs/bug-hunt-2026-09-28.md); next: screen and keyboard
-  fixes)
+  [bug hunt](docs/bug-hunt-2026-09-28.md); next: APRS and SMS, then the
+  build and test tools)
 - [ ] SMS: show the gateway's receipt (`ACK04}`) as "delivered" on the
   message you sent, instead of as a new Inbox message
 - [ ] On-air tests: relays and store and forward with desktop JS8Call

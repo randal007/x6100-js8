@@ -9,6 +9,8 @@
 #include "classify.hpp"
 #include "datafile.hpp"
 
+#include "js8core/protocol/varicode.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <regex>
@@ -421,6 +423,9 @@ std::optional<Signature> delivered_signature(const std::string &text) {
     if (!std::regex_search(t, m, re)) return std::nullopt;
     Signature s;
     s.from = m.str(1);
+    // "I'M AWAY FROM HOME" isn't signed by "HOME": desktop also requires a
+    // valid callsign.
+    if (!js8core::protocol::varicode::is_valid_callsign(s.from, nullptr)) return std::nullopt;
     if (m[2].matched) s.next_id = std::stoi(m.str(2));
     return s;
 }

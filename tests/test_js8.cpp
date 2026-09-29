@@ -321,11 +321,19 @@ TEST_CASE("classify recognises heartbeats, CQs and messages to me", "[js8][class
     CHECK_FALSE(classify("W1ABC: @ALLCALL SNR -12", "K2XYZ").snr_report);
     CHECK_FALSE(classify("W1ABC: N0XYZ HELLO SNR -12", "K2XYZ").snr_report);
 
-    // Portable and prefixed forms of my call still count as me.
-    CHECK(classify("W1ABC: K2XYZ/P HELLO", "K2XYZ").to_me);
-    CHECK(classify("W1ABC: VE3/K2XYZ HELLO", "K2XYZ").to_me);
+    // As desktop: my call or my base call exactly. K2XYZ/P is another
+    // station (a portable, a club's /P) when I'm K2XYZ (bug hunt 4).
+    CHECK_FALSE(classify("W1ABC: K2XYZ/P HELLO", "K2XYZ").to_me);
+    CHECK_FALSE(classify("W1ABC: VE3/K2XYZ HELLO", "K2XYZ").to_me);
+    CHECK(classify("W1ABC: K2XYZ/P HELLO", "K2XYZ/P").to_me); // me, portable
+    CHECK(classify("W1ABC: K2XYZ HELLO", "K2XYZ/P").to_me);   // my base call
     CHECK_FALSE(classify("W1ABC: K2XYA HELLO", "K2XYZ").to_me);
     CHECK_FALSE(classify("free text", "K2XYZ").to_me);
+
+    // CQ is the word CQ, not a call starting with it (Portugal's CQ7ABC).
+    CHECK_FALSE(classify("CT1ABC: CQ7ABC HELLO", "K2XYZ").cq);
+    CHECK(classify("CT1ABC: CQ7ABC HELLO", "K2XYZ").to == "CQ7ABC");
+    CHECK(classify("W1ABC: CQ CQ DE W1ABC", "K2XYZ").cq);
 }
 
 TEST_CASE("base_callsign strips prefixes and suffixes", "[js8][classify]") {
@@ -1606,6 +1614,18 @@ TEST_CASE("grids: 4 to 10 characters read, 6 kept, not RR73, most precise kept",
     CHECK(find_grid("VE7NHW GRID CN89KG12AB") == "CN89KG"); // logged as 6
     CHECK(find_grid("VE7NHW QTH CN89KG12") == "CN89KG");
 
+    // The sender's own grid, as desktop takes it: heartbeats, CQs and GRID
+    // commands only (bug hunt 6).
+    CHECK(announced_grid("@HB HEARTBEAT CN89") == "CN89");
+    CHECK(announced_grid("@ALLCALL CQ CQ CQ FN03") == "FN03");
+    CHECK(announced_grid("VE7NHW GRID DN17AB TNX") == "DN17AB");
+    CHECK(announced_grid("@APRSIS GRID CN89KG12") == "CN89KG");
+    CHECK(announced_grid("K2XYZ RR73 GRID EN34KS") == "EN34KS");
+    CHECK(announced_grid("K2XYZ MY DAUGHTER LIVES IN EM12") == "");
+    CHECK(announced_grid("K2XYZ W1ABC IS FN42") == "");
+    CHECK(announced_grid("K2XYZ HEARTBEAT SNR -08") == "");
+    CHECK(announced_grid("VE7NHW RR73") == "");
+
     CHECK(better_grid("", "DN17") == "DN17");
     CHECK(better_grid("DN17AB", "DN17") == "DN17AB");  // less precise: keep
     CHECK(better_grid("DN17", "DN17AB") == "DN17AB");
@@ -1613,7 +1633,7 @@ TEST_CASE("grids: 4 to 10 characters read, 6 kept, not RR73, most precise kept",
     CHECK(better_grid("DN17AB", "") == "DN17AB");
 }
 
-TEST_CASE("the QSO keeps the grid they sent anywhere in a message", "[js8][log]") {
+TEST_CASE("the QSO and the station keep the grid they announced, not any grid-shaped word", "[js8][log]") {
     QsoTracker        t;
     const std::string me = "VE7NHW";
     t.sent("VE7NHW: N7EAL GRID?", me, 0);
@@ -1635,6 +1655,34 @@ TEST_CASE("the QSO keeps the grid they sent anywhere in a message", "[js8][log]"
     auto list = st.sorted(1000);
     REQUIRE(list.size() == 1);
     CHECK(list[0].grid == "DN17AB");
+
+    // Someone else's grid, or a grid in passing, isn't theirs (bug hunt 6).
+    StationList st2;
+    StationEvent e2{"N0XYZ", "VE7NHW", "N0XYZ: VE7NHW MY DAUGHTER LIVES IN EM12", true, -9, 1500, 0, 1000};
+    st2.add(e2, me);
+    CHECK(st2.sorted(1000)[0].grid.empty());
+    QsoTracker t2;
+    t2.sent("VE7NHW: N0XYZ HELLO", me, 0);
+    t2.received("N0XYZ", "N0XYZ: VE7NHW W1ABC IS IN FN42", true, -9, me, 15000);
+    REQUIRE(t2.get("N0XYZ", 15000));
+    CHECK(t2.get("N0XYZ", 15000)->grid.empty());
+}
+
+TEST_CASE("a QSO ends on 73 near the end of a message, not anywhere", "[js8][log]") {
+    const std::string me = "VE7NHW";
+    auto ends = [&](const char *last) {
+        QsoTracker t;
+        t.sent("VE7NHW: N7EAL SNR -12", me, 1000);
+        t.received("N7EAL", "N7EAL: VE7NHW SNR -08", true, -11, me, 16000);
+        return (bool)t.received("N7EAL", last, true, -11, me, 31000);
+    };
+    CHECK(ends("N7EAL: VE7NHW TNX QSO 73"));
+    CHECK(ends("N7EAL: VE7NHW 73 GL"));
+    CHECK(ends("N7EAL: VE7NHW FB OM 73 ES GL"));
+    CHECK(ends("N7EAL: VE7NHW RR73"));
+    CHECK(ends("N7EAL: VE7NHW TU SK"));
+    CHECK_FALSE(ends("N7EAL: VE7NHW 73 DEGREES HERE TODAY")); // bug hunt 13
+    CHECK_FALSE(ends("N7EAL: VE7NHW RIG IS 73 WATTS INTO A DIPOLE"));
 }
 
 // ---- Inbox -------------------------------------------------------------------
@@ -1994,6 +2042,11 @@ TEST_CASE("alert words match whole words and the sender's call", "[js8][alerts]"
     CHECK(alert_word_hit("N7EAL: W1ABC GOING SOTA TODAY", "N7EAL", w) == "SOTA");
     CHECK(alert_word_hit("N7EAL: W1ABC SOTAS AND POTA", "N7EAL", w) == "");           // whole words only
     CHECK(alert_word_hit("N7EAL: W1ABC HI", "N7EAL", {}) == "");
+    // Punctuation around a word isn't part of it (B-26); @ and / are.
+    CHECK(alert_word_hit("N7EAL: W1ABC GOING SOTA, 73", "N7EAL", w) == "SOTA");
+    CHECK(alert_word_hit("N7EAL: W1ABC (SOTA) TODAY", "N7EAL", w) == "SOTA");
+    CHECK(alert_word_hit("N7EAL: W1ABC HEARD VE7ABC?", "N7EAL", w) == "VE7ABC");
+    CHECK(alert_word_hit("N7EAL: W1ABC POTA TODAY", "N7EAL", w) == ""); // @POTA wants the @
 
     char hit[16];
     CHECK(js8_alert_hit("N7EAL: @POTA HI", "N7EAL", "ve7abc @pota", hit, sizeof(hit)));
@@ -2878,6 +2931,11 @@ TEST_CASE("a delivered message's signature, as desktop's inbox reads it", "[js8]
     CHECK(b->from == "N0XYZ");
     CHECK(b->next_id == 0);
     CHECK_FALSE(delivered_signature("HELLO THERE"));
+    // Not signed: "HOME" isn't a callsign (bug hunt 3; desktop checks too).
+    CHECK_FALSE(delivered_signature("I'M AWAY FROM HOME"));
+    auto c = delivered_signature("SEE YOU FROM VE7/N0XYZ");
+    REQUIRE(c);
+    CHECK(c->from == "VE7/N0XYZ");
 }
 
 TEST_CASE("js8_process keeps messages and answers them", "[js8][held]") {

@@ -64,7 +64,10 @@ MessageClass classify(const std::string &text, const std::string &my_call) {
     const std::string &first = tokens[0];
 
     if (first == "@HB" || (tokens.size() > 1 && tokens[1] == "HEARTBEAT")) mc.heartbeat = true;
-    if (starts_with(first, "CQ") || (first == "@ALLCALL" && tokens.size() > 1 && tokens[1] == "CQ")) mc.cq = true;
+    // "CQ" itself, not a call starting with it (Portugal's CQ0-CQ9 special
+    // calls: "CT1ABC: CQ7ABC HELLO" is to CQ7ABC). CQ frames render as
+    // "@ALLCALL CQ ...".
+    if (first == "CQ" || (first == "@ALLCALL" && tokens.size() > 1 && tokens[1] == "CQ")) mc.cq = true;
 
     if (first[0] == '@') {
         mc.to       = first;
@@ -75,8 +78,10 @@ MessageClass classify(const std::string &text, const std::string &my_call) {
 
     if (!mc.to.empty() && !mc.to_group && tokens.size() > 2 && tokens[1] == "SNR") mc.snr_report = true;
 
+    // As desktop: our call or our base call, exactly. VE7NHW/P is another
+    // station (a portable, a club's /P) when we're VE7NHW.
     if (!my_call.empty() && !mc.to.empty() && !mc.to_group)
-        mc.to_me = base_callsign(mc.to) == base_callsign(my_call);
+        mc.to_me = mc.to == upper(my_call) || mc.to == base_callsign(my_call);
 
     return mc;
 }
@@ -157,6 +162,21 @@ std::string find_grid(const std::string &body) {
         if (w[i] == "GRID" && is_grid(w[i + 1])) return w[i + 1].substr(0, 6);
     for (auto it = w.rbegin(); it != w.rend(); ++it)
         if (is_grid(*it)) return it->substr(0, 6);
+    return "";
+}
+
+std::string announced_grid(const std::string &body) {
+    std::istringstream       in(upper(body));
+    std::vector<std::string> w;
+    for (std::string t; in >> t;) w.push_back(t);
+    if (w.empty()) return "";
+    // "GRID xxxx": a GRID command, or said in so many words ("RR73 GRID
+    // EN34KS"; desktop only reads the command, but this is just as plain).
+    for (std::size_t i = 0; i + 1 < w.size(); i++)
+        if (w[i] == "GRID" && is_grid(w[i + 1])) return w[i + 1].substr(0, 6);
+    bool hb = w[0] == "@HB" || (w.size() > 1 && w[1] == "HEARTBEAT");
+    bool cq = w[0] == "CQ" || (w[0] == "@ALLCALL" && w.size() > 1 && w[1] == "CQ");
+    if ((hb || cq) && w.size() > 1 && is_grid(w.back())) return w.back().substr(0, 6);
     return "";
 }
 

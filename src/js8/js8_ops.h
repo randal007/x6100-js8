@@ -37,6 +37,10 @@ const char *js8_query_label(js8_query_t q);
 bool js8_query_text(js8_query_t q, const char *to_call, int their_snr, const char *my_grid, char *out,
                     unsigned out_len);
 
+/* A Maidenhead locator of 4, 6, 8 or 10 characters, any case, spaces
+ * around ignored ("cn89kg" yes, "HOME" no). */
+bool js8_is_grid(const char *text);
+
 /* "CALL: HEARTBEAT FN42", as desktop JS8Call sends it. */
 void js8_heartbeat_text(const char *my_call, const char *my_grid, char *out, unsigned out_len);
 

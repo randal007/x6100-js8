@@ -12,6 +12,7 @@
 #include "speeds.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
 #include <cmath>
 #include <regex>
@@ -134,6 +135,18 @@ void normalize_compound_directed_helpers(std::vector<RxFrame> &frames) {
 
 } // namespace
 
+namespace {
+// Message ids for the whole run, not per receiver: the app's message list
+// outlives a receiver (JS8 closed and reopened, a retune), and a new
+// receiver's message 1 used to update an old message's row.
+std::atomic<std::uint32_t> g_next_id{1};
+
+std::uint32_t next_message_id() {
+    std::uint32_t id = g_next_id++;
+    return id ? id : g_next_id++; // 0 means "none"
+}
+} // namespace
+
 std::string assemble_multipart_text(const std::vector<RxFrame> &frames) {
     std::vector<const RxFrame *> parts;
     for (auto &f : frames)
@@ -187,7 +200,7 @@ void MessageAssembler::add(const RxFrame &frame) {
     if (frame.is_first() && frame.is_last()) {
         if (match) buffers_.erase(*match);
         RxFrame msg = frame;
-        msg.msg_id  = next_id_++;
+        msg.msg_id  = next_message_id();
         msg.partial = false;
         emit_(msg);
         return;
@@ -196,7 +209,7 @@ void MessageAssembler::add(const RxFrame &frame) {
     // First frame: start a fresh buffer at this offset.
     if (frame.is_first()) {
         if (match) buffers_.erase(*match);
-        auto &buf = buffers_[key_for(frame)] = Buffer{{frame}, frame.timestamp_ms, next_id_++};
+        auto &buf = buffers_[key_for(frame)] = Buffer{{frame}, frame.timestamp_ms, next_message_id()};
         show_partial(buf);
         return;
     }
@@ -217,7 +230,7 @@ void MessageAssembler::add(const RxFrame &frame) {
     }
 
     // No buffer: probably a missed first frame. Start one anyway.
-    Buffer buf{{frame}, frame.timestamp_ms, next_id_++};
+    Buffer buf{{frame}, frame.timestamp_ms, next_message_id()};
     if (frame.is_last()) {
         emit_(assemble(buf));
         return;
