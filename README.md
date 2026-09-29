@@ -706,6 +706,12 @@ Still to do:
   work over its four cores (the screen drawing and the JS8 decoder each
   lean on one core today)
 
+Next big feature (planned, not started): **Show Map** — a world map in
+place of the waterfall and list, stations in their grid squares, curved
+paths to the stations that heard you, a close-in view of your continent
+that switches to the world when DX is heard. See
+[docs/MAP_PLAN.md](docs/MAP_PLAN.md) for the plan and mock-ups.
+
 Ideas for later:
 
 - Time Sync from a USB GPS (true UTC, no stations needed)
@@ -746,7 +752,8 @@ JS8 app by VE7NHW.
 
 - **Design notes:** [docs/RESEARCH.md](docs/RESEARCH.md) (JS8 vs FT8, why
   this engine), [docs/TX_PLAN.md](docs/TX_PLAN.md) (transmitting),
-  [docs/T6_PLAN.md](docs/T6_PLAN.md) (speeds).
+  [docs/T6_PLAN.md](docs/T6_PLAN.md) (speeds),
+  [docs/MAP_PLAN.md](docs/MAP_PLAN.md) (the planned map view).
 - **Known bugs:** found by reading the code, in
   [docs/review/](docs/review/) (a feature-by-feature review: bugs,
   improvements, and the [fix plan](docs/review/fix-plan.md) in work
