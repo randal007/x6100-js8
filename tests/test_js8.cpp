@@ -3268,3 +3268,222 @@ TEST_CASE("an APRS gateway's reply (no checksum, as desktop sends it) reaches th
     msg.checksum_ok = false;
     CHECK(process(msg, settings(), {}, "").store.kind == StoreAction::Kind::None);
 }
+
+/* ---- Show Map: positions, views, callsign places (docs/MAP_PLAN.md) ------ */
+
+#include "callsign_place.hpp"
+#include "geo.hpp"
+#include "js8_map.h"
+
+#ifndef CTY_DAT_PATH
+#define CTY_DAT_PATH "third-party/cty/cty.dat"
+#endif
+
+namespace geo = x6100::js8::geo;
+#include <algorithm>
+#include <cstdio>
+
+TEST_CASE("map: locators to areas and centres, as the radio's qth.c", "[map]") {
+    auto b = geo::grid_box("CN89");
+    REQUIRE(b);
+    CHECK(b->sw.lon == Catch::Approx(-124));
+    CHECK(b->sw.lat == Catch::Approx(49));
+    CHECK(b->ne.lon == Catch::Approx(-122));
+    CHECK(b->ne.lat == Catch::Approx(50));
+    auto c = geo::grid_center("cn89kg"); // any case; qth_str_to_pos: -123.125, 49.2708
+    REQUIRE(c);
+    CHECK(c->lon == Catch::Approx(-123.125));
+    CHECK(c->lat == Catch::Approx(49.0 + 6 * 2.5 / 60 + 2.5 / 120));
+    CHECK(geo::grid_box("CN89KG12AB"));
+    for (const char *bad : {"", "HOME", "CN8", "SS00", "CN89ZZ", "CN89K", "C189"}) {
+        INFO(bad);
+        CHECK_FALSE(geo::grid_box(bad));
+    }
+    // Round trip through js8_latlon_to_grid: the centre is in the square.
+    for (double lat = -80; lat <= 80; lat += 17.3)
+        for (double lon = -179; lon <= 179; lon += 23.7) {
+            char g[11];
+            REQUIRE(js8_latlon_to_grid(lat, lon, 6, g, sizeof(g)));
+            auto box = geo::grid_box(g);
+            REQUIRE(box);
+            CHECK(lat >= box->sw.lat - 1e-9); // points on an edge: rounding either way
+            CHECK(lat < box->ne.lat + 1e-9);
+            CHECK(lon >= box->sw.lon - 1e-9);
+            CHECK(lon < box->ne.lon + 1e-9);
+        }
+}
+
+TEST_CASE("map: distance, bearing, Mercator", "[map]") {
+    CHECK(geo::distance_km({0, 0}, {0, 1}) == Catch::Approx(111.195).epsilon(0.001));
+    CHECK(geo::bearing_deg({0, 0}, {1, 0}) == Catch::Approx(0).margin(1e-6));
+    CHECK(geo::bearing_deg({0, 0}, {0, 1}) == Catch::Approx(90));
+    CHECK(geo::mercator_y(0) == Catch::Approx(0).margin(1e-9));
+    CHECK(geo::mercator_y(45) == Catch::Approx(50.4987).epsilon(1e-4));
+    CHECK(geo::mercator_y(90) == Catch::Approx(180).epsilon(1e-6)); // clamped: the square world
+    CHECK(geo::mercator_lat(geo::mercator_y(60)) == Catch::Approx(60));
+    CHECK(geo::unwrap(170, -170) == Catch::Approx(-190));
+}
+
+TEST_CASE("map: great-circle paths curve and stay in one piece across the Pacific", "[map]") {
+    auto home = *geo::grid_center("CN89");
+    auto ja   = *geo::grid_center("PM95");
+    auto path = geo::great_circle(home, ja, 64);
+    REQUIRE(path.size() == 65);
+    CHECK(path.front().lat == Catch::Approx(home.lat));
+    CHECK(path.back().lat == Catch::Approx(ja.lat));
+    CHECK(path.back().lon == Catch::Approx(ja.lon - 360)); // went west, over the Pacific
+    double top = -90;
+    for (size_t i = 1; i < path.size(); i++) {
+        CHECK(std::fabs(path[i].lon - path[i - 1].lon) < 10); // no jump at the date line
+        top = std::max(top, path[i].lat);
+    }
+    CHECK(top > home.lat + 5); // it bows north, as GridTracker's paths do
+}
+
+TEST_CASE("map: the fitted view shows every station, never too close in", "[map]") {
+    auto home = *geo::grid_center("CN89");
+    std::vector<geo::LatLon> na = {*geo::grid_center("FN42"), *geo::grid_center("EM12"), *geo::grid_center("CN85")};
+    auto v = geo::fit(home, na, 771, 268);
+    for (auto p : na) {
+        double x, y;
+        v.project(p, x, y);
+        CHECK(x > 0.1 * 771);
+        CHECK(x < 0.9 * 771);
+        CHECK(y > 0.1 * 268);
+        CHECK(y < 0.9 * 268);
+    }
+    // One station next door: at least ~40 degrees across.
+    auto near = geo::fit(home, {*geo::grid_center("CN88")}, 771, 268);
+    CHECK(771 / near.px_deg >= 40);
+    // Home in North America and a station in Japan: centred over the
+    // Pacific, not over Europe.
+    auto pac = geo::fit(home, {*geo::grid_center("PM95")}, 771, 268);
+    CHECK(std::fabs(geo::unwrap(pac.lon_c, -170) + 170) < 30);
+}
+
+TEST_CASE("map: portable calls as desktop JS8Call reads them", "[map]") {
+    using x6100::js8::call_area;
+    using x6100::js8::effective_prefix;
+    CHECK(effective_prefix("VE7NHW") == "VE7NHW");
+    CHECK(effective_prefix("w6/ve7nhw") == "W6");
+    CHECK(effective_prefix("VE7NHW/W6") == "W6");
+    CHECK(effective_prefix("VE7NHW/P") == "VE7NHW");
+    CHECK(effective_prefix("VE7NHW/MM") == "VE7NHW");
+    CHECK(effective_prefix("KG4UHM/6") == "KG4UHM");
+    CHECK(call_area("VE7NHW") == 7);
+    CHECK(call_area("KG4UHM/6") == 6);
+    CHECK(call_area("W6/VE7NHW") == 6);
+    CHECK(call_area("7K1ABC") == 1);
+    CHECK(call_area("2E0ABC") == 0);
+    CHECK(call_area("ABC") == -1);
+}
+
+TEST_CASE("map: callsigns placed by AD1C's country file and our regions", "[map]") {
+    x6100::js8::CountryFile cty;
+    REQUIRE(cty.load(CTY_DAT_PATH));
+    CHECK(cty.entity_count() > 300);
+    struct Case {
+        const char *call, *country, *continent, *region;
+    };
+    for (auto [call, country, continent, region] : std::vector<Case>{
+             {"VE7NHW", "Canada", "NA", "British Columbia"},
+             {"va3xyz", "Canada", "NA", "Ontario"},
+             {"VO1ABC", "Canada", "NA", "Newfoundland"},
+             {"VO2ABC", "Canada", "NA", "Labrador"},
+             {"VY1ABC", "Canada", "NA", "Yukon"},
+             {"VE7NHW/P", "Canada", "NA", "British Columbia"},
+             {"W6ABC", "United States", "NA", "US call area 6"},
+             {"KG4UHM/6", "United States", "NA", "US call area 6"}, // desktop's KG4 fixup, then /6
+             {"W6/VE7NHW", "United States", "NA", "US call area 6"},
+             {"VE7NHW/W6", "United States", "NA", "US call area 6"},
+             {"KG4AB", "Guantanamo Bay", "NA", ""},
+             {"KL7QXZ", "Alaska", "NA", ""},
+             {"KL7AB", "United States", "NA", "US call area 7"}, // a real call cty.dat lists (lives in the lower 48)
+             {"KH6XX", "Hawaii", "OC", ""},
+             {"JA1ABC", "Japan", "AS", "Kanto"},
+             {"7K1ABC", "Japan", "AS", "Kanto"},
+             {"VK2ABC", "Australia", "OC", "New South Wales"},
+             {"G4XYZ", "England", "EU", ""},
+             {"ZS6ABC", "South Africa", "AF", ""},
+             {"LU1ABC", "Argentina", "SA", ""},
+             {"4X1ABC", "Israel", "AS", ""},
+         }) {
+        INFO(call);
+        auto pl = cty.find(call);
+        REQUIRE(pl);
+        CHECK(pl->country == country);
+        CHECK(pl->continent == continent);
+        CHECK(pl->region == region);
+    }
+    // Regions sit inside their region: VE7 in British Columbia.
+    auto bc = cty.find("VE7NHW");
+    CHECK(bc->pos.lat > 48);
+    CHECK(bc->pos.lat < 60);
+    CHECK(bc->pos.lon > -139);
+    CHECK(bc->pos.lon < -114);
+    CHECK_FALSE(cty.find(""));
+    CHECK(cty.continent_near(*geo::grid_center("JO62")).value_or("") == "EU");
+}
+
+TEST_CASE("map: C API places stations and picks the view (Auto / Close-in / World)", "[map]") {
+    REQUIRE(js8_map_load_countries(CTY_DAT_PATH));
+    js8_map_place_t pl;
+    REQUIRE(js8_map_place("VE6ABC", "", &pl));
+    CHECK(pl.approx);
+    CHECK(std::string(pl.where) == "Alberta");
+    CHECK(std::string(pl.continent) == "NA");
+    REQUIRE(js8_map_place("KK7RFI", "CN85", &pl)); // a grid wins
+    CHECK_FALSE(pl.approx);
+    CHECK(std::string(pl.where) == "CN85");
+    CHECK(pl.lat == Catch::Approx(45.5));
+
+    char mine[3];
+    REQUIRE(js8_map_my_continent("VE7NHW", "CN89", mine));
+    CHECK(std::string(mine) == "NA");
+    REQUIRE(js8_map_my_continent("", "JO62", mine)); // no call: the grid's country
+    CHECK(std::string(mine) == "EU");
+
+    auto home = *geo::grid_center("CN89");
+    auto pt   = [](const char *grid, const char *cont) {
+        js8_map_point_t p{};
+        auto c = *geo::grid_center(grid);
+        p.lat  = c.lat;
+        p.lon  = c.lon;
+        std::snprintf(p.continent, sizeof(p.continent), "%s", cont);
+        return p;
+    };
+    std::vector<js8_map_point_t> na = {pt("CN85", "NA"), pt("FN42", "NA"), pt("EM12", "NA")};
+    js8_map_view_t               v;
+    CHECK_FALSE(js8_map_choose_view(JS8_MAP_AUTO, home.lat, home.lon, "NA", na.data(), na.size(), 771, 268, &v));
+    auto dx = na;
+    dx.push_back(pt("PM95", "AS"));
+    CHECK(js8_map_choose_view(JS8_MAP_AUTO, home.lat, home.lon, "NA", dx.data(), dx.size(), 771, 268, &v));
+    float x, y;
+    js8_map_project(&v, 35.5, 139, &x, &y); // Japan is on the world view
+    CHECK(x > 0);
+    CHECK(x < 771);
+    // Close-in holds on North America; Japan is off the edge.
+    CHECK_FALSE(js8_map_choose_view(JS8_MAP_CLOSE, home.lat, home.lon, "NA", dx.data(), dx.size(), 771, 268, &v));
+    js8_map_project(&v, 35.5, 139, &x, &y);
+    CHECK((x < 0 || x > 771));
+    // World: the whole world, centred on us.
+    CHECK(js8_map_choose_view(JS8_MAP_WORLD, home.lat, home.lon, "NA", na.data(), na.size(), 771, 268, &v));
+    CHECK(v.px_deg == Catch::Approx(771 / 360.0));
+    // A station whose continent is unknown doesn't switch to the world.
+    std::vector<js8_map_point_t> unk = {pt("FN42", "NA"), pt("EM12", "")};
+    CHECK_FALSE(js8_map_choose_view(JS8_MAP_AUTO, home.lat, home.lon, "NA", unk.data(), unk.size(), 771, 268, &v));
+
+    // Squares and paths on the screen.
+    js8_map_choose_view(JS8_MAP_AUTO, home.lat, home.lon, "NA", na.data(), na.size(), 771, 268, &v);
+    float x0, y0, x1, y1;
+    REQUIRE(js8_map_grid_rect(&v, "CN89", &x0, &y0, &x1, &y1));
+    CHECK(x0 < x1);
+    CHECK(y0 < y1);
+    float xs[33], ys[33], hx, hy, tx, ty;
+    js8_map_path(&v, home.lat, home.lon, 42.5, -71, 32, xs, ys);
+    js8_map_project(&v, home.lat, home.lon, &hx, &hy);
+    js8_map_project(&v, 42.5, -71, &tx, &ty);
+    CHECK(xs[0] == Catch::Approx(hx).margin(0.01));
+    CHECK(ys[32] == Catch::Approx(ty).margin(0.01));
+    CHECK(xs[32] == Catch::Approx(tx).margin(0.01));
+}

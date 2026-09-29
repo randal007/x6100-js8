@@ -20,6 +20,9 @@ add_library(JS8 STATIC
     alerts.cpp
     js8_ops.cpp
     js8_rx.cpp
+    geo.cpp
+    callsign_place.cpp
+    js8_map.cpp
 )
 
 # js8core needs C++20. Link it PRIVATE so the requirement stops here: the

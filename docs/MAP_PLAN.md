@@ -3,7 +3,8 @@
 A third view next to the message list and the Stations view: a world map
 with the stations heard on this frequency in their grid squares, you at
 yours, and curved paths to the stations that heard you. Inspired by
-GridTracker 2's map ("just the map"). Nothing here is built yet.
+GridTracker 2's map ("just the map"). **Status:** phase 1 done (the
+maths and callsign lookups, tested on the PC); nothing on the screen yet.
 
 ![North America close-in, then the world view](map-mockups/v2_na_world.png)
 
@@ -80,8 +81,10 @@ uses). *Heard me* adds the path.
 ### Callsign → place
 
 - **Country and continent:** AD1C's `cty.dat` (the file desktop JS8Call and
-  WSJT-X ship), parsed at start: prefixes, exact calls, the entity's centre
-  and continent. Credited in the README.
+  WSJT-X ship; its **Big CTY** edition, vendored in `third-party/cty/`, MIT
+  licence), parsed at start: prefixes, exact calls (they win: `KL7AB` is a
+  real call listed as living in the lower 48), the entity's centre and
+  continent, and cty.dat's own per-prefix positions when it has them.
 - **Regions** where the call area says where: our own small table,
   `src/js8/prefix_regions` — Canada by province (VE1/VA1 NS, VE2 QC, VE3 ON,
   VE4 MB, VE5 SK, VE6 AB, VE7 BC, VE8 NT, VE9 NB, VO1 NL, VO2 Labrador, VY0
@@ -118,10 +121,20 @@ uses). *Heard me* adds the path.
 
 ## Phases
 
-1. **Data and maths, on the PC with tests:** Maidenhead ↔ lat/long,
+1. **Data and maths, on the PC with tests** (done): Maidenhead ↔ lat/long,
    Mercator, great-circle paths, fit-to-stations with the minimum area,
    the continent rule, `cty.dat` parsing and the region table (portable
    calls included). Unit tests in `tests/test_js8.cpp`.
+   Code: `src/js8/geo.{hpp,cpp}` (locators — same centres as the radio's
+   `qth_str_to_pos()`, so map positions and the Stations view's distances
+   agree — distance, bearing, Mercator, great circles, the fitted view),
+   `src/js8/callsign_place.{hpp,cpp}` (cty.dat, desktop's
+   `effective_prefix()` and KG4 rule, call areas, the region table) and the
+   C API the app will use, `src/js8/js8_map.h` (`js8_map_place()`,
+   `js8_map_my_continent()`, `js8_map_choose_view()` with Auto /
+   Close-in / World, `js8_map_project()`, `js8_map_grid_rect()`,
+   `js8_map_path()`). Tests `[map]`: 7 cases, ~1200 checks. Parsing
+   cty.dat and 20 lookups: 19 ms on the PC (debug + ASan build).
 2. **Map data and the drawing test:** `tools/map_data`; draw the base map
    in C; time it on the PC, under ARM emulation, then on the radio.
 3. **The view in the app:** the third view, the buttons, Time Sync into
@@ -136,7 +149,8 @@ uses). *Heard me* adds the path.
 ## Credits and licences
 
 Natural Earth (public domain) for the map; AD1C's country file (`cty.dat`,
-shipped as desktop JS8Call ships it); colours and ideas from GridTracker 2
+MIT licence per <https://www.country-files.com/copyright/>, shipped as
+desktop JS8Call ships it); colours and ideas from GridTracker 2
 (no GridTracker code, map tiles or data are used). The Esri *Dark Gray*
 tiles GridTracker shows online can't be copied onto the radio; ours are
 drawn from Natural Earth in the same colours.
