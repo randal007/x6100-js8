@@ -128,17 +128,26 @@ offset counts as free" isn't ported: desktop never marks such offsets at
 `d9c50510`. Tests: `[parity]` and the switches/timing unit tests; harness
 `ONLY_REPLYQ` (new) and `ONLY_RETUNE` (now uses the keyboard).
 
-### WP4: Smoother screen, lighter work (effort M–L)
+### WP4: Smoother screen, lighter work — done 2026-09-29
+
+**Decided 2026-09-29 (your answers):** D-A: the fix for B-25 stays inside
+JS8 (its own queue for waterfall rows, partials coalesced); the shared
+`QUEUE_MAX_SIZE` in `src/scheduler.cpp` is **not** changed. D-B: "new
+station" means not heard on this band since power-on (and not in the log
+for the band). D-C: I-15 only if I-14's measurement says it's still worth
+it.
 
 | Item | Verdict | The fix |
 |---|---|---|
 | **I-14** TX bar restyles every 250 ms | **Fix** | First a harness case that runs `lv_timer_handler()` while timing (so it can see it); then set the TX bar's colour/text and the waterfall frame only when they change. |
-| **B-25** 64-item scheduler queue drops messages | **Fix** | Waterfall rows go straight into the dialog's own ring under a mutex (no scheduler); partial updates coalesced (latest per message); `QUEUE_MAX_SIZE` 64 → 256 (one line in firmware code). |
+| **B-25** 64-item scheduler queue drops messages | **Fix** (D-A) | Waterfall rows go straight into the dialog's own ring under a mutex (no scheduler); partial updates coalesced (latest per message). `QUEUE_MAX_SIZE` stays 64 (shared code, your call). |
 | **I-16** cheaper waterfall rows | **Fix, small** | While there: preallocated buffers, `nth_element` for the floor, direct pixel writes, drop `line_buf`. |
 | **I-17** station lists never forget | **Fix** | Erase expired stations in `add()`; `js8_stations_find(call)` by key; `heard_stations()` / `free_hb_offset()` without a full copy per message. |
-| **B-20** "new station" alerts again | **Fix, small** | A per-power-on set of calls heard, for "new". |
+| **B-20** "new station" alerts again | **Fix, small** (D-B) | A per-power-on set of calls heard per band, for "new". |
 | **BH-17** 200 log lookups every 5 s | **Fix** | Worked-before cached per call and band, refreshed after a log save. |
 | **I-15** per-row work on every redraw | **Fix** | Command span stored with each history slot; station fields computed at each rebuild. Only if I-14's measurement says it's still worth it. |
+
+**Status:** done in 68fd0fe, all as decided: I-14, B-25, I-16 (JS8 side: `lv_waterfall.c` is shared with FT8), I-17, B-20, BH-17; I-15 not done (measured: `js8_command_span()` is 0.2% of the redraw). New harness cases: `ONLY_LOAD` (GUI work per second), `ONLY_STALL` (B-25, lost all 6 messages on the old code), `ONLY_NEWSTN` (B-20, beeped twice on the old code).
 
 ### WP5: Screen and keyboard fixes (effort L, many small)
 

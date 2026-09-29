@@ -29,10 +29,10 @@ numbers refer to that commit.
 | I-11 | F31 | ~~Size the groups setting for ten groups~~ **done in 4bfb8d6** | robustness | low |
 | I-12 | F32, F33, F38 | ~~One safe "write the file" helper for all three data files~~ **done in 4bfb8d6** | simplify | medium |
 | I-13 | F32, F33, F38 | ~~Tests for damaged, unreadable and half-written data files~~ **done in 4bfb8d6** | tests | medium |
-| I-14 | F51 | Restyle the TX bar and the waterfall frame only when they change | efficiency | high |
-| I-15 | F45, F46, F59 | Work out each row's colours and fields once, not on every redraw | efficiency | medium |
-| I-16 | F42, F43 | Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes | efficiency | low |
-| I-17 | F58, F62 | Forget expired stations; look one up without copying the list | efficiency | medium |
+| I-14 | F51 | ~~Restyle the TX bar and the waterfall frame only when they change~~ **done in 68fd0fe** | efficiency | high |
+| I-15 | F45, F46, F59 | ~~Work out each row's colours and fields once, not on every redraw~~ **not done: measured, not worth it** | efficiency | medium |
+| I-16 | F42, F43 | ~~Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes~~ **done in 68fd0fe (JS8 side)** | efficiency | low |
+| I-17 | F58, F62 | ~~Forget expired stations; look one up without copying the list~~ **done in 68fd0fe** | efficiency | medium |
 | I-18 | F63, F67, F40 | One "from a popup into the keyboard" helper | simplify | medium |
 | I-19 | F75 | Keep `MODE_JS8`'s number clear of upstream's | robustness | low |
 | I-20 | F95, F96, F97 | Run the unit tests and the harness in CI | tests | high |
@@ -185,6 +185,8 @@ there). Three ways to draw less.
 
 ### I-14. Restyle the TX bar and the waterfall frame only when they change — efficiency, high
 
+**Done in 68fd0fe** (package 4). Measured first with the new harness case `ONLY_LOAD` (LVGL timers running): idle, JS8 sent about 1,031,000 pixels a second to the screen (7.2 ms of GUI work a second on a PC); now 10,000 (the clock) and 0.6 ms. With waterfall rows and a full list, 26.7 → 19 ms/s.
+
 `tx_timer_cb()` calls `update_tx_bar()` every 250 ms, idle or not
 (`src/dialog_js8.c:1567-1579`), and `update_tx_bar()` always sets the TX
 bar's background colour, its text, and the waterfall's border width and
@@ -209,6 +211,8 @@ Likely rather than confirmed: read in the code, not measured.
 
 ### I-15. Work out each row's colours and fields once, not on every redraw — efficiency, medium
 
+**Not done** (package 4, D-C: only if the measurement said so). gprof over `WFPERF_PROFILE=full`: `js8_command_span()` is 0.2% of the redraw, and a command row's text is drawn once (the table's own pass is transparent), so there's nothing worth caching; nearly all the time is drawing the letters.
+
 The list is see-through over the waterfall, so every waterfall row
 (15 a second) redraws every visible list row. For each one,
 `table_draw_cb()` runs `row_command()` → `js8_command_span()`
@@ -224,6 +228,8 @@ the 55-pixel strip above it needs redrawing per row.
 
 ### I-16. Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes — efficiency, low
 
+**Done in 68fd0fe** (package 4) on the JS8 side: a fixed ring of rows (no malloc or free per row, no leak when one is dropped) and a quickselect for the floor (checked equal to the sort on 200,000 rows). The widget's per-pixel painting and its unused `line_buf` are left alone: `lv_waterfall.c` is shared with the FT8 app.
+
 On the receiver thread, `wf_emit_row()` (`dialog_js8.c:1323-1360`)
 allocates two buffers per row and `qsort`s all 771 values to find the
 30th percentile: a preallocated buffer and a selection
@@ -236,6 +242,8 @@ allocated and never read (already so upstream).
 ## Batch 6: Selecting, navigating, Stations
 
 ### I-17. Forget expired stations; look one up without copying the list — efficiency, medium
+
+**Done in 68fd0fe** (package 4): expired stations erased at most once a minute (never with "always"), `js8_stations_find()` and `js8_stations_recent()` (a partial sort of the 32 wanted); `free_hb_offset()` stopped reading the list in package 3. Tests `[stations]`.
 
 `StationList` (`src/js8/stations.cpp`) never erases anything: expired
 stations are only filtered out when read (`sorted()`, `:85-97`), and the

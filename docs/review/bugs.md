@@ -50,12 +50,12 @@ Combining this review with the earlier bug hunt (BH-n):
 | B-17 | F34, F41 | ~~A message that couldn't be saved is still ACKed~~ **fixed in 4bfb8d6** | low | confirmed |
 | B-18 | F12, F62 | ~~QUERY CALL about a station heard only through a relay gets no answer~~ **fixed in 4140fbb** | low | confirmed |
 | B-19 | F56 | The VOL knob does nothing while most popups are open | low | confirmed |
-| B-20 | F60, F83 | "New station" alerts again for a station that dropped off the list | low | likely |
+| B-20 | F60, F83 | ~~"New station" alerts again for a station that dropped off the list~~ **fixed in 68fd0fe** | low | likely |
 | B-21 | F66 | ~~AGN? repeats what we last queued, not what went out~~ **fixed in 4140fbb** | low | confirmed |
 | B-22 | F63 | The keyboard refuses some characters JS8 can send ($, %, [ and others) | low | confirmed |
 | B-23 | F63, F72 | A message that's too long freezes the frame count instead of saying so | low | confirmed |
 | B-24 | F74, F76 | A QSO left unlogged stays first in Log QSO for good | low | confirmed |
-| B-25 | F88 | A stalled screen can silently drop decoded messages (64-item scheduler queue) | low | possible |
+| B-25 | F88 | ~~A stalled screen can silently drop decoded messages (64-item scheduler queue)~~ **fixed in 68fd0fe** | low | possible |
 | B-26 | F83 | Alert words miss a word with punctuation attached ("SOTA,") | low | confirmed |
 | B-27 | F99 | `x6100-flash` with no argument writes an old build (18ebf06) | low | confirmed |
 
@@ -490,6 +490,8 @@ with I-05's single popup table).
 
 ### B-20. "New station" alerts again for a station that dropped off the list — low, likely
 
+**Fixed in 68fd0fe** (package 4, D-B): "new" means not heard on this band's list since power-on (kept through the Clear button, reset when the list is reused for another custom frequency); stations are looked up by key. Reproduced first: harness `ONLY_NEWSTN` beeped twice for the same regular on the old code.
+
 **Where:** `src/dialog_js8.c:696` (`process_message`), `:3969-3979`
 (`find_station`), `:4899-4903` (`alert_check`).
 
@@ -569,6 +571,8 @@ Cancel inside the popup.
 isn't the pending one (or expire it with the QSO tracker's timeout).
 
 ### B-25. A stalled screen can silently drop decoded messages — low, possible
+
+**Fixed in 68fd0fe** (package 4, D-A: inside JS8 only; `QUEUE_MAX_SIZE` unchanged): messages, ends of cycle and TX progress go through JS8's own queue (128, drained every 5 ms, a message's newer text replacing its older text still waiting, never across an end of cycle), waterfall rows through a fixed ring; a lost event (queue full) now shows an info row. Reproduced first: harness `ONLY_STALL` (the GUI stuck ~50 s) lost all 6 messages on the old code, 852 overflows; none now.
 
 **Where:** `src/scheduler.cpp:26-37` (firmware code: `QUEUE_MAX_SIZE 64`,
 "Scheduler queue overflow" and the item is dropped); JS8's users:
