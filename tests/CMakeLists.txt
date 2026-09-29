@@ -21,7 +21,7 @@ add_test(NAME test_ft8_qso COMMAND $<TARGET_FILE:test_ft8_qso> --colour-mode=ans
 add_subdirectory(../third-party/js8core ${CMAKE_BINARY_DIR}/third-party/js8core)
 add_subdirectory(../src/js8 ${CMAKE_BINARY_DIR}/src/js8)
 add_executable(test_js8 test_js8.cpp)
-target_link_libraries(test_js8 PRIVATE JS8 JS8TestSignal js8core Catch2::Catch2WithMain)
+target_link_libraries(test_js8 PRIVATE JS8 JS8TestSignal js8core Catch2::Catch2WithMain sqlite3)
 target_compile_definitions(test_js8 PRIVATE CTY_DAT_PATH="${PROJECT_SOURCE_DIR}/third-party/cty/cty.dat"
                                            MAP_BIN_PATH="${PROJECT_SOURCE_DIR}/tools/map_data/js8_map.bin")
 add_test(NAME test_js8 COMMAND $<TARGET_FILE:test_js8> --colour-mode=ansi )

@@ -204,6 +204,24 @@ uses). *Heard me* adds the path.
    arrived while the map or the Stations view was showing; a station leaves
    it when selected (`show_selection()`) or sent to by hand
    (`tx_queue_at()`), and all clear on going back to the message list.
+   **More from the map ideas** (the user's pick of nine, 2026-09-29, "just
+   don't make the signal ones too big"), batch A: squares **fade** with
+   age (`st->heard_ms`, 8 steps to 30 % at 45 min; not the selected one,
+   pop-ups or QSOs); **size by SNR**, -2 px at -24 dB to +3 px at +8 dB,
+   never past 29 px; a **CQ** tag (black on green, `sony_14`) on the
+   corner of stations whose CQ was decoded in the last 2 min (`m->cq`,
+   `map_cq_add()`), its place reserved before the labels and drawn last;
+   **NEW DXCC / NEW GRID** from the radio's QSO log (`/mnt/qso_log.db`,
+   read-only with sqlite when the map opens: `js8_map_load_worked()`,
+   countries by cty.dat, 4-character grids; a QSO logged in JS8 counts at
+   once, `js8_map_worked_add()`): a white outline on a never-worked
+   station's square and the pop-up says what's new; **stats** top left
+   (beside the status line, or under it when that's long); the **beam
+   heading** in the selected label (`az 252`, `js8_map_bearing_deg()`).
+   Batch B still to come: a dot travelling along the red path while a
+   message goes out (and in), the band's other conversations as dim lines,
+   the last two decodes as a strip over the map, and *follow selected*
+   (hold the view button: frame you and the selected station).
    Still to come: a Setting for your colour.
 5. **On the air**, then a beta.
 

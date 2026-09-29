@@ -3565,3 +3565,39 @@ TEST_CASE("map: the base map is drawn right for any view", "[map]") {
     js8_map_data_free(d);
     CHECK(js8_map_data_load("/nonexistent/js8_map.bin") == nullptr);
 }
+
+#include <sqlite3.h>
+
+TEST_CASE("map: new grid and new DXCC from the QSO log", "[map]") {
+    REQUIRE(js8_map_load_countries(CTY_DAT_PATH));
+    char what[40];
+    CHECK_FALSE(js8_map_load_worked("/nonexistent/qso_log.db")); // no log: nothing is new
+    CHECK(js8_map_new_kind("G4XYZ", "IO91", what, sizeof(what)) == JS8_MAP_NEW_NONE);
+
+    // A log as the radio writes it (qso_log.c's table, the columns we read).
+    auto path = (std::filesystem::temp_directory_path() / "js8_map_worked_test.db").string();
+    std::remove(path.c_str());
+    sqlite3 *db = nullptr;
+    REQUIRE(sqlite3_open(path.c_str(), &db) == SQLITE_OK);
+    REQUIRE(sqlite3_exec(db,
+                         "CREATE TABLE qso_log(remote_callsign TEXT NOT NULL, remote_grid TEXT);"
+                         "INSERT INTO qso_log VALUES('NR5D','EM26'),('WB8PLB',NULL),('JA1XYZ','PM95ab');",
+                         nullptr, nullptr, nullptr) == SQLITE_OK);
+    sqlite3_close(db);
+
+    REQUIRE(js8_map_load_worked(path.c_str()));
+    CHECK(js8_map_worked_grids() == 2);     // EM26, PM95
+    CHECK(js8_map_worked_countries() == 2); // United States, Japan
+    CHECK(js8_map_new_kind("NR5D", "EM26", what, sizeof(what)) == JS8_MAP_NEW_NONE);
+    CHECK(js8_map_new_kind("K1ABC", "FN31", what, sizeof(what)) == JS8_MAP_NEW_GRID);
+    CHECK(std::string(what) == "FN31");
+    CHECK(js8_map_new_kind("JA2ABC", "pm85", what, sizeof(what)) == JS8_MAP_NEW_GRID); // Japan worked, PM85 not
+    CHECK(std::string(what) == "PM85");
+    CHECK(js8_map_new_kind("G4XYZ", "IO91", what, sizeof(what)) == JS8_MAP_NEW_DXCC); // country beats grid
+    CHECK(std::string(what) == "England");
+    CHECK(js8_map_new_kind("VE7ABC", "", what, sizeof(what)) == JS8_MAP_NEW_DXCC); // no grid: country only
+    js8_map_worked_add("G4XYZ", "IO91");
+    CHECK(js8_map_new_kind("G4XYZ", "IO91", what, sizeof(what)) == JS8_MAP_NEW_NONE);
+    CHECK(js8_map_bearing_deg(0, 0, 10, 0) == Catch::Approx(0).margin(1e-6));
+    std::remove(path.c_str());
+}

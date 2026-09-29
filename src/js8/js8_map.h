@@ -78,8 +78,32 @@ bool js8_map_grid_rect(const js8_map_view_t *v, const char *grid, float *x0, flo
 void js8_map_path(const js8_map_view_t *v, double lat1, double lon1, double lat2, double lon2, int n, float *xs,
                   float *ys);
 
-/* Great-circle distance, km. */
+/* Great-circle distance, km, and the bearing from 1 to 2, degrees 0-359
+ * (the long path is the other way round: +180). */
 double js8_map_distance_km(double lat1, double lon1, double lat2, double lon2);
+double js8_map_bearing_deg(double lat1, double lon1, double lat2, double lon2);
+
+/* ---- Worked before (the radio's QSO log, all bands and modes) ------------ */
+
+/* Read the grids and countries you've worked from the radio's QSO log
+ * (qso_log.db, opened read-only). Needs the country file for countries.
+ * False if the log can't be read: then nothing counts as new. */
+bool js8_map_load_worked(const char *db_path);
+/* A QSO just logged. */
+void js8_map_worked_add(const char *call, const char *grid);
+/* How many grids / countries worked (0 before a load). */
+unsigned js8_map_worked_grids(void);
+unsigned js8_map_worked_countries(void);
+
+typedef enum {
+    JS8_MAP_NEW_NONE, /* worked before, or the log isn't known */
+    JS8_MAP_NEW_GRID, /* a grid square never worked; `what` = "FN31" */
+    JS8_MAP_NEW_DXCC, /* a country never worked; `what` = "Japan" */
+} js8_map_new_t;
+
+/* Would a QSO with this station be a new country or grid square? A new
+ * country wins over a new grid. */
+js8_map_new_t js8_map_new_kind(const char *call, const char *grid, char *what, unsigned size);
 
 /* ---- The base map (Natural Earth, tools/map_data) ------------------------ */
 

@@ -13,7 +13,8 @@ add_compile_definitions(LV_DRAW_NEON=0 JS8_TEXTS_PATH="${CMAKE_BINARY_DIR}/js8_t
                         JS8_INBOX_PATH="${CMAKE_BINARY_DIR}/js8_inbox.txt"
                         JS8_HELD_PATH="${CMAKE_BINARY_DIR}/js8_held.txt"
                         JS8_MAP_DATA_PATH="${X}/tools/map_data/js8_map.bin"
-                        JS8_CTY_PATH="${X}/third-party/cty/cty.dat")
+                        JS8_CTY_PATH="${X}/third-party/cty/cty.dat"
+                        JS8_QSO_DB_PATH="${CMAKE_BINARY_DIR}/js8_qso_log.db")
 if(HARNESS_SANITIZE)
     add_compile_options(-fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer)
     add_link_options(-fsanitize=address -fsanitize=undefined)
@@ -49,4 +50,4 @@ add_executable(js8_ui_harness
 set_source_files_properties(main.cpp PROPERTIES COMPILE_OPTIONS "-std=c++20")
 # Upstream relies on GCC 12 pulling <cstdlib> in transitively; newer host GCC does not.
 set_source_files_properties(${X}/src/scheduler.cpp PROPERTIES COMPILE_OPTIONS "-include;cstdlib")
-target_link_libraries(js8_ui_harness PRIVATE lvgl JS8 JS8TestSignal js8core ${D}/lib/libliquid.a m)
+target_link_libraries(js8_ui_harness PRIVATE lvgl JS8 JS8TestSignal js8core ${D}/lib/libliquid.a sqlite3 m)

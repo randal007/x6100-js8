@@ -230,7 +230,21 @@ GridTracker's *Dark Gray* look.
   **MFK** to step through the stations: it's the Stations view's selection,
   so Reply, Query, HW CPY? ... work as usual.
 - **New stations** pop up for 8 seconds with a flashing ring and their
-  details, then just their square stays.
+  details, then just their square stays. Never worked (the radio's QSO
+  log, the one FT8 and JS8 log to): **NEW DXCC Japan** or **NEW GRID**
+  in the pop-up, and a **white outline** on the square until you log a
+  QSO with them.
+- **Squares fade** the longer a station goes unheard (to 30 % after 45
+  minutes; the selected one and a QSO never fade), and are **a little
+  bigger for a strong signal**, a little smaller for a weak one (a few
+  pixels at most, so they don't take over).
+- **CQ** tag: on a station's corner for 2 minutes after it called CQ.
+- **Stats** (top left): `14 heard  5 hear you  DX JA1ABC 10833 km`, the
+  whole Stations list whatever Show picks. The selected station's label
+  also has the beam heading (`az 252`, short path).
+
+  ![New stations, a CQ caller and the stats](docs/screenshots/13_map_new.png)
+
 - **Map: Auto** (page 3, second button) shows your continent close-in and
   switches to the world by itself when someone on another continent is
   heard, back again when they age off the Stations list. **Close-in** stays
@@ -712,8 +726,10 @@ Done for beta 4 so far:
   or ACKed
 - [x] **Show Map:** the stations of this frequency on a world map in
   GridTracker's style — grid squares, curved paths to who heard you,
-  callsign placement without a grid, new stations popping up, your
-  continent close-in and the world when DX is heard ([The map](#the-map))
+  callsign placement without a grid, new stations popping up (NEW DXCC /
+  NEW GRID from your QSO log), paths turning red in a QSO, QRZ, CQ tags,
+  fading squares, your continent close-in and the world when DX is heard
+  ([The map](#the-map))
 - [x] **Time Sync moved to Settings** (*Time Sync now*, *Reset time
   drift*): its page 3 button is the map's view button now
 - [x] **Decode marks** on the waterfall (Settings), as desktop's *Show

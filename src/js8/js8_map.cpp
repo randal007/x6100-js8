@@ -10,10 +10,14 @@
 #include "geo.hpp"
 #include "map_render.hpp"
 
+#include <sqlite3.h>
+
+#include <cctype>
 #include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <new>
+#include <unordered_set>
 
 using namespace x6100::js8;
 
@@ -177,6 +181,99 @@ extern "C" void js8_map_path(const js8_map_view_t *v, double lat1, double lon1, 
 
 extern "C" double js8_map_distance_km(double lat1, double lon1, double lat2, double lon2) {
     return geo::distance_km({lat1, lon1}, {lat2, lon2});
+}
+
+extern "C" double js8_map_bearing_deg(double lat1, double lon1, double lat2, double lon2) {
+    return geo::bearing_deg({lat1, lon1}, {lat2, lon2});
+}
+
+// ---- Worked before ---------------------------------------------------------
+
+namespace {
+
+std::mutex                      worked_mutex;
+bool                            worked_known = false;
+std::unordered_set<std::string> worked_grids, worked_countries;
+
+std::string grid4(const char *grid) {
+    std::string g;
+    for (int i = 0; grid && grid[i] && i < 4; i++) g += (char)std::toupper((unsigned char)grid[i]);
+    return g.size() == 4 && geo::grid_box(g) ? g : std::string();
+}
+
+std::string country_of(const char *call) {
+    if (!call || !*call) return {};
+    std::lock_guard<std::mutex> lock(countries_mutex);
+    auto                        pl = countries.find(call);
+    return pl ? pl->country : std::string();
+}
+
+} // namespace
+
+extern "C" bool js8_map_load_worked(const char *db_path) {
+    sqlite3 *db = nullptr;
+    if (!db_path || sqlite3_open_v2(db_path, &db, SQLITE_OPEN_READONLY, nullptr) != SQLITE_OK) {
+        sqlite3_close(db);
+        return false;
+    }
+    std::vector<std::pair<std::string, std::string>> rows; // call, grid
+    sqlite3_stmt *st = nullptr;
+    bool          ok = sqlite3_prepare_v2(db, "SELECT remote_callsign, remote_grid FROM qso_log", -1, &st, nullptr) ==
+              SQLITE_OK;
+    while (ok && sqlite3_step(st) == SQLITE_ROW) {
+        auto c = (const char *)sqlite3_column_text(st, 0), g = (const char *)sqlite3_column_text(st, 1);
+        rows.emplace_back(c ? c : "", g ? g : "");
+    }
+    sqlite3_finalize(st);
+    sqlite3_close(db);
+    if (!ok) return false;
+    std::unordered_set<std::string> grids, cs;
+    for (auto &[c, g] : rows) {
+        auto g4 = grid4(g.c_str());
+        if (!g4.empty()) grids.insert(g4);
+        auto country = country_of(c.c_str());
+        if (!country.empty()) cs.insert(country);
+    }
+    std::lock_guard<std::mutex> lock(worked_mutex);
+    worked_grids     = std::move(grids);
+    worked_countries = std::move(cs);
+    worked_known     = true;
+    return true;
+}
+
+extern "C" void js8_map_worked_add(const char *call, const char *grid) {
+    auto g4 = grid4(grid);
+    auto c  = country_of(call);
+    std::lock_guard<std::mutex> lock(worked_mutex);
+    if (!g4.empty()) worked_grids.insert(g4);
+    if (!c.empty()) worked_countries.insert(c);
+}
+
+extern "C" unsigned js8_map_worked_grids(void) {
+    std::lock_guard<std::mutex> lock(worked_mutex);
+    return (unsigned)worked_grids.size();
+}
+
+extern "C" unsigned js8_map_worked_countries(void) {
+    std::lock_guard<std::mutex> lock(worked_mutex);
+    return (unsigned)worked_countries.size();
+}
+
+extern "C" js8_map_new_t js8_map_new_kind(const char *call, const char *grid, char *what, unsigned size) {
+    if (what && size) what[0] = '\0';
+    auto c  = country_of(call);
+    auto g4 = grid4(grid);
+    std::lock_guard<std::mutex> lock(worked_mutex);
+    if (!worked_known) return JS8_MAP_NEW_NONE;
+    if (!c.empty() && !worked_countries.count(c)) {
+        copy_str(what, size, c);
+        return JS8_MAP_NEW_DXCC;
+    }
+    if (!g4.empty() && !worked_grids.count(g4)) {
+        copy_str(what, size, g4);
+        return JS8_MAP_NEW_GRID;
+    }
+    return JS8_MAP_NEW_NONE;
 }
 
 struct js8_map_data {

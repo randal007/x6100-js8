@@ -4,6 +4,7 @@
 // through the dialog's audio callback. Screenshots are written as PPM.
 
 #include "lvgl/lvgl.h"
+#include <sqlite3.h>
 #include "widgets/lv_waterfall.h"
 #include "widgets/lv_finder.h"
 extern "C" {
@@ -45,6 +46,7 @@ void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
 bool     dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_paths, int *qrz);
+const char *dialog_js8_map_stats(void);
 void ui_usb_event(uint32_t key, int value);
 void ui_mfk_turn(int32_t diff);
 void ui_mfk_set(bool down);
@@ -2367,6 +2369,19 @@ int main() {
             printf("[map] %s: map %s, %s view, %d ring(s)%s, %d red path(s), QRZ %d\n", what, on ? "on" : "off",
                    world ? "world" : "close-in", pops, tx ? ", TX outline" : "", qso, qrz);
         };
+        // The QSO log the map reads for NEW grids/countries: W7XYZ in DM43
+        // and VE3KP in FN03 worked (so the US and Canada aren't new), EN52
+        // and Japan never.
+        {
+            sqlite3 *db = nullptr;
+            std::remove(JS8_QSO_DB_PATH);
+            if (sqlite3_open(JS8_QSO_DB_PATH, &db) == SQLITE_OK)
+                sqlite3_exec(db,
+                             "CREATE TABLE qso_log (remote_callsign TEXT, remote_grid TEXT);"
+                             "INSERT INTO qso_log VALUES ('W7XYZ', 'DM43'), ('VE3KP', 'FN03nq'), ('N0XYZ', NULL);",
+                             nullptr, nullptr, nullptr);
+            sqlite3_close(db);
+        }
         ui_indevs_init(); // the MFK
         pump(300);
         // W7XYZ, K9DEF and VE3KP send grids; N0XYZ reports our signal
@@ -2375,7 +2390,8 @@ int main() {
                    {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1200, 0.05f},
                    {"VE3KP", "FN03", "", "@HB HEARTBEAT FN03", 1600, 0.05f},
                    {"N0XYZ", "", "K2XYZ", "K2XYZ HEARTBEAT SNR -12", 2000, 0.05f},
-                   {"VE6ABC", "", "K2XYZ", "K2XYZ SNR?", 2400, 0.05f}});
+                   {"VE6ABC", "", "K2XYZ", "K2XYZ SNR?", 2400, 0.05f},
+                   {"K5LOW", "EM12", "", "@ALLCALL CQ CQ EM12", 2700, 0.004f}}); // weak: a smaller square
         ui_page(3);
         printf("[map] page 3 slot 2 before the map: '%s' (want empty)\n", ui_button_label(1));
         printf("[map] stations button: '%s'\n", ui_button_label(3));
@@ -2387,6 +2403,7 @@ int main() {
         state("opened");
         printf("[map] view button: '%s' (want Map: Auto), stations button '%s' (want Show Messages)\n",
                ui_button_label(1), ui_button_label(3));
+        printf("[map] stats: '%s' (want 6 heard  2 hear you  DX ...)\n", dialog_js8_map_stats());
         screenshot("90_map.ppm");
         ui_mfk_turn(1);
         pump(400);
@@ -2450,10 +2467,19 @@ int main() {
         feed_band({{"JA1ABC", "PM95", "", "@HB HEARTBEAT PM95", 1400, 0.05f}}, 0, 99, 0, 0);
         pump(300);
         state("JA1ABC heard");
+        printf("[map] stats: '%s' (want DX JA1ABC)\n", dialog_js8_map_stats());
         screenshot("94_map_dx_popup.ppm");
         pump(9000);
         state("9 s later");
         screenshot("95_map_popup_gone.ppm");
+        // Half an hour on: the others fade; a fresh one doesn't; K5LOW's CQ
+        // tag is long gone.
+        js8_set_drift_ms(30 * 60 * 1000);
+        feed_band({{"W7XYZ", "DM43", "", "@HB HEARTBEAT DM43", 800, 0.05f}}, 0, 99, 0, 0);
+        pump(1500);
+        screenshot("9a_map_faded.ppm");
+        js8_set_drift_ms(0);
+        pump(300);
         // Time Sync lives in Settings now, first in the list.
         ui_page(4);
         ui_press(4); // Settings
