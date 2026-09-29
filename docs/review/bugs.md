@@ -608,6 +608,8 @@ comparing (keep `@` and `/`).
 
 ### B-27. `x6100-flash` with no argument writes an old build — low, confirmed
 
+**Update 2026-09-28:** the builder session moved the default to CI 36507712183; it will go stale again, so the plan's fix (no default: list the newest successful builds and ask) is still to do in WP7.
+
 **Where:** `~/Work/bin/x6100-flash:13` (`RUN="${1:-36383576566}"`),
 outside the repo.
 
