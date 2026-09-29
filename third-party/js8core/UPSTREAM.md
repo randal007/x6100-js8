@@ -112,7 +112,14 @@ Each one is its own commit on top of the pristine import, so
     all four speeds for 50 typical messages (checked against its code
     built with Qt; `tests/test_js8.cpp` "[desktop]" keeps 24 of them).
 
-All eleven are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
+12. **`Js8Engine::set_sync_stats()`.** `populate_decode_metadata()` always
+    set `params.syncStats = false`, so the decoder never emitted its
+    `events::SyncState` (each sync candidate with its strength, and each
+    decode), which desktop draws on its waterfall when "Show decode
+    attempts" is on (`mainwindow.cpp` sets `dec_data.params.syncStats`
+    from that option). Now a switch, off by default.
+
+All twelve are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 

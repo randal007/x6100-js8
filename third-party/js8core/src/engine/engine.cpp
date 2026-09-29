@@ -357,6 +357,7 @@ public:
   }
 
   void set_qso_offset(int offset_hz) override { nfqso_.store(offset_hz); }
+  void set_sync_stats(bool enabled) override { sync_stats_.store(enabled); }
 
   void set_submodes(int submodes) override {
     constexpr int knownSubmodes = (1 << static_cast<int>(protocol::SubmodeId::A)) |
@@ -546,7 +547,7 @@ public:
 #endif
       decode_state_.params.utc = utc_tm.tm_hour * 10000 + utc_tm.tm_min * 100 + utc_tm.tm_sec;
       decode_state_.params.newdat = true;
-      decode_state_.params.syncStats = false;
+      decode_state_.params.syncStats = sync_stats_.load(); // patch 12
       decode_state_.params.nfa = nfa_.load();
       decode_state_.params.nfb = nfb_.load();
       decode_state_.params.nfqso = nfqso_.load();
@@ -1049,6 +1050,7 @@ public:
     std::atomic<int> nfa_{200};    // patch 9: set_decode_range()
     std::atomic<int> nfb_{2500};
     std::atomic<int> nfqso_{1500}; // set_qso_offset()
+    std::atomic<bool> sync_stats_{false}; // patch 12: set_sync_stats()
     std::atomic<bool> drift_realign_pending_{false};
     // Written only on the audio thread; may lag time_drift_ms_ by one capture buffer.
     std::int64_t ring_drift_ms_{0};
