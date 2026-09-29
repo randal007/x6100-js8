@@ -31,6 +31,51 @@ it must on the radio, so feeding faster than real time breaks decoding by
 design. (The library tests in `tests/test_js8.cpp` switch that guard off to
 run faster.)
 
+## Scenarios
+
+With no switch the full run above. `ONLY_<NAME>=1` runs one scenario
+instead (each prints `[tag] ... (want ...)` lines to compare):
+
+| Switch | What it checks |
+|---|---|
+| `ALERTS` | the Alerts list, beeps and purple alert-word rows |
+| `APRS` | APRS list: grid and GPS beacons, position + message, POTA/SOTA spot form, SMS, email, Winlink |
+| `AUTOCQ` | hold CQ: auto CQ interval from the end of each CQ, stops when answered; a manual heartbeat restarts the HB timer |
+| `BADFILES` | unreadable Inbox / settings files kept aside, not written over (see below) |
+| `BANDS` | each band keeps its own Stations list |
+| `COMPOSE` | typing a reply while their long message is still arriving |
+| `DRIFT` | Time Sync as a drift: JS8's timing moves, the clock doesn't; refused while sending; hold resets |
+| `FREQ` | page 6 Freq: JS8Call's presets, GhostNet's, a custom frequency |
+| `FREQMARK` | rows without a callsign marked by frequency |
+| `GEN=query\|aprs\|texts\|alerts` | GEN / APP closing the app with that list open |
+| `HBPAUSE` | heartbeat pause (see below) |
+| `HELD` | messages held for others (store and forward), fetched as desktop does |
+| `INBOX` | a message for us saved and ACKed, the Inbox view (don't run while building: real-time feeding starves) |
+| `LOCK` | hold MFK to lock a station; turning only scrolls |
+| `LOG` | a QSO to 73, the Log popup, ADIF |
+| `LOOKS` | coloured commands, end marks, relay "via" stations, bearing, km/miles, Settings lines |
+| `MARKS` | decode marks (see below) |
+| `MODE` | opened in USB with a custom CB frequency saved: always USB-D |
+| `OPERATOR` | Settings operator call, logged as OPERATOR |
+| `PARTIAL` | a long message growing in place as it arrives |
+| `QSOFREQ` | Directed view shows what's on the selected station's frequency |
+| `RELAY` | relays passed on and received, ACK back along the path |
+| `REPLYQ` | automatic replies queue (see below) |
+| `RETUNE`, `TXSAFE` | transmitting safely (see below) |
+| `SMS` | a phone text via an APRS gateway; Reply by SMS fills in the number |
+| `SPEED` | all four speeds decoded together; the Speed button |
+| `TEXTS` | Settings: INFO/STATUS keyboard gets the focus |
+| `TXBAR` | frame progress in the TX bar during a long message |
+| `URGENT` | beta 2's urgent fixes (docs/BETA2_URGENT_PLAN.md); its four "[page]" wants predate the page 1/2 swap |
+| `WFPERF`, `WFRING`, `WFTIME` | waterfall measurements (see below) |
+
+Scenarios that feed two multi-frame stations must give them different
+offsets, or they garble each other. The data files (`js8_texts.txt`,
+`js8_inbox.txt` ...) live in the **build** directory
+(`JS8_TEXTS_PATH` = `${CMAKE_BINARY_DIR}/...`), not the working one, and
+scenarios leave settings there (alert words, operator call) that later runs
+see.
+
 ## Transmitting safely
 
 - `ONLY_TXSAFE=1`: a CQ; while the stub radio is keyed, a band key (must be

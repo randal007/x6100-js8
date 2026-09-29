@@ -11,6 +11,9 @@ the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 > alert beeps you can hear, a smoother waterfall and a Settings list
 > ([New in beta 3](#new-in-beta-3)). Nothing transmits by itself when the
 > app opens; automatic replies and heartbeats are switches you turn on.
+>
+> **Beta 4 is being tested.** This manual already describes it; what has
+> changed since beta 3 is listed under [Coming next](#coming-next).
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
@@ -63,6 +66,8 @@ the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 - **JS8Call's, GhostNet's or your own frequencies** on the band keys.
 - **Time Sync** from the decodes, and a Stations view of who is on and who
   heard you.
+- **Decode marks** on the waterfall (optional), as desktop's *Show decode
+  attempts*: where the decoder is trying, even signals too weak to see.
 
 ## Installing
 
@@ -675,6 +680,7 @@ Ideas for later:
 - Automatic time drift, like desktop JS8Call's auto sync
 - Waterfall: an option for a solid (not see-through) list, for even less
   work, and the same drawing fix for the FT8 app's waterfall
+- Decode marks: an option to hide the dim ones (faint maybes, mostly noise)
 
 ## Bug reports and feature requests
 
@@ -686,6 +692,11 @@ This is a beta: reports from testing are very welcome.
   did, what you expected and what happened. A photo or screenshot of the
   radio's screen helps, and so does the `app_logs` folder from the SD card's
   DATA partition if the app closed or froze.
+- **Radio problems on Windows** (no power out, settings you can't find):
+  [tools/windows](tools/windows) has a read-only script that collects
+  the firmware and BASE versions, the transmit settings and the logs over
+  the USB cable into one file to attach to your issue. It changes nothing
+  on the radio.
 - **Feature requests and ideas:** start a thread in
   [Discussions](https://github.com/randal007/x6100-js8/discussions).
 
@@ -717,6 +728,8 @@ JS8 app by VE7NHW.
 - **Tests:** `tests/test_js8.cpp` (Catch2; `[.slow]` runs real-time decodes),
   and [tools/js8_ui_harness](tools/js8_ui_harness), which runs the real app
   headless on stock LVGL under ASan/UBSan.
+- **Testers' tools:** [tools/windows](tools/windows) (read-only
+  diagnostics over the radio's USB console, PowerShell).
 - **Building:** GitHub Actions builds the SD image with
   [AetherX6100Buildroot](https://github.com/gdyuldin/AetherX6100Buildroot)
   (about an hour): run *Build image* on `main` for a test image (an
