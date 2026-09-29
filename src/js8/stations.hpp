@@ -9,6 +9,7 @@
 #include <cstdint>
 #include <map>
 #include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -55,10 +56,35 @@ public:
     /// first (most recent first), then the rest by most recently heard.
     std::vector<Station> sorted(std::int64_t now_ms, std::int64_t expire_ms = EXPIRE_MS) const;
 
+    /// The `max` most recently heard within `expire_ms` (0: all), most
+    /// recent first; copies only those.
+    std::vector<Station> recent(std::int64_t now_ms, std::size_t max, std::int64_t expire_ms = EXPIRE_MS) const;
+
+    /// One station, if heard within `expire_ms` (0: any time).
+    const Station *find(const std::string &call, std::int64_t now_ms, std::int64_t expire_ms = EXPIRE_MS) const;
+
+    /// Forget stations not heard within `expire_ms` (0: keep all). They
+    /// were only hidden before, and every read copied them all.
+    void expire(std::int64_t now_ms, std::int64_t expire_ms);
+
+    /// Heard directly since the list was made or reset, even if it has
+    /// expired since or the list was cleared: a "new station" is one not
+    /// heard before.
+    bool heard_before(const std::string &call) const { return heard_.count(call) > 0; }
+
+    /// The Clear button: empty the list, keep what was heard before.
     void clear() { stations_.clear(); }
+    /// Start afresh (the list is reused for another frequency).
+    void reset() {
+        stations_.clear();
+        heard_.clear();
+    }
+
+    std::size_t size() const { return stations_.size(); }
 
 private:
     std::map<std::string, Station> stations_;
+    std::set<std::string>          heard_;
 };
 
 } // namespace x6100::js8

@@ -5,8 +5,8 @@
  *
  *  Layout follows the FT8 app: a waterfall strip across the top and a
  *  message list over the rest of it. Decoding lives in src/js8 (no LVGL);
- *  its callbacks arrive on worker threads and are marshalled here with
- *  scheduler_put().
+ *  its callbacks arrive on worker threads and reach the GUI thread through
+ *  JS8's own queues (ev_push, the waterfall ring), not scheduler_put().
  */
 
 #include "dialog_js8.h"
@@ -463,9 +463,10 @@ static unsigned wf_row_fill;   /* samples in the row being built (receiver threa
  * pace comes from the system clock: an LVGL timer's period counts from when
  * it last ran (and LVGL's tick runs slow), so a 100 ms timer drew ~9.7 rows
  * a second, fell behind and caught up with a two-row jump every 2 s. */
-static float     *wf_queue[WF_QUEUE];
-static uint16_t   wf_queue_size[WF_QUEUE];
-static unsigned   wf_q_head, wf_q_count;
+static pthread_mutex_t wf_lock = PTHREAD_MUTEX_INITIALIZER;
+static float      wf_rows[WF_QUEUE][WIDTH]; /* rows made, not drawn yet (wf_lock) */
+static unsigned   wf_q_head, wf_q_count;    /* (wf_lock) */
+static float      wf_row[WIDTH], wf_sel[WIDTH]; /* the row being made (receiver thread) */
 static lv_timer_t *wf_timer;
 static int64_t    wf_due_us;   /* when the next row should be drawn (monotonic) */
 static float    wf_floor_db;   /* smoothed noise floor (receiver thread) */
@@ -738,8 +739,10 @@ static int find_partial(uint32_t msg_id) {
 /* Everything that acts on a message, once it's complete: never on the text
  * so far of one still arriving. */
 static void process_message(js8_rx_msg_t *m) {
-    js8_station_t seen;
-    bool          new_station = !m->tx && m->from[0] && !find_station(m->from, &seen);
+    /* New: not heard on this frequency since the radio was switched on
+     * (your choice), not just "not listed now": a regular who dropped off
+     * the list an hour after they were last heard beeped again (B-20). */
+    bool new_station = !m->tx && m->from[0] && !js8_stations_heard_before(stations, m->from);
     js8_stations_add(stations, m, params.callsign.x, now_wall_ms());
     if (m->tx) return;
     if (params.js8_relay.x) { /* stations a relay to us came through, as desktop lists them */
@@ -962,6 +965,35 @@ static bool selected_station(char *call, size_t call_len, float *freq, int *snr)
     return true;
 }
 
+/* Worked before (the radio's QSO database), per call and band. The
+ * Stations view asked the database for every listed station every 5 s and
+ * after each decode (bug hunt 17). Forgotten when a QSO is logged here and
+ * each time JS8 opens (the FT8 app may have logged meanwhile). */
+#define WORKED_CACHE 512
+static struct {
+    char            call[JS8_RX_CALL_LEN]; /* "": empty */
+    qso_log_band_t  band;
+    bool            worked;
+} worked_cache[WORKED_CACHE];
+
+static bool worked_before(const char *call) {
+    qso_log_band_t band = qso_log_freq_to_band(cparam_i_get(cfg_fg_freq));
+    unsigned       h    = 5381;
+    for (const char *p = call; *p; p++) h = h * 33 + (unsigned char)*p;
+    h = (h * 33 + (unsigned)band) % WORKED_CACHE;
+    if (worked_cache[h].call[0] && worked_cache[h].band == band && strcmp(worked_cache[h].call, call) == 0)
+        return worked_cache[h].worked;
+    bool worked = qso_log_search_worked(call, MODE_JS8, band) > 0;
+    snprintf(worked_cache[h].call, sizeof(worked_cache[h].call), "%s", call);
+    worked_cache[h].band   = band;
+    worked_cache[h].worked = worked;
+    return worked;
+}
+
+static void worked_forget(void) {
+    memset(worked_cache, 0, sizeof(worked_cache));
+}
+
 static void rebuild_station_rows(void) {
     /* Keep the cursor on the same station while the list re-sorts. */
     char  keep[JS8_RX_CALL_LEN] = "";
@@ -981,7 +1013,7 @@ static void rebuild_station_rows(void) {
     for (int i = 0; i < st_count; i++) {
         char hit[16];
         st_alert[i]  = js8_alert_hit("", st_rows[i].call, alert_words, hit, sizeof(hit));
-        st_worked[i] = qso_log_search_worked(st_rows[i].call, MODE_JS8, qso_log_freq_to_band(cparam_i_get(cfg_fg_freq))) > 0;
+        st_worked[i] = worked_before(st_rows[i].call);
         if (keep[0] && strcmp(st_rows[i].call, keep) == 0) keep_row = rows;
         append_row(" ", (int16_t)i); /* drawn by table_draw_end_cb() */
     }
@@ -1269,6 +1301,98 @@ static void table_select_cb(lv_event_t *e) {
     select_at_cursor(false);
 }
 
+/* ---- From the worker threads to the GUI -------------------------------
+ *
+ * Messages, the end of each decode cycle and the transmitter's progress
+ * wait in JS8's own queue, drained on the GUI thread every WF_TICK_MS
+ * (ev_tick in wf_timer_cb), and waterfall rows in their own ring. The
+ * shared scheduler queue (64 items, src/scheduler.cpp) drops what doesn't
+ * fit, and waterfall rows alone were 15 a second: a GUI stall of a few
+ * seconds lost decoded messages (B-25). The text so far of a message still
+ * arriving replaces its older text still waiting, so only the newest
+ * counts. */
+
+typedef enum { EV_MESSAGE, EV_CYCLE_DONE, EV_TX_STATUS, EV_TX_DONE } ev_kind_t;
+
+typedef struct {
+    ev_kind_t kind;
+    union {
+        js8_rx_msg_t    msg;
+        unsigned        decodes;
+        js8_tx_status_t tx_status;
+        tx_done_t       tx_done;
+    };
+} ui_event_t;
+
+#define EVENTS   128 /* a busy slot's decodes are a few dozen */
+#define EV_BATCH 16  /* handled per tick */
+
+static pthread_mutex_t ev_lock = PTHREAD_MUTEX_INITIALIZER;
+static ui_event_t      ev_queue[EVENTS];
+static unsigned        ev_head, ev_count, ev_lost;
+
+static void ui_add_message(void *arg);
+static void ui_cycle_done(void *arg);
+static void ui_tx_status(void *arg);
+static void ui_tx_done(void *arg);
+
+static void ev_push(const ui_event_t *e) {
+    pthread_mutex_lock(&ev_lock);
+    /* Newer text of a message still arriving (or its end): replaces the
+     * text waiting, back to the last end of cycle (which must follow its
+     * cycle's messages). */
+    if (e->kind == EV_MESSAGE && e->msg.msg_id && !e->msg.tx) {
+        for (unsigned k = ev_count; k-- > 0;) {
+            ui_event_t *q = &ev_queue[(ev_head + k) % EVENTS];
+            if (q->kind == EV_CYCLE_DONE) break;
+            if (q->kind == EV_MESSAGE && q->msg.partial && !q->msg.tx && q->msg.msg_id == e->msg.msg_id) {
+                *q = *e;
+                pthread_mutex_unlock(&ev_lock);
+                return;
+            }
+        }
+    }
+    if (ev_count == EVENTS) {
+        ev_lost++;
+    } else {
+        ev_queue[(ev_head + ev_count) % EVENTS] = *e;
+        ev_count++;
+    }
+    pthread_mutex_unlock(&ev_lock);
+}
+
+static void ev_clear(void) {
+    pthread_mutex_lock(&ev_lock);
+    ev_count = ev_lost = 0;
+    pthread_mutex_unlock(&ev_lock);
+}
+
+/* The GUI thread, every WF_TICK_MS. */
+static void ev_tick(void) {
+    static ui_event_t batch[EV_BATCH];
+    pthread_mutex_lock(&ev_lock);
+    unsigned n = ev_count < EV_BATCH ? ev_count : EV_BATCH, lost = ev_lost;
+    for (unsigned i = 0; i < n; i++) batch[i] = ev_queue[(ev_head + i) % EVENTS];
+    ev_head  = (ev_head + n) % EVENTS;
+    ev_count -= n;
+    ev_lost  = 0;
+    pthread_mutex_unlock(&ev_lock);
+
+    if (lost) {
+        LV_LOG_WARN("JS8: %u decoder/TX events lost, the GUI fell behind", lost);
+        add_info_row("%u decodes lost: the screen fell behind", lost);
+    }
+    for (unsigned i = 0; i < n; i++) {
+        ui_event_t *e = &batch[i];
+        switch (e->kind) {
+        case EV_MESSAGE: ui_add_message(&e->msg); break;
+        case EV_CYCLE_DONE: ui_cycle_done(&e->decodes); break;
+        case EV_TX_STATUS: ui_tx_status(&e->tx_status); break;
+        case EV_TX_DONE: ui_tx_done(&e->tx_done); break;
+        }
+    }
+}
+
 /* ---- Receiver callbacks (worker threads) ------------------------------- */
 
 static void ui_add_message(void *arg) {
@@ -1278,7 +1402,8 @@ static void ui_add_message(void *arg) {
 
 static void on_message(const js8_rx_msg_t *m, void *ctx) {
     (void)ctx;
-    scheduler_put(ui_add_message, (void *)m, sizeof(*m));
+    ui_event_t e = {.kind = EV_MESSAGE, .msg = *m};
+    ev_push(&e);
 }
 
 static void update_status(void) {
@@ -1340,37 +1465,14 @@ static void ui_cycle_done(void *arg) {
 
 static void on_cycle_done(unsigned decodes, void *ctx) {
     (void)ctx;
-    scheduler_put(ui_cycle_done, &decodes, sizeof(decodes));
+    ui_event_t e = {.kind = EV_CYCLE_DONE, .decodes = decodes};
+    ev_push(&e);
 }
-
-typedef struct {
-    float   *psd;
-    uint16_t size;
-} wf_data_t;
 
 static void wf_queue_clear(void) {
-    while (wf_q_count) {
-        free(wf_queue[wf_q_head]);
-        wf_q_head = (wf_q_head + 1) % WF_QUEUE;
-        wf_q_count--;
-    }
-}
-
-static void ui_waterfall_add(void *arg) {
-    wf_data_t *d = (wf_data_t *)arg;
-    if (!dialog.run || !waterfall) {
-        free(d->psd);
-        return;
-    }
-    if (wf_q_count == WF_QUEUE) { /* far behind: drop the oldest */
-        free(wf_queue[wf_q_head]);
-        wf_q_head = (wf_q_head + 1) % WF_QUEUE;
-        wf_q_count--;
-    }
-    unsigned tail       = (wf_q_head + wf_q_count) % WF_QUEUE;
-    wf_queue[tail]      = d->psd;
-    wf_queue_size[tail] = d->size;
-    wf_q_count++;
+    pthread_mutex_lock(&wf_lock);
+    wf_q_count = 0;
+    pthread_mutex_unlock(&wf_lock);
 }
 
 /* ---- Decode marks (Settings: Decode marks) -------------------------------
@@ -1486,21 +1588,28 @@ static int64_t now_mono_ms(void) {
 static void wf_timer_cb(lv_timer_t *t) {
     (void)t;
     marks_tick();
-    if (!wf_q_count) return;
+    ev_tick();
+    pthread_mutex_lock(&wf_lock);
+    unsigned waiting = wf_q_count;
+    pthread_mutex_unlock(&wf_lock);
+    if (!waiting) return;
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     int64_t now    = (int64_t)ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
     int64_t period = 1000000 / WF_ROWS_PER_SEC;
-    if (wf_q_count > 6) period = period * 3 / 4;
-    else if (wf_q_count > 3) period = period * 19 / 20;
+    if (waiting > 6) period = period * 3 / 4;
+    else if (waiting > 3) period = period * 19 / 20;
     /* After a pause (no audio while transmitting) start again now. */
     if (now - wf_due_us > period) wf_due_us = now;
     if (now < wf_due_us) return;
 
-    lv_waterfall_add_data(waterfall, wf_queue[wf_q_head], wf_queue_size[wf_q_head]);
-    free(wf_queue[wf_q_head]);
+    static float row[WIDTH];
+    pthread_mutex_lock(&wf_lock);
+    memcpy(row, wf_rows[wf_q_head], sizeof(row));
     wf_q_head = (wf_q_head + 1) % WF_QUEUE;
     wf_q_count--;
+    pthread_mutex_unlock(&wf_lock);
+    lv_waterfall_add_data(waterfall, row, WIDTH);
     wf_due_us += period;
     /* On the screen now, not at LVGL's next refresh: that comes every
      * 33 ms by a tick that runs slow, so rows landed 66-134 ms apart
@@ -1508,9 +1617,29 @@ static void wf_timer_cb(lv_timer_t *t) {
     lv_refr_now(NULL);
 }
 
-static int cmp_float(const void *a, const void *b) {
-    float x = *(const float *)a, y = *(const float *)b;
-    return (x > y) - (x < y);
+/* The k-th smallest of v[0..n-1], reordering v: quickselect (Hoare's
+ * partition), O(n), where sorting the row was O(n log n) per row. */
+static float select_nth(float *v, int n, int k) {
+    int lo = 0, hi = n - 1;
+    while (lo < hi) {
+        float pivot = v[lo + (hi - lo) / 2];
+        int   i = lo, j = hi;
+        while (i <= j) {
+            while (v[i] < pivot) i++;
+            while (v[j] > pivot) j--;
+            if (i <= j) {
+                float t = v[i];
+                v[i]    = v[j];
+                v[j]    = t;
+                i++;
+                j--;
+            }
+        }
+        if (k <= j) hi = j;
+        else if (k >= i) lo = i;
+        else return v[k];
+    }
+    return v[k];
 }
 
 static void wf_emit_row(void) {
@@ -1526,30 +1655,30 @@ static void wf_emit_row(void) {
 
     /* One value per pixel: the strongest of the bins under it, so a narrow
      * signal between two pixels' centres doesn't flicker. */
-    uint32_t  bins = high_bin - low_bin;
-    wf_data_t d    = {.size = WIDTH};
-    d.psd          = malloc(d.size * sizeof(float));
-    if (!d.psd) return;
+    uint32_t bins = high_bin - low_bin;
     for (uint32_t x = 0; x < WIDTH; x++) {
         uint32_t b0 = low_bin + x * bins / WIDTH, b1 = low_bin + (x + 1) * bins / WIDTH;
         float    v  = psd[b0];
         for (uint32_t b = b0 + 1; b < b1; b++) v = psd[b] > v ? psd[b] : v;
-        d.psd[x] = v;
+        wf_row[x] = v;
     }
 
     /* Noise floor: the 30th percentile of the row, smoothed over ~2 s. */
-    float *sorted = malloc(d.size * sizeof(float));
-    if (sorted) {
-        memcpy(sorted, d.psd, d.size * sizeof(float));
-        qsort(sorted, d.size, sizeof(float), cmp_float);
-        float floor_now = sorted[d.size * 3 / 10];
-        free(sorted);
-        wf_floor_db  = wf_floor_set ? wf_floor_db + 0.05f * (floor_now - wf_floor_db) : floor_now;
-        wf_floor_set = true;
-    }
-    for (uint16_t i = 0; i < d.size; i++) d.psd[i] -= wf_floor_db;
+    memcpy(wf_sel, wf_row, sizeof(wf_sel));
+    float floor_now = select_nth(wf_sel, WIDTH, WIDTH * 3 / 10);
+    wf_floor_db     = wf_floor_set ? wf_floor_db + 0.05f * (floor_now - wf_floor_db) : floor_now;
+    wf_floor_set    = true;
+    for (uint32_t i = 0; i < WIDTH; i++) wf_row[i] -= wf_floor_db;
 
-    scheduler_put(ui_waterfall_add, &d, sizeof(d));
+    /* Into the ring for wf_timer_cb; far behind, the oldest goes. */
+    pthread_mutex_lock(&wf_lock);
+    if (wf_q_count == WF_QUEUE) {
+        wf_q_head = (wf_q_head + 1) % WF_QUEUE;
+        wf_q_count--;
+    }
+    memcpy(wf_rows[(wf_q_head + wf_q_count) % WF_QUEUE], wf_row, sizeof(wf_row));
+    wf_q_count++;
+    pthread_mutex_unlock(&wf_lock);
 }
 
 static void on_audio(const float *samples, unsigned n, void *ctx) {
@@ -1717,7 +1846,8 @@ static void ui_tx_status(void *arg) {
 
 static void on_tx_status(const js8_tx_status_t *st, void *ctx) {
     (void)ctx;
-    scheduler_put(ui_tx_status, (void *)st, sizeof(*st));
+    ui_event_t e = {.kind = EV_TX_STATUS, .tx_status = *st};
+    ev_push(&e);
 }
 
 static void ui_tx_done(void *arg) {
@@ -1744,9 +1874,9 @@ static void ui_tx_done(void *arg) {
 
 static void on_tx_done(const char *text, bool completed, void *ctx) {
     (void)ctx;
-    tx_done_t done = {.completed = completed};
-    snprintf(done.text, sizeof(done.text), "%s", text ? text : "");
-    scheduler_put(ui_tx_done, &done, sizeof(done));
+    ui_event_t e = {.kind = EV_TX_DONE, .tx_done = {.completed = completed}};
+    snprintf(e.tx_done.text, sizeof(e.tx_done.text), "%s", text ? text : "");
+    ev_push(&e);
 }
 
 static void tx_start(void) {
@@ -1783,6 +1913,40 @@ static void tx_timer_cb(lv_timer_t *t) {
     if (view_stations && ticks % 20 == 0) rebuild_station_rows(); /* ages */
 }
 
+/* The TX bar and the waterfall frame as last set. Every LVGL style or
+ * text call redraws, changed or not, and the frame's redraw spills onto the
+ * dialog background behind the waterfall: set only what changed (I-14). */
+static struct {
+    bool     fresh; /* just created: set everything */
+    uint32_t bg;
+    bool     recolor;
+    char     text[JS8_RX_TEXT_LEN + 64];
+    bool     frame;
+} tx_bar_shown;
+
+static void tx_bar_set(uint32_t bg, bool recolor, const char *text) {
+    bool fresh = tx_bar_shown.fresh;
+    if (fresh || tx_bar_shown.bg != bg) lv_obj_set_style_bg_color(tx_bar, lv_color_hex(bg), 0);
+    if (fresh || tx_bar_shown.recolor != recolor) lv_label_set_recolor(tx_bar, recolor);
+    if (fresh || strcmp(tx_bar_shown.text, text) != 0) lv_label_set_text(tx_bar, text);
+    tx_bar_shown.bg      = bg;
+    tx_bar_shown.recolor = recolor;
+    snprintf(tx_bar_shown.text, sizeof(tx_bar_shown.text), "%s", text);
+    if (fresh) { /* the frame too: its colour never changes */
+        lv_obj_set_style_border_color(waterfall, lv_color_hex(0xff2020), 0);
+        lv_obj_set_style_border_width(waterfall, 0, 0);
+        tx_bar_shown.frame = false;
+        tx_bar_shown.fresh = false;
+    }
+}
+
+/* A red frame round the waterfall while keyed. */
+static void wf_frame_set(bool on) {
+    if (tx_bar_shown.frame == on) return;
+    lv_obj_set_style_border_width(waterfall, on ? 3 : 0, 0);
+    tx_bar_shown.frame = on;
+}
+
 /* "TX 1500 Hz  ready" / "... K2XYZ SNR?  starts in 9 s" / "... sending 2/3" */
 static void update_tx_bar(void) {
     if (!tx_bar) return;
@@ -1792,17 +1956,17 @@ static void update_tx_bar(void) {
     if (cq_adjusting && tx_status.state == JS8_TX_IDLE) {
         snprintf(line, sizeof(line), "Auto CQ %u min after each CQ: turn the knob (%d-%d), press CQ when done",
                  params.js8_cq_interval.x, CQ_MIN_INTERVAL, CQ_MAX_INTERVAL);
-        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x5a4a00), 0);
-        lv_label_set_text(tx_bar, line);
+        tx_bar_set(0x5a4a00, false, line);
         return;
     }
     if (hb_adjusting && tx_status.state == JS8_TX_IDLE) {
         snprintf(line, sizeof(line), "HB every %u min: turn the knob (5-30), press HB when done",
                  params.js8_hb_interval.x);
-        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x5a4a00), 0);
-        lv_label_set_text(tx_bar, line);
+        tx_bar_set(0x5a4a00, false, line);
         return;
     }
+
+    uint32_t bg;
 
     switch (tx_status.state) {
     case JS8_TX_WAITING: {
@@ -1813,13 +1977,13 @@ static void update_tx_bar(void) {
         snprintf(line, sizeof(line), "TX %4.0f Hz %s  %d/%d %s %d s   %s", tx_status.offset_hz,
                  js8_speed_name(tx_status.speed), tx_status.frame, tx_status.frames,
                  tx_status.frame == 1 ? "starts in" : "next in", secs, tx_status.text);
-        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x5a4a00), 0);
+        bg = 0x5a4a00;
         break;
     }
     case JS8_TX_KEYING:
         snprintf(line, sizeof(line), "TX %4.0f Hz %s  sending %d/%d   %s", tx_status.offset_hz,
                  js8_speed_name(tx_status.speed), tx_status.frame, tx_status.frames, tx_status.text);
-        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0xa00000), 0);
+        bg = 0xa00000;
         break;
     default:
         /* A locked station in red (recolor only here: sent text may hold '#'). */
@@ -1829,16 +1993,11 @@ static void update_tx_bar(void) {
         if (sel_call[0]) strncat(line, sel_call, sizeof(line) - strlen(line) - 1);
         if (sel_call[0] && sel_locked) strncat(line, "#", sizeof(line) - strlen(line) - 1);
         if (auto_cq) strncat(line, "      auto CQ", sizeof(line) - strlen(line) - 1);
-        lv_obj_set_style_bg_color(tx_bar, lv_color_hex(0x202020), 0);
+        bg = 0x202020;
         break;
     }
-    lv_label_set_recolor(tx_bar, tx_status.state != JS8_TX_WAITING && tx_status.state != JS8_TX_KEYING && sel_locked);
-    lv_label_set_text(tx_bar, line);
-
-    /* A red frame round the waterfall while keyed. */
-    bool on = tx_status.state == JS8_TX_KEYING;
-    lv_obj_set_style_border_width(waterfall, on ? 3 : 0, 0);
-    lv_obj_set_style_border_color(waterfall, lv_color_hex(0xff2020), 0);
+    tx_bar_set(bg, tx_status.state != JS8_TX_WAITING && tx_status.state != JS8_TX_KEYING && sel_locked, line);
+    wf_frame_set(tx_status.state == JS8_TX_KEYING);
 }
 
 /* Queue `text` at our offset. Returns false (with a message shown) if it
@@ -2198,7 +2357,7 @@ static js8_stations_t *stations_for_band(void) {
     /* Many custom frequencies: reuse the slots in turn. */
     int i = band_lists_next;
     band_lists_next = (band_lists_next + 1) % BAND_LISTS;
-    js8_stations_clear(band_lists[i].list);
+    js8_stations_reset(band_lists[i].list); /* another frequency: nobody heard yet */
     band_lists[i].dial_khz = khz;
     return band_lists[i].list;
 }
@@ -2390,6 +2549,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_pad_top(tx_bar, 3, 0);
     lv_obj_set_style_bg_opa(tx_bar, LV_OPA_COVER, 0);
     lv_label_set_long_mode(tx_bar, LV_LABEL_LONG_DOT);
+    tx_bar_shown.fresh = true;
 
     /* Message list */
 
@@ -2435,6 +2595,9 @@ static void construct_cb(lv_obj_t *parent) {
     main_screen_lock_band(true);
 
     cycles = cycle_decodes = 0;
+    ev_clear(); /* anything left from the last time JS8 was open */
+    worked_forget();
+    wf_queue_clear();
     rx_start();
     update_status();
 
@@ -3188,22 +3351,14 @@ static void user_touch(void) {
  * RETRIEVE MSG look here. */
 static unsigned heard_stations(js8_heard_t *out, unsigned max) {
     static js8_station_t list[MAX_ROWS];
-    int                  n = js8_stations_list(stations, now_wall_ms(), list, MAX_ROWS);
-    /* js8_stations_list puts stations that heard us first; re-sort by time. */
-    for (int i = 1; i < n; i++)
-        for (int j = i; j > 0 && list[j].heard_ms > list[j - 1].heard_ms; j--) {
-            js8_station_t t = list[j];
-            list[j]         = list[j - 1];
-            list[j - 1]     = t;
-        }
-    unsigned k = 0;
-    for (int i = 0; i < n && k < max; i++) {
-        out[k].call     = list[i].call;
-        out[k].snr      = list[i].snr;
-        out[k].heard_ms = list[i].heard_ms;
-        k++;
+    if (max > MAX_ROWS) max = MAX_ROWS;
+    int n = js8_stations_recent(stations, now_wall_ms(), list, (int)max);
+    for (int i = 0; i < n; i++) {
+        out[i].call     = list[i].call;
+        out[i].snr      = list[i].snr;
+        out[i].heard_ms = list[i].heard_ms;
     }
-    return k;
+    return (unsigned)n;
 }
 
 /* The switches as they are now, for deciding again at send time. */
@@ -4362,15 +4517,7 @@ static bool any_popup(void) {
 }
 
 static bool find_station(const char *call, js8_station_t *out) {
-    static js8_station_t list[MAX_ROWS];
-    int                  n = js8_stations_list(stations, now_wall_ms(), list, MAX_ROWS);
-    for (int i = 0; i < n; i++) {
-        if (strcmp(list[i].call, call) == 0) {
-            *out = list[i];
-            return true;
-        }
-    }
-    return false;
+    return js8_stations_find(stations, call, now_wall_ms(), out);
 }
 
 /* 6-character grid from a current GPS fix (portable), else the QTH setting. */
@@ -4448,6 +4595,7 @@ static void log_save(void) {
         NULL, log_entry.my_grid, log_entry.grid);
     free(canon);
     qso_log_record_save(rec);
+    worked_forget();
 
     js8_qsos_logged(qsos, log_entry.call);
     if (strcmp(log_pending, log_entry.call) == 0) log_pending[0] = '\0';
@@ -5305,8 +5453,7 @@ static void alert_check(js8_rx_msg_t *m, bool new_station) {
     bool    hb_ack = strstr(m->text, " HEARTBEAT SNR") != NULL;
     if ((a & JS8_ALERT_TO_ME) && m->to_me && !hb_ack) alert_beep(1);
     else if ((a & JS8_ALERT_CQ) && m->cq) alert_beep(1);
-    else if ((a & JS8_ALERT_NEW) && new_station && m->from[0] &&
-             qso_log_search_worked(m->from, MODE_JS8, qso_log_freq_to_band(cparam_i_get(cfg_fg_freq))) <= 0) {
+    else if ((a & JS8_ALERT_NEW) && new_station && m->from[0] && !worked_before(m->from)) {
         msg_update_text_fmt("New station: %s", m->from);
         alert_beep(1);
     }

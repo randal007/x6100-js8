@@ -44,7 +44,8 @@ const char *const LABELS[JS8_Q_COUNT] = {
 } // namespace
 
 struct js8_stations {
-    StationList list;
+    StationList  list;
+    std::int64_t pruned_ms = 0; ///< expired stations last forgotten
 };
 
 struct js8_held {
@@ -95,6 +96,25 @@ extern "C" int js8_heartbeat_offset(const float *offsets_hz, const int64_t *hear
     return find_free_offset(activity, now_ms, rng);
 }
 
+namespace {
+std::int64_t g_station_expire_ms = StationList::EXPIRE_MS;
+
+void to_c(const Station &st, js8_station_t &o) {
+    o = js8_station_t{};
+    copy_str(o.call, sizeof(o.call), st.call);
+    copy_str(o.grid, sizeof(o.grid), st.grid);
+    o.heard_ms         = st.heard_ms;
+    o.snr              = (int16_t)st.snr;
+    o.freq_hz          = st.freq_hz;
+    o.submode          = (uint8_t)st.mode;
+    o.heard_me         = st.heard_me;
+    o.heard_me_ms      = st.heard_me_ms;
+    o.has_reported_snr = st.reported_snr.has_value();
+    o.reported_snr     = (int16_t)st.reported_snr.value_or(0);
+    copy_str(o.via, sizeof(o.via), st.via);
+}
+} // namespace
+
 extern "C" js8_stations_t *js8_stations_create(void) {
     return new (std::nothrow) js8_stations;
 }
@@ -115,10 +135,12 @@ extern "C" void js8_stations_add(js8_stations_t *s, const js8_rx_msg_t *m, const
     ev.mode    = m->submode;
     ev.when_ms = now_ms;
     s->list.add(ev, my_call ? my_call : "");
-}
-
-namespace {
-std::int64_t g_station_expire_ms = StationList::EXPIRE_MS;
+    // Forget expired stations once a minute: they were only hidden, and
+    // every read copied them all (days on a busy band: thousands).
+    if (now_ms - s->pruned_ms >= 60'000) {
+        s->list.expire(now_ms, g_station_expire_ms);
+        s->pruned_ms = now_ms;
+    }
 }
 
 extern "C" void js8_stations_set_expire_ms(int64_t ms) {
@@ -176,27 +198,37 @@ extern "C" int js8_stations_list(js8_stations_t *s, int64_t now_ms, js8_station_
     if (!s || !out || max <= 0) return 0;
     auto list = s->list.sorted(now_ms, g_station_expire_ms);
     int  n    = std::min<int>(max, (int)list.size());
-    for (int i = 0; i < n; i++) {
-        const auto &st = list[i];
-        js8_station_t &o = out[i];
-        o = js8_station_t{};
-        copy_str(o.call, sizeof(o.call), st.call);
-        copy_str(o.grid, sizeof(o.grid), st.grid);
-        o.heard_ms         = st.heard_ms;
-        o.snr              = (int16_t)st.snr;
-        o.freq_hz          = st.freq_hz;
-        o.submode          = (uint8_t)st.mode;
-        o.heard_me         = st.heard_me;
-        o.heard_me_ms      = st.heard_me_ms;
-        o.has_reported_snr = st.reported_snr.has_value();
-        o.reported_snr     = (int16_t)st.reported_snr.value_or(0);
-        copy_str(o.via, sizeof(o.via), st.via);
-    }
+    for (int i = 0; i < n; i++) to_c(list[i], out[i]);
     return n;
+}
+
+extern "C" int js8_stations_recent(js8_stations_t *s, int64_t now_ms, js8_station_t *out, int max) {
+    if (!s || !out || max <= 0) return 0;
+    auto list = s->list.recent(now_ms, (std::size_t)max, g_station_expire_ms);
+    for (std::size_t i = 0; i < list.size(); i++) to_c(list[i], out[i]);
+    return (int)list.size();
+}
+
+extern "C" bool js8_stations_find(js8_stations_t *s, const char *call, int64_t now_ms, js8_station_t *out) {
+    if (!s || !call) return false;
+    const Station *st = s->list.find(call, now_ms, g_station_expire_ms);
+    if (st && out) to_c(*st, *out);
+    return st != nullptr;
+}
+
+extern "C" bool js8_stations_heard_before(js8_stations_t *s, const char *call) {
+    return s && call && s->list.heard_before(call);
 }
 
 extern "C" void js8_stations_clear(js8_stations_t *s) {
     if (s) s->list.clear();
+}
+
+extern "C" void js8_stations_reset(js8_stations_t *s) {
+    if (s) {
+        s->list.reset();
+        s->pruned_ms = 0;
+    }
 }
 
 /* ---- T4 -------------------------------------------------------------- */

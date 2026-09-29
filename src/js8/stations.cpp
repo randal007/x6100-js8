@@ -9,6 +9,7 @@
 #include "classify.hpp"
 
 #include <algorithm>
+#include <iterator>
 #include <cctype>
 #include <sstream>
 
@@ -37,6 +38,7 @@ void StationList::add(const StationEvent &ev, const std::string &my_call) {
     if (ev.from.empty()) return;
     if (!my_call.empty() && base_callsign(ev.from) == base_callsign(my_call)) return; // our own echo
 
+    heard_.insert(ev.from);
     Station &st = stations_[ev.from];
     st.call     = ev.from;
     st.via.clear(); // heard directly
@@ -93,6 +95,31 @@ std::vector<Station> StationList::sorted(std::int64_t now_ms, std::int64_t expir
         return a.heard_ms > b.heard_ms;
     });
     return out;
+}
+
+std::vector<Station> StationList::recent(std::int64_t now_ms, std::size_t max, std::int64_t expire_ms) const {
+    std::vector<const Station *> live;
+    for (auto &[call, st] : stations_)
+        if (expire_ms <= 0 || now_ms - st.heard_ms < expire_ms) live.push_back(&st);
+    std::size_t n     = std::min(max, live.size());
+    auto        newer = [](const Station *a, const Station *b) { return a->heard_ms > b->heard_ms; };
+    std::partial_sort(live.begin(), live.begin() + (std::ptrdiff_t)n, live.end(), newer);
+    std::vector<Station> out;
+    out.reserve(n);
+    for (std::size_t i = 0; i < n; i++) out.push_back(*live[i]);
+    return out;
+}
+
+const Station *StationList::find(const std::string &call, std::int64_t now_ms, std::int64_t expire_ms) const {
+    auto it = stations_.find(call);
+    if (it == stations_.end() || (expire_ms > 0 && now_ms - it->second.heard_ms >= expire_ms)) return nullptr;
+    return &it->second;
+}
+
+void StationList::expire(std::int64_t now_ms, std::int64_t expire_ms) {
+    if (expire_ms <= 0) return;
+    for (auto it = stations_.begin(); it != stations_.end();)
+        it = now_ms - it->second.heard_ms >= expire_ms ? stations_.erase(it) : std::next(it);
 }
 
 } // namespace x6100::js8

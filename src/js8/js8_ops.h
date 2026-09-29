@@ -67,7 +67,17 @@ void            js8_stations_destroy(js8_stations_t *s);
 void            js8_stations_add(js8_stations_t *s, const js8_rx_msg_t *msg, const char *my_call, int64_t now_ms);
 /* Fill up to max stations, ★ first then most recent; returns the count. */
 int             js8_stations_list(js8_stations_t *s, int64_t now_ms, js8_station_t *out, int max);
+/* The max most recently heard, most recent first; returns the count. */
+int             js8_stations_recent(js8_stations_t *s, int64_t now_ms, js8_station_t *out, int max);
+/* One station, if it's listed. */
+bool            js8_stations_find(js8_stations_t *s, const char *call, int64_t now_ms, js8_station_t *out);
+/* Heard directly since the list was made or reset (not "new"), even if it
+ * has dropped off the list since. */
+bool            js8_stations_heard_before(js8_stations_t *s, const char *call);
+/* The Clear button: empty the list; what was heard before is kept. */
 void            js8_stations_clear(js8_stations_t *s);
+/* Start afresh: the list is reused for another frequency. */
+void            js8_stations_reset(js8_stations_t *s);
 /* How long a station stays listed, for every list (0: always); default 1 h. */
 void            js8_stations_set_expire_ms(int64_t ms);
 /* A station heard only through `via` (a relay), as desktop lists them. */

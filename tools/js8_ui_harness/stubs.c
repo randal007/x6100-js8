@@ -122,10 +122,12 @@ void dsp_set_waterfall_enabled(bool v) { (void)v; }
 void dsp_set_spectrum_enabled(bool v) { (void)v; }
 uint16_t radio_change_vol(int16_t d) { printf("[radio] vol %+d\n", d); return 0; }
 
+int stub_new_station_alerts; /* "New station: ..." shown */
 static void vmsg(const char *tag, const char *fmt, va_list ap) {
-    printf("[%s] ", tag);
-    vprintf(fmt, ap);
-    printf("\n");
+    char text[512];
+    vsnprintf(text, sizeof(text), fmt, ap);
+    if (strncmp(text, "New station: ", 13) == 0) stub_new_station_alerts++;
+    printf("[%s] %s\n", tag, text);
 }
 void msg_update_text_fmt(const char *fmt, ...) { va_list ap; va_start(ap, fmt); vmsg("msg", fmt, ap); va_end(ap); }
 void msg_schedule_text_fmt(const char *fmt, ...) { va_list ap; va_start(ap, fmt); vmsg("msg", fmt, ap); va_end(ap); }

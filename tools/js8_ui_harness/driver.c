@@ -13,6 +13,9 @@
 
 extern buttons_page_t *stub_page;
 
+/* JS8's alert switches (params.js8_alerts bits). */
+void ui_set_alerts(unsigned bits) { params.js8_alerts.x = (uint8_t)bits; }
+
 void ui_init(void) {
     EVENT_BAND_UP   = lv_event_register_id();
     EVENT_BAND_DOWN = lv_event_register_id();

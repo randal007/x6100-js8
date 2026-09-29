@@ -51,11 +51,13 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `HBPAUSE` | heartbeat pause (see below) |
 | `HELD` | messages held for others (store and forward), fetched as desktop does |
 | `INBOX` | a message for us saved and ACKed, the Inbox view (don't run while building: real-time feeding starves) |
+| `LOAD` | the GUI thread's work per second, idle and with waterfall rows (see below) |
 | `LOCK` | hold MFK to lock a station; turning only scrolls |
 | `LOG` | a QSO to 73, the Log popup, ADIF |
 | `LOOKS` | coloured commands, end marks, relay "via" stations, bearing, km/miles, Settings lines |
 | `MARKS` | decode marks (see below) |
 | `MODE` | opened in USB with a custom CB frequency saved: always USB-D |
+| `NEWSTN` | "New station" alerts once per band per power-on, not again an hour later |
 | `OPERATOR` | Settings operator call, logged as OPERATOR |
 | `PARTIAL` | a long message growing in place as it arrives |
 | `QSOFREQ` | Directed view shows what's on the selected station's frequency |
@@ -64,6 +66,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `RETUNE`, `TXSAFE` | transmitting safely (see below) |
 | `SMS` | a phone text via an APRS gateway; Reply by SMS fills in the number |
 | `SPEED` | all four speeds decoded together; the Speed button |
+| `STALL` | the GUI stuck for ~50 s while a band's messages arrive: none lost (see below) |
 | `TEXTS` | Settings: INFO/STATUS keyboard gets the focus |
 | `TXBAR` | frame progress in the TX bar during a long message |
 | `URGENT` | beta 2's urgent fixes (docs/BETA2_URGENT_PLAN.md); its four "[page]" wants predate the page 1/2 swap |
@@ -127,6 +130,19 @@ see.
 
 Build without sanitizers for timings
 (`cmake -S . -B build-perf -DCMAKE_BUILD_TYPE=Release -DHARNESS_SANITIZE=OFF`).
+
+- `ONLY_LOAD=1`: what the GUI thread does per second while JS8 sits
+  there, as on the radio (LVGL's timers run, the TX bar's 250 ms update
+  included, unlike `WFPERF`): idle and with live noise (waterfall rows),
+  with an empty list, a full one and the Stations view. Prints ms of GUI
+  work per second, pixels sent to the screen and flushes. `LOAD_S` sets
+  the seconds per case (10). Package 4 measured idle 7.2 → 0.6 ms/s and
+  1031 → 10 kpx/s (the TX bar restyled 4 times a second), rows with a full
+  list 26.7 → 19 ms/s.
+- `ONLY_STALL=1`: feeds six stations (~50 s) without running the GUI
+  thread, as if it were stuck, then checks every message is in the list.
+  Before package 4 the shared scheduler queue (64 items) overflowed 852
+  times and all six were lost; JS8 now has its own queues.
 
 - `ONLY_WFPERF=1`: fills the list, then adds waterfall rows as fast as they
   render, with a full-screen draw buffer and the radio's flush path

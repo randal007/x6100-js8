@@ -409,7 +409,9 @@ comment, then **Save to log**. Nothing is logged without Save.
 ![Alerts](docs/screenshots/08_alerts.png)
 
 Page 6 **Alerts >**: a short beep for a message to you, an Inbox message,
-a CQ or a new station (each a switch), and **alert words**: calls or
+a CQ or a new station (one not heard on this band since the radio was
+switched on and not in your log for the band; each a switch), and
+**alert words**: calls or
 words you type (e.g. `VE7ABC @POTA SOTA`). Decodes containing them beep
 twice and show purple, in the list and the Stations view. **Test beep**
 plays it. Beeps never sound while transmitting.
@@ -657,14 +659,21 @@ Done for beta 4 so far:
 - [x] **Decode marks** on the waterfall (Settings), as desktop's *Show
   decode attempts*: see where the decoder is trying, even signals too
   weak to see, and in yellow what it decoded
+- [x] **A smoother screen, lighter work:** idle, JS8 no longer redraws
+  the TX bar and the waterfall frame four times a second (about a million
+  pixels a second for nothing); decoded messages can't be lost when the
+  screen falls behind (a ~50 s stall used to lose every message on the
+  band); waterfall rows, the station lists and the Stations view's
+  worked-before marks cost less; a regular who isn't in your log alerts as
+  a new station once per band, not each time they come back after an hour
 
 Still to do:
 
 - [ ] Fix the rest of the bugs found by reading the code: the plan, in
   order, is [docs/review/fix-plan.md](docs/review/fix-plan.md) (from the
   full review in [docs/review](docs/review/) and the first
-  [bug hunt](docs/bug-hunt-2026-09-28.md); next: a smoother screen and
-  lighter work)
+  [bug hunt](docs/bug-hunt-2026-09-28.md); next: screen and keyboard
+  fixes)
 - [ ] SMS: show the gateway's receipt (`ACK04}`) as "delivered" on the
   message you sent, instead of as a new Inbox message
 - [ ] On-air tests: relays and store and forward with desktop JS8Call

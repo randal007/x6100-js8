@@ -2996,6 +2996,81 @@ TEST_CASE("stations heard through a relay are listed via it; aging is adjustable
     CHECK(list.sorted(10'000, 5500).size() == 1);
 }
 
+TEST_CASE("stations: expired ones forgotten, one found by call, the most recent, heard before", "[js8][stations]") {
+    StationList  list;
+    StationEvent ev;
+    auto         hear = [&](const char *call, std::int64_t when) {
+        ev.from    = call;
+        ev.text    = std::string(call) + ": @HB HEARTBEAT FN42";
+        ev.when_ms = when;
+        list.add(ev, "K2XYZ");
+    };
+    hear("W1ABC", 1000);
+    hear("N0XYZ", 2000);
+    hear("VE7ABC", 3000);
+    hear("K2XYZ", 3500); // our own echo: not a station
+    CHECK(list.size() == 3);
+
+    // The most recent first, only as many as asked for.
+    auto r = list.recent(4000, 2);
+    REQUIRE(r.size() == 2);
+    CHECK(r[0].call == "VE7ABC");
+    CHECK(r[1].call == "N0XYZ");
+    CHECK(list.recent(4000, 10, 2500).size() == 2); // W1ABC is past 2.5 s
+
+    // Found by call while listed.
+    REQUIRE(list.find("N0XYZ", 4000) != nullptr);
+    CHECK(list.find("N0XYZ", 4000)->heard_ms == 2000);
+    CHECK(list.find("W9XX", 4000) == nullptr);
+    CHECK(list.find("W1ABC", 4000, 2500) == nullptr); // expired
+
+    // Expired stations are erased (they were only hidden); 0 keeps all.
+    list.expire(4000, 0);
+    CHECK(list.size() == 3);
+    list.expire(4000, 2500);
+    CHECK(list.size() == 2);
+    CHECK(list.find("W1ABC", 4000, 0) == nullptr);
+
+    // Heard before stays true after expiry and the Clear button, not after
+    // a reset (the list reused for another frequency).
+    CHECK(list.heard_before("W1ABC"));
+    CHECK_FALSE(list.heard_before("K2XYZ"));
+    list.clear();
+    CHECK(list.size() == 0);
+    CHECK(list.heard_before("VE7ABC"));
+    list.reset();
+    CHECK_FALSE(list.heard_before("VE7ABC"));
+
+    // Only through a relay: listed, but not heard directly.
+    list.add_via("KK6ABC", "N0XYZ", 1500, 0, 5000);
+    CHECK(list.find("KK6ABC", 5000) != nullptr);
+    CHECK_FALSE(list.heard_before("KK6ABC"));
+}
+
+TEST_CASE("stations C API: the list forgets expired stations as it goes", "[js8][stations]") {
+    js8_stations_t *s = js8_stations_create();
+    js8_rx_msg_t    m{};
+    std::strcpy(m.from, "W1ABC");
+    std::strcpy(m.text, "W1ABC: @HB HEARTBEAT FN42");
+    js8_stations_add(s, &m, "K2XYZ", 1000);
+    std::strcpy(m.from, "N0XYZ");
+    std::strcpy(m.text, "N0XYZ: @HB HEARTBEAT EN34");
+    const std::int64_t later = 1000 + StationList::EXPIRE_MS + 70'000; // W1ABC expired, a minute on
+    js8_stations_add(s, &m, "K2XYZ", later);
+    js8_station_t st;
+    CHECK_FALSE(js8_stations_find(s, "W1ABC", later, &st));
+    REQUIRE(js8_stations_find(s, "N0XYZ", later, &st));
+    CHECK(std::string(st.call) == "N0XYZ");
+    js8_station_t list[4];
+    CHECK(js8_stations_recent(s, later, list, 4) == 1);
+    CHECK(js8_stations_heard_before(s, "W1ABC")); // not "new" if heard again
+    js8_stations_clear(s);
+    CHECK(js8_stations_heard_before(s, "N0XYZ"));
+    js8_stations_reset(s);
+    CHECK_FALSE(js8_stations_heard_before(s, "N0XYZ"));
+    js8_stations_destroy(s);
+}
+
 TEST_CASE("relay stations and command spans for the message list", "[js8][relay]") {
     auto msg = [](const char *from, const char *text, const char *my_call) {
         js8_rx_msg_t m{};

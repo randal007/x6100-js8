@@ -51,6 +51,7 @@ const char *ui_cursor_text(void);
 int         ui_group_count(void);
 int         ui_marked_rows(char *out, unsigned len);
 void ui_keypad_set(uint32_t key, bool down);
+void ui_set_alerts(unsigned bits);
 extern int stub_tx_frames;
 extern int stub_usb_kbd;
 extern int32_t stub_tx_offset;
@@ -61,6 +62,7 @@ void    js8_set_drift_ms(int64_t ms);
 extern int16_t stub_tx_peak;
 extern volatile int stub_tx_keyed;
 extern int stub_tx_aborted;
+extern int stub_new_station_alerts;
 }
 
 #include "js8core/decoder.hpp"
@@ -123,8 +125,14 @@ static double now_ms_f() {
 static bool                wftime_mode;
 static std::vector<double> wftime_stamps;
 
+// ONLY_LOAD: pixels and flushes sent to the screen.
+static long load_flush_px;
+static long load_flushes;
+
 static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *a, lv_color_t *px) {
     uint32_t w = a->x2 - a->x1 + 1, h = a->y2 - a->y1 + 1;
+    load_flush_px += (long)w * h;
+    load_flushes++;
     if (wftime_mode && a->x1 <= 30 && a->x2 >= 770 && a->y1 <= 79 && a->y2 >= 79) {
         /* a new row on top: the top line's pixels changed */
         static uint64_t last_sig;
@@ -173,11 +181,49 @@ static void pump(int ms) {
 
 static void pump(int ms);
 
+// ONLY_LOAD: the GUI thread's work for `ms` as on the radio: LVGL's timers
+// run (the TX bar's 250 ms update included), unlike wf_bench. With `noise`,
+// live noise audio in real time, so the waterfall adds its rows.
+static void load_measure(const char *label, int ms, bool noise) {
+    std::mt19937                    rng(9);
+    std::normal_distribution<float> nd(0.0f, 0.02f);
+    std::vector<float>              buf;
+    long                            px0 = load_flush_px, fl0 = load_flushes;
+    double                          busy = 0, fed = 0;
+    auto                            t0 = std::chrono::steady_clock::now();
+    for (;;) {
+        double el = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+        if (el * 1000 >= ms) break;
+        lv_tick_inc(5);
+        if (noise) {
+            unsigned n = (unsigned)(el * RATE - fed);
+            if (n) {
+                buf.resize(n);
+                for (auto &x : buf) x = nd(rng);
+                dialog_audio_samples(n, buf.data());
+                fed += n;
+            }
+        }
+        double a = now_ms_f();
+        scheduler_work();
+        lv_timer_handler();
+        busy += now_ms_f() - a;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    double s = ms / 1000.0;
+    printf("[load] %-34s GUI busy %6.1f ms/s, %7.0f kpx/s to the screen, %5.1f flushes/s\n", label, busy / s,
+           (load_flush_px - px0) / 1000.0 / s, (load_flushes - fl0) / s);
+}
+
 struct Station {
     const char *call, *grid, *to, *text;
     double      offset_hz;
     float       amp;
 };
+
+// ONLY_STALL: feed_band() without running the GUI thread, as if it were
+// stuck (a slow redraw, a database lookup, an SD card write).
+static bool feed_stalled;
 
 // Synthesise `band` (one slot per frame, starting at the next slot
 // boundary) and feed it through the dialog's audio callback in real time.
@@ -221,7 +267,9 @@ static void feed_band(const std::vector<Station> &band, std::size_t first = 0, s
         unsigned n = (unsigned)std::min(piece, audio.size() - i);
         dialog_audio_samples(n, &audio[i]);
         auto due = t0 + std::chrono::microseconds((long long)((i + n) * 1e6 / RATE));
-        while (std::chrono::steady_clock::now() < due) pump(5);
+        if (feed_stalled) std::this_thread::sleep_until(due);
+        else
+            while (std::chrono::steady_clock::now() < due) pump(5);
     }
     pump(1500);
 }
@@ -531,6 +579,93 @@ int main() {
                            (wftime_stamps[i] - wftime_stamps[0]) / 1000);
         printf("[wftime] %zu rows: interval mean %.1f ms, sd %.1f, min %.1f, p5 %.1f, p95 %.1f, max %.1f; %d uneven (>20%%)\n",
                iv.v.size() + 1, m, sqrt(var / iv.v.size()), iv.pct(0), iv.pct(0.05), iv.pct(0.95), iv.pct(1), off);
+        return 0;
+    }
+    if (getenv("ONLY_NEWSTN")) {
+        // B-20: "New station" once per band per power-on, not again each
+        // time a regular comes back after dropping off the Stations list
+        // (an hour after they were last heard).
+        pump(300);
+        ui_set_alerts(0x01 | 0x10); // beep, new station
+        feed_band({{"VA7XYZ", "CN89", "", "@HB HEARTBEAT CN89", 900, 0.05f}});
+        printf("[newstn] first heard: alerts %d (want 1)\n", stub_new_station_alerts);
+        js8_set_drift_ms(61 * 60 * 1000); // an hour on (whole slots): off the list
+        pump(1500);
+        feed_band({{"VA7XYZ", "CN89", "", "@HB HEARTBEAT CN89", 900, 0.05f},
+                   {"W7NEW", "DM43", "", "@HB HEARTBEAT DM43", 1400, 0.05f}});
+        ui_page(2);
+        ui_press(1); // Show: Directed
+        ui_press(1); // All: heartbeats shown
+        pump(300);
+        printf("[newstn] an hour later: VA7XYZ heard %d, W7NEW heard %d, alerts %d (want 1, 1, 2: only W7NEW new)\n",
+               ui_list_count("VA7XYZ: @HB") == 2, ui_list_has("W7NEW: @HB") == 1, stub_new_station_alerts);
+        js8_set_drift_ms(0);
+        return 0;
+    }
+    if (getenv("ONLY_STALL")) {
+        // B-25: the GUI thread stuck for a whole band's worth of messages
+        // (~50 s): every decode must still reach the list afterwards. The
+        // shared scheduler queue held 64 items and waterfall rows alone
+        // were 15 a second, so this lost messages.
+        pump(300);
+        std::vector<Station> band = {{"W1ABC", "FN42", "", "W1ABC: HEARTBEAT FN42", 600, 0.05f},
+                                     {"VE3KP", "FN03", "", "CQ CQ CQ FN03", 900, 0.05f},
+                                     {"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO FROM THE X6100 TEST", 1320, 0.05f},
+                                     {"G4ABC", "IO91", "", "@ALLCALL ANYONE ON THE BAND FOR A CHAT", 1760, 0.05f},
+                                     {"KN4CRD", "EM73", "K2XYZ", "K2XYZ MSG STORED MESSAGE FOR YOU", 2150, 0.05f},
+                                     {"DL1XX", "JO62", "", "DL1XX: HEARTBEAT JO62", 2380, 0.05f}};
+        feed_stalled = true;
+        feed_band(band); // the GUI runs again only at the end
+        feed_stalled = false;
+        pump(3000);
+        ui_page(2);
+        ui_press(1); // Show: Directed
+        ui_press(1); // All (heartbeats too)
+        pump(300);
+        int got = 0;
+        for (const char *want : {"W1ABC: @HB HEARTBEAT", "VE3KP: @ALLCALL CQ CQ CQ", "N0XYZ: K2XYZ HELLO FROM THE X6100 TEST",
+                                 "G4ABC: @ALLCALL ANYONE ON THE BAND FOR A CHAT", "KN4CRD: K2XYZ MSG STORED MESSAGE",
+                                 "DL1XX: @HB HEARTBEAT"}) {
+            int has = ui_list_has(want) == 1;
+            got += has;
+            printf("[stall] %-46s %s\n", want, has ? "in the list" : "LOST");
+        }
+        printf("[stall] after a ~50 s GUI stall: %d of 6 messages in the list (want 6)\n", got);
+        if (got < 6) {
+            lv_obj_t *t = find_obj(lv_scr_act(), &lv_table_class);
+            for (uint16_t r = 0; t && r < lv_table_get_row_cnt(t); r++)
+                printf("[stall] row %2u: %s\n", r, lv_table_get_cell_value(t, r, 0));
+        }
+        return 0;
+    }
+    if (getenv("ONLY_LOAD")) {
+        // What the GUI thread does per second while JS8 sits there (package 4,
+        // I-14/I-15): idle, then with waterfall rows, empty and full list.
+        // Build without sanitizers (build-perf) for meaningful numbers.
+        int secs = getenv("LOAD_S") ? atoi(getenv("LOAD_S")) : 10;
+        pump(1000);
+        load_measure("idle, empty list", secs * 1000, false);
+        load_measure("waterfall rows, empty list", secs * 1000, true);
+        feed_band({{"W1ABC", "FN42", "", "@POTA ACTIVATING CA-1234", 1300, 0.05f},
+                   {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1800, 0.05f},
+                   {"VE7ABC", "CN89", "", "K2XYZ HELLO THERE", 900, 0.05f},
+                   {"N0XYZ", "EN34", "", "CQ CQ CQ EN34", 1500, 0.05f},
+                   {"KK7RFI", "DN17", "", "@HB HEARTBEAT DN17", 2200, 0.05f},
+                   {"W7ABC", "CN85", "", "K2XYZ SNR -05", 2600, 0.05f}});
+        feed_band({{"G4ABC", "IO91", "", "@ALLCALL ANYONE ON THE BAND FOR A CHAT TONIGHT", 1100, 0.05f},
+                   {"KN4CRD", "EM73", "", "K2XYZ MSG STORED MESSAGE FOR YOU", 2000, 0.05f},
+                   {"DL1XX", "JO62", "", "DL1XX: HEARTBEAT JO62", 700, 0.05f}});
+        ui_page(2);
+        ui_press(1); // Show: Directed
+        ui_press(1); // All
+        pump(500);
+        printf("[load] list rows: %d\n", ui_list_count(":"));
+        load_measure("idle, full list", secs * 1000, false);
+        load_measure("waterfall rows, full list", secs * 1000, true);
+        ui_page(3);
+        ui_press(3); // Show Stations
+        pump(500);
+        load_measure("waterfall rows, Stations view", secs * 1000, true);
         return 0;
     }
     if (getenv("ONLY_WFPERF")) {
