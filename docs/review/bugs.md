@@ -42,21 +42,21 @@ Combining this review with the earlier bug hunt (BH-n):
 | B-09 | F15 | Holding CQ while sending: first CQ a whole interval later (won't fix: user's decision) | low | confirmed |
 | B-10 | F11 | ~~An `@APRSIS MSG` without `TO:` is kept and ACKed~~ **fixed in 4140fbb** | low | confirmed |
 | B-11 | F22 | After a receiver stall, minute-old audio can decode again as new | low | possible |
-| B-12 | F26, F30 | A message still arriving when JS8 closed can take over a new message's row | low | likely |
-| B-13 | F28 | Any first word starting with "CQ" makes a message a CQ | low | confirmed |
+| B-12 | F26, F30 | ~~A message still arriving when JS8 closed can take over a new message's row~~ **fixed in 3e20282** | low | likely |
+| B-13 | F28 | ~~Any first word starting with "CQ" makes a message a CQ~~ **fixed in 3e20282** | low | confirmed |
 | B-14 | F32, F33, F41 | ~~An Inbox file that can't be read is overwritten by the next save~~ **fixed in 4bfb8d6** | medium | confirmed |
 | B-15 | F38, F41 | ~~`js8_texts.txt` is rewritten in place: a power cut can wipe the settings~~ **fixed in 4bfb8d6** | low | confirmed |
-| B-16 | F40, F63 | Without a callsign the keyboard never opens, and leaves a stale edit mode behind | low | confirmed |
+| B-16 | F40, F63 | ~~Without a callsign the keyboard never opens, and leaves a stale edit mode behind~~ **fixed in 3e20282** | low | confirmed |
 | B-17 | F34, F41 | ~~A message that couldn't be saved is still ACKed~~ **fixed in 4bfb8d6** | low | confirmed |
 | B-18 | F12, F62 | ~~QUERY CALL about a station heard only through a relay gets no answer~~ **fixed in 4140fbb** | low | confirmed |
-| B-19 | F56 | The VOL knob does nothing while most popups are open | low | confirmed |
+| B-19 | F56 | ~~The VOL knob does nothing while most popups are open~~ **fixed in 3e20282** | low | confirmed |
 | B-20 | F60, F83 | ~~"New station" alerts again for a station that dropped off the list~~ **fixed in 68fd0fe** | low | likely |
 | B-21 | F66 | ~~AGN? repeats what we last queued, not what went out~~ **fixed in 4140fbb** | low | confirmed |
-| B-22 | F63 | The keyboard refuses some characters JS8 can send ($, %, [ and others) | low | confirmed |
-| B-23 | F63, F72 | A message that's too long freezes the frame count instead of saying so | low | confirmed |
-| B-24 | F74, F76 | A QSO left unlogged stays first in Log QSO for good | low | confirmed |
+| B-22 | F63 | ~~The keyboard refuses some characters JS8 can send ($, %, [ and others)~~ **fixed in 3e20282** | low | confirmed |
+| B-23 | F63, F72 | ~~A message that's too long freezes the frame count instead of saying so~~ **fixed in 3e20282** | low | confirmed |
+| B-24 | F74, F76 | ~~A QSO left unlogged stays first in Log QSO for good~~ **fixed in 3e20282** | low | confirmed |
 | B-25 | F88 | ~~A stalled screen can silently drop decoded messages (64-item scheduler queue)~~ **fixed in 68fd0fe** | low | possible |
-| B-26 | F83 | Alert words miss a word with punctuation attached ("SOTA,") | low | confirmed |
+| B-26 | F83 | ~~Alert words miss a word with punctuation attached ("SOTA,")~~ **fixed in 3e20282** | low | confirmed |
 | B-27 | F99 | `x6100-flash` with no argument writes an old build (18ebf06) | low | confirmed |
 
 ## Batch 1: Transmitting and the radio
@@ -348,6 +348,8 @@ ring), as the gap fill does, instead of a bare realign.
 
 ### B-12. A message still arriving when JS8 closed can take over a new message's row — low, likely
 
+**Fixed in 3e20282** (package 5): message ids come from one counter for the whole run, and messages still arriving when the receiver stops (a retune, JS8 closing) are closed. Harness `ONLY_ROWS`: on the old code the row kept " ..." after a band change.
+
 **Where:** `src/dialog_js8.c:683-690` (`find_partial`), `:751-760`
 (`add_message`); `src/js8/assembler.hpp:87` (`next_id_ = 1`).
 
@@ -364,6 +366,8 @@ of at the bottom. Such partials also keep their "growing" state forever.
 radio is on), and mark leftover partials as final on retune and close.
 
 ### B-13. Any first word starting with "CQ" makes a message a CQ — low, confirmed
+
+**Fixed in 3e20282** (package 5): `first == "CQ"`; unit test with CQ7ABC.
 
 **Where:** `src/js8/classify.cpp:67`
 (`starts_with(first, "CQ")`).
@@ -417,6 +421,8 @@ Inbox files next to it are written safely (temporary file, `fsync`,
 BH-16's fallback to the `.tmp` file on load.
 
 ### B-16. Without a callsign the keyboard never opens, and leaves a stale edit mode behind — low, confirmed
+
+**Fixed in 3e20282** (package 5): the callsign is required only for what sends (a message, an APRS beacon); a refusal undoes the edit mode; `construct_cb` resets it. Harness `ONLY_KEYS`: on the old code, after a refused custom frequency, Send... opened the frequency editor ("COSTS $5, 50%..." typed as "550").
 
 **Where:** `src/dialog_js8.c:1874-1879` (`compose_open`); callers that
 set `edit_target` first: `texts_item_cb` (`:3344`), `freq_item_cb`
@@ -474,6 +480,8 @@ i.e. `"(5m)"`, and answers `N0XYZ YES (5m)` (`processCommandActivity.cpp:1100-11
 
 ### B-19. The VOL knob does nothing while most popups are open — low, confirmed
 
+**Fixed in 3e20282** (package 5): one `popup_key()` for every popup, the VOL knob included. Harness `ONLY_KEYS`: 0 of 5 popups on the old code, 5 of 5 now.
+
 **Where:** the popups' key callbacks: `texts_key_cb`, `aprs_key_cb`,
 `log_key_cb`, `inbox_key_cb`, `alerts_key_cb`, `freq_key_cb`,
 `spot_key_cb`.
@@ -527,6 +535,8 @@ sent, or the frames that went out when it was stopped), and clear it in
 
 ### B-22. The keyboard refuses characters JS8 can send — low, confirmed
 
+**Fixed in 3e20282** (package 5): all printable ASCII.
+
 **Where:** `src/dialog_js8.c:1886` (`lv_textarea_set_accepted_chars`).
 
 **What goes wrong:** `is_sendable_char()` takes all printable ASCII
@@ -542,6 +552,8 @@ silently (the filter also applies to prefilled text).
 
 ### B-23. A message that's too long freezes the frame count instead of saying so — low, confirmed
 
+**Fixed in 3e20282** (package 5): the preview's error ("JS8: too long: 23 frames (max 20)") as you type.
+
 **Where:** `src/dialog_js8.c:1748-1755` (`compose_changed_cb`).
 
 **What goes wrong:** the live "N frames, S s" line is only updated while
@@ -555,6 +567,8 @@ ordinary text, easier with many escaped punctuation characters.
 ## Batch 9: Alerts, time, app life cycle, firmware hooks
 
 ### B-24. A QSO left unlogged stays first in Log QSO for good — low, confirmed
+
+**Fixed in 3e20282** (package 5, D-E): ESC on the prompt clears it; Log QSO takes the selected station when it isn't the pending one; the pending one is forgotten with the QSO tracker (30 min). Harness `ONLY_LOGPEND`: the old code opened N0XYZ with W1ABC selected.
 
 **Where:** `src/dialog_js8.c:4274-4288` (`log_offer` sets `log_pending`),
 `:4067-4073` (only Save and the Cancel item clear it), `:4264`
@@ -597,6 +611,8 @@ for JS8's message and TX events (a bigger queue, or a JS8-side queue the
 UI drains).
 
 ### B-26. Alert words miss a word with punctuation attached — low, confirmed
+
+**Fixed in 3e20282** (package 5): punctuation stripped around tokens, `@` and `/` kept.
 
 **Where:** `src/js8/alerts.cpp:48-57` (`alert_word_hit` splits only on
 `: > space tab`).

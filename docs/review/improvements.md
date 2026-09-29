@@ -20,7 +20,7 @@ numbers refer to that commit.
 | I-02 | F02 | Synthesise TX audio without 16 MB of temporary buffers | efficiency | medium |
 | I-03 | F10 | Keep the JS8 presets out of upstream's migration numbers | robustness | medium |
 | I-04 | F03 | Plan each message once, not twice | efficiency | low |
-| I-05 | F05, F89 | One list of popups instead of three | simplify | low |
+| I-05 | F05, F89 | ~~One list of popups instead of three~~ **fixed in 3e20282** | simplify | low |
 | I-06 | F01 | Save the learned TX gain once per message, not per frame | efficiency | low |
 | I-07 | F11–F20 | ~~A desktop-parity test table for the auto-reply rules~~ **done in 4140fbb** | tests | medium |
 | I-08 | F11, F20 | ~~Decide once, when the reply is actually sent~~ **done in 4140fbb** | simplify | low |
@@ -33,7 +33,7 @@ numbers refer to that commit.
 | I-15 | F45, F46, F59 | ~~Work out each row's colours and fields once, not on every redraw~~ **not done: measured, not worth it** | efficiency | medium |
 | I-16 | F42, F43 | ~~Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes~~ **done in 68fd0fe (JS8 side)** | efficiency | low |
 | I-17 | F58, F62 | ~~Forget expired stations; look one up without copying the list~~ **done in 68fd0fe** | efficiency | medium |
-| I-18 | F63, F67, F40 | One "from a popup into the keyboard" helper | simplify | medium |
+| I-18 | F63, F67, F40 | ~~One "from a popup into the keyboard" helper~~ **fixed in 3e20282** | simplify | medium |
 | I-19 | F75 | Keep `MODE_JS8`'s number clear of upstream's | robustness | low |
 | I-20 | F95, F96, F97 | Run the unit tests and the harness in CI | tests | high |
 | I-21 | F97 | Pin buildroot and the third-party actions; find out why tags never build | robustness | medium |
@@ -87,6 +87,8 @@ builds and two decode-backs on the LVGL thread for every message. Have
 plan).
 
 ### I-05. One list of popups instead of three — simplify, low
+
+**Done in 3e20282** (package 5): the `popups[]` table, used by `any_popup()`, `close_popups()` and `destruct_cb()`.
 
 `any_popup()` (`:3965`), `close_popups()` (`:2752`) and `destruct_cb()`
 (`:2263-2294`) each name all eight popups. A popup missing from one of
@@ -261,6 +263,8 @@ the 200-station blind spot in B-20.
 ## Batch 7: Sending by hand
 
 ### I-18. One "from a popup into the keyboard" helper — simplify, medium
+
+**Done in 3e20282** (package 5): `popup_leave()` and `popup_to_keyboard()`, used by all twelve places; a refusal resets the edit mode (B-16).
 
 The same six steps are written out in `texts_item_cb`, `query_msg_cb`,
 `freq_item_cb`, the Inbox items (`inbox_leave` + `msg_compose`), the log,

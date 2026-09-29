@@ -149,7 +149,15 @@ it.
 
 **Status:** done in 68fd0fe, all as decided: I-14, B-25, I-16 (JS8 side: `lv_waterfall.c` is shared with FT8), I-17, B-20, BH-17; I-15 not done (measured: `js8_command_span()` is 0.2% of the redraw). New harness cases: `ONLY_LOAD` (GUI work per second), `ONLY_STALL` (B-25, lost all 6 messages on the old code), `ONLY_NEWSTN` (B-20, beeped twice on the old code).
 
-### WP5: Screen and keyboard fixes (effort L, many small)
+### WP5: Screen and keyboard fixes — done 2026-09-29
+
+**Decided 2026-09-29 (your answers, all as recommended):** D-E (B-24):
+ESC on the log prompt means "not now"; **Log QSO** logs the selected
+station when you've selected another one, and a pending QSO is forgotten
+with the QSO record (30 min). D-F (BH-13): a QSO ends on 73, SK or RR73
+among its **last three words**. D-G (BH-9): the Inbox lists all messages
+(up to 200) **newest first**, the cursor on the **newest unread** (it
+used to start on the oldest unread; you chose the newest).
 
 | Item | Verdict | The fix |
 |---|---|---|
@@ -157,18 +165,20 @@ it.
 | **B-16** stale edit mode, no keyboard without a callsign | **Fix** | Reset `edit_target` in `construct_cb` and when the keyboard refuses; require the callsign only for sending (inside the helper above). |
 | **B-22** ten sendable characters refused | **Fix, small** | Accept all printable ASCII (the font has all 95 glyphs, checked). |
 | **B-23** too-long message freezes the count | **Fix, small** | Show `pv.error`. |
-| **B-24** unlogged QSO stays first | **Fix, small** | ESC clears it too; Log QSO takes the selected station when it differs; expires with the QSO tracker. |
+| **B-24** unlogged QSO stays first | **Fix, small** (D-E) | ESC clears it too; Log QSO takes the selected station when it differs; expires with the QSO tracker. |
 | **B-26** alert words and punctuation | **Fix, small** | Strip punctuation around tokens (keep `@` and `/`). |
-| **BH-13** "73" anywhere ends the QSO | **Fix, small** | Last two words only. |
+| **BH-13** "73" anywhere ends the QSO | **Fix, small** (D-F) | The last three words only. |
 | **BH-15** Hold Speed uses the cursor | **Fix, small** | The selected station's speed (`js8_stations_find`). |
 | **BH-3** Inbox "Reply to HOME" | **Fix, small** | Require a valid callsign (js8core `is_valid_callsign`). |
 | **BH-4** `VE7NHW/P` counts as us | **Fix, small** | `to_me` = our call or our base call exactly, as desktop. |
 | **BH-6** grids from any grid-shaped word | **Fix** | Grids only from heartbeats, CQs, `GRID` and `@APRSIS GRID`, in Stations and the QSO tracker; tests. |
 | **BH-S3** typed log grid unchecked | **Fix, small** | `is_grid()` check in the Log popup. |
-| **BH-9** Inbox list shows 50 of 200 | **Fix, small** | All unread first, then the newest, up to 200. |
+| **BH-9** Inbox list shows 50 of 200 | **Fix, small** (D-G) | All of them (up to 200), newest first, the cursor on the newest unread. |
 | **BH-18** info rows vanish on rebuild | **Fix** | Info rows kept in the history ring (a flag), so they survive rebuilds and age like messages. |
 | **B-12** partial rows reuse ids | **Fix, small** | A process-wide message counter; partial slots marked final on retune and close. |
 | **B-13** "CQ" prefix | **Fix, small** | `first == "CQ"`. |
+
+**Status:** done in 3e20282, all sixteen as decided. New harness cases `ONLY_KEYS` (B-19, B-16, B-22, B-23), `ONLY_LOGPEND` (B-24, BH-S3) and `ONLY_ROWS` (BH-18, B-12, BH-9); each failed on the old code first. Unit tests for B-13, BH-4, BH-6, BH-13, B-26 and BH-3.
 
 ### WP6: APRS and SMS (effort M)
 
