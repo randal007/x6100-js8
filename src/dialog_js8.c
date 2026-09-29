@@ -15,6 +15,7 @@
 #include "js8/js8_tx.h"
 #include "js8/js8_ops.h"
 #include "js8/js8_speed.h"
+#include "js8/js8_map.h"
 #include "qth/qth.h"
 #include "qso_log.h"
 
@@ -75,6 +76,12 @@
 #ifndef JS8_LOG_PATH
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
+#ifndef JS8_MAP_DATA_PATH
+#define JS8_MAP_DATA_PATH "/usr/share/x6100/js8/js8_map.bin" /* tools/map_data */
+#endif
+#ifndef JS8_CTY_PATH
+#define JS8_CTY_PATH     "/usr/share/x6100/js8/cty.dat" /* third-party/cty */
+#endif
 #define SYNC_WINDOW_MS   120000 /* Time Sync uses decodes from the last 2 min */
 #define SYNC_SAMPLES     64     /* decodes kept for Time Sync (a busy band's 2 min) */
 #define WF_ROWS_PER_SEC  15     /* waterfall rows per second of audio, as the main screen's */
@@ -132,8 +139,14 @@ static void key_cb(lv_event_t *e);
 static const char *show_label_getter(void);
 static void        show_cb(button_data_t *btn);
 static void        clear_cb(button_data_t *btn);
-static void        time_sync_cb(button_data_t *btn);
-static void        time_sync_hold_cb(button_data_t *btn);
+static void        time_sync_now(void);
+static void        time_sync_reset(void);
+static const char *map_view_label_getter(void);
+static void        map_view_cb(button_data_t *btn);
+static void        map_update(bool force);
+static void        map_popup_add(const char *call);
+static void        map_show(bool on);
+static void        map_free(void);
 static void        rotary_cb(int32_t diff);
 static void        reply_cb(button_data_t *btn);
 static void        send_cb(button_data_t *btn);
@@ -288,6 +301,12 @@ static struct {
 } band_lists[BAND_LISTS];
 static int band_lists_next; /* slot reused when all are taken */
 static bool           view_stations;   /* list shows stations, not messages */
+/* Show Map: the map covers the waterfall and the list; the Stations view
+ * stays underneath (view_stations too), so the MFK selects as there. */
+static bool           view_map;
+static bool           map_heard_me_only; /* Show in the map: All heard / Heard me */
+static lv_obj_t      *wf_box;           /* the waterfall's opaque box (hidden under the map) */
+static lv_obj_t      *map_box, *map_canvas, *map_status; /* made when the map first opens */
 static js8_station_t  st_rows[MAX_ROWS];
 static int            st_count;
 static lv_obj_t      *query_list;      /* Query popup, when open */
@@ -521,14 +540,14 @@ static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press =
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
 static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_4, .prev = &page_2};
-static button_data_t btn_time_sync = {.type = BTN_TEXT, .label = "Time\nSync", .press = time_sync_cb, .hold = time_sync_hold_cb};
+static button_data_t btn_map_view = {.type = BTN_TEXT_FN, .label_fn = map_view_label_getter, .press = map_view_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
 static button_data_t btn_inbox     = {.type = BTN_TEXT_FN, .label_fn = inbox_label_getter, .press = inbox_cb};
 
 static buttons_page_t page_1 = {{&btn_p1, &btn_cq, &btn_hb, &btn_query, &btn_hw_cpy}};
 static buttons_page_t page_2 = {{&btn_p2, &btn_show, &btn_reply, &btn_send, &btn_clear}};
-static buttons_page_t page_3 = {{&btn_p3, &btn_time_sync, &btn_hold, &btn_stations, &btn_inbox}};
+static buttons_page_t page_3 = {{&btn_p3, &btn_map_view, &btn_hold, &btn_stations, &btn_inbox}};
 
 static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_5, .prev = &page_3};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
@@ -812,6 +831,7 @@ static void process_message(js8_rx_msg_t *m) {
      * (your choice), not just "not listed now": a regular who dropped off
      * the list an hour after they were last heard beeped again (B-20). */
     bool new_station = !m->tx && m->from[0] && !js8_stations_heard_before(stations, m->from);
+    if (new_station) map_popup_add(m->from); /* pops up on the map for a few seconds */
     js8_stations_add(stations, m, params.callsign.x, now_wall_ms());
     if (m->tx) return;
     if (params.js8_relay.x) { /* stations a relay to us came through, as desktop lists them */
@@ -1088,6 +1108,7 @@ static void rebuild_station_rows(void) {
         append_row(" ", (int16_t)i); /* drawn by table_draw_end_cb() */
     }
     select_row(keep_row);
+    if (view_map) map_update(false);
 }
 
 /* Commands in colour (desktop draws them as "pills"): the table draws such
@@ -1281,6 +1302,7 @@ static void show_selection(void) {
     lv_obj_invalidate(finder);
     lv_obj_invalidate(table);
     update_tx_bar();
+    if (view_map) map_update(false);
 }
 
 /* The station on the cursor's row becomes the selection (the user moved
@@ -1523,6 +1545,7 @@ static void update_status(void) {
     if (d) snprintf(drift, sizeof(drift), " drift %+.1fs", d / 1000.0);
     lv_label_set_text_fmt(status, "%s%s%s  %02d:%02d:%02dZ%s  total %u", flags, testing ? "TEST WAV  " : "",
                           where_label(), tm.tm_hour, tm.tm_min, tm.tm_sec, drift, hist_count);
+    if (map_status && view_map) lv_label_set_text(map_status, lv_label_get_text(status)); /* the same, over the map */
 }
 
 static void ui_cycle_done(void *arg) {
@@ -1981,6 +2004,7 @@ static void tx_timer_cb(lv_timer_t *t) {
         update_status();
     }
     if (view_stations && ticks % 20 == 0) rebuild_station_rows(); /* ages */
+    if (view_map) map_update(false); /* pop-ups flash and end; redrawn only if something changed */
 }
 
 /* The TX bar and the waterfall frame as last set. Every LVGL style or
@@ -2593,7 +2617,7 @@ static void construct_cb(lv_obj_t *parent) {
      * line and alpha-blended, most of the cost of a row. A plain opaque
      * object does cover, and drawing starts there, as for the main
      * screen's waterfall. */
-    lv_obj_t *wf_box = lv_obj_create(dialog.obj);
+    wf_box = lv_obj_create(dialog.obj);
     lv_obj_remove_style_all(wf_box);
     lv_obj_set_style_bg_color(wf_box, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(wf_box, LV_OPA_COVER, 0);
@@ -2804,12 +2828,481 @@ static void destruct_cb(void) {
     /* LVGL objects are children of dialog.obj, deleted by dialog_destruct()
      * right after this returns. */
     waterfall = finder = table = status = tx_bar = NULL;
+    wf_box    = NULL;
+    map_free();
+}
+
+
+/* ---- Show Map (docs/MAP_PLAN.md) ----------------------------------------- */
+
+/* A map in place of the waterfall and the list, GridTracker's look: the
+ * base map (src/js8/map_render, Natural Earth) drawn for the view, the
+ * stations of this frequency in their grid squares (or placed by callsign,
+ * hollow), curved paths to those who heard you, you in orange, the
+ * selected station in red, and new stations popping up for 8 s. The
+ * Stations view stays underneath: the MFK selects there. */
+
+#define MAP_W          WIDTH
+#define MAP_H          WF_HEIGHT
+#define MAP_LEGEND_H   26
+#define MAP_FIT_H      (MAP_H - TX_BAR_H - MAP_LEGEND_H) /* stations fit above the legend and TX bar */
+#define MAP_POPUPS     8
+#define MAP_POPUP_MS   8000
+#define MAP_PATH_N     48
+#define MAP_OCEAN      0x232227
+#define MAP_HEARD      0x00FF00 /* GridTracker's CQ green */
+#define MAP_HOME       0xFFA600 /* GridTracker's QTH orange */
+#define MAP_PURPLE     0xAB00B6 /* the paths: VE7NHW's pick */
+#define MAP_SELECT     0xFF3030
+#define MAP_SQUARE_OPA 136      /* GridTracker's grid alpha */
+#define MAP_TAKEN      32       /* label boxes placed per redraw */
+
+static uint32_t       *map_base, *map_px; /* the base map, and base + stations as shown */
+static js8_map_data_t *map_data;
+static js8_map_view_t  map_view;
+static bool            map_view_ok, map_world;
+static char            map_my_cont[3];
+static uint32_t        map_sig;
+static struct {
+    char    call[JS8_RX_CALL_LEN];
+    int64_t until_ms; /* monotonic */
+} map_popups[MAP_POPUPS];
+static lv_area_t map_taken[MAP_TAKEN];
+static int       map_ntaken;
+
+static const char *const map_mode_names[3] = {"Auto", "Close-in", "World"};
+
+static void map_popup_add(const char *call) {
+    int slot = 0;
+    for (int i = 0; i < MAP_POPUPS; i++) {
+        if (strcasecmp(map_popups[i].call, call) == 0) {
+            slot = i;
+            break;
+        }
+        if (map_popups[i].until_ms < map_popups[slot].until_ms) slot = i; /* the oldest goes */
+    }
+    snprintf(map_popups[slot].call, sizeof(map_popups[slot].call), "%s", call);
+    map_popups[slot].until_ms = now_mono_ms() + MAP_POPUP_MS;
+}
+
+static bool map_popup_on(const char *call, int64_t now) {
+    for (int i = 0; i < MAP_POPUPS; i++)
+        if (map_popups[i].until_ms > now && strcasecmp(map_popups[i].call, call) == 0) return true;
+    return false;
+}
+
+/* Objects and buffers, made the first time the map opens. */
+static bool map_ensure(void) {
+    if (map_box) return true;
+    map_base = malloc((size_t)MAP_W * MAP_H * sizeof(uint32_t));
+    map_px   = malloc((size_t)MAP_W * MAP_H * sizeof(uint32_t));
+    if (!map_base || !map_px) {
+        free(map_base);
+        free(map_px);
+        map_base = map_px = NULL;
+        return false;
+    }
+    if (!map_data) map_data = js8_map_data_load(JS8_MAP_DATA_PATH);
+    if (!js8_map_countries_loaded()) js8_map_load_countries(JS8_CTY_PATH);
+    if (!map_data) LV_LOG_USER("JS8 map: no map data at %s", JS8_MAP_DATA_PATH);
+
+    /* An opaque box, as the waterfall's: LVGL starts drawing there and
+     * never redraws the list and the dialog background behind it. */
+    map_box = lv_obj_create(dialog.obj);
+    lv_obj_remove_style_all(map_box);
+    lv_obj_set_style_bg_color(map_box, lv_color_hex(MAP_OCEAN), 0);
+    lv_obj_set_style_bg_opa(map_box, LV_OPA_COVER, 0);
+    lv_obj_clear_flag(map_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(map_box, MAP_W, MAP_H);
+    lv_obj_set_pos(map_box, 13, 13);
+    lv_obj_add_flag(map_box, LV_OBJ_FLAG_HIDDEN);
+
+    map_canvas = lv_canvas_create(map_box);
+    lv_canvas_set_buffer(map_canvas, map_px, MAP_W, MAP_H, LV_IMG_CF_TRUE_COLOR);
+    lv_obj_set_pos(map_canvas, 0, 0);
+
+    map_status = lv_label_create(map_box);
+    lv_obj_set_style_text_font(map_status, &sony_18, 0);
+    lv_obj_set_style_text_color(map_status, lv_color_white(), 0);
+    lv_obj_set_style_bg_color(map_status, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(map_status, LV_OPA_50, 0);
+    lv_obj_align(map_status, LV_ALIGN_TOP_RIGHT, -4, 4);
+    lv_label_set_text(map_status, "");
+    map_view_ok = false;
+    return true;
+}
+
+static void map_free(void) {
+    /* The objects go with dialog.obj. */
+    map_box = map_canvas = map_status = NULL;
+    free(map_base);
+    free(map_px);
+    map_base = map_px = NULL;
+    js8_map_data_free(map_data);
+    map_data    = NULL;
+    map_view_ok = false;
+    view_map    = false;
+}
+
+static void map_show(bool on) {
+    if (on && !map_ensure()) {
+        msg_update_text_fmt("Map: not enough memory");
+        return;
+    }
+    view_map = on;
+    if (on) {
+        js8_map_my_continent(params.callsign.x, params.qth.x, map_my_cont);
+        lv_obj_add_flag(wf_box, LV_OBJ_FLAG_HIDDEN); /* decoding goes on; rows just aren't drawn */
+        lv_obj_clear_flag(map_box, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_move_foreground(map_box);
+        lv_obj_set_pos(tx_bar, 13, 13 + MAP_H - TX_BAR_H);
+        lv_obj_move_foreground(tx_bar);
+        map_view_ok = false;
+        update_status();
+        map_update(true);
+    } else {
+        if (map_box) lv_obj_add_flag(map_box, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_pos(tx_bar, 13, 13 + WF_VISIBLE);
+    }
+    if (btn_map_view.disp_btn) buttons_refresh(&btn_map_view);
+    if (btn_show.disp_btn) buttons_refresh(&btn_show);
+}
+
+static void map_rect(int x, int y, int w, int h, uint32_t fill, lv_opa_t fill_opa, uint32_t border, int bw,
+                     lv_coord_t radius) {
+    lv_draw_rect_dsc_t d;
+    lv_draw_rect_dsc_init(&d);
+    d.bg_color     = lv_color_hex(fill);
+    d.bg_opa       = fill_opa;
+    d.border_color = lv_color_hex(border);
+    d.border_width = bw;
+    d.border_opa   = bw ? LV_OPA_COVER : LV_OPA_TRANSP;
+    d.radius       = radius;
+    lv_canvas_draw_rect(map_canvas, x, y, w, h, &d);
+}
+
+static bool map_overlaps(const lv_area_t *a) {
+    for (int i = 0; i < map_ntaken; i++)
+        if (a->x1 < map_taken[i].x2 && map_taken[i].x1 < a->x2 && a->y1 < map_taken[i].y2 && map_taken[i].y1 < a->y2)
+            return true;
+    return false;
+}
+
+static void map_take(lv_coord_t x1, lv_coord_t y1, lv_coord_t x2, lv_coord_t y2) {
+    if (map_ntaken < MAP_TAKEN) map_taken[map_ntaken++] = (lv_area_t){x1, y1, x2, y2};
+}
+
+/* A label on a dark box beside (x, y): right of it, else left, above or
+ * below, wherever it covers no other label (or the legend, the status
+ * line). A forced one takes the first place that fits on the map; any
+ * other is left out if none is free. */
+static void map_label(int x, int y, const char *text, uint32_t fg, uint32_t bg, lv_opa_t bg_opa, int dx,
+                      bool force) {
+    lv_point_t sz;
+    lv_txt_get_size(&sz, text, &sony_18, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    const int places[4][2] = {{x + dx, y - sz.y / 2},
+                              {x - dx - sz.x, y - sz.y / 2},
+                              {x - sz.x / 2, y - dx - sz.y},
+                              {x - sz.x / 2, y + dx}};
+    lv_area_t box;
+    int       bx = 0, by = 0;
+    bool      found = false;
+    /* Never over its own station (moved back onto the map, a label can
+     * land on it). */
+    const lv_area_t own = {x - 8, y - 8, x + 8, y + 8};
+#define MAP_LABEL_FREE(b)                                                                                              \
+    (!map_overlaps(&(b)) && !((b).x1 < own.x2 && own.x1 < (b).x2 && (b).y1 < own.y2 && own.y1 < (b).y2))
+    for (int k = 0; k < 4 && !found; k++) {
+        bx = LV_CLAMP(4, places[k][0], MAP_W - sz.x - 4);
+        by = LV_CLAMP(2, places[k][1], MAP_H - TX_BAR_H - MAP_LEGEND_H - sz.y - 2);
+        box   = (lv_area_t){bx - 4, by - 2, bx + sz.x + 4, by + sz.y + 2};
+        found = MAP_LABEL_FREE(box);
+        if (force && !found && k == 0) { /* forced: keep the first place unless another is free */
+            lv_area_t first = box;
+            int       fx = bx, fy = by;
+            for (int j = 1; j < 4 && !found; j++) {
+                bx    = LV_CLAMP(4, places[j][0], MAP_W - sz.x - 4);
+                by    = LV_CLAMP(2, places[j][1], MAP_H - TX_BAR_H - MAP_LEGEND_H - sz.y - 2);
+                box   = (lv_area_t){bx - 4, by - 2, bx + sz.x + 4, by + sz.y + 2};
+                found = MAP_LABEL_FREE(box);
+            }
+            if (!found) {
+                box   = first;
+                bx    = fx;
+                by    = fy;
+                found = true;
+            }
+        }
+    }
+#undef MAP_LABEL_FREE
+    if (!found) return;
+    map_take(box.x1, box.y1, box.x2, box.y2);
+    map_rect(box.x1, box.y1, box.x2 - box.x1, box.y2 - box.y1, bg, bg_opa, 0, 0, 3);
+    lv_draw_label_dsc_t ld;
+    lv_draw_label_dsc_init(&ld);
+    ld.color = lv_color_hex(fg);
+    ld.font  = &sony_18;
+    lv_canvas_draw_text(map_canvas, bx, by, sz.x + 4, &ld, text);
+}
+
+/* A station's square (its 4-character grid) or, placed by callsign, a
+ * hollow box; its centre in *cx, *cy. */
+static void map_station_mark(const char *grid, const js8_map_place_t *pl, uint32_t color, lv_opa_t opa, int *cx,
+                             int *cy) {
+    float x0, y0, x1, y1;
+    char  g4[5] = "";
+    if (!pl->approx && strlen(grid) >= 4) snprintf(g4, sizeof(g4), "%.4s", grid);
+    if (g4[0] && js8_map_grid_rect(&map_view, g4, &x0, &y0, &x1, &y1)) {
+        float mx = (x0 + x1) / 2, my = (y0 + y1) / 2;
+        if (x1 - x0 < 7) x0 = mx - 3.5f, x1 = mx + 3.5f; /* at least 7 px, to be seen */
+        if (y1 - y0 < 7) y0 = my - 3.5f, y1 = my + 3.5f;
+        map_rect((int)x0, (int)y0, (int)(x1 - x0 + 0.5f), (int)(y1 - y0 + 0.5f), color, opa, color, 1, 0);
+        *cx = (int)mx;
+        *cy = (int)my;
+        return;
+    }
+    float x, y;
+    js8_map_project(&map_view, pl->lat, pl->lon, &x, &y);
+    map_rect((int)x - 5, (int)y - 5, 11, 11, color, LV_OPA_TRANSP, color, 2, 0);
+    *cx = (int)x;
+    *cy = (int)y;
+}
+
+static uint32_t map_hash(uint32_t h, const void *p, size_t n) {
+    const unsigned char *b = p;
+    for (size_t i = 0; i < n; i++) h = (h ^ b[i]) * 16777619u;
+    return h;
+}
+
+static void map_legend(bool have_home) {
+    int y0 = MAP_H - TX_BAR_H - MAP_LEGEND_H, cy = y0 + MAP_LEGEND_H / 2;
+    map_rect(0, y0, MAP_W, MAP_LEGEND_H, 0x000000, 130, 0, 0, 0);
+    map_take(0, y0, MAP_W, MAP_H);
+    lv_draw_label_dsc_t ld;
+    lv_draw_label_dsc_init(&ld);
+    ld.color = lv_color_hex(0xDDDDDD);
+    ld.font  = &sony_18;
+    static const struct {
+        uint32_t    color;
+        int         kind; /* 0 square, 1 line, 2 hollow */
+        const char *text;
+    } items[] = {{MAP_HEARD, 0, "heard"},
+                 {MAP_PURPLE, 1, "heard you"},
+                 {MAP_HEARD, 2, "by call prefix"},
+                 {MAP_SELECT, 0, "selected"},
+                 {MAP_HOME, 0, "you"}};
+    int x = 8;
+    for (unsigned i = 0; i < sizeof(items) / sizeof(items[0]); i++) {
+        if (items[i].kind == 0) map_rect(x, cy - 5, 10, 10, items[i].color, MAP_SQUARE_OPA + 60, items[i].color, 1, 0);
+        else if (items[i].kind == 2) map_rect(x, cy - 5, 10, 10, items[i].color, LV_OPA_TRANSP, items[i].color, 2, 0);
+        else map_rect(x, cy - 1, 12, 3, items[i].color, LV_OPA_COVER, 0, 0, 0);
+        lv_point_t sz;
+        lv_txt_get_size(&sz, items[i].text, &sony_18, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+        lv_canvas_draw_text(map_canvas, x + 16, cy - sz.y / 2, sz.x + 4, &ld, items[i].text);
+        x += 16 + sz.x + 16;
+    }
+    char        right[64];
+    const char *cont = strcmp(map_my_cont, "NA") == 0   ? "North America"
+                       : strcmp(map_my_cont, "SA") == 0 ? "South America"
+                       : strcmp(map_my_cont, "EU") == 0 ? "Europe"
+                       : strcmp(map_my_cont, "AF") == 0 ? "Africa"
+                       : strcmp(map_my_cont, "AS") == 0 ? "Asia"
+                       : strcmp(map_my_cont, "OC") == 0 ? "Oceania"
+                                                        : "Your continent";
+    if (!have_home) snprintf(right, sizeof(right), "Set your grid: APP > QTH");
+    else if (params.js8_map_mode.x == JS8_MAP_WORLD) snprintf(right, sizeof(right), "World");
+    else if (map_world) snprintf(right, sizeof(right), "World (DX heard)");
+    else snprintf(right, sizeof(right), "%s%s", cont, params.js8_map_mode.x == JS8_MAP_CLOSE ? " (close-in)" : "");
+    if (map_heard_me_only) strncat(right, ", heard me", sizeof(right) - strlen(right) - 1);
+    lv_point_t sz;
+    lv_txt_get_size(&sz, right, &sony_18, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
+    ld.color = lv_color_white();
+    lv_canvas_draw_text(map_canvas, MAP_W - 8 - sz.x, cy - sz.y / 2, sz.x + 4, &ld, right);
+}
+
+/* "  1234 km" (or mi) from home to a place, for labels. */
+static void map_dist(char *buf, size_t size, const js8_map_place_t *home, const js8_map_place_t *p) {
+    double km = js8_map_distance_km(home->lat, home->lon, p->lat, p->lon);
+    snprintf(buf, size, "  %.0f %s", params.js8_miles.x ? km * 0.621371 : km, params.js8_miles.x ? "mi" : "km");
+}
+
+/* Place, fit, draw. The base map is redrawn only when the view moves; the
+ * stations only when something shown changed (the pop-ups' flashing
+ * included), checked every 250 ms. */
+static void map_update(bool force) {
+    if (!view_map || !map_canvas || !map_base) return;
+    int64_t                now = now_mono_ms();
+    js8_map_place_t        home;
+    bool                   have_home = js8_map_place(params.callsign.x, params.qth.x, &home);
+    static js8_map_place_t pl[MAX_ROWS];
+    static bool            shown[MAX_ROWS];
+    static js8_map_point_t pts[MAX_ROWS];
+    unsigned               n = 0;
+    for (int i = 0; i < st_count; i++) {
+        const js8_station_t *st  = &st_rows[i];
+        bool                 sel = sel_call[0] && strcasecmp(st->call, sel_call) == 0;
+        shown[i] = js8_map_place(st->call, st->grid, &pl[i]) && (!map_heard_me_only || st->heard_me || sel);
+        if (!shown[i]) continue;
+        pts[n].lat = pl[i].lat;
+        pts[n].lon = pl[i].lon;
+        memcpy(pts[n].continent, pl[i].continent, sizeof(pts[n].continent));
+        n++;
+    }
+    js8_map_view_t v;
+    bool world = js8_map_choose_view((js8_map_mode_t)params.js8_map_mode.x, have_home ? home.lat : 0,
+                                     have_home ? home.lon : 0, map_my_cont, pts, n, MAP_W, MAP_FIT_H, &v);
+    /* Drawn over the whole area; the fitted part sits above the legend. */
+    v.merc_c -= (MAP_H / 2.0 - MAP_FIT_H / 2.0) / v.px_deg;
+    v.height = MAP_H;
+    bool base_new = !map_view_ok || v.lon_c != map_view.lon_c || v.merc_c != map_view.merc_c ||
+                    v.px_deg != map_view.px_deg || v.wrap != map_view.wrap;
+    if (base_new) {
+        if (!map_data || !js8_map_render_base(map_data, &v, map_base, MAP_W))
+            for (size_t i = 0; i < (size_t)MAP_W * MAP_H; i++) map_base[i] = 0xFF000000u | MAP_OCEAN;
+        map_view    = v;
+        map_view_ok = true;
+        map_world   = world;
+        LV_LOG_USER("JS8 map: view lon %.1f merc %.1f, %.2f px/deg, %u stations%s", v.lon_c, v.merc_c, v.px_deg, n,
+                    world ? ", world" : "");
+    }
+
+    /* Everything drawn below, hashed: unchanged means nothing to redraw. */
+    bool     blink = (now / 500) % 2 == 0;
+    uint32_t sig   = 2166136261u;
+    sig            = map_hash(sig, sel_call, strlen(sel_call));
+    sig            = map_hash(sig, &map_heard_me_only, sizeof(map_heard_me_only));
+    sig            = map_hash(sig, &have_home, sizeof(have_home));
+    for (int i = 0; i < st_count; i++) {
+        if (!shown[i]) continue;
+        const js8_station_t *st  = &st_rows[i];
+        bool                 pop = map_popup_on(st->call, now);
+        sig                      = map_hash(sig, st->call, strlen(st->call));
+        sig                      = map_hash(sig, st->grid, strlen(st->grid));
+        sig                      = map_hash(sig, &st->snr, sizeof(st->snr));
+        sig                      = map_hash(sig, &st->heard_me, sizeof(st->heard_me));
+        sig                      = map_hash(sig, &st->reported_snr, sizeof(st->reported_snr));
+        sig                      = map_hash(sig, &pop, sizeof(pop));
+        if (pop) sig = map_hash(sig, &blink, sizeof(blink));
+    }
+    if (!force && !base_new && sig == map_sig) return;
+    map_sig = sig;
+
+    memcpy(map_px, map_base, (size_t)MAP_W * MAP_H * sizeof(uint32_t));
+    map_ntaken = 0;
+    map_legend(have_home);
+    if (map_status) map_take(MAP_W - 8 - lv_obj_get_width(map_status), 0, MAP_W, 4 + lv_obj_get_height(map_status));
+
+    /* Paths first, under the squares: GridTracker's curves to the stations
+     * that heard you. */
+    lv_draw_line_dsc_t line;
+    lv_draw_line_dsc_init(&line);
+    line.color       = lv_color_hex(MAP_PURPLE);
+    line.width       = 3;
+    line.round_start = 1;
+    line.round_end   = 1;
+    for (int i = 0; have_home && i < st_count; i++) {
+        if (!shown[i] || !st_rows[i].heard_me) continue;
+        float      xs[MAP_PATH_N + 1], ys[MAP_PATH_N + 1];
+        lv_point_t p[MAP_PATH_N + 1];
+        js8_map_path(&map_view, home.lat, home.lon, pl[i].lat, pl[i].lon, MAP_PATH_N, xs, ys);
+        for (int k = 0; k <= MAP_PATH_N; k++) {
+            p[k].x = (lv_coord_t)LV_CLAMP(-4000, (int)xs[k], 4000);
+            p[k].y = (lv_coord_t)LV_CLAMP(-4000, (int)ys[k], 4000);
+        }
+        lv_canvas_draw_line(map_canvas, p, MAP_PATH_N + 1, &line);
+    }
+
+    /* The stations: squares, hollow boxes, the far ends' purple dots. */
+    static int cx[MAX_ROWS], cy[MAX_ROWS];
+    int        sel_i = -1;
+    for (int i = 0; i < st_count; i++) {
+        if (!shown[i]) continue;
+        bool sel = sel_call[0] && strcasecmp(st_rows[i].call, sel_call) == 0;
+        if (sel) sel_i = i;
+        map_station_mark(st_rows[i].grid, &pl[i], sel ? MAP_SELECT : MAP_HEARD, sel ? 200 : MAP_SQUARE_OPA, &cx[i],
+                         &cy[i]);
+        if (have_home && st_rows[i].heard_me)
+            map_rect(cx[i] - 3, cy[i] - 3, 7, 7, MAP_PURPLE, LV_OPA_COVER, 0, 0, LV_RADIUS_CIRCLE);
+    }
+
+    /* You. */
+    if (have_home) {
+        int             hx, hy;
+        js8_map_place_t me = home;
+        me.approx          = strlen(params.qth.x) < 4;
+        map_station_mark(params.qth.x, &me, MAP_HOME, 220, &hx, &hy);
+        map_take(hx - 7, hy - 7, hx + 7, hy + 7); /* no label over you */
+        map_label(hx, hy, params.callsign.x, MAP_HOME, 0x000000, 170, 9, true);
+    }
+
+    /* The selected station, red, with its label. */
+    char dist[24] = "";
+    if (sel_i >= 0) {
+        const js8_station_t *st = &st_rows[sel_i];
+        map_rect(cx[sel_i] - 11, cy[sel_i] - 11, 23, 23, 0, LV_OPA_TRANSP, MAP_SELECT, 2, 0);
+        map_take(cx[sel_i] - 12, cy[sel_i] - 12, cx[sel_i] + 12, cy[sel_i] + 12);
+        char text[112];
+        int  len = snprintf(text, sizeof(text), "%s  %s  %+d dB", st->call, pl[sel_i].where, st->snr);
+        if (st->heard_me && st->has_reported_snr)
+            len += snprintf(text + len, sizeof(text) - len, "  hears you %+d", st->reported_snr);
+        if (have_home) map_dist(dist, sizeof(dist), &home, &pl[sel_i]);
+        snprintf(text + len, sizeof(text) - len, "%s", dist);
+        map_label(cx[sel_i], cy[sel_i], text, 0xFFFFFF, 0x6E0000, 225, 15, true);
+    }
+
+    /* New stations: a flashing ring and their details, for 8 s. */
+    for (int i = 0; i < st_count; i++) {
+        if (!shown[i] || i == sel_i || !map_popup_on(st_rows[i].call, now)) continue;
+        if (blink) {
+            map_rect(cx[i] - 10, cy[i] - 10, 21, 21, 0, LV_OPA_TRANSP, 0xFFFFFF, 2, LV_RADIUS_CIRCLE);
+            map_rect(cx[i] - 14, cy[i] - 14, 29, 29, 0, LV_OPA_TRANSP, 0x9A9A9A, 2, LV_RADIUS_CIRCLE);
+        }
+        char text[112];
+        dist[0] = '\0';
+        if (have_home) map_dist(dist, sizeof(dist), &home, &pl[i]);
+        snprintf(text, sizeof(text), "NEW  %s  %s  %+d dB%s", st_rows[i].call, pl[i].where, st_rows[i].snr, dist);
+        map_label(cx[i], cy[i], text, 0xFFFFFF, 0x005A00, 225, 17, false); /* only where it fits: the ring shows anyway */
+    }
+    lv_obj_invalidate(map_canvas);
+}
+
+/* For tools/js8_ui_harness: is the map showing, is it a world view, how
+ * many new-station pop-ups are up. */
+bool dialog_js8_map_state(bool *world, int *popups) {
+    int64_t now = now_mono_ms();
+    int     n   = 0;
+    for (int i = 0; i < MAP_POPUPS; i++) n += map_popups[i].until_ms > now;
+    if (world) *world = map_world || params.js8_map_mode.x == JS8_MAP_WORLD;
+    if (popups) *popups = n;
+    return view_map;
+}
+
+static const char *map_view_label_getter(void) {
+    static char buf[24];
+    if (!view_map) return ""; /* only while the map shows */
+    snprintf(buf, sizeof(buf), "Map:\n%s", map_mode_names[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
+    return buf;
+}
+
+/* Auto -> Close-in -> World. */
+static void map_view_cb(button_data_t *btn) {
+    user_touch();
+    if (popup_guard()) return;
+    if (!view_map) return;
+    params_uint8_set(&params.js8_map_mode, (params.js8_map_mode.x + 1) % 3);
+    buttons_refresh(btn);
+    map_update(true);
+    static const char *const what[3] = {"Map: your continent, the world when DX is heard",
+                                        "Map: your continent only", "Map: the whole world"};
+    msg_update_text_fmt("%s", what[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
 }
 
 /* ---- Buttons ---------------------------------------------------------- */
 
 static const char *show_label_getter(void) {
     static const char *const labels[SHOW_COUNT] = {"Show:\nAll", "Show:\nNo HB", "Show:\nDirected"};
+    if (view_map) return map_heard_me_only ? "Show:\nHeard me" : "Show:\nAll heard";
     return labels[show];
 }
 
@@ -2818,6 +3311,13 @@ static const char *show_label_getter(void) {
 static void show_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
+    if (view_map) { /* the map: everyone heard, or only who heard us */
+        map_heard_me_only = !map_heard_me_only;
+        buttons_refresh(btn);
+        map_update(true);
+        msg_update_text_fmt(map_heard_me_only ? "Map: stations that heard you" : "Map: every station heard");
+        return;
+    }
     if (view_stations) {
         view_stations = false;
         cursor_freq   = -1;
@@ -2858,10 +3358,9 @@ static void clear_cb(button_data_t *btn) {
  * go back to the radio's clock. Needs JS8's time within a couple of seconds
  * already, or nothing decodes: set the radio's clock roughly in SETTINGS
  * first. Not while sending: it would move the frames still to go. */
-static void time_sync_cb(button_data_t *btn) {
+/* Settings > Time Sync now (it was page 3's button). */
+static void time_sync_now(void) {
     user_touch();
-    if (popup_guard()) return;
-    (void)btn;
     if (js8_tx_busy(tx)) {
         msg_update_text_fmt("Not while sending - Stop TX first");
         return;
@@ -2888,10 +3387,9 @@ static void time_sync_cb(button_data_t *btn) {
 }
 
 /* Hold: no drift, JS8 back on the radio's clock (desktop's Reset). */
-static void time_sync_hold_cb(button_data_t *btn) {
+/* Settings > Reset time drift (was holding Time Sync). */
+static void time_sync_reset(void) {
     user_touch();
-    if (popup_guard()) return;
-    (void)btn;
     if (js8_tx_busy(tx)) {
         msg_update_text_fmt("Not while sending - Stop TX first");
         return;
@@ -3169,14 +3667,23 @@ static void hold_cb(button_data_t *btn) {
 }
 
 static const char *stations_label_getter(void) {
-    return view_stations ? "Show\nMessages" : "Show\nStations";
+    return view_map ? "Show\nMessages" : view_stations ? "Show\nMap" : "Show\nStations";
 }
 
 static void stations_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
-    view_stations = !view_stations;
-    cursor_freq   = -1;
+    /* Messages -> Stations -> Map -> Messages. The map keeps the Stations
+     * view underneath it: the MFK selects there, the map shows it. */
+    if (view_map) {
+        map_show(false);
+        view_stations = false;
+    } else if (view_stations) {
+        map_show(true);
+    } else {
+        view_stations = true;
+    }
+    cursor_freq = -1;
     buttons_refresh(btn);
     /* The Stations view ends a lock: the station stays selected, and the
      * knob selects again there. */
@@ -3896,6 +4403,8 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_MSG_KEEP 102
 #define SETTINGS_MILES    103
 #define SETTINGS_MARKS    104
+#define SETTINGS_TSYNC    105
+#define SETTINGS_TRESET   106
 
 static const char *relay_label(void) {
     return params.js8_relay.x ? "Relay: On" : "Relay: Off";
@@ -3916,6 +4425,11 @@ static const char *settings_label(int which) {
         return buf;
     case SETTINGS_MILES: return params.js8_miles.x ? "Distance: miles" : "Distance: km";
     case SETTINGS_MARKS: return params.js8_decode_marks.x ? "Decode marks: On" : "Decode marks: Off";
+    case SETTINGS_TSYNC:
+        if (js8_drift_ms()) snprintf(buf, sizeof(buf), "Time Sync now (drift %+.1f s)", js8_drift_ms() / 1000.0);
+        else snprintf(buf, sizeof(buf), "Time Sync now");
+        return buf;
+    case SETTINGS_TRESET: return "Reset time drift";
     }
     return "";
 }
@@ -3959,6 +4473,10 @@ static void texts_item_cb(lv_event_t *e) {
             msg_update_text_fmt(params.js8_decode_marks.x
                                     ? "Decode marks on: where the decoder is trying (cyan, white) and what it decoded (yellow)"
                                     : "Decode marks off");
+            break;
+        case SETTINGS_TSYNC: time_sync_now(); break;
+        case SETTINGS_TRESET:
+            time_sync_reset();
             break;
         }
         lv_label_set_text(lv_obj_get_child(lv_event_get_target(e), 0), settings_label(which));
@@ -4005,9 +4523,14 @@ static void texts_cb(button_data_t *btn) {
     lv_obj_t *title = lv_list_add_text(texts_list, "Settings");
     lv_obj_set_style_text_font(title, &sony_22, 0);
 
+    /* Time Sync first: it's what you want at the start of a session (it
+     * was page 3's button until that slot went to the map). */
+    lv_obj_t *first = settings_add(settings_label(SETTINGS_TSYNC), SETTINGS_TSYNC);
+    settings_add(settings_label(SETTINGS_TRESET), SETTINGS_TRESET);
+
     char label[TEXT_MAX + 16];
     snprintf(label, sizeof(label), "INFO: %s", info_text[0] ? info_text : "(not set)");
-    lv_obj_t *first = settings_add(label, EDIT_INFO);
+    settings_add(label, EDIT_INFO);
     snprintf(label, sizeof(label), "STATUS: %s", status_text[0] ? status_text : "(not set)");
     settings_add(label, EDIT_STATUS);
     settings_add(relay_label(), SETTINGS_RELAY);

@@ -81,6 +81,7 @@ params_t params = {
     .js8_msg_keep           = { .x = 0, .min = 0, .max = 4, .name = "js8_msg_keep" },  /* all */
     .js8_miles              = { .x = false,     .name = "js8_miles" },
     .js8_decode_marks       = { .x = false,     .name = "js8_decode_marks" },
+    .js8_map_mode           = { .x = 0, .min = 0, .max = 2, .name = "js8_map_mode" },   /* Auto */
     .js8_hb_interval        = { .x = 30,        .name = "js8_hb_interval" },
     .js8_cq_interval        = { .x = 1,         .name = "js8_cq_interval" },
     .js8_log_prompt         = { .x = true,      .name = "js8_log_prompt" },
@@ -266,6 +267,7 @@ static bool params_load() {
         if (params_load_uint8(&params.js8_msg_keep, name, i)) continue;
         if (params_load_bool(&params.js8_miles, name, i)) continue;
         if (params_load_bool(&params.js8_decode_marks, name, i)) continue;
+        if (params_load_uint8(&params.js8_map_mode, name, i)) continue;
         if (params_load_uint16(&params.js8_hb_interval, name, i)) continue;
         if (params_load_uint16(&params.js8_cq_interval, name, i)) continue;
         if (params_load_bool(&params.js8_log_prompt, name, i)) continue;
@@ -409,6 +411,7 @@ static void params_save() {
     params_save_uint8(&params.js8_msg_keep);
     params_save_bool(&params.js8_miles);
     params_save_bool(&params.js8_decode_marks);
+    params_save_uint8(&params.js8_map_mode);
     params_save_uint16(&params.js8_hb_interval);
     params_save_uint16(&params.js8_cq_interval);
     params_save_bool(&params.js8_log_prompt);

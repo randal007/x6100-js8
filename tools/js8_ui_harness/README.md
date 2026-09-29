@@ -58,6 +58,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `LOGPEND` | ESC on the log prompt, then Log QSO takes the selected station; a typed grid checked |
 | `LOOKS` | coloured commands, end marks, relay "via" stations, bearing, km/miles, Settings lines |
 | `MARKS` | decode marks (see below) |
+| `MAP` | Show Map: Messages → Stations → Map, stations by grid and by prefix, paths, the MFK selection in red, Show *Heard me*, the view button (Auto / Close-in / World), a DX station switching Auto to the world with its 8 s pop-up, Time Sync first in Settings, back to Messages (`90_map.ppm` ... `96_back_to_messages.ppm`) |
 | `MODE` | opened in USB with a custom CB frequency saved: always USB-D |
 | `NEWSTN` | "New station" alerts once per band per power-on, not again an hour later |
 | `OPERATOR` | Settings operator call, logged as OPERATOR |

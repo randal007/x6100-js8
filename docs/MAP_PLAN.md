@@ -5,7 +5,8 @@ with the stations heard on this frequency in their grid squares, you at
 yours, and curved paths to the stations that heard you. Inspired by
 GridTracker 2's map ("just the map"). **Status:** phase 1 done (the
 maths and callsign lookups, tested on the PC) and phase 2 done (the base
-map drawn by the radio in 19–51 ms a view); nothing on the screen yet.
+map drawn by the radio in 19–51 ms a view); phase 3 (the view in the
+app) working in the test harness, not yet tried on the radio.
 
 ![North America close-in, then the world view](map-mockups/v2_na_world.png)
 
@@ -161,6 +162,20 @@ uses). *Heard me* adds the path.
    waterfall paused while hidden. Harness scenario `ONLY_MAP` with
    screenshots (close-in, switch to world and back, a new station's 8 s
    pop-up, Heard me, the view button).
+   Done in `src/dialog_js8.c` ("Show Map" section): the map is an opaque
+   box with a canvas over the waterfall and the list; the Stations view
+   stays underneath (`view_stations` and `view_map` both on), so the MFK
+   selects there and the map draws that selection. `map_update()` picks the
+   view (`js8_map_choose_view()`, fitted into the part above the legend and
+   TX bar, then drawn over the whole area), redraws the base map only when
+   the view moves (synchronous, 19–51 ms on the radio), and redraws the
+   stations only when a hash of what's shown changes (checked every
+   250 ms, so pop-ups flash at 2 Hz). Labels go right, left, above or
+   below, never over another label, the legend, the status line, you or
+   their own station; the selected station's and yours always show.
+   `params.js8_map_mode` (Auto / Close-in / World) is saved. Data files
+   install to `/usr/share/x6100/js8/` (top-level CMakeLists). Harness
+   `ONLY_MAP` (see its README).
 4. **Polish:** pop-up timing and placement, label overlaps, colours
    setting, README.
 5. **On the air**, then a beta.

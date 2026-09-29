@@ -26,6 +26,7 @@ the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 - [Installing](#installing)
 - [First steps](#first-steps)
 - [The screen](#the-screen)
+- [The map](#the-map)
 - [The buttons](#the-buttons)
 - [Transmitting](#transmitting)
 - [Speeds](#speeds)
@@ -92,11 +93,12 @@ the image you used before.
 1. **Callsign and grid:** APP → Callsign, and APP → QTH (4 or 6
    characters). JS8 won't send without a callsign.
 2. **Clock:** JS8 needs the radio's clock within about 2 seconds. WiFi sets
-   it automatically; otherwise set it in SETTINGS, then use **Time Sync**
-   (page 3) once some stations have decoded. Like desktop JS8Call's time
-   drift, it shifts only JS8's own timing to match theirs (the top line
-   shows `drift +1.2s`); the radio's clock isn't touched. The drift lasts
-   until the radio is switched off; hold **Time Sync** to reset it.
+   it automatically; otherwise set it in SETTINGS, then use **Time Sync
+   now** (page 4, **Settings…**, the first line) once some stations have
+   decoded. Like desktop JS8Call's time drift, it shifts only JS8's own
+   timing to match theirs (the top line shows `drift +1.2s`); the radio's
+   clock isn't touched. The drift lasts until the radio is switched off;
+   **Reset time drift** (the next line) undoes it.
 3. **Open JS8:** APP → page 3 → **JS8**. The radio tunes the nearest JS8
    frequency; the **band keys** step through JS8Call's standard frequencies
    (160 m to 6 m), or GhostNet's, or you can type your own (**Freq**, page
@@ -184,7 +186,7 @@ keyboard works too; lowercase is typed as capitals.
 | ends in `♢` | the message's last frame arrived (desktop's end-of-transmission mark) |
 | yellow words | the command (`SNR?`, `MSG`, `ACK`, `>`, `CQ CQ CQ` ...) |
 
-**Stations view** (page 3, *Show Stations*): one row per station, like
+**Stations view** (page 3, *Show Stations*; press again for [the map](#the-map)): one row per station, like
 desktop's Call Activity. `*` and gold: they heard you (they replied or
 acknowledged your heartbeat), with the report they gave you ("heard you
 −13"). Then time since heard, their SNR here, speed, grid, distance and
@@ -197,6 +199,35 @@ on, as on desktop. Stations drop off an hour after they were last heard
 6 characters, the most precise one wins, and the `RR73` sign-off is never
 mistaken for a grid.
 
+## The map
+
+Page 3, **Show Stations** twice (*Show Map*): the stations of this
+frequency on a world map in place of the waterfall and the list, in
+GridTracker's *Dark Gray* look.
+
+![The map](docs/screenshots/12_map.png)
+
+- **Green squares:** stations heard, in their grid square. **Hollow
+  boxes:** no grid heard yet, so placed by callsign — the middle of their
+  province, state or call area where the call says (VE7 → British Columbia,
+  W6 → US call area 6, VK2 → New South Wales, JA1 → Kanto), else their
+  country (AD1C's country file).
+- **Purple curved lines:** great-circle paths to the stations that heard
+  you, ending in a purple dot.
+- **Orange:** you (your grid, APP → QTH). **Red:** the selected station,
+  with its call, grid, SNR, how they hear you and the distance. Turn the
+  **MFK** to step through the stations: it's the Stations view's selection,
+  so Reply, Query, HW CPY? ... work as usual.
+- **New stations** pop up for 8 seconds with a flashing ring and their
+  details, then just their square stays.
+- **Map: Auto** (page 3, second button) shows your continent close-in and
+  switches to the world by itself when someone on another continent is
+  heard, back again when they age off the Stations list. **Close-in** stays
+  on your continent; **World** shows the whole world. Each view zooms to fit
+  the stations shown. **Show** (page 2): *All heard* or only those who
+  *Heard me*.
+- The TX bar moves to the bottom of the map; decoding goes on as usual.
+
 ## The buttons
 
 The first button on each row turns the page (`JS8 1:6` … `6:6`); hold it
@@ -208,13 +239,13 @@ to go back a page. In JS8 a hold is half a second.
 | 1 | **Heartbeat** | One heartbeat now: on your own offset if that is 1000 Hz or below, else at a free spot in the 500–1000 Hz heartbeat sub-band (clear of anything heard in the last 30 s), as desktop. With HB on, the automatic ones count again from this one. |
 | 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…? |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
-| 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. |
+| 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. On [the map](#the-map): **All heard / Heard me**. |
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead (each station its own, for 5 minutes). |
 | 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
-| 3 | **Time Sync** | Shift JS8's timing to match the last 2 minutes of decodes (needs 3 or more; with 3 or more stations, each counts once), like desktop's time drift; the radio's clock isn't changed. Pressing it again right after is safe. Not while sending. Hold to reset the drift. |
+| 3 | **Map: Auto / Close-in / World** | Only while [the map](#the-map) shows (blank otherwise): which part of the world it shows. *Time Sync* moved to Settings to make room. |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
-| 3 | **Show Stations / Messages** | Switch between the message list and the Stations view. Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off an hour after it was last heard. |
+| 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off an hour after it was last heard. |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
 | 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. Shows *paused* for 10 minutes after you send something; press it then to resume at once. |
@@ -380,6 +411,8 @@ Page 4 **Settings…**:
 
 | Line | Does |
 |---|---|
+| **Time Sync now** | Shift JS8's timing to match the last 2 minutes of decodes (needs 3 or more; with 3 or more stations, each counts once), like desktop's time drift; the radio's clock isn't changed (the line shows the drift). Pressing it again right after is safe. Not while sending. It was page 3's button. |
+| **Reset time drift** | Back on the radio's clock. |
 | **INFO: …** | What AUTO sends for INFO? |
 | **STATUS: …** | What AUTO sends for STATUS? |
 | **Relay: On / Off** | Press to switch. On (the default, as on desktop): relays are passed on and `MSG TO:` messages held for others. Off: both are ignored (desktop's *Disable message relay*). |
@@ -665,6 +698,12 @@ Done for beta 4 so far:
   what actually went out; `QUERY CALL` about a station heard only through
   a relay is answered; an `@APRSIS MSG` without `TO:` is no longer kept
   or ACKed
+- [x] **Show Map:** the stations of this frequency on a world map in
+  GridTracker's style — grid squares, curved paths to who heard you,
+  callsign placement without a grid, new stations popping up, your
+  continent close-in and the world when DX is heard ([The map](#the-map))
+- [x] **Time Sync moved to Settings** (*Time Sync now*, *Reset time
+  drift*): its page 3 button is the map's view button now
 - [x] **Decode marks** on the waterfall (Settings), as desktop's *Show
   decode attempts*: see where the decoder is trying, even signals too
   weak to see, and in yellow what it decoded
@@ -705,12 +744,9 @@ Still to do:
 - [ ] Performance: measure each part's CPU use on the radio and spread the
   work over its four cores (the screen drawing and the JS8 decoder each
   lean on one core today)
-
-Next big feature (planned, not started): **Show Map** — a world map in
-place of the waterfall and list, stations in their grid squares, curved
-paths to the stations that heard you, a close-in view of your continent
-that switches to the world when DX is heard. See
-[docs/MAP_PLAN.md](docs/MAP_PLAN.md) for the plan and mock-ups.
+- [ ] Show Map: tried on the radio (it's in the beta 4 test builds from
+  now on); still to come: a Setting for your map colour, polish from use
+  on the air ([docs/MAP_PLAN.md](docs/MAP_PLAN.md))
 
 Ideas for later:
 

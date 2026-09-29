@@ -134,6 +134,7 @@ typedef struct {
     params_uint8_t      js8_msg_keep;    /* Settings: how long messages stay listed (index) */
     params_bool_t       js8_miles;       /* Settings: distances in miles, not km */
     params_bool_t       js8_decode_marks; /* Settings: decode attempts marked on the waterfall */
+    params_uint8_t      js8_map_mode;    /* Show Map: 0 Auto, 1 Close-in, 2 World */
     params_uint16_t     js8_hb_interval;
     params_uint16_t     js8_cq_interval; /* auto CQ: minutes after each CQ ends */
     params_bool_t       js8_log_prompt;  /* offer to log when a QSO ends */

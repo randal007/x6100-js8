@@ -41,6 +41,7 @@ void ui_init(void) {
     params.js8_msg_keep.x    = 0;
     params.js8_miles.x       = false;
     params.js8_decode_marks.x = false;
+    params.js8_map_mode.x     = 0;
     params.js8_log_activation.x = 0;
     params.js8_alerts.x = 7;
     params.js8_speed.x  = 0;
@@ -129,13 +130,21 @@ int  ui_focus_is_table(void) {
 
 #include "textarea_window.h"
 
-void ui_compose_append(const char *text) { lv_textarea_add_text(textarea_window_text(), text); }
+void ui_compose_append(const char *text) {
+    /* textarea_window keeps its pointer after closing: never type into a dead one. */
+    lv_obj_t *t = textarea_window_text();
+    if (t && lv_obj_is_valid(t)) lv_textarea_add_text(t, text);
+    else printf("[driver] ui_compose_append('%s'): no compose window\n", text);
+}
 /* The compose box's placeholder: which editor it opened as. */
 const char *ui_compose_placeholder(void) {
     lv_obj_t *t = textarea_window_text();
     return (t && lv_obj_is_valid(t)) ? lv_textarea_get_placeholder_text(t) : "(no compose window)";
 }
-void ui_compose_clear(void) { lv_textarea_set_text(textarea_window_text(), ""); }
+void ui_compose_clear(void) {
+    lv_obj_t *t = textarea_window_text();
+    if (t && lv_obj_is_valid(t)) lv_textarea_set_text(t, "");
+}
 const char *ui_compose_text(void) {
     /* textarea_window keeps its pointer after closing; don't read a dead one. */
     lv_obj_t *t = textarea_window_text();

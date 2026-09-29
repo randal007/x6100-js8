@@ -44,6 +44,7 @@ int  ui_kb_select_ok(void);
 void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
+bool     dialog_js8_map_state(bool *world, int *popups);
 void ui_usb_event(uint32_t key, int value);
 void ui_mfk_turn(int32_t diff);
 void ui_mfk_set(bool down);
@@ -2355,6 +2356,90 @@ int main() {
         tx_idle();
         return 0;
     }
+    if (getenv("ONLY_MAP")) {
+        // Show Map (docs/MAP_PLAN.md): the third view, stations placed by
+        // grid or callsign, the view button, the Show filter, DX switching
+        // to the world view, new-station pop-ups, Time Sync in Settings.
+        auto state = [](const char *what) {
+            bool world = false;
+            int  pops  = 0;
+            bool on    = dialog_js8_map_state(&world, &pops);
+            printf("[map] %s: map %s, %s view, %d pop-up(s)\n", what, on ? "on" : "off", world ? "world" : "close-in",
+                   pops);
+        };
+        ui_indevs_init(); // the MFK
+        pump(300);
+        // W7XYZ, K9DEF and VE3KP send grids; N0XYZ reports our signal
+        // (heard us, no grid: US call area 0); VE6ABC asks SNR? (Alberta).
+        feed_band({{"W7XYZ", "DM43", "", "@HB HEARTBEAT DM43", 800, 0.05f},
+                   {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1200, 0.05f},
+                   {"VE3KP", "FN03", "", "@HB HEARTBEAT FN03", 1600, 0.05f},
+                   {"N0XYZ", "", "K2XYZ", "K2XYZ HEARTBEAT SNR -12", 2000, 0.05f},
+                   {"VE6ABC", "", "K2XYZ", "K2XYZ SNR?", 2400, 0.05f}});
+        ui_page(3);
+        printf("[map] page 3 slot 2 before the map: '%s' (want empty)\n", ui_button_label(1));
+        printf("[map] stations button: '%s'\n", ui_button_label(3));
+        ui_press(3); // Show Stations
+        pump(300);
+        printf("[map] then: '%s' (want Show Map)\n", ui_button_label(3));
+        ui_press(3); // Show Map
+        pump(500);
+        state("opened");
+        printf("[map] view button: '%s' (want Map: Auto), stations button '%s' (want Show Messages)\n",
+               ui_button_label(1), ui_button_label(3));
+        screenshot("90_map.ppm");
+        ui_mfk_turn(1);
+        pump(400);
+        ui_mfk_turn(1);
+        pump(400);
+        char sel[16] = "";
+        dialog_js8_selected_call(sel, sizeof(sel));
+        printf("[map] MFK selected %s\n", sel);
+        screenshot("91_map_selected.ppm");
+        ui_page(2);
+        ui_press(1); // Show: Heard me
+        pump(400);
+        printf("[map] Show in the map: '%s' (want Heard me)\n", ui_button_label(1));
+        screenshot("92_map_heard_me.ppm");
+        ui_press(1); // back to All heard
+        pump(300);
+        ui_page(3);
+        ui_press(1); // Map: Close-in
+        pump(300);
+        ui_press(1); // Map: World
+        pump(500);
+        state("World pressed");
+        printf("[map] view button: '%s' (want Map: World)\n", ui_button_label(1));
+        screenshot("93_map_world.ppm");
+        ui_press(1); // back to Auto
+        pump(300);
+        // A station in Japan: Auto switches to the world, and it pops up.
+        feed_band({{"JA1ABC", "PM95", "", "@HB HEARTBEAT PM95", 1400, 0.05f}}, 0, 99, 0, 0);
+        pump(300);
+        state("JA1ABC heard");
+        screenshot("94_map_dx_popup.ppm");
+        pump(9000);
+        state("9 s later");
+        screenshot("95_map_popup_gone.ppm");
+        // Time Sync lives in Settings now, first in the list.
+        ui_page(4);
+        ui_press(4); // Settings
+        pump(300);
+        printf("[map] Settings opens on '%s' (want Time Sync now)\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        // Back to the messages: the waterfall returns.
+        ui_page(3);
+        ui_press(3); // Show Messages
+        pump(400);
+        state("Show Messages");
+        printf("[map] view button off the map: '%s' (want empty), stations button '%s' (want Show Stations)\n",
+               ui_button_label(1), ui_button_label(3));
+        screenshot("96_back_to_messages.ppm");
+        return 0;
+    }
     if (getenv("ONLY_MARKS")) {
         // Decode marks (Settings): brackets where the decoder tries (by sync
         // strength) and yellow where it decoded; off by default.
@@ -2674,6 +2759,8 @@ int main() {
         ui_press(4);
         pump(200);
         printf("[texts] list open, focus: %s\n", ui_focus_desc());
+        // Time Sync comes first in Settings now: find INFO.
+        for (int i = 0; i < 14 && strncmp(ui_focused_text(), "INFO", 4) != 0; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // INFO
         pump(300);          // lets the list's async delete run
         printf("[texts] editing INFO, focus: %s\n", ui_focus_desc());
