@@ -96,6 +96,15 @@ Processed with(std::optional<AutoReply> r) {
 Processed aprs_to_inbox(const Ctx &c, const std::string &dest, const std::string &text) {
     Processed p;
     if (dest != upper(trim(c.s.my_call))) return p;
+    // The gateway's receipt for a message we sent with an id ("{04}"):
+    // "ACK04} DE SMS" (or REJ, or APRS 1.1's "ACK04}AB"), not a message.
+    static const std::regex receipt_re("^(ACK|REJ)([A-Z0-9]{1,5})(\\}[A-Z0-9]{0,5})?(?:\\s+DE\\s+(\\S+))?$");
+    std::smatch             m;
+    std::string             t = upper(trim(text));
+    if (std::regex_match(t, m, receipt_re)) {
+        p.store = {StoreAction::Kind::AprsReceipt, m[4].matched ? m.str(4) : "APRS", c.s.my_call, m.str(1), m.str(2)};
+        return p;
+    }
     p.store = {StoreAction::Kind::Inbox, "APRS", c.s.my_call, "APRS", trim(text)};
     return p;
 }

@@ -211,6 +211,7 @@ static void        js8_next_page_cb(button_data_t *btn);
 static void        js8_prev_page_cb(button_data_t *btn);
 static void        texts_close(void);
 static bool        aprs_prepare(const char *in, char *out, size_t size);
+static void        aprs_sent_commit(void);
 static bool        any_popup(void);
 static void        log_cb(button_data_t *btn);
 static void        log_close(void);
@@ -2397,6 +2398,7 @@ static bool compose_ok_cb(void) {
     char text[TX_TEXT_MAX + 8];
     if (!aprs_prepare(textarea_window_get(), text, sizeof(text))) return false;
     if (!tx_queue(text)) return false; /* keep the window open */
+    aprs_sent_commit(); /* an APRS message with an id: its receipt is expected */
     /* The held message offered on Reply went as offered: it's on its way. */
     if (deliver_pending.id && strcasecmp(text, deliver_pending.text) == 0)
         deliver_start(deliver_pending.id, deliver_pending.group_call, text);
@@ -4884,9 +4886,14 @@ static void push_tick(void) {
     js8_heard_t heard[32];
     unsigned    n = heard_stations(heard, 32);
     char        text[64];
-    if (!js8_held_push_due(held, heard, n, now, text, sizeof(text))) return;
+    int         id;
+    if (!js8_held_push_due(held, heard, n, now, text, sizeof(text), &id)) return;
     LV_LOG_USER("JS8 auto: '%s'", text);
-    if (tx_queue_at(text, params.js8_tx_freq.x, true)) add_info_row("Auto: %s", text);
+    /* Told only once it's queued: one that couldn't go out is tried at the
+     * next look, not in 8 hours (bug hunt S4). */
+    if (!tx_queue_at(text, params.js8_tx_freq.x, true)) return;
+    js8_held_push_sent(held, id, now);
+    add_info_row("Auto: %s", text);
 }
 
 /* Messages kept (Settings): every 30 s, drop rows past their time, unless
@@ -5294,11 +5301,73 @@ static const char *const aprs_labels[APRS_COUNT] = {
 
 static unsigned aprs_msg_id;
 
+/* APRS messages we sent with an id ("{04}"), so the gateway's receipt
+ * ("ACK04}" / "REJ04}", relayed back over JS8) marks the right one instead
+ * of landing in the Inbox as a message (bug hunt S7). Kept while the radio
+ * is on (your choice): receipts come within minutes, and the ids restart
+ * at power-on. */
+#define APRS_SENT 16
+typedef struct {
+    char    id[6];     /* "04" */
+    char    to[10];    /* the addressee: SMS, EMAIL-2, WLNK-1 ... */
+    char    dest[48];  /* the message's first word: "@6045551234", an address */
+    int64_t ms;
+    bool    answered;  /* its receipt came */
+} aprs_sent_t;
+static aprs_sent_t aprs_sent[APRS_SENT];
+static int         aprs_sent_next;
+static aprs_sent_t aprs_pending; /* prepared, not yet queued; id "" = none */
+
+/* "{04}" or "{AB12" at the end of an APRS message: its id (1-5 letters or
+ * digits, "}" optional), or NULL. */
+static const char *aprs_id_at_end(const char *body, char *id, size_t len) {
+    const char *brace = strrchr(body, '{');
+    if (!brace) return NULL;
+    size_t n = 0;
+    while (n < 5 && isalnum((unsigned char)brace[1 + n])) n++;
+    const char *end = brace + 1 + n;
+    if (!n || (*end == '}' ? end[1] : *end)) return NULL;
+    snprintf(id, len, "%.*s", (int)n, brace + 1);
+    return brace;
+}
+
+static void aprs_sent_commit(void) {
+    if (!aprs_pending.id[0]) return;
+    aprs_pending.ms          = now_wall_ms();
+    aprs_sent[aprs_sent_next] = aprs_pending;
+    aprs_sent_next            = (aprs_sent_next + 1) % APRS_SENT;
+    aprs_pending.id[0]        = '\0';
+}
+
+static const char *aprs_kind(const char *to) {
+    return !strcmp(to, "SMS") ? "SMS" : !strcmp(to, "EMAIL-2") ? "Email" : !strcmp(to, "WLNK-1") ? "Winlink" : to;
+}
+
+/* A gateway's receipt: the message it answers, marked. */
+static void aprs_receipt(const js8_stored_t *k) {
+    aprs_sent_t *s = NULL;
+    for (int i = 1; i <= APRS_SENT && !s; i++) { /* newest first */
+        aprs_sent_t *c = &aprs_sent[(aprs_sent_next - i + APRS_SENT) % APRS_SENT];
+        if (c->id[0] && !strcasecmp(c->id, k->text)) s = c;
+    }
+    const char *what = k->rejected ? "rejected by the gateway" : "delivered";
+    if (!s) { /* sent before a restart, or by another radio */
+        msg_update_text_fmt("APRS: message {%s} %s (receipt from %s)", k->text, what, k->from);
+        add_info_row("APRS receipt from %s: message {%s} %s", k->from, k->text, what);
+        return;
+    }
+    if (s->answered) return; /* the same receipt again */
+    s->answered = true;
+    msg_update_text_fmt("%s {%s} to %s %s", aprs_kind(s->to), s->id, s->dest, what);
+    add_info_row("%s {%s} to %s %s (receipt from %s)", aprs_kind(s->to), s->id, s->dest, what, k->from);
+}
+
 /* Before sending anything typed: APRS CMDs get checked, SMS/email/Winlink a
  * message ID like JS8Spotter's "{01}", and POTA/SOTA refs are remembered.
  * Anything else passes through unchanged. */
 static bool aprs_prepare(const char *in, char *out, size_t size) {
     snprintf(out, size, "%s", in);
+    aprs_pending.id[0] = '\0';
     size_t pre = strlen(APRS_CMD);
     if (strncmp(in, APRS_CMD, pre) != 0) return true;
     if (strlen(in) < pre + 10 || in[pre + 9] != ':') {
@@ -5322,9 +5391,21 @@ static bool aprs_prepare(const char *in, char *out, size_t size) {
         aprs_msg_id = aprs_msg_id % 99 + 1;
         snprintf(out, size, "%s{%02u}", in, aprs_msg_id);
     }
-    size_t text_len = strlen(out) - pre - 10;
+    /* 67 characters of text; the id "{04}" comes on top (APRS spec, bug
+     * hunt S1: counting it cut SMS/email/Winlink to 63). */
+    const char *text_out = out + pre + 10;
+    size_t      text_len = strlen(text_out);
+    char        id[6];
+    const char *id_at    = aprs_id_at_end(text_out, id, sizeof(id));
+    if (id_at) text_len = (size_t)(id_at - text_out);
+    if (id_at && want_id) { /* its receipt will come back: remember it */
+        snprintf(aprs_pending.id, sizeof(aprs_pending.id), "%s", id);
+        snprintf(aprs_pending.to, sizeof(aprs_pending.to), "%s", to);
+        snprintf(aprs_pending.dest, sizeof(aprs_pending.dest), "%.*s", (int)strcspn(body, " "), body);
+        aprs_pending.answered = false;
+    }
     if (text_len > APRS_TEXT_MAX) {
-        msg_update_text_fmt("APRS allows %d characters after the addressee, this is %u: shorten it",
+        msg_update_text_fmt("APRS allows %d characters of text (the {id} is extra), this is %u: shorten it",
                             APRS_TEXT_MAX, (unsigned)text_len);
         return false;
     }
@@ -6220,6 +6301,10 @@ static const char *inbox_label_getter(void) {
  * "MSG TO:W1ABC ..." held here until W1ABC asks (QUERY MSGS, QUERY MSG n,
  * our HB ack's "MSG ID n", or our RETRIEVE MSG), as desktop does. */
 static void stored_received(const js8_stored_t *k) {
+    if (k->kind == JS8_STORED_APRS_RECEIPT) {
+        aprs_receipt(k);
+        return;
+    }
     char from[JS8_PATH_LEN + 16];
     js8_path_display(k->path[0] ? k->path : k->from, from, sizeof(from));
     if (k->kind == JS8_STORED_INBOX) {

@@ -65,7 +65,9 @@ struct AutoReply {
 /// What desktop keeps from a message: "MSG" to us or our group goes to the
 /// inbox (with the relay path it came by), "MSG TO:" is held for someone.
 struct StoreAction {
-    enum class Kind { None, Inbox, Held } kind = Kind::None;
+    /// AprsReceipt: an APRS gateway's ACKnn}/REJnn} for a message we sent
+    /// (from = the gateway, path = "ACK" or "REJ", text = the message id).
+    enum class Kind { None, Inbox, Held, AprsReceipt } kind = Kind::None;
     std::string from, to, path, text;
 };
 

@@ -101,7 +101,7 @@ bool            js8_command_span(const char *text, unsigned *start, unsigned *le
 typedef struct js8_held js8_held_t;
 typedef struct js8_inbox js8_inbox_t;
 
-#define JS8_PATH_LEN 48 /* a relay path, "K2XYZ>N0XYZ" */
+#define JS8_PATH_LEN 256 /* a relay path, "K2XYZ>N0XYZ": as long as a message can be (desktop has no limit) */
 
 typedef struct {
     bool        autoreply; /* AUTO */
@@ -148,13 +148,19 @@ typedef struct {
     char              deliver_group_call[JS8_RX_CALL_LEN]; /* a group message: who it went to */
 } js8_auto_result_t;
 
-typedef enum { JS8_STORED_NONE, JS8_STORED_INBOX, JS8_STORED_HELD } js8_stored_kind_t;
+typedef enum {
+    JS8_STORED_NONE,
+    JS8_STORED_INBOX,
+    JS8_STORED_HELD,
+    JS8_STORED_APRS_RECEIPT, /* not kept: an APRS gateway's receipt; text = message id, from = gateway */
+} js8_stored_kind_t;
 
 /* What js8_process() kept from a message. */
 typedef struct {
     js8_stored_kind_t kind;
     int               id;     /* -1: couldn't save the file (kept in memory, and no ACK sent) */
     bool              resend; /* the same message again: nothing new */
+    bool              rejected; /* JS8_STORED_APRS_RECEIPT: REJ, else ACK */
     char              from[JS8_RX_CALL_LEN];
     char              to[JS8_RX_CALL_LEN];
     char              path[JS8_PATH_LEN];
@@ -337,9 +343,11 @@ void js8_held_delivered(js8_held_t *h, int id);
 void js8_held_group_delivered(js8_held_t *h, int id, const char *call);
 /* Desktop's stored-message notice: if a station we hold a message for was
  * heard in the last 15 min and not told in 8 h, "W1ABC RETRIEVE MSG 3" in
- * text and true (marked told). */
+ * text, its id in *id, and true. Not marked told: js8_held_push_sent()
+ * once it has been queued. */
 bool js8_held_push_due(js8_held_t *h, const js8_heard_t *heard, unsigned n_heard, int64_t now_ms, char *text,
-                       unsigned text_len);
+                       unsigned text_len, int *id);
+void js8_held_push_sent(js8_held_t *h, int id, int64_t now_ms);
 void js8_held_delete(js8_held_t *h, int id);
 int  js8_held_waiting(js8_held_t *h); /* not yet delivered */
 int  js8_held_count(js8_held_t *h);

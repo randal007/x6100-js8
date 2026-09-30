@@ -68,7 +68,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `REPLYQ` | automatic replies queue (see below) |
 | `RETUNE`, `TXSAFE` | transmitting safely (see below) |
 | `ROWS` | info rows survive rebuilds, a cut-off message stops growing, the Inbox lists all 200 |
-| `SMS` | a phone text via an APRS gateway; Reply by SMS fills in the number |
+| `SMS` | a phone text via an APRS gateway; Reply by SMS fills in the number; the gateway's receipt shown as delivered, not an Inbox message; 67 characters plus the `{nn}` |
 | `SPEED` | all four speeds decoded together; the Speed button |
 | `STALL` | the GUI stuck for ~50 s while a band's messages arrive: none lost (see below) |
 | `TEXTS` | Settings: INFO/STATUS keyboard gets the focus |

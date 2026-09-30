@@ -2855,6 +2855,76 @@ TEST_CASE("QUERY CALL, RETRIEVE MSG and APRS gateway messages follow desktop", "
     auto not_mine = process(buffered("W1GW", "@APRSIS MSG TO:W9ZZZ HELLO"), s, {}, "");
     CHECK(not_mine.store.kind == StoreAction::Kind::None);
     CHECK_FALSE(not_mine.reply);
+
+    // An SMS gateway's receipt for our "{04}" message: not an Inbox message
+    // (bug hunt S7, as seen on the air 2026-09-28), and no ACK sent.
+    auto ack = process(buffered("NR4U", "@APRSIS MSG TO: K2XYZ ACK04} DE SMS"), s, {}, "");
+    CHECK(ack.store.kind == StoreAction::Kind::AprsReceipt);
+    CHECK(ack.store.path == "ACK");
+    CHECK(ack.store.text == "04");
+    CHECK(ack.store.from == "SMS");
+    CHECK_FALSE(ack.reply);
+    auto rej = process(buffered("NR4U", "@APRSIS MSG TO:K2XYZ REJ7} DE EMAIL-2"), s, {}, "");
+    CHECK(rej.store.kind == StoreAction::Kind::AprsReceipt);
+    CHECK(rej.store.path == "REJ");
+    CHECK(rej.store.text == "7");
+    CHECK(rej.store.from == "EMAIL-2");
+    auto reply_ack = process(buffered("NR4U", "@APRSIS MSG TO:K2XYZ ACK12}AB"), s, {}, ""); // APRS 1.1 reply-ack
+    CHECK(reply_ack.store.kind == StoreAction::Kind::AprsReceipt);
+    CHECK(reply_ack.store.text == "12");
+    // A message that merely starts with ACK is still a message.
+    auto words = process(buffered("NR4U", "@APRSIS MSG TO:K2XYZ ACK THAT, SEE YOU AT 5 DE SMS"), s, {}, "");
+    CHECK(words.store.kind == StoreAction::Kind::Inbox);
+}
+
+TEST_CASE("a long relay path comes back whole from the Inbox", "[js8][aprs]") {
+    // Seven hops of long calls (desktop has no limit; ours was cut at 48,
+    // so Reply sent to a chopped call: bug hunt S2).
+    const std::string path = "VE7ABC/P>EA8/G4XYZ>W1ABC/M>VA7XYZ/P>KH6/N0XYZ>DL1XX/P>VE3KP/M";
+    char ipath[] = "/tmp/js8_path_inbox_XXXXXX";
+    int  fd      = mkstemp(ipath);
+    REQUIRE(fd >= 0);
+    std::string line = "1\t1000\tU\tVE3KP/M\tK2XYZ\t" + path + "\tHELLO VIA MANY\n";
+    REQUIRE(write(fd, line.data(), line.size()) == (ssize_t)line.size());
+    close(fd);
+    js8_inbox_t    *inbox = js8_inbox_open(ipath);
+    js8_inbox_msg_t m;
+    REQUIRE(js8_inbox_get(inbox, 1, &m));
+    CHECK(std::string(m.path) == path);
+    CHECK(path.size() > 48);
+    js8_inbox_close(inbox);
+    unlink(ipath);
+}
+
+TEST_CASE("an APRS receipt through js8_process: reported, not kept", "[js8][aprs]") {
+    char ipath[] = "/tmp/js8_receipt_inbox_XXXXXX";
+    int  fd      = mkstemp(ipath);
+    REQUIRE(fd >= 0);
+    close(fd);
+    unlink(ipath);
+    js8_inbox_t        *inbox = js8_inbox_open(ipath);
+    js8_auto_t         *a     = js8_auto_create();
+    js8_auto_settings_t st{};
+    st.autoreply = true;
+    st.my_call   = "K2XYZ";
+    st.my_grid   = "FN42";
+    js8_rx_msg_t m{};
+    std::strcpy(m.from, "NR4U");
+    std::strcpy(m.to, "@APRSIS");
+    std::strcpy(m.text, "NR4U: @APRSIS MSG TO: K2XYZ ACK04} DE SMS");
+    m.checksum = 0; // gateways relay without a checksum
+    js8_stored_t      kept;
+    js8_auto_result_t r;
+    js8_process(a, &m, &st, nullptr, 0, "", 1000, inbox, &kept, &r);
+    CHECK(kept.kind == JS8_STORED_APRS_RECEIPT);
+    CHECK(std::string(kept.text) == "04");
+    CHECK(std::string(kept.from) == "SMS");
+    CHECK_FALSE(kept.rejected);
+    CHECK(r.action == JS8_AUTO_IGNORE);
+    CHECK(js8_inbox_count(inbox) == 0);
+    js8_auto_destroy(a);
+    js8_inbox_close(inbox);
+    unlink(ipath);
 }
 
 TEST_CASE("RETRIEVE MSG: when the station is heard, once per 8 hours", "[js8][held]") {
@@ -2866,6 +2936,10 @@ TEST_CASE("RETRIEVE MSG: when the station is heard, once per 8 hours", "[js8][he
     REQUIRE(due);
     CHECK(due->first == id);
     CHECK(due->second == "W1ABC RETRIEVE MSG " + std::to_string(id));
+    // Not told until it has gone out (bug hunt S4): a notice that couldn't
+    // be queued is due again at the next look, not in 8 hours.
+    CHECK(held.push_due({Heard("W1ABC", -5, now)}, now + 60'000));
+    CHECK(held.notified(id, now));
     CHECK_FALSE(held.push_due({Heard("W1ABC", -5, now)}, now + 60'000)); // told already
     CHECK(held.push_due({Heard("W1ABC", -5, now + HeldMessages::PUSH_REPEAT_MS)}, now + HeldMessages::PUSH_REPEAT_MS));
     held.mark_delivered(id);
@@ -2911,7 +2985,7 @@ TEST_CASE("inbox and held files from the last release still load", "[js8][held]"
     int g = held.add("N0XYZ", "@NET", "NET TONIGHT", 2000, "K2XYZ>N0XYZ");
     held.mark_group_delivered(g, "W1ABC");
     held.mark_group_delivered(g, "VE7ABC");
-    held.push_due({Heard("W1ABC", 0, 5000)}, 5000);
+    held.notified(2, 5000);
     REQUIRE(held.save(hpath));
     HeldMessages r;
     REQUIRE(r.load(hpath));
@@ -3008,7 +3082,7 @@ TEST_CASE("js8_process keeps messages and answers them", "[js8][held]") {
 
     js8_heard_t heard[] = {{"W1ABC", -3, 10'000}};
     char        text[64];
-    CHECK_FALSE(js8_held_push_due(held, heard, 1, 20'000, text, sizeof(text))); // only a group message
+    CHECK_FALSE(js8_held_push_due(held, heard, 1, 20'000, text, sizeof(text), nullptr)); // only a group message
     char groups[64];
     js8_groups_normalise("net, @Net  aa", groups, sizeof(groups));
     CHECK(std::string(groups) == "@NET @AA");

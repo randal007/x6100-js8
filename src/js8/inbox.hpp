@@ -128,7 +128,9 @@ public:
     /// Desktop's pushNotificationHandler(): the first message whose station
     /// was heard in the last 15 minutes and hasn't been told in 8 hours, as
     /// "W1ABC RETRIEVE MSG 3"; marks it told. Not for group messages.
-    std::optional<std::pair<int, std::string>> push_due(const std::vector<Heard> &heard, std::int64_t now_ms);
+    std::optional<std::pair<int, std::string>> push_due(const std::vector<Heard> &heard, std::int64_t now_ms) const;
+    /// "RETRIEVE MSG" for `id` went out: not again for PUSH_REPEAT_MS.
+    bool notified(int id, std::int64_t now_ms);
 
 private:
     std::vector<HeldMessage> msgs_; ///< oldest first

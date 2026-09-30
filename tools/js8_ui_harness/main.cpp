@@ -2073,18 +2073,52 @@ int main() {
         for (int i = 0; i < 300 && stub_tx_frames == b; i++) pump(100);
         printf("[sms] sent: %d (want @APRSIS CMD :SMS      :@6045551234 GOT IT{nn})\n",
                ui_list_has("@APRSIS CMD :SMS      :@6045551234 GOT IT{"));
-        // The gateway's receipt has no number: plain Reply by APRS, empty line.
-        pump(500);
+        // Its id, as sent: "...GOT IT{07}".
+        char id[8] = "";
+        if (lv_obj_t *t = find_obj(lv_scr_act(), &lv_table_class))
+            for (uint16_t r = 0; r < lv_table_get_row_cnt(t); r++) {
+                const char *v = lv_table_get_cell_value(t, r, 0), *p = v ? strstr(v, "GOT IT{") : nullptr;
+                if (p) sscanf(p + 7, "%7[0-9A-Z]", id);
+            }
+        for (int i = 0; i < 300 && stub_tx_keyed; i++) pump(100);
+        pump(3500);
+        // The gateway's receipt for it (bug hunt S7): reported, not an Inbox
+        // message. (ACK04} above, for a message this radio didn't send, is
+        // reported too, and kept out of the Inbox as well.)
+        char receipt[64];
+        snprintf(receipt, sizeof(receipt), "@APRSIS MSG TO:K2XYZ ACK%s} DE SMS", id);
+        feed_band({{"W7GW", "DN17", "", receipt, 1800, 0.05f}});
+        char want[80];
+        snprintf(want, sizeof(want), "SMS {%s} to @6045551234 delivered", id);
+        printf("[sms] receipt for {%s}: '%s' shown %d (want 1)\n", id, want, ui_list_has(want));
+        printf("[sms] unknown receipt ACK04: reported %d (want 1)\n", ui_list_has("message {04} delivered"));
         ui_page(3);
-        ui_press(4);
+        ui_press(4); // Inbox
         pump(300);
-        for (int i = 0; i < 4 && !strstr(ui_focused_text(), "ACK04"); i++) ui_key(LV_KEY_RIGHT);
-        ui_click_focused();
+        printf("[sms] Inbox: receipts kept out %d, the phone's text there %d (want 1, 1)\n",
+               ui_popup_has("ACK") == 0, ui_popup_has("@6045551234 2 WAY") == 1);
+        ui_key(LV_KEY_ESC);
         pump(300);
-        printf("[sms] receipt view focused '%s' (want Reply by APRS to SMS)\n", ui_focused_text());
-        ui_click_focused();
+
+        // 67 characters of text, the id on top (bug hunt S1: 63 before).
+        std::string text67 = "@6045551234 " + std::string(55, 'A'); // 67
+        ui_page(2);
+        ui_press(3); // Send...
+        pump(200);
+        ui_compose_append(("@APRSIS CMD :SMS      :" + text67).c_str());
+        stub_last_msg[0] = '\0';
+        ui_compose_enter();
         pump(300);
-        printf("[sms] receipt reply prefill '%s' (want @APRSIS CMD :SMS      :)\n", ui_compose_text());
+        printf("[sms] 67 characters: '%s' (want Queued...)\n", stub_last_msg);
+        for (int i = 0; i < 300 && !stub_tx_keyed; i++) pump(100);
+        for (int i = 0; i < 400 && stub_tx_keyed; i++) pump(100);
+        pump(3500);
+        ui_press(3);
+        pump(200);
+        ui_compose_append(("@APRSIS CMD :SMS      :" + text67 + "B").c_str());
+        ui_compose_enter();
+        pump(300);
+        printf("[sms] 68 characters: '%s' (want APRS allows 67...)\n", stub_last_msg);
         ui_compose_cancel();
         pump(300);
         return 0;

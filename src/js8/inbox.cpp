@@ -310,8 +310,10 @@ bool HeldMessages::mark_group_delivered(int id, const std::string &call) {
     return false;
 }
 
+// Only finds it: marked told (notified()) once the notice has been queued,
+// or a notice that couldn't go out waited 8 hours (bug hunt S4).
 std::optional<std::pair<int, std::string>> HeldMessages::push_due(const std::vector<Heard> &heard,
-                                                                  std::int64_t              now_ms) {
+                                                                  std::int64_t              now_ms) const {
     for (auto &m : msgs_) {
         if (m.delivered || m.text.empty() || m.to.empty() || m.is_group()) continue;
         bool seen = false;
@@ -319,10 +321,18 @@ std::optional<std::pair<int, std::string>> HeldMessages::push_due(const std::vec
             if ((h.call == m.to || base_callsign(h.call) == m.to) && now_ms - h.heard_ms <= PUSH_SEEN_MS) seen = true;
         if (!seen) continue;
         if (m.notified_ms && now_ms - m.notified_ms < PUSH_REPEAT_MS) continue;
-        m.notified_ms = now_ms;
         return std::make_pair(m.id, m.to + " RETRIEVE MSG " + std::to_string(m.id));
     }
     return std::nullopt;
+}
+
+bool HeldMessages::notified(int id, std::int64_t now_ms) {
+    for (auto &m : msgs_)
+        if (m.id == id) {
+            m.notified_ms = now_ms;
+            return true;
+        }
+    return false;
 }
 
 std::optional<HeldMessage> HeldMessages::get(int id) const {

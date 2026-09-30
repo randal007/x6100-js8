@@ -311,6 +311,14 @@ void keep(const StoreAction &a, std::int64_t now_ms, js8_inbox_t *inbox, js8_hel
         st.id     = held->held.add(a.from, a.to, a.text, now_ms, a.path, &added);
         st.resend = !added;
         if ((added || held->unsaved) && !sync(held)) st.id = -1;
+    } else if (a.kind == StoreAction::Kind::AprsReceipt) {
+        st.kind     = JS8_STORED_APRS_RECEIPT; /* nothing kept: the dialog marks its sent message */
+        st.rejected = a.path == "REJ";
+        copy_str(st.from, sizeof(st.from), a.from);
+        copy_str(st.to, sizeof(st.to), a.to);
+        copy_str(st.text, sizeof(st.text), a.text);
+        if (out) *out = st;
+        return;
     } else {
         return;
     }
@@ -750,13 +758,17 @@ extern "C" void js8_held_group_delivered(js8_held_t *h, int id, const char *call
 }
 
 extern "C" bool js8_held_push_due(js8_held_t *h, const js8_heard_t *heard, unsigned n_heard, int64_t now_ms,
-                                  char *text, unsigned text_len) {
+                                  char *text, unsigned text_len, int *id) {
     if (!h) return false;
     auto due = h->held.push_due(heard_list(heard, n_heard), now_ms);
     if (!due) return false;
-    sync(h);
     copy_str(text, text_len, due->second);
+    if (id) *id = due->first;
     return true;
+}
+
+extern "C" void js8_held_push_sent(js8_held_t *h, int id, int64_t now_ms) {
+    if (h && h->held.notified(id, now_ms)) sync(h);
 }
 
 extern "C" void js8_held_delete(js8_held_t *h, int id) {

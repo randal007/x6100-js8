@@ -530,7 +530,8 @@ them); they come back to the radio only if a JS8Call-improved station with
 *relaying inbound APRS messages* switched on has heard you lately. Its
 `@APRSIS MSG TO:<your call> <text> DE <sender>` then lands in your Inbox,
 from *APRS*, and **Reply by APRS** answers it. Older desktop JS8Call never
-passes APRS messages back. APRS text is limited to 67 characters.
+passes APRS messages back. APRS text is limited to 67 characters; an
+SMS, email or Winlink message's number (`{04}`) comes on top.
 
 **Two-way SMS works** (confirmed on the air 2026-09-28 with the beta 4
 test build, through NR4U's gateway on 40 m): texts from a phone arrive in
@@ -538,8 +539,11 @@ the Inbox as `@6045551234 <text> DE SMS`, and a reply goes back to the
 phone: open the text in the Inbox and choose **Reply by SMS to
 @6045551234**; the keyboard opens with the number filled in, so you only
 type your text (from the next build on; the beta 4 test build opens the
-line empty). The gateway's receipt for your reply (`ACK04}`) also arrives, as an Inbox
-message for now. Beta 3 drops all of these messages (see
+line empty). The gateway's receipt for your reply (`ACK04}`) shows as
+**SMS {04} to @6045551234 delivered** on the message line and in the list
+(or *rejected by the gateway* for a `REJ04}`); it isn't an Inbox message.
+The app remembers what you sent until the radio is switched off. Beta 3
+drops all of these messages (see
 [Known issues](#known-issues-in-beta-3)).
 
 **Position with a message:** Spot my grid and Spot GPS position open a
@@ -773,16 +777,20 @@ Done for beta 4 so far:
   HOME"; alert words match with punctuation around them ("SOTA,"); a
   message to a CQ7 call isn't a CQ; Hold Speed matches the selected
   (locked) station
+- [x] **APRS and SMS:** the gateway's receipt (`ACK04}`) shows as "SMS
+  {04} to @6045551234 delivered" instead of arriving as an Inbox message;
+  SMS, email and Winlink get their full 67 characters (the `{04}` counted
+  against them before); a message relayed through many stations keeps its
+  whole path for Reply (desktop has no limit either); a "RETRIEVE MSG"
+  notice that couldn't go out is tried again at the next chance
 
 Still to do:
 
 - [ ] Fix the rest of the bugs found by reading the code: the plan, in
   order, is [docs/review/fix-plan.md](docs/review/fix-plan.md) (from the
   full review in [docs/review](docs/review/) and the first
-  [bug hunt](docs/bug-hunt-2026-09-28.md); next: APRS and SMS, then the
-  build and test tools)
-- [ ] SMS: show the gateway's receipt (`ACK04}`) as "delivered" on the
-  message you sent, instead of as a new Inbox message
+  [bug hunt](docs/bug-hunt-2026-09-28.md); next: the build and test tools,
+  then the docs)
 - [ ] On-air tests: relays and store and forward with desktop JS8Call
   stations, the other APRS gateways (POTA, SOTA, email, Winlink), a long
   message watched to the end
