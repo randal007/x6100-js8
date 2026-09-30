@@ -180,16 +180,25 @@ used to start on the oldest unread; you chose the newest).
 
 **Status:** done in 3e20282, all sixteen as decided. New harness cases `ONLY_KEYS` (B-19, B-16, B-22, B-23), `ONLY_LOGPEND` (B-24, BH-S3) and `ONLY_ROWS` (BH-18, B-12, BH-9); each failed on the old code first. Unit tests for B-13, BH-4, BH-6, BH-13, B-26 and BH-3.
 
-### WP6: APRS and SMS (effort M)
+### WP6: APRS and SMS — done 2026-09-30
+
+**Decided 2026-09-30 (your answers):** D-H: a receipt shows as "SMS {04}
+to @6045551234 delivered" (or rejected) on the message line and as an
+info row, never in the Inbox, and one for a message the app doesn't
+remember gets a note too. D-I: sent messages are remembered only while
+the radio is on. BH-S2: 256 characters, as long as a message can be, as
+desktop (no limit).
 
 | Item | Verdict | The fix |
 |---|---|---|
 | **BH-S7** SMS gateway receipt lands in the Inbox | **Fix** (your "Still to do") | Remember our `{NN}` APRS sends (id, addressee, time); an incoming `ACKnn}` (or `REJnn}`) marks that one delivered (info row "SMS 04 delivered") instead of going to the Inbox. |
 | **BH-S1** APRS length counts the `{NN}` ID | **Fix, small** | 67 characters of text, the ID extra (APRS spec). |
-| **BH-S2** long relay paths cut at 48 | **Fix, small** | `JS8_PATH_LEN` 96. |
+| **BH-S2** long relay paths cut at 48 | **Fix, small** | `JS8_PATH_LEN` 256 (your choice: as desktop, as long as a message). |
 | **BH-S4** RETRIEVE MSG notice not retried | **Fix, small** | Mark it told only after `tx_queue_at()` succeeds. |
 
 **On the air:** an SMS through NR4U and its receipt.
+
+**Status:** done in b99582c, all four as decided. Harness `ONLY_SMS` now sends an SMS, feeds its receipt back and checks "SMS {nn} to @6045551234 delivered", receipts kept out of the Inbox, and 67 vs 68 characters; on the old code the receipts went into the Inbox and a 67-character SMS was refused ("this is 71"). Unit tests for receipts (ACK, REJ, the APRS 1.1 reply-ack), a 7-hop relay path, and the notice marked only once sent.
 
 ### WP7: Tools and CI (effort M; any time, no radio needed)
 
