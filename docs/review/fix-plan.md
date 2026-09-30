@@ -32,7 +32,7 @@ Nothing in WP1, WP2 or WP7 waits on these; WP3 does. D1 is decided.
 | D7 | BH-5: remember one offered answer per station (so Reply works for each), or keep desktop's single outgoing box? | **Decided 2026-09-28: yes**, one per station. |
 | D8 | B-14: an Inbox file that can't be read: move it aside, or refuse to save? | **Decided 2026-09-28: A**, move it aside (`<name>.unreadable-<date>`) and say so; refuse to save only if it can't even be moved. |
 | D9 | I-21: pin the buildroot commit CI builds with? (Updates become deliberate.) | Yes. |
-| D10 | I-03 / I-19: our migration numbers and `MODE_JS8 = 8` will collide with upstream's future ones. Renumber now, or write the rule down for the next upstream merge? | Write the rule down; renumbering needs database surgery on your card. |
+| D10 | I-03 / I-19: our migration numbers and `MODE_JS8 = 8` will collide with upstream's future ones. Renumber now, or write the rule down for the next upstream merge? | **Decided 2026-09-30: write the rule down** (done, `docs/UPSTREAM_README.md`). |
 
 ## Work packages, in order
 
@@ -228,12 +228,14 @@ default `/dev/ttyACM0`; the log rotated at 4 MB when the daemon starts; `tail` r
 Both were tested without the card or the radio: the flash script with a made-up card serial (stops at
 "Card not found") and fake images with wrong layouts; the console on a socat pty with a fake radio.
 
-### WP8: Docs (with the release)
+### WP8: Docs — done 2026-09-30
 
 | Item | Verdict | The fix |
 |---|---|---|
 | **I-25** README | **Fix** | Stale button rows, 150 not 200, all popups listed, link `docs/review/`, the power-off note, beta 4 notes for what the packages fixed. |
 | bugs.md / bug hunt | **Fix** | Mark each item fixed with its commit as the packages land. |
+
+**Status:** done in 1acbeb5: I-25 plus a read-through of the whole README against the code (see I-25); D10's rule in `docs/UPSTREAM_README.md`. For the beta 4 release, still to do when you release: the header (beta 4 current), *New in beta 4* from the *Done for beta 4* list, and *Known issues in beta 4*.
 
 ## Not now
 

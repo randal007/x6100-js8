@@ -18,7 +18,7 @@ numbers refer to that commit.
 |---|---|---|---|---|
 | I-01 | F02, F04 | ~~Test closing the app while a frame is keyed~~ **done in 2ed19a8** | tests | high |
 | I-02 | F02 | Synthesise TX audio without 16 MB of temporary buffers | efficiency | medium |
-| I-03 | F10 | Keep the JS8 presets out of upstream's migration numbers | robustness | medium |
+| I-03 | F10 | ~~Keep the JS8 presets out of upstream's migration numbers~~ **rule written down in 1acbeb5 (D10)** | robustness | medium |
 | I-04 | F03 | Plan each message once, not twice | efficiency | low |
 | I-05 | F05, F89 | ~~One list of popups instead of three~~ **fixed in 3e20282** | simplify | low |
 | I-06 | F01 | Save the learned TX gain once per message, not per frame | efficiency | low |
@@ -34,13 +34,13 @@ numbers refer to that commit.
 | I-16 | F42, F43 | ~~Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes~~ **done in 68fd0fe (JS8 side)** | efficiency | low |
 | I-17 | F58, F62 | ~~Forget expired stations; look one up without copying the list~~ **done in 68fd0fe** | efficiency | medium |
 | I-18 | F63, F67, F40 | ~~One "from a popup into the keyboard" helper~~ **fixed in 3e20282** | simplify | medium |
-| I-19 | F75 | Keep `MODE_JS8`'s number clear of upstream's | robustness | low |
+| I-19 | F75 | ~~Keep `MODE_JS8`'s number clear of upstream's~~ **rule written down in 1acbeb5 (D10)** | robustness | low |
 | I-20 | F95, F96, F97 | ~~Run the unit tests and the harness in CI~~ **done in d729111** | tests | high |
 | I-21 | F97 | Pin buildroot and the third-party actions; find out why tags never build | robustness | medium |
 | I-22 | F94, F98 | Leave the WAV test mode out of the firmware; compiler warnings on | simplify | low |
 | I-23 | F100 | ~~`x6100-console`: refuse to type into a login prompt, and tidy up~~ **done (outside the repo, package 7)** | robustness | medium |
 | I-24 | F99 | ~~`x6100-flash`: no stale default, check the image's partition table~~ **done (outside the repo, package 7)** | robustness | low |
-| I-25 | F101 | README: two stale button rows, one number, and a link to this review | docs | low |
+| I-25 | F101 | ~~README: two stale button rows, one number, and a link to this review~~ **done in 1acbeb5** | docs | low |
 
 ## Batch 1: Transmitting and the radio
 
@@ -67,6 +67,8 @@ written directly: one 2.2 MB buffer (or none, synthesising part by part as
 `tx_player_play` plays), same waveform bit for bit apart from rounding.
 
 ### I-03. Keep the JS8 presets out of upstream's migration numbers — robustness, medium
+
+**Rule written down in 1acbeb5** (D10): `docs/UPSTREAM_README.md`, *Merging upstream*: upstream's migrations go after our 4 and 5.
 
 `src/params/migrations.c` adds `_4_add_js8_presets` and
 `_5_add_ghostnet_presets` after upstream's 0–3. `params.db` lives on the
@@ -291,6 +293,8 @@ lowercase into capitals as it's typed), but it still isn't checked, so
 
 ### I-19. Keep `MODE_JS8`'s number clear of upstream's — robustness, low
 
+**Rule written down in 1acbeb5** (D10): `docs/UPSTREAM_README.md`, *Merging upstream*: `MODE_JS8` stays 8, `ACTION_APP_JS8` stays where it is.
+
 `qso_log.db` (on the DATA partition, kept across reflashing) stores the
 mode as an integer (`qso_log.c:188`, `mode INT NOT NULL`), and we appended
 `MODE_JS8` to `qso_log_mode_t` (`qso_log.h:40`), so it's 8. Upstream's
@@ -381,6 +385,8 @@ DATA *into* the existing backup folder, and the later `diff` then reports
 a difference that isn't there.
 
 ### I-25. README: two stale button rows, one number, and a link to this review — docs, low
+
+**Done in 1acbeb5** (package 8), with a read-through of the whole README against the code: also the grids rule, the SMS paragraph, the map in *What it does*, the popups (Freq, the spot form, the VOL knob), the power-off note (holding POWER too), "Still to do".
 
 - The buttons table's **Show Stations** row still says a station "drops
   off an hour after it was last heard" (now *Stations kept* in Settings),
