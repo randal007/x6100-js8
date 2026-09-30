@@ -786,6 +786,10 @@ Done for beta 4 so far:
   against them before); a message relayed through many stations keeps its
   whole path for Reply (desktop has no limit either); a "RETRIEVE MSG"
   notice that couldn't go out is tried again at the next chance
+- [x] **Your own messages** show how they went: ` ...` while going out, the
+  end mark `♢` once the last frame has (as desktop JS8Call ends its own
+  sent line), `(stopped 2/5)` if you stopped it or closed JS8. Only your
+  screen changes: other stations already saw the `♢` on your messages
 
 Still to do:
 
@@ -803,11 +807,6 @@ Still to do:
 - [ ] Show Map: tried on the radio (it's in the beta 4 test builds from
   now on); still to come: a Setting for your map colour, polish from use
   on the air ([docs/MAP_PLAN.md](docs/MAP_PLAN.md))
-- [ ] Your own messages: the end mark `♢` on the red TX row once the last
-  frame has gone out, as desktop JS8Call shows it; ` ...` while sending,
-  `(stopped 2/5)` if you stop it. Only our own screen changes: other
-  stations already see the `♢` on our messages (our last frame carries the
-  "last" flag, as desktop's does)
 
 Ideas for later:
 
