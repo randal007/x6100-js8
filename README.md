@@ -792,6 +792,11 @@ Still to do:
 - [ ] Show Map: tried on the radio (it's in the beta 4 test builds from
   now on); still to come: a Setting for your map colour, polish from use
   on the air ([docs/MAP_PLAN.md](docs/MAP_PLAN.md))
+- [ ] Your own messages: the end mark `♢` on the red TX row once the last
+  frame has gone out, as desktop JS8Call shows it; ` ...` while sending,
+  `(stopped 2/5)` if you stop it. Only our own screen changes: other
+  stations already see the `♢` on our messages (our last frame carries the
+  "last" flag, as desktop's does)
 
 Ideas for later:
 
