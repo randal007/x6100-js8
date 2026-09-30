@@ -238,6 +238,15 @@ uses). *Heard me* adds the path.
    status line; the TX bar 50 % idle, 70 % waiting or sending, on every
    page); squares 3/4 of the grid square's mean side (6-20 px, was the
    whole side, 7-26), their dots, outlines and rings smaller to match.
+   Then (VE7NHW): the stats moved to the top right, under the status line
+   (the QRZ line under them); the map fills the whole inside of the
+   dialog's border, the frame's blue-grey band too (793 x 345 in the
+   default theme, where the border is 1 px at the edge; 788 x 339 in the
+   legacy theme, 4 px in; was 771 x 325). The border's rounded or cut
+   corners are read from the theme's dialog image when the map is made and
+   put back over the map's corners after each redraw
+   (`map_corners_load()`, `map_corners_apply()`); the TX bar gets rounded
+   corners on the map so its see-through black stays off them.
    Still to come: a Setting for your colour.
 5. **On the air**, then a beta.
 

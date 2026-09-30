@@ -153,6 +153,7 @@ static void        map_popup_add(const char *call);
 static void        map_qso_add(const char *call, bool ring);
 static void        map_qrz_add(const char *call);
 static void        map_status_changed(void);
+static bool        map_top_place(void);
 static void        map_talk_note(const js8_rx_msg_t *m);
 static void        map_pulse_add(const char *call);
 static void        map_qrz_clear(const char *call);
@@ -320,7 +321,7 @@ static bool           map_heard_me_only; /* Show in the map: All heard / Heard m
 static lv_obj_t      *wf_box;           /* the waterfall's opaque box (hidden under the map) */
 static lv_obj_t      *map_box, *map_canvas, *map_status; /* made when the map first opens */
 static lv_obj_t      *map_qrz_label;    /* "QRZ 2  W7XYZ K9DEF" under the status line */
-static lv_obj_t      *map_stats_label;  /* "14 heard  5 hear you  DX ..." top left */
+static lv_obj_t      *map_stats_label;  /* "14 heard  5 hear you  DX ..." under the status line */
 /* Stations that called CQ lately: green in the Stations view, a "CQ" tag
  * on the map, for 5 min (VE7NHW). */
 #define CQ_HEARD_N  16
@@ -2914,8 +2915,18 @@ static void destruct_cb(void) {
  * selected station in red, and new stations popping up for 8 s. The
  * Stations view stays underneath: the MFK selects there. */
 
-#define MAP_W          WIDTH
-#define MAP_H          WF_HEIGHT
+/* The map fills the whole inside of the dialog's border, the frame's
+ * blue-grey band included, not just the waterfall's place (VE7NHW). Where
+ * that border is depends on the theme's dialog image (map_geometry()); its
+ * rounded or cut corners are put back over the map (map_corners_apply()). */
+static int map_x = 13, map_y = 13, map_w = WIDTH, map_h = WF_HEIGHT;
+static int map_corner_r = 9; /* the TX bar's corners on the map, inside the border's */
+static int map_edge     = 4; /* the status line this far in, clear of the corners */
+#define MAP_X          map_x
+#define MAP_Y          map_y
+#define MAP_W          map_w
+#define MAP_H          map_h
+#define MAP_CORNER     11 /* the border's corners reach this far in (x + y) */
 #define MAP_LEGEND_H   26
 #define MAP_STRIP_H    40 /* the last two messages, above the legend */
 #define MAP_FIT_H      (MAP_H - TX_BAR_H - MAP_LEGEND_H - MAP_STRIP_H) /* stations fit above those and the TX bar */
@@ -3003,8 +3014,7 @@ static void map_qrz_show(void) {
     }
     lv_label_set_text(map_qrz_label, buf);
     lv_obj_clear_flag(map_qrz_label, LV_OBJ_FLAG_HIDDEN);
-    lv_obj_update_layout(map_status); /* its size, before lining up under it */
-    lv_obj_align_to(map_qrz_label, map_status, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 3);
+    if (map_top_place()) map_sig = 0; /* under the status line and the stats */
 }
 
 static void map_qrz_add(const char *call) {
@@ -3269,8 +3279,82 @@ static void map_strip_update(void) {
     if (!found && !lv_obj_has_flag(map_strip_box, LV_OBJ_FLAG_HIDDEN)) lv_obj_add_flag(map_strip_box, LV_OBJ_FLAG_HIDDEN);
 }
 
+/* The inside of the dialog's border, from the theme's image: simple
+ * (dialog_dark.bin, 795 x 347) has a 1 px white border at its edge; legacy
+ * (dialog.bin, 796 x 348) a 2 px border 2 px in. */
+static void map_geometry(void) {
+    if (params.theme.x == THEME_LEGACY) {
+        map_x = 4, map_y = 4, map_w = 788, map_h = 339;
+        map_corner_r = 12, map_edge = 7; /* its corners are cut 10 px across */
+    } else {
+        map_x = 1, map_y = 1, map_w = 793, map_h = 345;
+        map_corner_r = 9, map_edge = 4;
+    }
+}
+
+/* The border's corners as the dialog image draws them (over the screen
+ * behind it): the map's square corners would stick out past them. Read
+ * from the image when the map is made. */
+static struct {
+    int16_t  x, y; /* on the map */
+    uint32_t c;
+} map_corner_px[4 * MAP_CORNER * (MAP_CORNER + 1) / 2];
+static int map_corner_n;
+
+static bool map_img_read(lv_img_decoder_dsc_t *dsc, int x, int y, int len, lv_color32_t *out) {
+    if (dsc->img_data) { /* an image in memory */
+        memcpy(out, dsc->img_data + ((size_t)y * dsc->header.w + x) * sizeof(lv_color32_t), len * sizeof(lv_color32_t));
+        return true;
+    }
+    return lv_img_decoder_read_line(dsc, x, y, len, (uint8_t *)out) == LV_RES_OK; /* a file */
+}
+
+static void map_corners_load(void) {
+    map_corner_n = 0;
+    const void          *src = lv_obj_get_style_bg_img_src(dialog.obj, LV_PART_MAIN);
+    lv_img_decoder_dsc_t dsc;
+    if (!src || lv_img_decoder_open(&dsc, src, lv_color_white(), 0) != LV_RES_OK) return;
+    if (dsc.header.cf == LV_IMG_CF_TRUE_COLOR_ALPHA && sizeof(lv_color_t) == sizeof(lv_color32_t) &&
+        MAP_X + MAP_W < (int)dsc.header.w && MAP_Y + MAP_H < (int)dsc.header.h) {
+        lv_color32_t bg = {.full = lv_color_to32(bg_color)};
+        for (int corner = 0; corner < 4; corner++) {
+            bool right = corner & 1, bottom = corner & 2;
+            int  x0    = right ? MAP_W - MAP_CORNER : 0;
+            for (int dy = 0; dy < MAP_CORNER; dy++) {
+                int          y = bottom ? MAP_H - 1 - dy : dy;
+                lv_color32_t row[MAP_CORNER], mid;
+                if (!map_img_read(&dsc, MAP_X + x0, MAP_Y + y, MAP_CORNER, row) ||
+                    !map_img_read(&dsc, MAP_X + MAP_W / 2, MAP_Y + y, 1, &mid))
+                    continue;
+                for (int dx = 0; dx + dy < MAP_CORNER; dx++) {
+                    int          x = right ? MAP_W - 1 - dx : dx;
+                    lv_color32_t p = row[x - x0];
+                    /* As the band in the middle of this row: the map covers it. */
+                    if (abs(p.ch.alpha - mid.ch.alpha) <= 8 && abs(p.ch.red - mid.ch.red) <= 40 &&
+                        abs(p.ch.green - mid.ch.green) <= 40 && abs(p.ch.blue - mid.ch.blue) <= 40)
+                        continue;
+                    int a = p.ch.alpha;
+                    map_corner_px[map_corner_n].x = x;
+                    map_corner_px[map_corner_n].y = y;
+                    map_corner_px[map_corner_n].c = 0xFF000000u |
+                                                    (uint32_t)((p.ch.red * a + bg.ch.red * (255 - a)) / 255) << 16 |
+                                                    (uint32_t)((p.ch.green * a + bg.ch.green * (255 - a)) / 255) << 8 |
+                                                    (uint32_t)((p.ch.blue * a + bg.ch.blue * (255 - a)) / 255);
+                    map_corner_n++;
+                }
+            }
+        }
+    }
+    lv_img_decoder_close(&dsc);
+}
+
+static void map_corners_apply(void) {
+    for (int i = 0; i < map_corner_n; i++) map_px[map_corner_px[i].y * MAP_W + map_corner_px[i].x] = map_corner_px[i].c;
+}
+
 static bool map_ensure(void) {
     if (map_box) return true;
+    map_geometry();
     map_base = malloc((size_t)MAP_W * MAP_H * sizeof(uint32_t));
     map_px   = malloc((size_t)MAP_W * MAP_H * sizeof(uint32_t));
     if (!map_base || !map_px) {
@@ -3291,19 +3375,20 @@ static bool map_ensure(void) {
     lv_obj_set_style_bg_opa(map_box, LV_OPA_COVER, 0);
     lv_obj_clear_flag(map_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(map_box, MAP_W, MAP_H);
-    lv_obj_set_pos(map_box, 13, 13);
+    lv_obj_set_pos(map_box, MAP_X, MAP_Y);
     lv_obj_add_flag(map_box, LV_OBJ_FLAG_HIDDEN);
 
     map_canvas = lv_canvas_create(map_box);
     lv_canvas_set_buffer(map_canvas, map_px, MAP_W, MAP_H, LV_IMG_CF_TRUE_COLOR);
     lv_obj_set_pos(map_canvas, 0, 0);
+    map_corners_load();
 
     map_status = lv_label_create(map_box);
     lv_obj_set_style_text_font(map_status, &sony_18, 0);
     lv_obj_set_style_text_color(map_status, lv_color_white(), 0);
     lv_obj_set_style_bg_color(map_status, lv_color_black(), 0);
     lv_obj_set_style_bg_opa(map_status, LV_OPA_50, 0);
-    lv_obj_align(map_status, LV_ALIGN_TOP_RIGHT, -4, 4);
+    lv_obj_align(map_status, LV_ALIGN_TOP_RIGHT, -map_edge, map_edge);
     lv_label_set_text(map_status, "");
 
     map_stats_label = lv_label_create(map_box);
@@ -3392,7 +3477,9 @@ static void map_show(bool on) {
         lv_obj_add_flag(wf_box, LV_OBJ_FLAG_HIDDEN); /* decoding goes on; rows just aren't drawn */
         lv_obj_clear_flag(map_box, LV_OBJ_FLAG_HIDDEN);
         lv_obj_move_foreground(map_box);
-        lv_obj_set_pos(tx_bar, 13, 13 + MAP_H - TX_BAR_H);
+        lv_obj_set_pos(tx_bar, MAP_X, MAP_Y + MAP_H - TX_BAR_H);
+        lv_obj_set_width(tx_bar, MAP_W);
+        lv_obj_set_style_radius(tx_bar, map_corner_r, 0); /* its see-through black stays off the border */
         lv_obj_move_foreground(tx_bar);
         map_view_ok = false;
         update_status();
@@ -3405,6 +3492,8 @@ static void map_show(bool on) {
         if (map_box) lv_obj_add_flag(map_box, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_HIDDEN);
         lv_obj_set_pos(tx_bar, 13, 13 + WF_VISIBLE);
+        lv_obj_set_width(tx_bar, WIDTH);
+        lv_obj_set_style_radius(tx_bar, 0, 0);
     }
     if (btn_map_view.disp_btn) buttons_refresh(&btn_map_view);
     if (btn_show.disp_btn) buttons_refresh(&btn_show);
@@ -3610,25 +3699,30 @@ static void map_badge(const lv_area_t *box, const char *text) {
     lv_canvas_draw_text(map_canvas, box->x1 + 3, box->y1 + 1, box->x2 - box->x1, &ld, text);
 }
 
-/* The stats beside the status line when there's room, else under it (the
- * QRZ line is on the right there). True if it moved. */
-static bool map_stats_place(void) {
-    if (!map_stats_label || !map_status) return false;
-    lv_obj_update_layout(map_status);
-    lv_point_t sz;
-    lv_txt_get_size(&sz, lv_label_get_text(map_stats_label), &sony_16, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
-    int y = 4 + sz.x + 8 + 12 + lv_obj_get_width(map_status) > MAP_W ? lv_obj_get_height(map_status) + 8 : 4;
-    if (lv_obj_get_y(map_stats_label) == y) return false;
-    lv_obj_align(map_stats_label, LV_ALIGN_TOP_LEFT, 4, y);
-    lv_obj_update_layout(map_stats_label);
-    return true;
+/* Top right, lined up under the status line: the stats, then the QRZ line
+ * (VE7NHW: the stats on the status line's side). True if either moved. */
+static bool map_top_place(void) {
+    if (!map_stats_label || !map_status || !map_qrz_label) return false;
+    lv_obj_t *above = map_status;
+    bool      moved = false;
+    lv_obj_t *below[2] = {map_stats_label, map_qrz_label};
+    for (int i = 0; i < 2; i++) {
+        if (lv_obj_has_flag(below[i], LV_OBJ_FLAG_HIDDEN)) continue;
+        lv_obj_update_layout(above); /* its size, before lining up under it */
+        lv_coord_t x = lv_obj_get_x(below[i]), y = lv_obj_get_y(below[i]);
+        lv_obj_align_to(below[i], above, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 3);
+        lv_obj_update_layout(below[i]);
+        moved |= x != lv_obj_get_x(below[i]) || y != lv_obj_get_y(below[i]);
+        above = below[i];
+    }
+    return moved;
 }
 
 static void map_status_changed(void) {
-    if (map_stats_place()) map_sig = 0; /* the stats moved: redraw the labels around them */
+    if (map_top_place()) map_sig = 0; /* the stats or QRZ moved: redraw the labels around them */
 }
 
-/* Top left: "14 heard  5 hear you  DX JA1ABC 7880 km" (the whole Stations
+/* Top right: "14 heard  5 hear you  DX JA1ABC 7880 km" (the whole Stations
  * list, whatever Show picks). */
 static void map_stats(const js8_map_place_t *home) {
     if (!map_stats_label) return;
@@ -3659,8 +3753,8 @@ static void map_stats(const js8_map_place_t *home) {
         return;
     }
     lv_obj_clear_flag(map_stats_label, LV_OBJ_FLAG_HIDDEN);
-    map_stats_place();
-    map_take(0, lv_obj_get_y(map_stats_label) - 4, lv_obj_get_x(map_stats_label) + lv_obj_get_width(map_stats_label) + 4,
+    map_top_place();
+    map_take(lv_obj_get_x(map_stats_label) - 4, lv_obj_get_y(map_stats_label) - 2, MAP_W,
              lv_obj_get_y(map_stats_label) + lv_obj_get_height(map_stats_label) + 2);
 }
 
@@ -3787,7 +3881,7 @@ static void map_update(bool force) {
     map_ntaken = 0;
     map_legend(have_home);
     map_stats(have_home ? &home : NULL);
-    if (map_status) map_take(MAP_W - 8 - lv_obj_get_width(map_status), 0, MAP_W, 4 + lv_obj_get_height(map_status));
+    if (map_status) map_take(MAP_W - map_edge - 4 - lv_obj_get_width(map_status), 0, MAP_W, map_edge + lv_obj_get_height(map_status));
     if (map_qrz_n && map_qrz_label) { /* the QRZ line under it */
         lv_obj_update_layout(map_qrz_label);
         map_take(lv_obj_get_x(map_qrz_label) - 4, lv_obj_get_y(map_qrz_label) - 2,
@@ -3931,6 +4025,7 @@ static void map_update(bool force) {
 
     for (int i = 0; i < st_count; i++)
         if (badge[i]) map_badge(&badge_box[i], "CQ");
+    map_corners_apply();
     lv_obj_invalidate(map_canvas);
 }
 

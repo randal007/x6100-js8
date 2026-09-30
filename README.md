@@ -203,7 +203,8 @@ mistaken for a grid.
 
 Page 3, **Show Stations** twice (*Show Map*): the stations of this
 frequency on a world map in place of the waterfall and the list, in
-GridTracker's *Dark Gray* look.
+GridTracker's *Dark Gray* look. The map fills the whole window, out to its
+white border.
 
 ![The map](docs/screenshots/12_map.png)
 
@@ -218,7 +219,7 @@ GridTracker's *Dark Gray* look.
   also gets the flashing ring, "calling you", unless it's only a
   heartbeat reply), and to the station you're sending to (Reply, a query,
   HW CPY? ...), even if it hasn't heard you yet.
-- **QRZ** (yellow, under the status line, GridTracker's "calling me"):
+- **QRZ** (yellow, under the status line and the stats, GridTracker's "calling me"):
   who sent something to your call — a message, a command, free text, not
   heartbeat replies — while the map or the Stations view was showing, e.g.
   `QRZ 2  K9DEF W7XYZ`, newest first. For when you've walked away: a
@@ -254,7 +255,7 @@ GridTracker's *Dark Gray* look.
   (`az 335  LP 155`); press Map: to go back.
 - The legend, the message lines, the status line and the TX bar are
   see-through: the map shows around and under the text.
-- **Stats** (top left): `14 heard  5 hear you  DX JA1ABC 10833 km`, the
+- **Stats** (top right, under the status line): `14 heard  5 hear you  DX JA1ABC 10833 km`, the
   whole Stations list whatever Show picks. The selected station's label
   also has the beam heading (`az 252`, short path).
 
