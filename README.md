@@ -182,8 +182,9 @@ keyboard works too; lowercase is typed as capitals.
 | dark blue | to a group (`@ALLCALL`, `@HB`, ...) |
 | purple | contains one of your [alert words](#alerts) |
 | `[...]` | a low-confidence decode |
-| ends in `...` | a long message still arriving; the row grows each decode cycle |
-| ends in `♢` | the message's last frame arrived (desktop's end-of-transmission mark) |
+| ends in `...` | a long message still arriving; the row grows each decode cycle. On your own (red) rows: still going out |
+| ends in `♢` | the message's last frame arrived (desktop's end-of-transmission mark). On your own rows: its last frame has gone out |
+| `(stopped 2/5)` | your message was stopped during frame 2 of 5 (ESC, or JS8 closed while sending) |
 | yellow words | the command (`SNR?`, `MSG`, `ACK`, `>`, `CQ CQ CQ` ...) |
 
 **Stations view** (page 3, *Show Stations*; press again for [the map](#the-map)): one row per station, like

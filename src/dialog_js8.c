@@ -512,6 +512,15 @@ static lv_font_t    table_font; /* the list's font: sony_24 with js8_marks_24 as
 static js8_rx_msg_t history[HISTORY];
 static int64_t      hist_ms[HISTORY]; /* when each arrived (JS8 time), for Messages kept */
 static uint32_t     hist_seq[HISTORY]; /* arrival order, shared with info rows */
+/* Your own messages' rows (VE7NHW): " ..." while it goes out, desktop's
+ * end mark once the last frame has, "(stopped 2/5)" if it was stopped. */
+enum { TX_ROW_NONE, TX_ROW_SENDING, TX_ROW_SENT, TX_ROW_STOPPED };
+static struct {
+    uint8_t  state;
+    uint16_t frame, frames; /* the frame on the air or next, as the TX bar counts */
+} hist_tx[HISTORY];
+static int          tx_row_slot = -1; /* the row of the message going out */
+static uint32_t     tx_row_seq;
 static uint16_t     hist_head;  /* next slot to write */
 static uint16_t     hist_count;
 /* Info rows ("Auto: N0XYZ SNR -05", "Held message 3 delivered"), kept
@@ -635,7 +644,19 @@ static bool passes_filter(const js8_rx_msg_t *m) {
     }
 }
 
-static void format_row(const js8_rx_msg_t *m, char *buf, size_t size) {
+/* " ...", the end mark, "  (stopped 2/5)" or nothing, for a row of yours;
+ * the map's strip has no end mark (its font hasn't the glyph). */
+static void tx_row_mark(int slot, bool eot, char *buf, size_t size) {
+    buf[0] = '\0';
+    switch (hist_tx[slot].state) {
+    case TX_ROW_SENDING: snprintf(buf, size, " ..."); break;
+    case TX_ROW_SENT:    if (eot) snprintf(buf, size, " " EOT_MARK); break;
+    case TX_ROW_STOPPED: snprintf(buf, size, "  (stopped %u/%u)", hist_tx[slot].frame, hist_tx[slot].frames); break;
+    }
+}
+
+static void format_row(int slot, char *buf, size_t size) {
+    const js8_rx_msg_t *m = &history[slot];
     int hh = m->utc / 10000, mm = (m->utc / 100) % 100, ss = m->utc % 100;
 
     /* Speed letter outside Normal: " F", " T", " S" (desktop's speed column). */
@@ -644,7 +665,9 @@ static void format_row(const js8_rx_msg_t *m, char *buf, size_t size) {
     if (sp != JS8_SPEED_NORMAL) snprintf(speed, sizeof(speed), " %c", js8_speed_letter(sp));
 
     if (m->tx) {
-        snprintf(buf, size, "%02d:%02d:%02d  TX %4.0f%s  %s", hh, mm, ss, m->freq_hz, speed, m->text);
+        char mark[32];
+        tx_row_mark(slot, true, mark, sizeof(mark));
+        snprintf(buf, size, "%02d:%02d:%02d  TX %4.0f%s  %s%s", hh, mm, ss, m->freq_hz, speed, m->text, mark);
         return;
     }
 
@@ -801,7 +824,7 @@ static void rebuild_rows(void) {
             append_row(info_rows[-1 - pick[k]].text, -1);
             continue;
         }
-        format_row(&history[pick[k]], buf, sizeof(buf));
+        format_row(pick[k], buf, sizeof(buf));
         append_row(buf, (int16_t)pick[k]);
     }
     follow();
@@ -902,7 +925,7 @@ static void update_slot(int slot, const js8_rx_msg_t *m) {
         return;
     }
     char buf[JS8_RX_TEXT_LEN + 48];
-    format_row(m, buf, sizeof(buf));
+    format_row(slot, buf, sizeof(buf));
     for (uint16_t r = 0; r < rows; r++) {
         if (row_hist[r] == slot) {
             /* A message growing as it arrives wraps onto new lines: keep
@@ -980,6 +1003,8 @@ static void add_message(const js8_rx_msg_t *msg) {
 
     int slot = hist_head;
     history[slot]  = *m;
+    hist_tx[slot].state  = m->tx ? TX_ROW_SENDING : TX_ROW_NONE; /* ours: added as its first frame keys */
+    hist_tx[slot].frame  = hist_tx[slot].frames = 0;
     hist_ms[slot]  = now_wall_ms();
     hist_seq[slot] = ++row_seq;
     hist_head      = (hist_head + 1) % HISTORY;
@@ -1008,7 +1033,7 @@ static void add_message(const js8_rx_msg_t *msg) {
 
     bool scroll = at_bottom();
     char buf[JS8_RX_TEXT_LEN + 48];
-    format_row(m, buf, sizeof(buf));
+    format_row(slot, buf, sizeof(buf));
     append_row(buf, (int16_t)slot);
     if (scroll) follow();
 }
@@ -1978,6 +2003,43 @@ static int current_utc_hhmmss(void) {
     return tm.tm_hour * 10000 + tm.tm_min * 100 + tm.tm_sec;
 }
 
+/* The row of the message going out, if it's still in the history. */
+static bool tx_row_ok(void) {
+    return tx_row_slot >= 0 && hist_count && history[tx_row_slot].tx && hist_seq[tx_row_slot] == tx_row_seq;
+}
+
+/* A row of yours changed its mark: in the list now, if it shows there (the
+ * Stations view rebuilds the list when you go back). */
+static void tx_row_refresh(int slot) {
+    if (view_stations || !table) return;
+    char buf[JS8_RX_TEXT_LEN + 48];
+    format_row(slot, buf, sizeof(buf));
+    for (uint16_t r = 0; r < rows; r++) {
+        if (row_hist[r] == slot) {
+            bool scroll = at_bottom();
+            lv_table_set_cell_value(table, r, 0, buf);
+            if (scroll) follow();
+            return;
+        }
+    }
+}
+
+/* The message going out ended: the end mark, or how far it got. */
+static void tx_row_end(bool completed) {
+    if (tx_row_ok()) {
+        hist_tx[tx_row_slot].state = completed ? TX_ROW_SENT : TX_ROW_STOPPED;
+        tx_row_refresh(tx_row_slot);
+    }
+    tx_row_slot = -1;
+}
+
+/* JS8 closed while one went out (it stops then): no " ..." left behind. */
+static void tx_rows_stopped(void) {
+    for (int i = 0; i < HISTORY; i++)
+        if (hist_tx[i].state == TX_ROW_SENDING) hist_tx[i].state = TX_ROW_STOPPED;
+    tx_row_slot = -1;
+}
+
 static void ui_tx_status(void *arg) {
     if (!dialog.run || !tx_bar) return;
     const js8_tx_status_t *st = (const js8_tx_status_t *)arg;
@@ -1991,6 +2053,8 @@ static void ui_tx_status(void *arg) {
         m.submode      = (uint8_t)js8_speed_submode(st->speed);
         snprintf(m.text, sizeof(m.text), "%s", tx_preview[0] ? tx_preview : st->text);
         add_message(&m);
+        tx_row_slot = (hist_head - 1 + HISTORY) % HISTORY;
+        tx_row_seq  = hist_seq[tx_row_slot];
         /* AGN? repeats what went out, as desktop: not a message stopped
          * before it keyed. */
         snprintf(last_tx_text, sizeof(last_tx_text), "%s", st->text);
@@ -1999,6 +2063,10 @@ static void ui_tx_status(void *arg) {
         char ended[JS8_RX_CALL_LEN];
         if (!tx_auto && js8_qsos_sent(qsos, m.text, params.callsign.x, now_wall_ms(), ended, sizeof(ended)))
             log_offer(ended);
+    }
+    if (st->frame > 0 && tx_row_ok()) { /* how far it got, for "(stopped 2/5)" */
+        hist_tx[tx_row_slot].frame  = (uint16_t)st->frame;
+        hist_tx[tx_row_slot].frames = (uint16_t)st->frames;
     }
     tx_status = *st;
     update_tx_bar();
@@ -2015,6 +2083,7 @@ static void ui_tx_done(void *arg) {
     const tx_done_t *done      = arg;
     bool             completed = done->completed;
     if (!completed) add_info_row("TX stopped");
+    tx_row_end(completed);
     deliver_end(done->text, completed);
     memset(&tx_status, 0, sizeof(tx_status));
     tx_active = false;
@@ -2648,6 +2717,7 @@ static void construct_cb(lv_obj_t *parent) {
     params_bool_set(&params.js8_hb, false);
     params_bool_set(&params.js8_hb_ack, false);
     auto_cq = false;
+    tx_rows_stopped(); /* a message JS8 was closed on stopped then */
 
     /* Full-screen app with its own waterfall: skip main-screen DSP. */
     dsp_set_waterfall_enabled(false);
@@ -3252,7 +3322,9 @@ static void map_strip_update(void) {
         uint32_t            color    = 0xE0E0E0;
         if (m) {
             int hh = m->utc / 10000, mm = (m->utc / 100) % 100;
-            if (m->tx) snprintf(buf, sizeof(buf), "%02d:%02d  TX   %s", hh, mm, m->text);
+            char mark[32] = "";
+            if (m->tx) tx_row_mark((int)(m - history), false, mark, sizeof(mark));
+            if (m->tx) snprintf(buf, sizeof(buf), "%02d:%02d  TX   %s%s", hh, mm, m->text, mark);
             else snprintf(buf, sizeof(buf), "%02d:%02d %+3d  %s%s", hh, mm, m->snr, m->text, m->partial ? " ..." : "");
             color = m->tx ? 0xFF9090 : m->to_me ? MAP_QRZ_COLOR : 0xE0E0E0;
         }
@@ -4153,6 +4225,7 @@ static void clear_cb(button_data_t *btn) {
     if (popup_guard()) return;
     (void)btn;
     hist_head = hist_count = 0;
+    tx_row_slot           = -1;
     info_head = info_count = 0;
     js8_stations_clear(stations);
     js8_rx_clear(rx);
