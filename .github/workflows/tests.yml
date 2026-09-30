@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   unit:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04 # libgpiod 1.6, as the image's X6100Control expects
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -27,12 +27,14 @@ jobs:
           submodules: true
 
       - name: Packages
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev pkg-config
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libsqlite3-dev pkg-config libgpiod-dev
 
+      # Only the test programs: the firmware's LVGL fork (NEON) doesn't build
+      # on a PC, and none of the tests need it.
       - name: Build the tests (ASan/UBSan)
         run: |
           cmake -B build_test -DENABLE_TESTING=YES
-          cmake --build build_test -j"$(nproc)"
+          cmake --build build_test -j"$(nproc)" --target test_js8 test_qth test_ft8_qso test_cfg
 
       - name: JS8 tests (the real-time [slow] ones left out)
         run: build_test/tests/test_js8 "~[slow]" --colour-mode=ansi
