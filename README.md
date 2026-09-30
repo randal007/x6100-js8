@@ -860,15 +860,18 @@ JS8 app by VE7NHW.
   inbox, log, alerts), `src/dialog_js8.c` (the app), vendored engine in
   `third-party/js8core` with local patches listed in
   [UPSTREAM.md](third-party/js8core/UPSTREAM.md).
-- **Tests:** `tests/test_js8.cpp` (Catch2; `[.slow]` runs real-time decodes),
+- **Tests:** `tests/test_js8.cpp` (Catch2; `[slow]` runs real-time decodes),
   and [tools/js8_ui_harness](tools/js8_ui_harness), which runs the real app
-  headless on stock LVGL under ASan/UBSan.
+  headless on stock LVGL under ASan/UBSan. GitHub runs the unit tests on
+  every push (*Tests*); start *Tests* by hand with *harness* ticked for the
+  harness scenarios too (real time, 1-3 hours).
 - **Testers' tools:** [tools/windows](tools/windows) (read-only
   diagnostics over the radio's USB console, PowerShell).
 - **Building:** GitHub Actions builds the SD image with
   [AetherX6100Buildroot](https://github.com/gdyuldin/AetherX6100Buildroot)
   (about an hour): run *Build image* on `main` for a test image (an
-  artifact), or on a tag to publish a release with the image attached;
+  artifact), or on a tag to publish a release with the image attached
+  (pushing a tag doesn't start it);
   upstream notes in
   [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 

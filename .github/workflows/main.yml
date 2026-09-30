@@ -1,10 +1,9 @@
 name: Build image
+# Started by hand (about an hour): on main for a test image (an artifact),
+# on a release tag to publish the release too (the Release step). Pushing a
+# tag never started it, so that trigger is gone (review I-21).
 on:
   workflow_dispatch:
-  push:
-    # Pattern matched against refs/tags
-    tags:
-      - '*'           # Push events to every tag not containing /
 
 # The repo's default token is read-only; the Release step needs to create
 # the release and attach the image.
