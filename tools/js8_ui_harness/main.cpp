@@ -1546,6 +1546,57 @@ int main() {
         pump(3500);
         return 0;
     }
+    if (getenv("ONLY_TXMARK")) {
+        // Your own rows: " ..." while the message goes out, desktop's end
+        // mark once its last frame has, "(stopped 2/n)" if stopped (ESC, or
+        // JS8 closed while sending).
+        const char *eot = " \xE2\x99\xA2";
+        auto        send = [](const char *text) {
+            ui_page(2);
+            ui_press(3); // Send...
+            pump(200);
+            ui_compose_append(text);
+            ui_compose_enter();
+            pump(300);
+        };
+        auto wait_frames = [](int n) { // until n more frames have keyed
+            int want = stub_tx_frames + n;
+            for (int i = 0; i < 400 && stub_tx_frames < want; i++) pump(100);
+            pump(300);
+        };
+        pump(300);
+        send("K9DEF THIS ONE GOES OUT IN FULL");
+        wait_frames(1);
+        printf("[txmark] first frame keyed: ' ...' %d (want 1)\n", ui_list_has("GOES OUT IN FULL ..."));
+        for (int i = 0; i < 900 && stub_tx_keyed; i++) pump(100);
+        for (int i = 0; i < 900 && ui_list_has("GOES OUT IN FULL ...") == 1; i++) pump(100);
+        char want[96];
+        snprintf(want, sizeof(want), "GOES OUT IN FULL%s", eot);
+        printf("[txmark] sent in full: end mark %d, ' ...' %d (want 1, 0)\n", ui_list_has(want),
+               ui_list_has("GOES OUT IN FULL ..."));
+        screenshot("c0_txmark_sent.ppm");
+
+        send("K9DEF THIS ONE IS STOPPED IN ITS SECOND FRAME");
+        wait_frames(2);
+        ui_key(LV_KEY_ESC); // stop TX
+        pump(500);
+        snprintf(want, sizeof(want), "SECOND FRAME%s", eot);
+        printf("[txmark] stopped in frame 2: %d, ' ...' %d, end mark %d (want 1, 0, 0)\n",
+               ui_list_has("SECOND FRAME  (stopped 2/"), ui_list_has("SECOND FRAME ..."), ui_list_has(want));
+        screenshot("c1_txmark_stopped.ppm");
+
+        ui_page(1);
+        ui_press(1); // CQ
+        wait_frames(1);
+        dialog_destruct(); // closed while it goes out
+        pump(500);
+        ui_open();
+        pump(500);
+        printf("[txmark] closed while sending, reopened: %d, ' ...' %d (want 1, 0)\n",
+               ui_list_has("CQ CQ CQ FN42  (stopped 1/1)"), ui_list_has("CQ CQ CQ FN42 ..."));
+        screenshot("c2_txmark_reopened.ppm");
+        return 0;
+    }
     if (getenv("ONLY_RETUNE")) {
         // A reply that waited behind the keyboard must not go out after a
         // change of band or frequency: it answered a station on the old one.

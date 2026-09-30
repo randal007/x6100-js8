@@ -89,6 +89,12 @@ see.
   refused, dial unchanged), then `dialog_destruct()` as GEN, APP or another
   app does (the frame must be aborted, PTT off, no crash: it crashed in
   `js8_tx_stopping()` before the fix); reopened, a CQ goes out again.
+- `ONLY_TXMARK=1`: your own rows' marks. A 3-frame message: ` ...` once
+  the first frame keys, the end mark `♢` after the last; another stopped
+  with ESC in its second frame: `(stopped 2/3)`, no end mark; a CQ with
+  JS8 closed on it and reopened: `(stopped 1/1)`. Screenshots
+  `c0_txmark_sent`, `c1_txmark_stopped`, `c2_txmark_reopened`. About 1.5
+  minutes.
 - `ONLY_RETUNE=1`: AUTO on and the keyboard open (Send...), a station
   asks us `SNR?` (the answer waits behind the keyboard); then a band key:
   the waiting answer must not go out on the new band.
