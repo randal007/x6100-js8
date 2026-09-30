@@ -4,16 +4,15 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 
-> **Beta 3** is the current release. In daily use on the air since beta 1:
+> **Beta 4** is the current release. In daily use on the air since beta 1:
 > heartbeats acknowledged, queries answered, QSOs and messages with desktop
-> JS8Call stations, all four speeds decoding. Beta 3 adds relays and store
-> and forward that work as desktop JS8Call's do, Time Sync as a drift,
-> alert beeps you can hear, a smoother waterfall and a Settings list
-> ([New in beta 3](#new-in-beta-3)). Nothing transmits by itself when the
-> app opens; automatic replies and heartbeats are switches you turn on.
->
-> **Beta 4 is being tested.** This manual already describes it; what has
-> changed since beta 3 is listed under [Coming next](#coming-next).
+> JS8Call stations, all four speeds decoding, two-way SMS through APRS.
+> Beta 4 adds a **map** of the stations heard in GridTracker's style,
+> decode marks on the waterfall, messages sent exactly as desktop JS8Call
+> sends them, automatic replies that follow desktop's rules, and the fixes
+> from a full code review ([New in beta 4](#new-in-beta-4)). Nothing
+> transmits by itself when the app opens; automatic replies and heartbeats
+> are switches you turn on.
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
@@ -37,8 +36,8 @@ the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
-- [New in beta 3](#new-in-beta-3)
-- [Known issues in beta 3](#known-issues-in-beta-3)
+- [New in beta 4](#new-in-beta-4)
+- [Known issues in beta 4](#known-issues-in-beta-4)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -75,7 +74,7 @@ the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta3.img.zip` from the Assets.
+   download `sdcard.js8-beta4.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works.
 3. Put the card in the radio and switch on. The first start creates the
@@ -265,7 +264,7 @@ white border.
   whole Stations list whatever Show picks. The selected station's label
   also has the beam heading (`az 252`, short path).
 
-  ![New stations, a CQ caller and the stats](docs/screenshots/13_map_new.png)
+  ![A new DXCC pops up in the World view; CQ tags and the stats](docs/screenshots/13_map_new.png)
 
 - **Map: Auto** (page 3, second button) shows your continent close-in and
   switches to the world by itself when someone on another continent is
@@ -550,8 +549,8 @@ type your text. The gateway's receipt for your reply (`ACK04}`) shows as
 **SMS {04} to @6045551234 delivered** on the message line and in the list
 (or *rejected by the gateway* for a `REJ04}`); it isn't an Inbox message.
 The app remembers what you sent until the radio is switched off. Beta 3
-drops all of these messages (see
-[Known issues](#known-issues-in-beta-3)).
+and earlier drop the relayed texts (gateways send them without the
+checksum beta 3 expected): use beta 4 or later.
 
 **Position with a message:** Spot my grid and Spot GPS position open a
 text box. Press Enter on it empty for the plain position beacon (2 frames),
@@ -619,66 +618,136 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
-## New in beta 3
+## New in beta 4
 
 New:
 
-- **[Relays](#relays)** as desktop JS8Call does them: passed on for
-  others, ACKed back along the path, and the questions and messages they
-  carry answered the same way. **Relay via them…** and **Can they
-  reach…?** (`QUERY CALL`) on the Query list
-- **Store and forward** checked line by line against desktop JS8Call:
-  `YES MSG ID 3 +2`, `NEXT MSG ID`, group messages (`MSG TO:@GROUP`),
-  `RETRIEVE MSG` notices, messages from APRS gateways, and desktop's Reply
-  choices in the Inbox (to the sender, or through the station that held
-  it). **Fetch message #…** on the Query list
-- **Settings…** (page 4, was Texts…): INFO, STATUS, Relay on/off and your
-  groups
-- **Time Sync** shifts only JS8's own timing (a drift, like desktop
-  JS8Call), not the radio's clock; the drift is shown on top, hold to
-  reset. Each station counts once and a second press can't overshoot
-- **Alert beeps through the speaker**; JS8 hears silence for under a
-  second meanwhile, as the radio feeds the beep back into its receive audio
-- **Auto CQ interval** set with the knob (1–30 min), like HB
-- **Shorter position beacons** with a message (4–5 frames instead of 6),
-  with a live frame count
-- **TX bar** shows the frame count first ("1/5 starts in 13 s", "sending
-  2/5"), so a long message can't push it off the screen
-- The **Inbox** button turns green while you have unread messages
-- **Stations lists** (times and ★ included) are kept when JS8 is closed
-  and reopened, until the radio is switched off
-- CQ page first (pages 1 and 2 swapped); a hold is half a second
+- **[Show Map](#the-map)** (Show Stations twice): the stations of this
+  frequency on a world map in GridTracker's style. Grid squares (or the
+  callsign's province, state or country when no grid was heard), curved
+  paths to who heard you, red while a message to or from you is on the
+  air, new stations popping up (**NEW DXCC** / **NEW GRID** from your QSO
+  log), CQ tags, **QRZ** (who called you while you were away), other
+  stations' QSOs in grey, a dot running along the path as your message goes
+  out, squares fading as stations go quiet. Your continent close-in, the
+  world when DX is heard, or **Follow** the selected station with its
+  short- and long-path headings
+- **Decode marks** on the waterfall (Settings), as desktop's *Show decode
+  attempts*: where the decoder is trying, even signals too weak to see, and
+  in yellow what it decoded
+- **Two-way SMS:** replies relayed back over JS8 (an SMS answer) reach the
+  Inbox; **Reply by SMS to @number** fills in the phone number, so you only
+  type the text; the gateway's receipt (`ACK04}`) shows as "SMS {04} to
+  @6045551234 delivered" instead of arriving as an Inbox message; SMS,
+  email and Winlink get their full 67 characters
+- **Hold the MFK** on a station to lock it: the knob then only scrolls,
+  `locked: CALL` in red in the TX bar; press another station, hold again or
+  open the Stations view to unlock
+- **Colours and marks as desktop's:** commands in yellow (`SNR?`, `MSG`,
+  `>`, `CQ CQ CQ` ...), desktop's end-of-message mark `♢` on messages whose
+  last frame arrived; your own messages red (as when transmitting) and
+  messages to you blue (the other way round before); your own messages
+  show ` ...` while going out, `♢` once sent, `(stopped 2/5)` if you
+  stopped it
+- Rows without a callsign: the green bar marks those on the selected
+  station's frequency, and with the MFK on one, every row on its frequency
+- **Stations view:** bearing, km or miles, and stations heard through a
+  relay listed *via* it, as on desktop
+- **Settings:** km or miles, how long stations and messages stay listed,
+  decode marks, an operator callsign different from the station's (logged
+  as `OPERATOR`), and **Time Sync now** / **Reset time drift**, moved here
+  from page 3 (that button is the map's view button now)
+- **Heartbeats pause** for 10 minutes after anything you send yourself
+  (not a heartbeat), then carry on by themselves; press HB to resume
+  sooner. Before, any message to you (even an automatic query or a garbled
+  one) switched HB and HB ACK off until you turned them back on
+- The TX bar is half see-through on every page
 
 Fixes:
 
-- Always **USB-D**: a custom frequency on another band (e.g. CB, 27 MHz)
-  brought up that band's last mode, often USB, with the mode keys locked
-- **Smoother waterfall** for less work: 15 rows a second, each on time
-- Noise reduction, noise blanker and notch filters off while JS8 is open
-  (the radio applies them in USB-D too); yours come back when you leave
-- TX filter 160–3000 Hz while JS8 is open, the radio's own default
-- A heartbeat sent by hand restarts the HB timer
-- Show in the Stations view goes back to the messages
-- Spot form: one Frequency row (keyboard; empty = the JS8 dial)
-- Held messages: a delivery counts only once it has gone out in full;
-  asking again gets it again at once; `QUERY MSGS` is answered only with
-  AUTO on, as on desktop
-- Offered relays keep their `*DE*` (the keyboard dropped the `*`)
+- **Messages go out exactly as desktop JS8Call sends them**, checked frame
+  by frame against desktop's own code at all four speeds. Before, desktop
+  read "RR 73" as "RR 31", a message starting with a number lost it, a
+  relay or `MSG TO:` / `QUERY CALL` to a call starting with a digit
+  (2E0ABC) named the wrong station, and messages naming a callsign
+  sometimes took an extra frame at Normal speed
+- **Closing JS8 while it transmits is safe:** GEN, APP or another app in
+  the middle of a frame used to crash the app with the radio still keyed
+  until it restarted; now the frame stops and PTT drops at once
+- The band keys wait until you stop sending ("Not while sending"), as the
+  Freq list does; they used to send the rest of the message on the new
+  band. After a change of band or frequency, automatic answers still
+  waiting are dropped instead of going out on the new one
+- **Automatic replies as desktop sends them:** answers queue (before, a
+  second question or heartbeat while one answer waited replaced it, so a
+  message's ACK could be lost); nothing automatic keys over a message to
+  you that is still arriving; the Log prompt or any other list no longer
+  holds up an unattended station, and AUTO's answers don't count as a QSO
+  for the Log prompt; each station's answer waits on Reply (AUTO off), not
+  just the last one; several held messages can be on their way at once;
+  HB ACKs at most every 55 minutes per station and a question asked again
+  answered again (desktop's rules); heartbeats on desktop's fixed schedule
+  and offset; auto CQ counts only from our CQs; AGN? repeats what actually
+  went out; `QUERY CALL` about a station heard only through a relay is
+  answered; an `@APRSIS MSG` without `TO:` is no longer kept or ACKed
+- **Your messages and settings are safer on the SD card:** a full Inbox
+  (200 messages) no longer stops saving and announcing new ones (they were
+  ACKed but lost); the Inbox, held messages and `js8_texts.txt` are written
+  so that a power cut leaves the old or the new version, never an empty
+  file; a file that can't be read is kept aside as
+  `<name>.unreadable-<date>` and you're told, instead of the next save
+  writing over it; a message that couldn't be saved gets no ACK, so the
+  sender's station knows it didn't arrive; room for ten groups
+- **A smoother screen, lighter work:** idle, JS8 no longer redraws the TX
+  bar and the waterfall frame four times a second (about a million pixels
+  a second for nothing); decoded messages can't be lost when the screen
+  falls behind (a ~50 s stall used to lose every message on the band);
+  waterfall rows, the station lists and the Stations view's worked-before
+  marks cost less; a regular who isn't in your log alerts as a new station
+  once per band, not each time they come back after an hour
+- **Screen and keyboard:** the VOL knob works in every list (Inbox,
+  Settings, APRS, Alerts, Freq, Log); a custom frequency, alert words or
+  log fields can be typed before you've set a callsign, and Send… no
+  longer opens in the frequency editor afterwards; the keyboard takes every
+  character JS8 sends (`` $ % < > [ ] ^ | ~ \ ` ``); a message that's too
+  long says so as you type; the Inbox lists all 200 and opens on the
+  newest unread; info rows ("Auto: ...", "Held message 3 delivered") no
+  longer vanish when the list is rebuilt; a message cut off by a band
+  change stops showing "..."; Hold Speed matches the selected (locked)
+  station
+- **Logging:** Log QSO takes the selected station, a QSO ends on 73, SK or
+  RR73 among the last three words (not "73 DEGREES HERE"), ESC on the
+  prompt means *not now*, and a typed grid must be a real one
+  ([Logging](#logging))
+- **As desktop:** a message to VE7NHW/P isn't to you as VE7NHW; "Reply to
+  HOME" is no longer offered for "... AWAY FROM HOME"; a message to a CQ7
+  call isn't a CQ; a station's grid only comes from its heartbeats, CQs
+  and GRID replies; alert words match with punctuation around them
+  ("SOTA,")
+- **APRS and relays:** a message relayed through many stations keeps its
+  whole path for Reply (desktop has no limit either); a "RETRIEVE MSG"
+  notice that couldn't go out is tried again at the next chance
 
-**Updating from beta 2:** copy your DATA files off first as usual
-(Installing). Your Inbox and held-message files are read as they are and
-gain the relay path from then on.
+All eight packages of the code review's
+[fix plan](docs/review/fix-plan.md) are in (from the full review in
+[docs/review](docs/review/) and the first
+[bug hunt](docs/bug-hunt-2026-09-28.md)), with tests that run on GitHub
+with every change.
 
-## Known issues in beta 3
+**Updating from beta 3:** copy your DATA files off first as usual
+([Installing](#installing)) and put them back: beta 4 reads them as they
+are, and its new settings start at their defaults.
 
-- **Relays and store and forward** follow desktop JS8Call's code but are
-  new: they haven't been tried on the air with desktop stations yet.
-  Reports welcome.
-- **APRS:** the grid spot and sending an SMS are confirmed on the air. POTA
-  and SOTA spots, position messages, email and Winlink are untested through
-  the gateways. **Replies relayed back over JS8 (an SMS answer) are
-  dropped** in beta 3: gateways send them without the checksum beta 3
-  expects. Fixed for beta 4, where two-way SMS is confirmed.
+## Known issues in beta 4
+
+- **Relays and store and forward** follow desktop JS8Call's code but
+  haven't been tried on the air with desktop stations yet. Reports welcome.
+- **APRS:** the grid spot and two-way SMS are confirmed on the air. Reply
+  by SMS's filled-in number and the "delivered" line for the gateway's
+  receipt are new in this release. POTA and SOTA spots, position
+  messages, email and Winlink are untested through the gateways.
+- **The map is new:** tried on the radio, not yet on a busy band. Your own
+  square is orange for now; a Setting to pick its colour is to come.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
 - The main screen's waterfall, seen through JS8's buttons, stands still
@@ -691,128 +760,16 @@ gain the relay path from then on.
 
 ## Coming next
 
-Done for beta 4 so far:
-
-- [x] Your own messages are red (as when transmitting) and messages to you
-  blue; it was the other way round
-- [x] Hold the MFK on a station to lock it: the knob then only scrolls,
-  `locked: CALL` in red in the TX bar; press another station, hold again
-  or open the Stations view to unlock
-- [x] Rows without a callsign: the green bar marks those on the selected
-  station's frequency, and with the MFK on one, every row on its frequency
-  (nobody new is selected)
-- [x] Commands in yellow in the list (`SNR?`, `MSG`, `>`, `CQ CQ CQ` ...),
-  and desktop's end-of-message mark `♢` on messages whose last frame arrived
-- [x] Stations view: bearing column, km or miles (Settings), and stations
-  heard through a relay listed *via* it, as on desktop
-- [x] Settings: how long stations and messages stay listed
-- [x] Settings: an operator callsign different from the station's, logged
-  as `OPERATOR` (shown in the Log popup)
-- [x] Messages go out exactly as desktop JS8Call sends them, checked frame
-  by frame against desktop's own code at all four speeds. Before, desktop
-  read "RR 73" as "RR 31", a message starting with a number lost it, a
-  relay or `MSG TO:` / `QUERY CALL` to a call starting with a digit
-  (2E0ABC) named the wrong station, and messages naming a callsign
-  sometimes took an extra frame at Normal speed
-- [x] APRS replies relayed back over JS8 (e.g. an SMS answer) reach the
-  Inbox; desktop sends them without the checksum we expected. **Two-way
-  SMS confirmed on the air** (2026-09-28, through NR4U's gateway)
-- [x] SMS: **Reply by SMS to @number** in the Inbox fills in the phone
-  number, so you only type the text (not yet on the air: after the beta 4
-  test build)
-- [x] **Closing JS8 while it transmits is safe:** GEN, APP or another app
-  in the middle of a frame used to crash the app with the radio still
-  keyed until it restarted; now the frame stops and PTT drops at once
-- [x] The band keys wait until you stop sending ("Not while sending"), as
-  the Freq list does; they used to send the rest of the message on the new
-  band
-- [x] After a change of band or frequency, automatic answers still
-  waiting are dropped instead of going out on the new one
-- [x] Heartbeats **pause** for 10 minutes after anything you send yourself
-  (not a heartbeat), then carry on by themselves; press HB to resume
-  sooner. Before, any message to you (even an automatic query or a garbled
-  one) switched HB and HB ACK off until you turned them back on
-- [x] **Your messages and settings are safer on the SD card:** a full Inbox
-  (200 messages) no longer stops saving and announcing new ones (they were
-  ACKed but lost); the Inbox, held messages and `js8_texts.txt` are written
-  so that a power cut leaves the old or the new version, never an empty
-  file; a file that can't be read is kept aside as
-  `<name>.unreadable-<date>` and you're told, instead of the next save
-  writing over it; a message that couldn't be saved gets no ACK, so the
-  sender's station knows it didn't arrive; room for ten groups
-- [x] **Automatic replies as desktop sends them:** answers queue (before,
-  a second question or heartbeat while one answer waited replaced it, so
-  a message's ACK could be lost); nothing automatic keys over a message
-  to you that is still arriving; the Log prompt or any other list no
-  longer holds up an unattended station, and AUTO's answers don't count
-  as a QSO for the Log prompt; each station's answer waits on Reply (AUTO
-  off), not just the last one; several held messages can be on their way
-  at once; HB ACKs at most every 55 minutes per station and a question
-  asked again answered again (desktop's rules); heartbeats on desktop's
-  fixed schedule and offset; auto CQ counts only from our CQs; AGN? repeats
-  what actually went out; `QUERY CALL` about a station heard only through
-  a relay is answered; an `@APRSIS MSG` without `TO:` is no longer kept
-  or ACKed
-- [x] **Show Map:** the stations of this frequency on a world map in
-  GridTracker's style — grid squares, curved paths to who heard you,
-  callsign placement without a grid, new stations popping up (NEW DXCC /
-  NEW GRID from your QSO log), paths turning red in a QSO, QRZ, CQ tags,
-  fading squares, your continent close-in and the world when DX is heard
-  ([The map](#the-map))
-- [x] **Time Sync moved to Settings** (*Time Sync now*, *Reset time
-  drift*): its page 3 button is the map's view button now
-- [x] **Decode marks** on the waterfall (Settings), as desktop's *Show
-  decode attempts*: see where the decoder is trying, even signals too
-  weak to see, and in yellow what it decoded
-- [x] **A smoother screen, lighter work:** idle, JS8 no longer redraws
-  the TX bar and the waterfall frame four times a second (about a million
-  pixels a second for nothing); decoded messages can't be lost when the
-  screen falls behind (a ~50 s stall used to lose every message on the
-  band); waterfall rows, the station lists and the Stations view's
-  worked-before marks cost less; a regular who isn't in your log alerts as
-  a new station once per band, not each time they come back after an hour
-- [x] **Screen and keyboard fixes:** the VOL knob works in every list
-  (Inbox, Settings, APRS, Alerts, Freq, Log); a custom frequency, alert
-  words or log fields can be typed before you've set a callsign, and
-  Send… no longer opens in the frequency editor afterwards; the keyboard
-  takes every character JS8 sends (`` $ % < > [ ] ^ | ~ \ ` ``); a message
-  that's too long says so as you type; Log QSO, the end of a QSO and typed
-  grids as described in [Logging](#logging); the Inbox lists all 200;
-  info rows ("Auto: ...", "Held message 3 delivered") no longer vanish
-  when the list is rebuilt; a message cut off by a band change stops
-  showing "..."; as desktop, a message to VE7NHW/P isn't to you as
-  VE7NHW, and "Reply to HOME" is no longer offered for "... AWAY FROM
-  HOME"; alert words match with punctuation around them ("SOTA,"); a
-  message to a CQ7 call isn't a CQ; Hold Speed matches the selected
-  (locked) station
-- [x] **APRS and SMS:** the gateway's receipt (`ACK04}`) shows as "SMS
-  {04} to @6045551234 delivered" instead of arriving as an Inbox message;
-  SMS, email and Winlink get their full 67 characters (the `{04}` counted
-  against them before); a message relayed through many stations keeps its
-  whole path for Reply (desktop has no limit either); a "RETRIEVE MSG"
-  notice that couldn't go out is tried again at the next chance
-- [x] **Your own messages** show how they went: ` ...` while going out, the
-  end mark `♢` once the last frame has (as desktop JS8Call ends its own
-  sent line), `(stopped 2/5)` if you stopped it or closed JS8. Only your
-  screen changes: other stations already saw the `♢` on your messages
-- [x] **The code review's fixes:** all eight packages of
-  [docs/review/fix-plan.md](docs/review/fix-plan.md) are done (from the
-  full review in [docs/review](docs/review/) and the first
-  [bug hunt](docs/bug-hunt-2026-09-28.md)), including tests that run on
-  GitHub with every change; a few low-priority items are left for later
-  there
-
-Still to do:
-
 - [ ] On-air tests: relays and store and forward with desktop JS8Call
   stations, the other APRS gateways (POTA, SOTA, email, Winlink), a long
   message watched to the end
 - [ ] Performance: measure each part's CPU use on the radio and spread the
   work over its four cores (the screen drawing and the JS8 decoder each
   lean on one core today)
-- [ ] Show Map: tried on the radio (it's in the beta 4 test builds from
-  now on); still to come: a Setting for your map colour, polish from use
-  on the air ([docs/MAP_PLAN.md](docs/MAP_PLAN.md))
+- [ ] Show Map: a Setting for your own square's colour, polish from use on
+  the air ([docs/MAP_PLAN.md](docs/MAP_PLAN.md))
+- [ ] A few low-priority items left in the
+  [fix plan](docs/review/fix-plan.md)
 
 Ideas for later:
 
@@ -828,7 +785,7 @@ This is a beta: reports from testing are very welcome.
 
 - **Bugs and problems:** open an issue in
   [Issues](https://github.com/randal007/x6100-js8/issues). Please say which
-  release you're running (e.g. `js8-beta3`), the band and speed, what you
+  release you're running (e.g. `js8-beta4`), the band and speed, what you
   did, what you expected and what happened. A photo or screenshot of the
   radio's screen helps, and so does the `app_logs` folder from the SD card's
   DATA partition if the app closed or froze.
