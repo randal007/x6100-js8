@@ -202,14 +202,31 @@ desktop (no limit).
 
 ### WP7: Tools and CI (effort M; any time, no radio needed)
 
+**Decided 2026-09-30 (your answers):** D9: **no**, Buildroot and the
+third-party actions stay unpinned (item 2 skipped). J: the unit tests run
+on GitHub on every push; the full harness is a separate job started by
+hand. K: the tag trigger (and its Release step) goes; builds stay manual.
+L: `x6100-flash` without a run id lists the newest successful builds and
+asks. I-24, I-23 as planned; I-22 later.
+
 | Item | Verdict | The fix |
 |---|---|---|
 | **I-20** tests not in CI | **Fix** | A job on push: `run_tests.sh` (already builds `test_js8`) with `~[.slow]`, then the harness; the image build stays manual. |
-| **I-21** unpinned buildroot and actions; tags never build | **Fix** (D9) | `ref:` on the buildroot checkout; actions pinned to SHAs; one test tag to see whether the tag trigger works, else remove it from the workflow and the README. |
+| **I-21** unpinned buildroot and actions; tags never build | **Tags only** (D9: no pinning, your call; K) | `ref:` on the buildroot checkout; actions pinned to SHAs; one test tag to see whether the tag trigger works, else remove it from the workflow and the README. |
 | **B-27** `x6100-flash` default build | **Fix, small** | No default: it lists the newest successful builds and asks. |
 | **I-24** flash checks | **Fix, small** | Check the image's partition table (two partitions ending at DATA's start); a unique backup folder. |
 | **I-23** console safety | **Fix** | `cmd`/`send` refuse at a login or password prompt or the Xiegu banner; stale PID detected; default port `ttyACM0`; log rotated, `tail` from the end. |
 | **I-22** WAV test mode in the firmware; warnings | **Later** | Harmless dead code; warnings would first need a clean-up pass. |
+
+**Status:** done in d729111 (the workflows; K: only the tag *trigger* went: the three betas were
+published by starting *Build image* by hand on the tag, which runs the Release step, so that step
+stays) and, outside the repo, `~/Work/bin/x6100-flash` (no default: lists the newest successful
+builds and asks; checks the image's partition table; unique backup folders) and
+`~/Work/bin/x6100-console` (cmd/send refuse while the radio boots or shows the stock Xiegu login or
+banner, cmd also at the login/password prompt, `--force` overrides; stale `daemon.pid` detected;
+default `/dev/ttyACM0`; the log rotated at 4 MB when the daemon starts; `tail` reads from the end).
+Both were tested without the card or the radio: the flash script with a made-up card serial (stops at
+"Card not found") and fake images with wrong layouts; the console on a socat pty with a fake radio.
 
 ### WP8: Docs (with the release)
 

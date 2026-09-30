@@ -57,7 +57,7 @@ Combining this review with the earlier bug hunt (BH-n):
 | B-24 | F74, F76 | ~~A QSO left unlogged stays first in Log QSO for good~~ **fixed in 3e20282** | low | confirmed |
 | B-25 | F88 | ~~A stalled screen can silently drop decoded messages (64-item scheduler queue)~~ **fixed in 68fd0fe** | low | possible |
 | B-26 | F83 | ~~Alert words miss a word with punctuation attached ("SOTA,")~~ **fixed in 3e20282** | low | confirmed |
-| B-27 | F99 | `x6100-flash` with no argument writes an old build (18ebf06) | low | confirmed |
+| B-27 | F99 | ~~`x6100-flash` with no argument writes an old build (18ebf06)~~ **fixed (outside the repo, package 7)** | low | confirmed |
 
 ## Batch 1: Transmitting and the radio
 
@@ -627,6 +627,8 @@ comparing (keep `@` and `/`).
 ## Batch 10: Engine, build, tests, tools, docs
 
 ### B-27. `x6100-flash` with no argument writes an old build — low, confirmed
+
+**Fixed** (package 7, 2026-09-30; the script is outside the repo): no default any more: without a run id it lists the five newest successful *Build image* runs on `main` (run, date, commit) and asks, 1 = the newest.
 
 **Update 2026-09-28:** the builder session moved the default to CI 36507712183; it will go stale again, so the plan's fix (no default: list the newest successful builds and ask) is still to do in WP7.
 

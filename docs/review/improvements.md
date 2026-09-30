@@ -35,11 +35,11 @@ numbers refer to that commit.
 | I-17 | F58, F62 | ~~Forget expired stations; look one up without copying the list~~ **done in 68fd0fe** | efficiency | medium |
 | I-18 | F63, F67, F40 | ~~One "from a popup into the keyboard" helper~~ **fixed in 3e20282** | simplify | medium |
 | I-19 | F75 | Keep `MODE_JS8`'s number clear of upstream's | robustness | low |
-| I-20 | F95, F96, F97 | Run the unit tests and the harness in CI | tests | high |
+| I-20 | F95, F96, F97 | ~~Run the unit tests and the harness in CI~~ **done in d729111** | tests | high |
 | I-21 | F97 | Pin buildroot and the third-party actions; find out why tags never build | robustness | medium |
 | I-22 | F94, F98 | Leave the WAV test mode out of the firmware; compiler warnings on | simplify | low |
-| I-23 | F100 | `x6100-console`: refuse to type into a login prompt, and tidy up | robustness | medium |
-| I-24 | F99 | `x6100-flash`: no stale default, check the image's partition table | robustness | low |
+| I-23 | F100 | ~~`x6100-console`: refuse to type into a login prompt, and tidy up~~ **done (outside the repo, package 7)** | robustness | medium |
+| I-24 | F99 | ~~`x6100-flash`: no stale default, check the image's partition table~~ **done (outside the repo, package 7)** | robustness | low |
 | I-25 | F101 | README: two stale button rows, one number, and a link to this review | docs | low |
 
 ## Batch 1: Transmitting and the radio
@@ -314,6 +314,8 @@ Android-port#104).
 
 ### I-20. Run the unit tests and the harness in CI — tests, high
 
+**Done in d729111** (package 7, J): `.github/workflows/tests.yml`, the unit tests on every push; the harness when started by hand with *harness* ticked.
+
 `.github/workflows/main.yml` builds the SD image and nothing else: the 95
 Catch2 tests (`tests/test_js8.cpp`, `run_tests.sh`) and the UI harness
 (`tools/js8_ui_harness`, ASan/UBSan) only run when someone runs them on
@@ -323,6 +325,8 @@ before the hour-long image build would catch regressions on GitHub, and
 I-01's close-while-keyed case would then guard B-01 for good.
 
 ### I-21. Pin buildroot and the third-party actions; find out why tags never build — robustness, medium
+
+**Partly done in d729111** (package 7): the tag trigger removed (it never fired; releases come from starting *Build image* by hand on the tag, which keeps its Release step). Pinning Buildroot and the actions: **not done** (D9, your call).
 
 - `gdyuldin/AetherX6100Buildroot` is checked out at whatever its default
   branch is that day: the same commit can build a different image, and
@@ -348,6 +352,8 @@ check part of every build.
 
 ### I-23. `x6100-console`: refuse to type into a login prompt, and tidy up — robustness, medium
 
+**Done** (package 7, outside the repo): cmd/send refuse while the radio boots or shows the stock Xiegu login or banner, cmd also at the login or password prompt (`--force` overrides); stale `daemon.pid` removed with a clear message; default `/dev/ttyACM0`; `console.log` rotated to `console.log.1` when the daemon starts with it over 4 MB; `tail` reads from the end. Tested on a socat pty with a fake radio.
+
 `~/Work/bin/x6100-console` (outside the repo):
 - `cmd` and `send` type into whatever the console shows. The rule "tail
   first; at a login, a password prompt or the stock Xiegu banner, send
@@ -363,6 +369,8 @@ check part of every build.
   from the end.
 
 ### I-24. `x6100-flash`: no stale default, check the image's partition table — robustness, low
+
+**Done** (package 7, outside the repo): the image's own partition table is checked before anything is written (BOOT + rootfs ending at `P3_START`; tested with fake images laid out wrong); backup folders carry the seconds and never reuse an existing one.
 
 Besides B-27: the script only checks the image isn't bigger than DATA's
 start. It could also check the image's own partition table (two
