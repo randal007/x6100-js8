@@ -330,6 +330,7 @@ static struct {
     char    call[JS8_RX_CALL_LEN];
     int64_t until_ms; /* monotonic */
 } cq_heard[CQ_HEARD_N];
+static int64_t my_cq_until_ms; /* monotonic: our own CQ, the tag on our square too (VE7NHW) */
 static void cq_heard_add(const char *call);
 static bool cq_heard_on(const char *call, int64_t now);
 static int64_t now_mono_ms(void);
@@ -2025,6 +2026,7 @@ static void ui_tx_done(void *arg) {
         auto_cq_next_ms = auto_cq_from_ms + cq_interval_ms();
         if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
     }
+    if (tx_cq && completed) my_cq_until_ms = now_mono_ms() + CQ_HEARD_MS; /* as others' CQs on the map */
     tx_cq = false;
 
     /* Replies that arrived while we were sending. */
@@ -3854,6 +3856,8 @@ static void map_update(bool force) {
         sig = map_hash(sig, &talk_age[t], sizeof(talk_age[t]));
     }
     sig            = map_hash(sig, &transmitting, sizeof(transmitting));
+    bool my_cq     = (tx_cq && transmitting) || my_cq_until_ms > now; /* sending one, or sent in the last 5 min */
+    sig            = map_hash(sig, &my_cq, sizeof(my_cq));
     sig            = map_hash(sig, sel_call, strlen(sel_call));
     sig            = map_hash(sig, &map_heard_me_only, sizeof(map_heard_me_only));
     sig            = map_hash(sig, &have_home, sizeof(have_home));
@@ -3957,14 +3961,18 @@ static void map_update(bool force) {
     }
 
     /* You; outlined red while transmitting (as the TX bar turns red), also
-     * between the frames of a longer message. */
+     * between the frames of a longer message; the "CQ" tag while you call
+     * CQ and for 5 min after, as other stations get it. */
+    bool      my_badge = false;
+    lv_area_t my_badge_box;
     if (have_home) {
         int             hx, hy;
         js8_map_place_t me = home;
         me.approx          = strlen(params.qth.x) < 4;
-        map_station_mark(params.qth.x, &me, MAP_HOME, 220, MAP_HOME, LV_OPA_COVER, 0, &hx, &hy);
+        int hside = map_station_mark(params.qth.x, &me, MAP_HOME, 220, MAP_HOME, LV_OPA_COVER, 0, &hx, &hy);
         if (transmitting) map_rect(hx - 10, hy - 10, 21, 21, 0, LV_OPA_TRANSP, MAP_TX, 3, 0);
         map_tx_drawn = transmitting;
+        my_badge     = my_cq && map_badge_box(hx, hy, transmitting ? 21 : hside, "CQ", &my_badge_box);
         map_take(hx - 6, hy - 6, hx + 6, hy + 6); /* no label over you */
         map_label(hx, hy, params.callsign.x, MAP_HOME, 0x000000, 170, 8, true);
     }
@@ -4025,6 +4033,7 @@ static void map_update(bool force) {
 
     for (int i = 0; i < st_count; i++)
         if (badge[i]) map_badge(&badge_box[i], "CQ");
+    if (my_badge) map_badge(&my_badge_box, "CQ");
     map_corners_apply();
     lv_obj_invalidate(map_canvas);
 }

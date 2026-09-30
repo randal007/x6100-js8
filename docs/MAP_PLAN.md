@@ -246,7 +246,9 @@ uses). *Heard me* adds the path.
    corners are read from the theme's dialog image when the map is made and
    put back over the map's corners after each redraw
    (`map_corners_load()`, `map_corners_apply()`); the TX bar gets rounded
-   corners on the map so its see-through black stays off them.
+   corners on the map so its see-through black stays off them. Your own
+   CQ gets the **CQ** tag on your square too, while it goes out and for
+   5 min after a CQ sent in full (`my_cq_until_ms`, set in `ui_tx_done()`).
    Still to come: a Setting for your colour.
 5. **On the air**, then a beta.
 

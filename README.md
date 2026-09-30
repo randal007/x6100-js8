@@ -241,7 +241,8 @@ white border.
   pixels at most, so they don't take over).
 - **CQ** tag: on a station's corner for 5 minutes after it called CQ (and
   its row in the Stations view is green for those 5 minutes, the green of
-  CQ rows in the message list).
+  CQ rows in the message list). Yours too: on your square while your CQ
+  goes out and for 5 minutes after it.
 - **Grey lines:** other stations talking to each other (`W7XYZ: K9DEF
   HW CPY?`), a relay's hops too, fading out over 10 minutes; drawn when
   both ends are on the map.
