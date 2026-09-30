@@ -67,6 +67,8 @@ the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
 - **JS8Call's, GhostNet's or your own frequencies** on the band keys.
 - **Time Sync** from the decodes, and a Stations view of who is on and who
   heard you.
+- **A map** of the stations heard, in GridTracker's style: paths to who
+  heard you, new stations popping up, your continent or the world.
 - **Decode marks** on the waterfall (optional), as desktop's *Show decode
   attempts*: where the decoder is trying, even signals too weak to see.
 
@@ -196,9 +198,11 @@ named in a relay that reached you show *via* the station that passed it
 on, as on desktop. Stations drop off an hour after they were last heard
 (*Stations kept* in [Settings](#settings)).
 
-**Grids** come from heartbeats, CQs and messages. Longer grids are kept to
-6 characters, the most precise one wins, and the `RR73` sign-off is never
-mistaken for a grid.
+**Grids** come from heartbeats, CQs and `GRID` replies (`GRID FN42AB`
+anywhere in a message counts too), as on desktop; another grid-shaped word
+in a message (`MY DAUGHTER LIVES IN EM12`) doesn't. Longer grids are kept
+to 6 characters, the most precise one wins, and the `RR73` sign-off is
+never mistaken for a grid.
 
 ## The map
 
@@ -291,12 +295,12 @@ to go back a page. In JS8 a hold is half a second.
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
 | 3 | **Map: Auto / Close-in / World** | Only while [the map](#the-map) shows (blank otherwise): which part of the world it shows. **Hold: Follow** the selected station (you and them framed, the long path too); press to stop. *Time Sync* moved to Settings to make room. |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
-| 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off an hour after it was last heard. |
+| 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off when it hasn't been heard for *Stations kept* ([Settings](#settings); an hour to start). |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
 | 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. Shows *paused* for 10 minutes after you send something; press it then to resume at once. |
 | 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and HB on, as on desktop). |
-| 4 | **Settings…** | INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay on/off and your groups: see [Settings](#settings). |
+| 4 | **Settings…** | Time Sync, INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay, your groups, how long stations and messages stay listed, km or miles, decode marks and an operator's call: see [Settings](#settings). |
 | 5 | **APRS >** | [APRS](#aprs) spots and messages. |
 | 5 | **Log QSO** | [Log](#logging) the QSO that just ended, or the selected station if you've selected someone else since. |
 | 5 | **Activ.: Off / POTA / SOTA** | Activating a park or summit: added to every log entry. Hold to type it. |
@@ -306,8 +310,9 @@ to go back a page. In JS8 a hold is half a second.
 | 6 | **Decode: All speeds / My speed** | Decode every speed (default), or only yours. |
 | 6 | **Freq: JS8 / GhostNet / kHz** | Which frequencies the band keys step through: **JS8Call's** (7.078, 14.078 …) or **GhostNet's** (3.575, 7.107, 14.107 MHz), tuning the closest one. Or **Custom kHz…**: type a dial frequency (e.g. `7107.5`; the last one is filled in). The band keys go from a custom frequency back to the list. |
 
-While a list is open (Query, Settings…, APRS, Log, Inbox, Alerts), any other
-button just closes it; press again to do the thing. ESC closes lists too.
+While a list is open (Query, Settings…, APRS, the POTA/SOTA spot form, Log,
+Inbox, Alerts, Freq), any other button just closes it; press again to do
+the thing. ESC closes lists too, and the VOL knob works in all of them.
 
 | Query list | Log popup |
 |---|---|
@@ -464,7 +469,7 @@ Page 4 **Settings…**:
 | **Relay: On / Off** | Press to switch. On (the default, as on desktop): relays are passed on and `MSG TO:` messages held for others. Off: both are ignored (desktop's *Disable message relay*). |
 | **Groups: …** | The groups you're in, e.g. `@NET @CANADA` (desktop's *My groups*): messages and questions to them are answered as if to you, and `MSG TO:@NET` messages are held for their members. |
 | **Stations kept: …** | Press to change: how long a station stays in the Stations view after it was last heard (15 min to 6 hours, or always; 1 hour to start). |
-| **Messages kept: …** | Press to change: messages leave the list this long after they arrived (15 min to 2 hours), or *all* (the default: the newest 200 stay). |
+| **Messages kept: …** | Press to change: messages leave the list this long after they arrived (15 min to 2 hours), or *all* (the default: the list keeps the newest 150 to 200 messages; it's trimmed back to 150 when it reaches 200). |
 | **Distance: km / miles** | Press to switch the Stations view's distances (km to start). |
 | **Decode marks: On / Off** | Press to switch the [decode marks](#the-screen) on the waterfall (off to start, as desktop). |
 | **Operator: …** | Someone else operating your station (desktop's *Operator Callsign*): their call goes in the log as `OPERATOR`; your station call is still what's sent on the air and logged as `STATION_CALLSIGN`. Empty: the station call. |
@@ -541,8 +546,7 @@ test build, through NR4U's gateway on 40 m): texts from a phone arrive in
 the Inbox as `@6045551234 <text> DE SMS`, and a reply goes back to the
 phone: open the text in the Inbox and choose **Reply by SMS to
 @6045551234**; the keyboard opens with the number filled in, so you only
-type your text (from the next build on; the beta 4 test build opens the
-line empty). The gateway's receipt for your reply (`ACK04}`) shows as
+type your text. The gateway's receipt for your reply (`ACK04}`) shows as
 **SMS {04} to @6045551234 delivered** on the message line and in the list
 (or *rejected by the gateway* for a `REJ04}`); it isn't an Inbox message.
 The app remembers what you sent until the radio is switched off. Beta 3
@@ -605,7 +609,7 @@ All on the **DATA** partition, readable on a PC:
 | `js8call_log.adi` | your JS8 log (ADIF) |
 | `js8_inbox.txt` | Inbox messages, one per line |
 | `js8_held.txt` | messages held for other stations |
-| `js8_texts.txt` | INFO, STATUS, last POTA/SOTA references, spot frequency/mode/comment, alert words, groups |
+| `js8_texts.txt` | INFO, STATUS, last POTA/SOTA references, spot frequency/mode/comment, alert words, groups, operator's call |
 | `params.db`, `qso_log.db` | the radio's settings and QSO database |
 | `incoming_log.adi` | put an ADIF log here to import it (worked-before marks) at the next start |
 
@@ -679,10 +683,11 @@ gain the relay path from then on.
   way to the end.
 - The main screen's waterfall, seen through JS8's buttons, stands still
   while JS8 is open (cosmetic).
-- If the radio loses power while JS8 is open, the USB-D receive filter
-  stays at 200–3000 Hz, which suits digital modes; set yours back by hand
-  if it was different. Leaving the app normally puts it back. Not planned
-  to change.
+- If the radio loses power, or you switch it off by holding POWER, while
+  JS8 is open, the USB-D receive filter stays at 200–3000 Hz, which suits
+  digital modes; set yours back by hand if it was different. Leaving the
+  app first (ESC) puts it back. Not planned to change (the power-off path
+  is shared with the whole radio).
 
 ## Coming next
 
@@ -790,14 +795,15 @@ Done for beta 4 so far:
   end mark `♢` once the last frame has (as desktop JS8Call ends its own
   sent line), `(stopped 2/5)` if you stopped it or closed JS8. Only your
   screen changes: other stations already saw the `♢` on your messages
+- [x] **The code review's fixes:** all eight packages of
+  [docs/review/fix-plan.md](docs/review/fix-plan.md) are done (from the
+  full review in [docs/review](docs/review/) and the first
+  [bug hunt](docs/bug-hunt-2026-09-28.md)), including tests that run on
+  GitHub with every change; a few low-priority items are left for later
+  there
 
 Still to do:
 
-- [ ] Fix the rest of the bugs found by reading the code: the plan, in
-  order, is [docs/review/fix-plan.md](docs/review/fix-plan.md) (from the
-  full review in [docs/review](docs/review/) and the first
-  [bug hunt](docs/bug-hunt-2026-09-28.md); next: the build and test tools,
-  then the docs)
 - [ ] On-air tests: relays and store and forward with desktop JS8Call
   stations, the other APRS gateways (POTA, SOTA, email, Winlink), a long
   message watched to the end
@@ -849,7 +855,7 @@ JS8 app by VE7NHW.
 - **Design notes:** [docs/RESEARCH.md](docs/RESEARCH.md) (JS8 vs FT8, why
   this engine), [docs/TX_PLAN.md](docs/TX_PLAN.md) (transmitting),
   [docs/T6_PLAN.md](docs/T6_PLAN.md) (speeds),
-  [docs/MAP_PLAN.md](docs/MAP_PLAN.md) (the planned map view).
+  [docs/MAP_PLAN.md](docs/MAP_PLAN.md) (the map view).
 - **Known bugs:** found by reading the code, in
   [docs/review/](docs/review/) (a feature-by-feature review: bugs,
   improvements, and the [fix plan](docs/review/fix-plan.md) in work

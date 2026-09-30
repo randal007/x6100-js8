@@ -54,3 +54,26 @@ git submodule update
 cd buildroot
 ./build.sh
 ```
+
+## Merging upstream: numbers the JS8 fork has taken
+
+Three things the JS8 fork added are numbered, and the numbers are stored on
+the SD card's DATA partition, which survives reflashing. When merging
+upstream (gdyuldin/x6100_gui), keep ours and give upstream's new ones the
+next free numbers, or cards already in use get mixed up:
+
+- **`params.db` migrations** (`src/params/migrations.c`): ours are 4
+  (`_4_add_js8_presets`) and 5 (`_5_add_ghostnet_presets`), after
+  upstream's 0–3. A card already at version 5 skips any migration 4 or 5
+  upstream adds, so put upstream's after ours (6, 7 …). Ours only
+  `INSERT OR IGNORE`, so running them again is harmless.
+- **`qso_log.db` mode** (`src/qso_log.h`): `MODE_JS8` = 8, appended after
+  upstream's `MODE_RTTY` = 7, is stored in every JS8 QSO (worked-before
+  marks, ADIF export). A mode upstream adds gets 9 or later; renumbering
+  JS8 would mean updating the QSO database on every card.
+- **Long-press actions** (`src/params/params.h`): `ACTION_APP_JS8` is
+  appended to `press_action_t` (after 1KO125's WeFax and NavTex) and its
+  value is saved in the settings: keep it where it is.
+
+(Decided 2026-09-30, review D10: write the rule down rather than renumber
+now, which would need database surgery on existing cards.)
