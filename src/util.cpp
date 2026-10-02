@@ -26,19 +26,6 @@ extern "C" {
     #include <errno.h>
 }
 
-/**
- * Return time in ms from unix epoch
- */
-uint64_t get_time() {
-    struct timespec now;
-
-    clock_gettime(CLOCK_MONOTONIC, &now);
-
-    uint64_t usec = (uint64_t) now.tv_sec * 1000L + now.tv_nsec / 1000000L;
-
-    return usec;
-}
-
 void get_time_str(char *str, size_t str_size) {
     time_t      now = time(NULL);
     struct tm   *t = localtime(&now);
@@ -73,10 +60,12 @@ void lpf(float *x, float current, float beta, float initial) {
 
 }
 
-void lpf_block(float *x, float *current, float beta, unsigned int count) {
-    liquid_vectorf_mulscalar(current, count, (1.0f - beta), current);
-    liquid_vectorf_mulscalar(x, count, beta, x);
-    liquid_vectorf_add(x, current, count, x);
+void lpf_block(float *x, const float *current, float beta, unsigned int count) {
+    const float a = 1.0f - beta;
+
+    for (unsigned int i = 0; i < count; i++) {
+        x[i] += a * (current[i] - x[i]);
+    }
 }
 
 char * util_canonize_callsign(const char * callsign, bool strip_slashes) {

@@ -8,8 +8,9 @@
 
 #include "band_info.h"
 
+#include "display.h"
+
 extern "C" {
-    #include "backlight.h"
     #include "events.h"
     #include "pubsub_ids.h"
     #include "styles.h"
@@ -21,8 +22,6 @@ extern "C" {
 #include "cfg/db.h"
 #include "cfg/subject.h"
 
-// For params.waterfall_zoom.x (params.h already has its own extern "C" guards)
-#include "params/params.h"
 
 #include <memory>
 #include <vector>
@@ -31,7 +30,6 @@ extern "C" {
 
 static lv_obj_t    *obj;
 
-static lv_coord_t   band_info_height = 24;
 static int32_t      width_hz         = 100000;
 static uint64_t     freq;
 static lv_anim_t    fade;
@@ -65,10 +63,7 @@ static void band_info_draw_cb(lv_event_t *e) {
         return;
     }
 
-    uint8_t current_zoom = 1;
-    if (params.waterfall_zoom.x) {
-        current_zoom = zoom;
-    }
+    uint8_t current_zoom = zoom;
 
     lv_coord_t x1 = obj->coords.x1;
     lv_coord_t y1 = obj->coords.y1;
@@ -108,7 +103,7 @@ static void band_info_draw_cb(lv_event_t *e) {
 
         lv_draw_rect_dsc_init(&rect_dsc);
 
-        rect_dsc.bg_color     = bg_color;
+        rect_dsc.bg_color     = style.colors.mark;
         rect_dsc.bg_opa       = LV_OPA_50;
         rect_dsc.border_width = 2;
         rect_dsc.border_color = lv_color_white();
@@ -127,7 +122,7 @@ static void band_info_draw_cb(lv_event_t *e) {
         lv_draw_label_dsc_t dsc_label;
         lv_draw_label_dsc_init(&dsc_label);
 
-        dsc_label.color = lv_color_white();
+        dsc_label.color = colors.base_text_color;
         dsc_label.font  = &sony_22;
 
         lv_point_t label_size;
@@ -156,8 +151,8 @@ extern "C" lv_obj_t *band_info_init(lv_obj_t *parent) {
     bands = BandsTable::all_bands();
     obj   = lv_obj_create(parent);
 
-    lv_obj_set_size(obj, lv_obj_get_width(parent), band_info_height);
-    lv_obj_align(obj, LV_ALIGN_CENTER, 0, -lv_obj_get_height(parent) / 2 + 18);
+    lv_obj_set_size(obj, LV_PCT(100), BAND_INFO_HEIGHT);
+    lv_obj_align(obj, LV_ALIGN_TOP_MID, 0, BAND_INFO_OFFSET_Y);
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 
     lv_obj_set_style_radius(obj, 0, 0);
@@ -172,17 +167,14 @@ extern "C" lv_obj_t *band_info_init(lv_obj_t *parent) {
     lv_anim_set_exec_cb(&fade, fade_anim);
     lv_anim_set_ready_cb(&fade, fade_ready);
 
-    zoom_sub = Subscription(cfg_mode_zoom->subscribe(on_zoom_changed, nullptr));
-    on_zoom_changed(cfg_mode_zoom, nullptr);
-    freq_sub = Subscription(cfg_fg_freq->subscribe_delayed(on_freq_changed, nullptr));
-    on_freq_changed(cfg_fg_freq, nullptr);
-    if_shift_sub = Subscription(cfg_band_if_shift->subscribe_delayed(on_if_shift_changed, nullptr));
-    on_if_shift_changed(cfg_band_if_shift, nullptr);
+    zoom_sub = Subscription(cfg.mode.zoom()->subscribe_and_notify(on_zoom_changed));
+    freq_sub = Subscription(cfg.cur.fg_freq()->subscribe_delayed_and_notify(on_freq_changed));
+    if_shift_sub = Subscription(cfg.band.if_shift()->subscribe_delayed_and_notify(on_if_shift_changed));
 
     return obj;
 }
 
-extern "C" void band_info_update(int32_t f) {
+static void band_info_update(int32_t f) {
     freq = f;
 
     lv_obj_invalidate(obj);
@@ -203,6 +195,7 @@ extern "C" void band_info_update(int32_t f) {
 
 static void on_zoom_changed(Subject *subj, void *user_data) {
     zoom = static_cast<ParamInt *>(subj)->get();
+    lv_obj_invalidate(obj);
 }
 
 static void on_freq_changed(Subject *subj, void *user_data) {
@@ -211,4 +204,5 @@ static void on_freq_changed(Subject *subj, void *user_data) {
 
 static void on_if_shift_changed(Subject *subj, void *user_data) {
     if_shift = static_cast<ParamInt *>(subj)->get();
+    lv_obj_invalidate(obj);
 }

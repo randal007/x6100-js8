@@ -10,16 +10,13 @@
 
 #include "mfk.h"
 #include "vol.h"
-#include "cfg/cfg_api.h"
+#include "cfg/subject_api.h"
 
 #define BUTTONS 5
-#define BTN_HEIGHT 62
-#define BTN_WIDTH 160
 
 
 #ifdef __cplusplus
 
-#include "params/params.h"
 
 extern "C" {
 #endif

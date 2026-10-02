@@ -9,23 +9,24 @@
 
 #include "wifi.h"
 
-extern "C" {
-
-#include "msg.h"
-#include "params/params.h"
-#include "pubsub_ids.h"
-
-#include <aether_radio/x6100_control/low/gpio.h>
-#include <glib.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-}
-
 #include <string>
 #include <map>
 #include <vector>
 #include <array>
+
+#include <glib.h>
+
+#include "globals.h"
+#include "cfg/cfg_api.h"
+
+#include "pubsub_ids.h"
+
+extern "C" {
+
+#include <aether_radio/x6100_control/low/gpio.h>
+#include "msg.h"
+
+}
 
 #define WLAN_IFACE "wlan0"
 #define EMPTY_SSID_STR "--"
@@ -36,9 +37,6 @@ static NMDevice  *device = NULL;
 
 static lv_timer_t *loop_timer;
 static lv_timer_t *scan_timer = NULL;
-
-// static wifi_ap_change_cb ap_add_cb=NULL;
-// static wifi_ap_change_cb ap_del_cb=NULL;
 
 static wifi_status_t status = WIFI_OFF;
 static bool          scanning = false;
@@ -54,10 +52,9 @@ static void fill_access_point_info(GBytes *active_ssid, NMAccessPoint *ap, wifi_
 static void set_status(wifi_status_t val);
 
 static void device_added_sig_cb(NMClient *client, GObject *device, gpointer user_data);
+static void device_removed_sig_cb(NMClient *client, GObject *device, gpointer user_data);
 static void device_state_changed_sig_cb(NMDevice *device, guint new_state, guint old_state, guint reason,
                                         gpointer user_data);
-// static void access_point_added_sig_cb(NMDeviceWifi *device, GObject *ap, gpointer user_data);
-// static void access_point_removed_sig_cb(NMDeviceWifi *device, GObject *ap, gpointer user_data);
 static void active_con_state_changed_sig_cb(NMActiveConnection *active_connection, guint state, guint reason,
                                             gpointer user_data);
 
@@ -68,6 +65,7 @@ static void connection_adding_and_activating_cb(GObject *client, GAsyncResult *r
 static void connection_modify_cb(GObject *connection, GAsyncResult *result, gpointer user_data);
 static void connection_delete_cb(GObject *connection, GAsyncResult *result, gpointer user_data);
 static void connection_activating_cb(GObject *client, GAsyncResult *result, gpointer user_data);
+static gboolean safe_cleanup(gpointer user_data);
 
 void wifi_power_setup() {
     set_status(WIFI_DISCONNECTED);
@@ -81,15 +79,36 @@ void wifi_power_setup() {
     }
     loop_timer = lv_timer_create(loop_iterations_cb, 30, NULL);
 
-    if (params.wifi_enabled.x)
+    if (cfg.network.wifi_enabled()->get())
         wifi_power_on();
     else
         wifi_power_off();
 }
 
+void wifi_cleanup() {
+    g_print("\nExecuting clean shutdown sequence...\n");
+
+    if (device) {
+        device = NULL;
+    }
+
+    if (client) {
+        g_object_unref(client);
+        client = NULL;
+        g_print("NMClient unreferenced and D-Bus handles cleared.\n");
+    }
+
+    if (loop) {
+        g_main_loop_unref(loop);
+        loop = NULL;
+    }
+
+    g_print("Clean exit.\n");
+}
+
 void wifi_power_on() {
     LV_LOG_USER("Power on wifi/bt");
-    params_bool_set(&params.wifi_enabled, true);
+    cfg.network.wifi_enabled()->set(true);
     x6100_gpio_set(x6100_pin_wifi, 0);
     if (!device) {
         set_status(WIFI_STARTING);
@@ -99,28 +118,18 @@ void wifi_power_on() {
 
 void wifi_power_off() {
     LV_LOG_USER("Power off wifi/bt");
-    set_status(WIFI_OFF);
     if (device) {
         device = NULL;
     }
-    params_bool_set(&params.wifi_enabled, false);
+    cfg.network.wifi_enabled()->set(false);
     x6100_gpio_set(x6100_pin_wifi, 1);
     if (scan_timer) {
         lv_timer_del(scan_timer);
         scan_timer = NULL;
     }
     scanning = false;
+    set_status(WIFI_OFF);
 }
-
-// void wifi_set_change_ap_callbacks(wifi_ap_change_cb add_cb, wifi_ap_change_cb del_cb) {
-//     ap_add_cb = add_cb;
-//     ap_del_cb = del_cb;
-// }
-
-// void wifi_clear_change_ap_callbacks() {
-//     ap_add_cb = NULL;
-//     ap_del_cb = NULL;
-// }
 
 wifi_status_t wifi_get_status() {
     return status;
@@ -359,7 +368,11 @@ bool wifi_get_ipaddr(char **ip_addr, char **gateway) {
 }
 
 static void loop_iterations_cb(lv_timer_t *t) {
-    g_main_context_iteration(g_main_loop_get_context(loop), FALSE);
+    if (!app_is_running) {
+        lv_timer_del(t);
+    } else {
+        g_main_context_iteration(g_main_loop_get_context(loop), FALSE);
+    }
 }
 
 static void update_scan_status_cb(lv_timer_t *t) {
@@ -388,6 +401,7 @@ static void setup_nm_client() {
         g_error_free(error);
     }
     g_signal_connect(client, "device-added", G_CALLBACK(device_added_sig_cb), NULL);
+    g_signal_connect(client, "device-removed", G_CALLBACK(device_removed_sig_cb), NULL);
 }
 
 static void setup_wifi_device() {
@@ -414,6 +428,20 @@ static void device_added_sig_cb(NMClient *client, GObject *dev, gpointer user_da
     if (strcmp(nm_device_get_iface(nm_dev), WLAN_IFACE) == 0) {
         device = nm_dev;
         setup_wifi_device();
+    }
+}
+
+static void device_removed_sig_cb(NMClient *client, GObject *dev, gpointer user_data) {
+    NMDevice           *nm_dev;
+    NMActiveConnection *active_con;
+    if (!device) {
+        return;
+    }
+    nm_dev = NM_DEVICE(dev);
+    if (strcmp(nm_device_get_iface(nm_dev), nm_device_get_iface(device)) == 0) {
+        LV_LOG_USER("Removed %s device", nm_device_get_iface(device));
+        device = NULL;
+        set_status(WIFI_OFF);
     }
 }
 
@@ -464,9 +492,8 @@ static void fill_access_point_info(GBytes *active_ssid, NMAccessPoint *ap, wifi_
 }
 
 static void set_status(wifi_status_t val) {
-    wifi_status_t prev_val = status;
-    status = val;
-    if (val != prev_val) {
+    if (val != status) {
+        status = val;
         lv_msg_send(MSG_WIFI_STATE_CHANGED, NULL);
     }
 }
@@ -578,43 +605,6 @@ static void device_state_changed_sig_cb(NMDevice *device, guint new_state, guint
         break;
     }
 }
-
-// static void access_point_added_sig_cb(NMDeviceWifi *device, GObject *ap, gpointer user_data) {
-//     wifi_ap_info_t ap_info;
-//     NMAccessPoint *active_ap = NULL;
-//     GBytes        *active_ssid = NULL;
-
-//     if ((active_ap = nm_device_wifi_get_active_access_point(NM_DEVICE_WIFI(device)))) {
-//         active_ssid = nm_access_point_get_ssid(active_ap);
-//     }
-//     printf("Access point added\n");
-//     if (ap_add_cb) {
-//         fill_access_point_info(active_ssid, NM_ACCESS_POINT(ap), &ap_info);
-//         ap_add_cb(&ap_info);
-//         if (active_ap) {
-//             g_object_unref(active_ap);
-//             g_object_unref(active_ssid);
-//         }
-//     }
-// }
-// static void access_point_removed_sig_cb(NMDeviceWifi *device, GObject *ap, gpointer user_data) {
-//     wifi_ap_info_t ap_info;
-//     NMAccessPoint *active_ap = NULL;
-//     GBytes        *active_ssid = NULL;
-
-//     if ((active_ap = nm_device_wifi_get_active_access_point(NM_DEVICE_WIFI(device)))) {
-//         active_ssid = nm_access_point_get_ssid(active_ap);
-//     }
-//     printf("Access point removed\n");
-//     if (ap_del_cb) {
-//         fill_access_point_info(active_ssid, NM_ACCESS_POINT(ap), &ap_info);
-//         ap_del_cb(&ap_info);
-//         if (active_ap) {
-//             g_object_unref(active_ap);
-//             g_object_unref(active_ssid);
-//         }
-//     }
-// }
 
 static void active_con_state_changed_sig_cb(NMActiveConnection *active_connection, guint state, guint reason,
                                             gpointer user_data) {

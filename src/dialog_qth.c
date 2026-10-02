@@ -6,8 +6,11 @@
  *  Copyright (c) 2022-2023 Belousov Oleg aka R1CBU
  */
 
+#include "dialog_qth.h"
+
+#include "radio.h"
 #include "textarea_window.h"
-#include "params/params.h"
+#include "cfg/cfg_api.h"
 #include "main_screen.h"
 #include "qth/qth.h"
 #include "msg.h"
@@ -22,7 +25,6 @@ static dialog_t             dialog = {
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = destruct_cb,
-    .audio_cb = NULL,
     .key_cb = key_cb
 };
 
@@ -32,7 +34,7 @@ static bool edit_ok() {
     const char *qth = textarea_window_get();
 
     if (qth_grid_check(qth)) {
-        params_str_set(&params.qth, qth);
+        param_t_set(cfg.qth(), qth);
     } else {
         msg_update_text_fmt("Incorrect QTH Grid");
     }
@@ -61,7 +63,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_textarea_set_placeholder_text(text, "QTH Grid");
     lv_obj_add_event_cb(text, key_cb, LV_EVENT_KEY, NULL);
 
-    textarea_window_set(params.qth.x);
+    textarea_window_set(PARAM_T_GET(cfg.qth()));
 }
 
 static void destruct_cb() {

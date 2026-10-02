@@ -8,25 +8,25 @@
 
 #include "dsp.h"
 
-#include "cfg/settings_manager.h"
+#include "cfg/cfg_api.h"
 
-#include "cw.h"
+#include "common/resampler.h"
+
+#include "helpers.h"
 #include "util.h"
+#include "common/vector.h"
 
 #include <algorithm>
 #include <atomic>
+#include <map>
+#include <mutex>
 #include <numeric>
-
-#include "dialog_msg_voice.h"
+#include <vector>
 
 extern "C" {
     #include "audio.h"
     #include "meter.h"
     #include "radio.h"
-    #include "recorder.h"
-    #include "rtty.h"
-    #include "spectrum.h"
-    #include "waterfall.h"
 
     #include <math.h>
     #include <pthread.h>
@@ -37,58 +37,61 @@ extern "C" {
 #define OEM_PSD_DELAY 4
 #define R8_PSD_DELAY 0
 
-#define SG_ALPHA_WF 0.8f
-#define SG_ALPHA_SP 0.4f
-#define SG_ALPHA_FACTOR 0.1f
+/* Chunks accumulated by the internal meter accumulator before the S-meter and
+ * (see DSP_METER_NOISE_ENABLED) the noise floor / auto-levels are refreshed. */
+#define DSP_METER_CHUNKS 2
 
-#define FULL_BW_HZ 100000
+/* 1 — compute the noise floor and auto min/max together with the S-meter;
+ * 0 — compute only the S-meter (noise floor and auto-levels stay at their
+ * startup/manual values). S-meter is computed in either case. */
+#define DSP_METER_NOISE_ENABLED 1
+
+/* Levels used for the TX spectrum/waterfall/scope, matching the existing
+ * S-meter scale (S4 .. S9+20). */
+#define DSP_TX_LEVEL_MIN S4
+#define DSP_TX_LEVEL_MAX S9_20
+
+#define DSP_ATT_DB -15.0f
+#define DSP_PRE_DB 19.0f
+
+// Forward declaration
+class ChunkedSpgram;
 
 static iirfilt_cccf dc_block;
 
 static pthread_mutex_t spectrum_mux = PTHREAD_MUTEX_INITIALIZER;
 
 static x6100_base_ver_t base_ver;
-static bool fw_decim = false;  // BASE firmware performs a decimation
 static bool fw_dc_blocker = false;  // BASE firmware performs a DC blocker on IQ
 
-static uint8_t       spectrum_factor = 1;
-static firdecim_crcf spectrum_decim_rx;
-static firdecim_crcf spectrum_decim_tx;
-static bool          waterfall_fft_decim = false;
-static float         zoom_level_offset = 0.0f;
+/* Firmware decimation exponent reported through flow_info (fft_dec). The BASE
+ * firmware always decimates on the supported revisions; only the reported
+ * factor is tracked here. */
+static uint8_t spectrum_factor = 1;
+static float   zoom_level_offset = 0.0f;
 
-static ChunkedSpgram *spectrum_sg_rx;
-static ChunkedSpgram *spectrum_sg_tx;
-static float          spectrum_psd[SPECTRUM_NFFT];
-static float          spectrum_psd_filtered[SPECTRUM_NFFT];
-static float          spectrum_beta   = 0.7f;
-static uint8_t        spectrum_fps_ms = (1000 / 15);
-static uint64_t       spectrum_time;
-static cfloat         spectrum_dec_buf[RADIO_SAMPLES];
-static uint32_t       spectrum_prev_freq;
+static float auto_min = S_MIN;
+static float auto_max = S9_40;
 
-static ChunkedSpgram *waterfall_sg_rx;
-static ChunkedSpgram *waterfall_sg_tx;
-static float          waterfall_psd_lin[WATERFALL_NFFT];
-static float          waterfall_psd[WATERFALL_NFFT];
-static uint8_t        waterfall_fps_ms = (1000 / 15);
-static uint64_t       waterfall_time;
+/* One shared FFT per direction, always at DSP_MAX_NFFT. */
+static ChunkedSpgram *spgram_rx;
+static ChunkedSpgram *spgram_tx;
+static float          psd_lin[DSP_MAX_NFFT];
 
-/* CPU savers used by the FT8 dialog while it owns the audio pipe. When
- * the corresponding flag is false, the heavy spectrum/waterfall FFT and
- * UI paint pass is skipped entirely. */
-static std::atomic<bool> waterfall_enabled{true};
-static std::atomic<bool> spectrum_enabled{true};
+/* Internal full-resolution accumulator for the S-meter / noise floor /
+ * auto-levels. Independent of the frame subscribers: it is always filled and
+ * never decimated. */
+static float    meter_accum[DSP_MAX_NFFT];
+static uint32_t meter_count = 0;
 
 static cfloat buf_filtered[RADIO_SAMPLES * 2];
 
 static uint32_t cur_freq;
 static uint8_t  psd_delay;
 static uint8_t  min_max_delay;
+static bool     cur_tx;
 
-static firdecim_rrrf audio_decim;
 static iirfilt_rrrf audio_dc_blocker;
-static float  *audio;
 
 static bool ready = false;
 
@@ -97,201 +100,222 @@ static int32_t filter_to   = 3000;
 static x6100_mode_t cur_mode;
 static float noise_level = S_MIN;
 
-static void dsp_update_min_max(float *psd_lin, uint16_t size);
-static void update_zoom(int32_t new_zoom);
+/* S-meter raw value ownership: DSP computes, corrects (att/pre) and clamps the
+ * value. meter.c consumes it for display (and applies its own clamp for the
+ * smoothed value), CAT reads it via dsp_get_s_meter_db(). */
+static std::atomic<bool>  s_meter_pre{false};
+static std::atomic<bool>  s_meter_att{false};
+static std::atomic<float> s_meter_db_raw{S1};
+
+/* Audio subscriptions for audio from BASE */
+
+#define MAX_RAW_SUBS        4
+#define MAX_RESAMPLED_SUBS  8
+#define MAX_AUDIO_SUBS      (MAX_RAW_SUBS + MAX_RESAMPLED_SUBS)
+
+enum AudioSubKind {
+    AUDIO_SUB_FREE = 0,
+    AUDIO_SUB_RAW,
+    AUDIO_SUB_FLOAT,
+};
+
+struct AudioSub {
+    uint32_t          id        = 0;
+    AudioSubKind      kind      = AUDIO_SUB_FREE;
+    audio_raw_cb_t    raw_cb    = nullptr;
+    audio_float_cb_t  float_cb  = nullptr;
+    uint32_t          rate_hz   = 0;
+    std::atomic<bool> active{false};
+    bool              exclusive = false;
+    Resampler        *resampler = nullptr;
+};
+
+/*
+ * Flat list of subscriptions, guarded by subs_mutex. Free slots have
+ * kind == AUDIO_SUB_FREE. IDs are monotonic and never reused, so a stale id
+ * matches nothing and dsp_audio_set_active()/dsp_audio_unsubscribe() become
+ * harmless no-ops for it.
+ *
+ * subs_mutex is held for the whole dsp_put_audio_samples() dispatch, so
+ * callbacks must never call dsp_audio_subscribe_*(), dsp_audio_unsubscribe()
+ * or dsp_audio_set_active() (non-recursive mutex -> deadlock).
+ */
+static AudioSub           subs[MAX_AUDIO_SUBS];
+static std::mutex         subs_mutex;
+static uint32_t           next_sub_id = 1;
+
+/* PSD frame subscribers (spectrum / waterfall / scope). */
+
+#define MAX_FRAME_SUBS  4
+
+struct FrameSub {
+    uint32_t          id               = 0;
+    uint16_t          nfft             = 0;
+    uint16_t          chunks_per_frame = 0;
+    bool              allow_vary_freq  = false;
+    dsp_frame_cb_t    cb               = nullptr;
+    void             *ud               = nullptr;
+    bool              used             = false;
+    std::atomic<bool> active{false};
+
+    /* Accumulator of linear power over DSP_MAX_NFFT in DC-shifted order, and
+     * how many chunks were actually summed into it (used for normalisation). */
+    float    accum[DSP_MAX_NFFT] = {};
+    uint32_t accum_count         = 0;
+
+    /* Cadence counter: +1 per active chunk, saturates at chunks_per_frame and
+     * is cleared only when a frame is emitted. It is not reset by
+     * reset_accumulators()/frame_sub_zero(), so a run of rejected (dirty)
+     * chunks or a frequency change cannot stall delivery. */
+    uint16_t chunks_elapsed = 0;
+
+    /* Precomputed max-pool decimation ranges: output bin j takes the maximum of
+     * the accumulator bins [bstart[j], bend[j]). */
+    uint16_t          bstart[DSP_MAX_NFFT] = {};
+    uint16_t          bend[DSP_MAX_NFFT]   = {};
+};
+
+/*
+ * Flat list of frame subscribers, guarded by frame_subs_mutex. Frames are
+ * dispatched in the DSP thread; the same reentrancy contract as the audio
+ * subscriptions applies (callbacks must not call dsp_frame_*()).
+ */
+static FrameSub           frame_subs[MAX_FRAME_SUBS];
+static std::mutex         frame_subs_mutex;
+static uint32_t           next_frame_sub_id = 1;
+
+static void update_noise_and_levels(float *psd_lin, uint16_t size, bool update_levels);
+static void update_s_meter(float *lin);
+static void dsp_resolve_levels(bool tx, float *out_min, float *out_max);
+static void set_spectrum_factor(uint8_t factor);
 static void on_zoom_change(Subject *subj, void *user_data);
 static void update_filters(Subject *subj, void *user_data);
 static void update_cur_mode(Subject *subj, void *user_data);
 static void on_cur_freq_change(Subject *subj, void *user_data);
+static void on_pre_att_change(Subject *subj, void *user_data);
 
 
-std::map<int32_t, cfloat*> ChunkedSpgram::w_cache;
+class ChunkedSpgram {
 
-ChunkedSpgram::ChunkedSpgram(size_t nfft) {
-    this->nfft = nfft;
-    this->buf_time = (cfloat *) calloc(sizeof(cfloat), nfft);
-    this->buf_freq = (cfloat *) calloc(sizeof(cfloat), nfft);
-    this->psd = (float *) calloc(sizeof(float), nfft);
-    this->fft = fft_create_plan(nfft, buf_time, buf_freq, LIQUID_FFT_FORWARD, 0);
-}
+    // Window cache keyed by window size. The vectors own the window samples, so
+    // the cache is released cleanly when the static map is destroyed at exit.
+    static inline std::map<int32_t, std::vector<cfloat>> w_cache;
 
-ChunkedSpgram::~ChunkedSpgram() {
-    free(this->buf_time);
-    free(this->buf_freq);
-    free(this->psd);
+    size_t   nfft_;
+    size_t   chunk_size_  = 0;
+    size_t   window_size_ = 0;
+    size_t   buffer_size_ = 0;
+    windowcf buffer_      = NULL;
+    fftplan  fft_;
+    cfloat  *buf_time_;
+    cfloat  *buf_freq_;
+    cfloat  *w_ = NULL;
 
-    if (buffer) {
-        windowcf_destroy(buffer);
-    }
-    fft_destroy_plan(fft);
-}
+    void setup_buffer() {
+        if (buffer_) {
+            windowcf_destroy(buffer_);
+        }
+        buffer_ = windowcf_create(buffer_size_);
+    };
 
-void ChunkedSpgram::setup_buffer() {
-    if (buffer) {
-        windowcf_destroy(buffer);
-    }
-    buffer = windowcf_create(this->buffer_size);
+    void setup_window() { w_ = get_cached_window(window_size_); };
 
-}
+    cfloat *get_cached_window(size_t window_size) {
+        auto search = w_cache.find((int32_t)window_size);
+        if (search != w_cache.end()) {
+            return search->second.data();
+        }
 
-void ChunkedSpgram::setup_window() {
-    w = get_cached_window(window_size);
-}
-
-cfloat *ChunkedSpgram::get_cached_window(size_t window_size) {
-    if (auto search = w_cache.find(window_size); search != w_cache.end()) {
-        return search->second;
-    } else {
-        cfloat *window = (cfloat *) calloc(sizeof(cfloat), window_size);
-        size_t i;
-        for (i = 0; i < window_size; i++) {
+        std::vector<cfloat> window(window_size);
+        for (size_t i = 0; i < window_size; i++) {
             window[i] = liquid_kaiser(i, window_size, 10.0f);
             // window[i] = liquid_hann(i, window_size);
         }
         // scale by window magnitude
         float g = 0.0f;
-        for (i=0; i<window_size; i++)
+        for (size_t i = 0; i < window_size; i++)
             g += std::norm(window[i]);
-        g = 1.0f / sqrtf(g * nfft / window_size);
-        // printf("nfft: %d, window_size: %d, buffer_size: %d, scale: %f\n", nfft, window_size, buffer_size, g);
+        g = 1.0f / sqrtf(g * nfft_ / window_size);
 
         // scale window and copy
-        for (i=0; i<window_size; i++)
+        for (size_t i = 0; i < window_size; i++)
             window[i] *= g;
-        w_cache[window_size] = window;
-        return window;
-    }
-}
 
-void ChunkedSpgram::set_alpha(float val) {
-    // validate input
-    if (val != -1 && (val < 0.0f || val > 1.0f)) {
-        printf("set_alpha(), alpha must be in {-1,[0,1]}");
-        return;
-    }
+        auto it = w_cache.emplace((int32_t)window_size, std::move(window)).first;
+        return it->second.data();
+    };
 
-    // set accumulation flag appropriately
-    accumulate = (val == -1.0f) ? true : false;
+  public:
+    ChunkedSpgram(size_t nfft) : nfft_(nfft) {
+        buf_time_ = (cfloat *)calloc(sizeof(cfloat), nfft);
+        buf_freq_ = (cfloat *)calloc(sizeof(cfloat), nfft);
+        fft_      = fft_create_plan(nfft, buf_time_, buf_freq_, LIQUID_FFT_FORWARD, 0);
+    };
 
-    if (accumulate) {
-        this->alpha = 1.0f;
-        this->gamma = 1.0f;
-    } else {
-        this->alpha = val;
-        this->gamma = 1.0f - val;
-    }
-}
+    ~ChunkedSpgram() {
+        free(buf_time_);
+        free(buf_freq_);
 
-void ChunkedSpgram::clear() {
-    num_transforms = 0;
-    for (size_t i = 0; i < nfft; i++) {
-        psd[i] = 0.0f;
-        buf_time[i] = 0.0f;
-    }
-}
-
-void ChunkedSpgram::reset() {
-    clear();
-    if (buffer) {
-        windowcf_reset(buffer);
-    }
-}
-
-bool ChunkedSpgram::ready() {
-    return num_transforms > 0;
-}
-
-void ChunkedSpgram::execute_block(cfloat *chunk, size_t n_samples) {
-    if (n_samples != chunk_size) {
-        chunk_size = n_samples;
-        window_size = LV_MIN(nfft, chunk_size);
-        buffer_size = nfft - nfft % window_size;
-        setup_window();
-        setup_buffer();
-        clear();
-    }
-
-    cfloat val;
-    for (size_t i=0; i<window_size; i++) {
-        val = chunk[i] * w[i];
-        windowcf_push(buffer, val);
-    }
-
-    cfloat *rc;
-    if (windowcf_read(buffer, &rc) != LIQUID_OK) {
-        return;
-    }
-    memcpy(buf_time, rc, sizeof(cfloat) * buffer_size);
-    fft_execute(fft);
-
-    // accumulate output
-    // TODO: vectorize this operation
-    for (size_t i=0; i<nfft; i++) {
-        float v = std::norm(buf_freq[i]);
-        if (num_transforms == 0)
-            psd[i] = v;
-        else
-            psd[i] = gamma*psd[i] + alpha*v;
-    }
-    num_transforms++;
-}
-
-void ChunkedSpgram::get_psd_mag(float *psd) {
-    // compute magnitude (linear) and run FFT shift
-    unsigned int i;
-    unsigned int nfft_2 = nfft / 2;
-    float scale = accumulate ? 1.0f / LV_MAX((size_t)1, num_transforms) : 1.0f;
-    for (i=0; i<nfft; i++) {
-        unsigned int k = (i + nfft_2) % nfft;
-        psd[i] = LV_MAX((float)LIQUID_SPGRAM_PSD_MIN, this->psd[k]) * scale;
-    }
-    if (accumulate) {
-        clear();
-    }
-}
-
-void ChunkedSpgram::get_psd(float *psd, bool linear) {
-    // compute magnitude, linear
-    get_psd_mag(psd);
-    if (!linear) {
-        // convert to dB
-        unsigned int i;
-        for (i=0; i<nfft; i++) {
-            // 10.0 because psd is squared magnitude (power)
-            psd[i] = 10.0f * log10f(psd[i]);
+        if (buffer_) {
+            windowcf_destroy(buffer_);
         }
-    }
-}
+        fft_destroy_plan(fft_);
+    };
+
+    void reset() {
+        if (buffer_) {
+            windowcf_reset(buffer_);
+        }
+    };
+
+    /* Window the current chunk, run one FFT and write the linear power of the
+     * current transform (unshifted FFT order) to mag[DSP_MAX_NFFT]. */
+    void execute_block(cfloat *chunk, size_t n_samples, float *mag) {
+        if (n_samples != chunk_size_) {
+            chunk_size_  = n_samples;
+            window_size_ = LV_MIN(nfft_, chunk_size_);
+            buffer_size_ = nfft_ - nfft_ % window_size_;
+            setup_window();
+            setup_buffer();
+        }
+
+        for (size_t i = 0; i < window_size_; i++) {
+            windowcf_push(buffer_, chunk[i] * w_[i]);
+        }
+
+        cfloat *rc;
+        if (windowcf_read(buffer_, &rc) != LIQUID_OK) {
+            return;
+        }
+        memcpy(buf_time_, rc, sizeof(cfloat) * buffer_size_);
+        fft_execute(fft_);
+
+        // TODO: vectorize this operation
+        for (size_t i = 0; i < nfft_; i++) {
+            mag[i] = LV_MAX(LIQUID_SPGRAM_PSD_MIN, std::norm(buf_freq_[i]));
+        }
+    };
+};
 
 /* * */
 
 void dsp_init() {
     base_ver = x6100_control_get_base_ver();
 
-    if ((util_compare_version(base_ver, (x6100_base_ver_t){1, 1, 9, 0}) >= 0) || (base_ver.rev >= 8)) {
-        fw_decim = true;
-        waterfall_fft_decim = true;
-    } else {
-        fw_decim = false;
+    /* Only firmware with the decimating flow is supported. Older firmware is
+     * logged and treated as if it decimated (degraded operation). */
+    bool supported = (util_compare_version(base_ver, (x6100_base_ver_t){1, 1, 9, 0}) >= 0) || (base_ver.rev >= 8);
+    if (!supported) {
+        LV_LOG_ERROR("BASE firmware is too old, not fully supported");
     }
     if (base_ver.rev >= 8) {
         fw_dc_blocker = true;
     }
 
-    waterfall_sg_rx = new ChunkedSpgram(WATERFALL_NFFT);
-    waterfall_sg_rx->set_alpha(-1.0f);
-    waterfall_sg_tx = new ChunkedSpgram(WATERFALL_NFFT);
-    waterfall_sg_tx->set_alpha(-1.0f);
-
-    spectrum_sg_rx = new ChunkedSpgram(SPECTRUM_NFFT);
-    spectrum_sg_rx->set_alpha(-1.0f);
-    spectrum_sg_tx = new ChunkedSpgram(SPECTRUM_NFFT);
-    spectrum_sg_tx->set_alpha(-1.0f);
+    spgram_rx = new ChunkedSpgram(DSP_MAX_NFFT);
+    spgram_tx = new ChunkedSpgram(DSP_MAX_NFFT);
 
     dc_block = iirfilt_cccf_create_dc_blocker(0.005f);
-
-    spectrum_time  = get_time();
-    waterfall_time = get_time();
 
     if (base_ver.rev < 8) {
         psd_delay = OEM_PSD_DELAY;
@@ -299,22 +323,170 @@ void dsp_init() {
         psd_delay = R8_PSD_DELAY;
     }
 
-    audio            = (float *)malloc(AUDIO_CAPTURE_RATE * sizeof(float));
-    audio_decim      = firdecim_rrrf_create_kaiser(AUDIO_DECIM, 7, 60.0f);
-    firdecim_rrrf_set_scale(audio_decim, 1.0f / AUDIO_DECIM);
-    audio_dc_blocker = iirfilt_rrrf_create_dc_blocker(2.0f * M_PI_2f32 * 50.0f * AUDIO_DECIM / AUDIO_CAPTURE_RATE);
+    audio_dc_blocker = iirfilt_rrrf_create_dc_blocker(2.0f * M_PI_2f32 * 50.0f / AUDIO_CAPTURE_RATE);
 
-    cfg_sm.p_mode_zoom.subscribe_and_notify(on_zoom_change);
+    cfg.mode.zoom()->subscribe_and_notify(on_zoom_change);
 
-    cfg_sm.p_band_if_shift.subscribe(update_filters);
-    cfg_sm.cp_cur_filter_low.subscribe(update_filters);
-    cfg_sm.cp_cur_filter_high.subscribe_and_notify(update_filters);
-    cfg_sm.cp_cur_mode.subscribe_and_notify(update_filters);
+    cfg.band.if_shift()->subscribe(update_filters);
+    cfg.filter.low()->subscribe(update_filters);
+    cfg.filter.high()->subscribe_and_notify(update_filters);
+    cfg.cur.mode()->subscribe_and_notify(update_filters);
 
-    cfg_sm.cp_cur_mode.subscribe_and_notify(update_cur_mode);
+    cfg.cur.mode()->subscribe_and_notify(update_cur_mode);
 
-    cfg_sm.cp_fg_freq.subscribe(on_cur_freq_change);
+    cfg.cur.pre()->subscribe_and_notify(on_pre_att_change, &s_meter_pre);
+    cfg.cur.att()->subscribe_and_notify(on_pre_att_change, &s_meter_att);
+
+    cfg.cur.fg_freq()->subscribe(on_cur_freq_change);
     ready = true;
+}
+
+/* Precompute the max-pool decimation ranges for one subscriber. Output bin j
+ * spans the input range [bstart[j], bend[j]) on the DC-shifted axis. */
+static void build_decim_ranges(FrameSub &s) {
+    const uint32_t n = DSP_MAX_NFFT;
+    const uint32_t w = s.nfft;
+
+    for (uint32_t j = 0; j < w; j++) {
+        uint32_t start = (j * n) / w;
+        uint32_t end   = ((j + 1) * n) / w;
+
+        if (end <= start) {
+            end = start + 1;
+        }
+        s.bstart[j] = (uint16_t)start;
+        s.bend[j]   = (uint16_t)end;
+    }
+}
+
+static void frame_sub_consume(FrameSub &s) {
+    if (s.accum_count == 0) {
+        return;
+    }
+
+    const float inv = 1.0f / (float)s.accum_count;
+
+    for (uint16_t i = 0; i < DSP_MAX_NFFT; i++) {
+        s.accum[i] *= inv;
+    }
+    s.accum_count = 0;
+}
+
+/* Drop the accumulated data only. The cadence counter is deliberately left
+ * alone: delivery must not restart from zero after a rejected chunk or a
+ * frequency / rx-tx / spectrum-factor change. */
+static void frame_sub_zero(FrameSub &s) {
+    memset(s.accum, 0, sizeof(s.accum));
+    s.accum_count = 0;
+}
+
+/* Fold one transform into a full-resolution accumulator, reversing the FFT DC
+ * shift so the accumulator is in DC-centered order. */
+static void accumulate_shifted(float *accum) {
+    const uint16_t half = DSP_MAX_NFFT / 2;
+
+    for (uint16_t i = 0; i < half; i++) {
+        accum[i] += psd_lin[i + half];
+    }
+    for (uint16_t i = half; i < DSP_MAX_NFFT; i++) {
+        accum[i] += psd_lin[i - half];
+    }
+}
+
+static void accumulate(FrameSub &s) {
+    accumulate_shifted(s.accum);
+    s.accum_count++;
+}
+
+static void meter_zero() {
+    memset(meter_accum, 0, sizeof(meter_accum));
+    meter_count = 0;
+}
+
+/* Zero the accumulated data owned by the DSP pipeline, which requires stable
+ * freq. Only the data is dropped; the per-subscriber cadence counters are left
+ * alone so a frequency / rx-tx / spectrum-factor change does not restart
+ * delivery from the beginning of the interval. Acquires frame_subs_mutex, so
+ * callers must not hold it; do not call it from deliver_frames()/meter_tick()
+ * or any other path that already holds the mutex. */
+static void reset_accumulators() {
+    std::lock_guard<std::mutex> lock(frame_subs_mutex);
+
+    for (size_t i = 0; i < MAX_FRAME_SUBS; i++) {
+        frame_sub_zero(frame_subs[i]);
+    }
+}
+
+/* S-meter / noise / auto-levels tick. Runs on every chunk from the internal
+ * full-resolution accumulator, independent of the frame subscribers, so the
+ * S-meter keeps moving even when every consumer is paused (e.g. FT8).
+ * update_levels is false when no external frame subscriber needs auto levels. */
+static void meter_tick(bool tx, bool update_levels) {
+    accumulate_shifted(meter_accum);
+    meter_count++;
+
+    if (meter_count < DSP_METER_CHUNKS) {
+        return;
+    }
+
+    const float inv = 1.0f / (float)meter_count;
+
+    for (uint16_t i = 0; i < DSP_MAX_NFFT; i++) {
+        meter_accum[i] *= inv;
+    }
+    meter_count = 0;
+
+#if DSP_METER_NOISE_ENABLED
+    if (tx) {
+        min_max_delay = 2;
+    } else {
+        update_noise_and_levels(meter_accum, DSP_MAX_NFFT, update_levels);
+    }
+#else
+    (void)tx;
+    (void)update_levels;
+#endif
+
+    update_s_meter(meter_accum);
+
+    /* Clear the mean so the next window starts fresh. */
+    meter_zero();
+}
+
+/* Max-pool the accumulated mean linear power down to the subscriber nfft,
+ * convert to dB and hand the frame to the callback. */
+static void decimate_emit(FrameSub &s, bool tx, uint32_t base_freq, uint32_t width_hz, uint8_t fft_dec, float min,
+                          float max) {
+    /* Per-call frame buffer: valid only for the duration of the callback, since
+     * delivery is serialized on the DSP thread and subscribers copy the bins
+     * they need. Sized to this subscriber's nfft instead of the shared max. */
+    float frame_out[s.nfft];
+
+    for (uint16_t j = 0; j < s.nfft; j++) {
+        uint16_t start = s.bstart[j];
+        uint16_t end   = s.bend[j];
+        float    v     = s.accum[start];
+
+        for (uint16_t i = start + 1; i < end; i++) {
+            float u = s.accum[i];
+            if (u > v) {
+                v = u;
+            }
+        }
+        frame_out[j] = 10.0f * log10f(LV_MAX(v, 1e-20f)) + DB_OFFSET + zoom_level_offset;
+    }
+
+    const dsp_frame_t frame = {
+        .psd_db    = frame_out,
+        .size      = s.nfft,
+        .tx        = tx,
+        .base_freq = base_freq,
+        .width_hz  = width_hz,
+        .fft_dec   = fft_dec,
+        .min       = min,
+        .max       = max,
+    };
+    s.cb(&frame, s.ud);
 }
 
 void dsp_reset() {
@@ -325,15 +497,14 @@ void dsp_reset() {
     }
 
     iirfilt_cccf_reset(dc_block);
-    spectrum_sg_rx->reset();
-    spectrum_sg_tx->reset();
-    waterfall_sg_rx->reset();
-    waterfall_sg_tx->reset();
+    spgram_rx->reset();
+    spgram_tx->reset();
+
+    reset_accumulators();
 }
 
-static void process_samples(cfloat *buf_samples, uint16_t size, firdecim_crcf sp_decim, ChunkedSpgram *sp_sg,
-                            ChunkedSpgram *wf_sg, bool tx) {
-    // Swap I and Q, add offset
+static void process_samples(cfloat *buf_samples, uint16_t size, bool tx) {
+    // Swap I and Q
     for (size_t i = 0; i < size; i++) {
         buf_filtered[i] = {buf_samples[i].imag(), buf_samples[i].real()};
     }
@@ -342,334 +513,50 @@ static void process_samples(cfloat *buf_samples, uint16_t size, firdecim_crcf sp
         iirfilt_cccf_execute_block(dc_block, buf_filtered, size, buf_filtered);
     }
 
-    cfloat *samples_for_wf = buf_filtered;
-    size_t wf_n_samples = size;
-    size_t sp_n_samples = size;
-
-    if (spectrum_enabled.load(std::memory_order_relaxed)) {
-        if ((spectrum_factor > 1) && !fw_decim) {
-            sp_n_samples = size / spectrum_factor;
-            firdecim_crcf_execute_block(sp_decim, buf_filtered, sp_n_samples, spectrum_dec_buf);
-            sp_sg->execute_block(spectrum_dec_buf, sp_n_samples);
-            if (waterfall_fft_decim) {
-                samples_for_wf = spectrum_dec_buf;
-                wf_n_samples = sp_n_samples;
-            }
-        } else {
-            sp_sg->execute_block(buf_filtered, sp_n_samples);
-        }
-    }
-    if (wf_sg) {
-        wf_sg->execute_block(samples_for_wf, wf_n_samples);  // always run FFT for S-meter
-    }
+    ChunkedSpgram *sg = tx ? spgram_tx : spgram_rx;
+    sg->execute_block(buf_filtered, size, psd_lin);
 }
 
-static bool update_spectrum(ChunkedSpgram *sp_sg, uint64_t now, bool tx, uint32_t base_freq, uint8_t fft_dec) {
-    if ((now - spectrum_time > spectrum_fps_ms) && sp_sg->ready()) {
-        sp_sg->get_psd(spectrum_psd);
-        liquid_vectorf_addscalar(spectrum_psd, SPECTRUM_NFFT, DB_OFFSET + zoom_level_offset, spectrum_psd);
-        // Shift filtered
-        if (base_freq != spectrum_prev_freq) {
-            int32_t shift = ((int64_t)base_freq - spectrum_prev_freq) * (spectrum_factor * SPECTRUM_NFFT) / FULL_BW_HZ;
-            float *src = spectrum_psd_filtered;
-            float *dst = spectrum_psd_filtered;
-            float *to_clear_p;
-            int32_t size;
-            if (shift > 0) {
-                src = spectrum_psd_filtered + shift;
-                size = SPECTRUM_NFFT - shift;
-                to_clear_p = spectrum_psd_filtered + size;
-            } else if (shift < 0) {
-                dst = spectrum_psd_filtered - shift;
-                size = SPECTRUM_NFFT + shift;
-                to_clear_p = spectrum_psd_filtered;
-            }
-            if (size > 0) {
-                memmove(dst, src, size * sizeof(*src));
-                float *stop = to_clear_p + LV_ABS(shift);
-                do
-                {
-                    *to_clear_p++ = S_MIN;
-                } while (to_clear_p < stop);
+static void update_s_meter(float *lin) {
+    int32_t from, to, center;
+    int32_t bw = FULL_BW_HZ / spectrum_factor;
 
-            }
-            spectrum_prev_freq = base_freq;
-        }
-        lpf_block(spectrum_psd_filtered, spectrum_psd, spectrum_beta, SPECTRUM_NFFT);
-        spectrum_data(spectrum_psd_filtered, SPECTRUM_NFFT, tx, base_freq, fft_dec);
-        spectrum_time = now;
-        return true;
+    center = DSP_MAX_NFFT / 2;
+    from = center + filter_from * DSP_MAX_NFFT / bw;
+    to = center + filter_to * DSP_MAX_NFFT / bw;
+    from = LV_MAX(from, 0);
+    to = LV_MIN(to, DSP_MAX_NFFT - 1);
+
+    float sum = 0.0f;
+
+    for (int32_t i = from; i <= to; i++) {
+        sum += lin[i];
     }
-    return false;
+
+    float sum_db = 10.0f * log10f(sum) + DB_OFFSET;
+
+    if (s_meter_att.load()) {
+        sum_db -= DSP_ATT_DB;
+    }
+    if (s_meter_pre.load()) {
+        sum_db -= DSP_PRE_DB;
+    }
+    s_meter_db_raw.store(sum_db);
+
+    // TODO: use subscription
+    meter_update(sum_db, cfg.ui.spectrum_beta()->get() * 0.01f);
 }
 
-/**
- * Refresh waterfall PSD buffers (common to both S-meter and waterfall UI).
- * Returns true when fresh linear / dB PSD data is ready.
- */
-static bool update_waterfall_psd(ChunkedSpgram *wf_sg, uint64_t now) {
-    if ((now - waterfall_time > waterfall_fps_ms) && (!psd_delay) & wf_sg->ready()) {
-        wf_sg->get_psd(waterfall_psd_lin, true);
-        for (size_t i = 0; i < WATERFALL_NFFT; i++) {
-            waterfall_psd[i] = 10.0f * log10f(waterfall_psd_lin[i]);
-        }
-        liquid_vectorf_addscalar(waterfall_psd, WATERFALL_NFFT, DB_OFFSET + zoom_level_offset, waterfall_psd);
-        waterfall_time = now;
-        return true;
-    }
-    return false;
-}
-
-static void update_s_meter() {
-    if (dialog_msg_voice_get_state() != MSG_VOICE_RECORD) {
-        int32_t from, to, center;
-        int32_t bw = FULL_BW_HZ;
-        if (fw_decim) {
-            bw /= spectrum_factor;
-        }
-        center = WATERFALL_NFFT / 2;
-        from = center + filter_from * WATERFALL_NFFT / bw;
-        to = center + filter_to * WATERFALL_NFFT / bw;
-        from = LV_MAX(from, 0);
-        to = LV_MIN(to, WATERFALL_NFFT - 1);
-
-        float sum_db, sum;
-        sum = 0.0f;
-
-        for (int32_t i = from; i <= to; i++) {
-            sum += waterfall_psd_lin[i];
-        }
-
-        sum_db = 10.0f * log10f(sum) + DB_OFFSET;
-
-        meter_update(sum_db, params.spectrum_beta.x * 0.01f);
-    }
-}
-
-void dsp_samples(cfloat *buf_samples, uint16_t size, bool tx, uint32_t base_freq, bool vary_freq, uint8_t fft_dec) {
-    if (!ready) {
-        return;
-    }
-
-    if (base_freq != 0) {
-        if (cur_freq != base_freq) {
-            cur_freq = base_freq;
-            waterfall_sg_rx->reset();
-            spectrum_sg_rx->reset();
-        }
-    }
-
-    if (fft_dec && (fft_dec != spectrum_factor)) {
-        update_zoom(fft_dec);
-    }
-
-    firdecim_crcf sp_decim;
-    ChunkedSpgram *sp_sg, *wf_sg;
-    uint64_t      now = get_time();
-
-    if (psd_delay) {
-        psd_delay--;
-    }
-
-    pthread_mutex_lock(&spectrum_mux);
-    if (tx) {
-        sp_decim = spectrum_decim_tx;
-        sp_sg    = spectrum_sg_tx;
-        wf_sg    = waterfall_sg_tx;
-    } else {
-        sp_decim = spectrum_decim_rx;
-        sp_sg    = spectrum_sg_rx;
-        wf_sg    = waterfall_sg_rx;
-    }
-    if (vary_freq) {
-        wf_sg = NULL;
-    }
-    process_samples(buf_samples, size, sp_decim, sp_sg, wf_sg, tx);
-    if (spectrum_enabled.load(std::memory_order_relaxed)) {
-        update_spectrum(sp_sg, now, tx, base_freq, fft_dec);
-    }
-    pthread_mutex_unlock(&spectrum_mux);
-
-    if (wf_sg && update_waterfall_psd(wf_sg, now)) {
-        /* S-meter runs every PSD refresh regardless of waterfall UI state. */
-        update_s_meter();
-
-        bool waterfall_on = waterfall_enabled.load(std::memory_order_relaxed);
-        if (waterfall_on) {
-            uint32_t width_hz = FULL_BW_HZ;
-            if (waterfall_fft_decim) {
-                width_hz /= spectrum_factor;
-            }
-            waterfall_data(waterfall_psd, WATERFALL_NFFT, tx, base_freq, width_hz);
-        }
-
-        // TODO: skip on disabled auto min/max
-        if (!tx) {
-            dsp_update_min_max(waterfall_psd_lin, WATERFALL_NFFT);
-        } else {
-            min_max_delay = 2;
-        }
-    }
-}
-
-static void update_zoom(int32_t new_zoom) {
-    if (new_zoom == spectrum_factor)
-        return;
-
-    pthread_mutex_lock(&spectrum_mux);
-
-    spectrum_factor = new_zoom;
-
-    if (spectrum_decim_rx) {
-        firdecim_crcf_destroy(spectrum_decim_rx);
-        spectrum_decim_rx = NULL;
-    }
-
-    if (spectrum_decim_tx) {
-        firdecim_crcf_destroy(spectrum_decim_tx);
-        spectrum_decim_tx = NULL;
-    }
-
-    if ((spectrum_factor > 1) && !fw_decim) {
-        spectrum_decim_rx = firdecim_crcf_create_kaiser(spectrum_factor, 8, 60.0f);
-        firdecim_crcf_set_scale(spectrum_decim_rx, sqrt(1.0f / (float)spectrum_factor));
-        spectrum_decim_tx = firdecim_crcf_create_kaiser(spectrum_factor, 8, 60.0f);
-        firdecim_crcf_set_scale(spectrum_decim_tx, sqrt(1.0f / (float)spectrum_factor));
-    }
-
-    for (uint16_t i = 0; i < SPECTRUM_NFFT; i++)
-        spectrum_psd_filtered[i] = S_MIN;
-
-    spectrum_sg_rx->reset();
-    waterfall_sg_rx->reset();
-
-    pthread_mutex_unlock(&spectrum_mux);
-}
-
-static void on_zoom_change(Subject *subj, void *user_data) {
-    int32_t new_zoom = cfg_sm.p_mode_zoom.get();
-    if ((base_ver.rev < 8) && (util_compare_version(base_ver, (x6100_base_ver_t){1, 1, 9, 0}) < 0)) {
-        update_zoom(new_zoom);
-    } else {
-        zoom_level_offset = log2f(new_zoom) * 3.0f;
-        if (base_ver.rev < 8) {
-            // OEM BASE >= 1.1.9 decimates in firmware but does not report fft_dec
-            // back via flow_info, so the feedback path in dsp_samples() never fires
-            // and spectrum_factor stays at 1. Sync it locally instead.
-            update_zoom(new_zoom);
-        }
-    }
-}
-
-static void update_filters(Subject *subj, void *user_data) {
-    auto low = cfg_sm.cp_cur_filter_low.get();
-    auto high = cfg_sm.cp_cur_filter_high.get();
-    auto if_shift = cfg_sm.p_band_if_shift.get();
-    auto mode = cfg_sm.cp_cur_mode.get();
-    switch (mode) {
-        case x6100_mode_lsb:
-        case x6100_mode_lsb_dig:
-        case x6100_mode_cwr:
-            filter_from = -high + if_shift;
-            filter_to = -low + if_shift;
-            break;
-
-        case x6100_mode_am:
-        case x6100_mode_nfm:
-            filter_from = -high + if_shift;
-            filter_to = high + if_shift;
-            break;
-        default:
-            filter_from = low + if_shift;
-            filter_to = high + if_shift;
-            break;
-    }
-}
-
-static void update_cur_mode(Subject *subj, void *user_data) {
-    cur_mode = (x6100_mode_t)cfg_sm.cp_cur_mode.get();
-}
-
-static void on_cur_freq_change(Subject *subj, void *user_data) {
-    int32_t new_freq = static_cast<SubjectT<int32_t> *>(subj)->get();
-    if (base_ver.rev < 8) {
-        psd_delay = OEM_PSD_DELAY;
-        cur_freq = new_freq;
-    } else {
-        psd_delay = R8_PSD_DELAY;
-    }
-}
-
-float dsp_get_spectrum_beta() {
-    return spectrum_beta;
-}
-
-void dsp_set_spectrum_beta(float x) {
-    spectrum_beta = x;
-}
-
-void dsp_put_audio_samples(size_t nsamples, int16_t *samples) {
-    if (!ready) {
-        return;
-    }
-
-    static float decim_buf[AUDIO_DECIM];
-    static uint8_t decim_i;
-
-    static float hilb_buf[2];
-    static uint8_t hilb_i;
-
-    if (dialog_msg_voice_get_state() == MSG_VOICE_RECORD) {
-        dialog_msg_voice_put_audio_samples(nsamples, samples);
-        return;
-    }
-
-    if (recorder_is_on()) {
-        recorder_put_audio_samples(nsamples, samples);
-    }
-
-    void (*audio_samples_fn)(unsigned int, float *) = NULL;
-
-    if (rtty_get_state() == RTTY_RX) {
-        audio_samples_fn = rtty_put_audio_samples;
-    } else if (cur_mode == x6100_mode_cw || cur_mode == x6100_mode_cwr) {
-        audio_samples_fn = cw_put_audio_samples;
-    } else if (dialog_need_audio()) {
-        audio_samples_fn = dialog_audio_samples;
-    }
-
-    if (audio_samples_fn != NULL) {
-        float k = 1.0f / (1 << 15);
-        size_t nsamples_dec = 0;
-        for (uint16_t i = 0; i < nsamples; i++) {
-            float sample = samples[i] * k;
-            decim_buf[decim_i++] = sample;
-            if (decim_i >= AUDIO_DECIM) {
-                decim_i = 0;
-                float val;
-                // decimate
-                firdecim_rrrf_execute(audio_decim, decim_buf, &val);
-                // dc blocker
-                iirfilt_rrrf_execute(audio_dc_blocker, val, &audio[nsamples_dec++]);
-            }
-        }
-        if (nsamples_dec) {
-            audio_samples_fn(nsamples_dec, audio);
-        }
-    }
-
-
-}
-
-static void dsp_update_min_max(float *psd_lin, uint16_t size) {
+/* Noise floor and display levels from the full-resolution linear spectrum.
+ * Called from the meter tick; auto_min/auto_max are only refreshed when a frame
+ * subscriber needs them (update_levels), while the noise floor always updates. */
+static void update_noise_and_levels(float *lin, uint16_t size, bool update_levels) {
     if (min_max_delay) {
         min_max_delay--;
         return;
     }
-    int32_t bw_hz = FULL_BW_HZ;
-    if (fw_decim) {
-        bw_hz /= spectrum_factor;
-    }
+
+    int32_t bw_hz = FULL_BW_HZ / spectrum_factor;
 
     // 2.5 kHz
     uint32_t win_size_hz = 2500;
@@ -680,23 +567,16 @@ static void dsp_update_min_max(float *psd_lin, uint16_t size) {
     size_t start = size * 0.04f;
     size_t stop = size * (1 - 0.04f);
 
-    float power_sum[stop - start - window_size];
+    float running = 0.0f;
+    for (size_t j = 0; j < window_size; j++)
+        running += lin[start + j];
+    float min = running;
 
-    // Sum with window
-    for (size_t i = 0; i < stop - start - window_size; i++) {
-        power_sum[i] = 0.0f;
-        for (size_t j = 0; j < window_size; j++) {
-            power_sum[i] += psd_lin[i + j + start];
-        }
+    for (size_t i = 1; i < stop - start - window_size; i++) {
+        running += lin[start + i + window_size - 1] - lin[start + i - 1];
+        if (running < min) min = running;
     }
-
-    // Search minimum
-    float min = MAXFLOAT;
-    for (size_t i = 0; i < stop - start - window_size; i++) {
-        if (min > power_sum[i]) {
-            min = power_sum[i];
-        }
-    }
+    min = LV_MAX(1e-12f, min);
 
     // Get Minimum Statistics offset for the noise level
     float offset;
@@ -724,35 +604,497 @@ static void dsp_update_min_max(float *psd_lin, uint16_t size) {
     min = noise_level;
     // Use win size for min/max and bandwidth for noise level on S-meter
     float noise_bw_offset = 10.0f * log10f(((float)filter_to - filter_from) / win_size_hz);
-    meter_set_noise(min + noise_bw_offset);
+    float noise_db = min + noise_bw_offset;
+    if (s_meter_att.load()) {
+        noise_db -= DSP_ATT_DB;
+    }
+    if (s_meter_pre.load()) {
+        noise_db -= DSP_PRE_DB;
+    }
+    meter_set_noise(noise_db);
 
-    min -= 19.0f;
+    if (!update_levels) {
+        return;
+    }
+
+    min -= 10.0f*log10f(window_size) + 5.0f;
 
     if (min < S_MIN) {
         min = S_MIN;
     } else if (min > S8) {
         min = S8;
     }
-    float max = min + 48.0f;
-
-    spectrum_update_min(min);
-    waterfall_update_min(min);
-
-    spectrum_update_max(max);
-    waterfall_update_max(max);
+    auto_min = min;
+    auto_max = auto_min + 48.0f;
 }
 
-void dsp_set_waterfall_enabled(bool enabled) {
-    waterfall_enabled.store(enabled, std::memory_order_relaxed);
-    if (enabled) {
-        psd_delay = 4;
-        waterfall_time = get_time();
+/* Whether any external frame subscriber is active right now, i.e. whether the
+ * auto levels must be refreshed. Must be called with frame_subs_mutex held. */
+static bool any_external_sub_active() {
+    for (size_t i = 0; i < MAX_FRAME_SUBS; i++) {
+        if (frame_subs[i].used && frame_subs[i].active.load(std::memory_order_acquire)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+static void deliver_frames(bool tx, uint32_t base_freq, uint8_t fft_dec, bool vary_freq) {
+    std::lock_guard<std::mutex> lock(frame_subs_mutex);
+
+    const uint32_t width_hz = FULL_BW_HZ / spectrum_factor;
+
+    /* The meter tick runs first: it never depends on a subscriber, and its
+     * fresh auto levels are what the frame levels below are resolved from. */
+    meter_tick(tx, any_external_sub_active());
+
+    for (size_t i = 0; i < MAX_FRAME_SUBS; i++) {
+        FrameSub &s = frame_subs[i];
+
+        if (!s.used || !s.active.load(std::memory_order_acquire)) {
+            continue;
+        }
+
+        /* Frames collected while the base frequency was changing are dropped
+         * unless the subscriber opts in (spectrum keeps them). */
+        const bool dirty = (vary_freq || psd_delay) && !s.allow_vary_freq;
+
+        if (dirty) {
+            /* The dirty chunk is not used, but it still advances the cadence
+             * below so delivery cannot stall while retuning. */
+            frame_sub_zero(s);
+        } else {
+            accumulate(s);
+        }
+
+        /* Cadence advances on every active chunk and saturates at the
+         * interval, so a saturated subscriber is "due" and emits on the first
+         * chunk it can actually use. The increment happens before the early
+         * continues to keep the due state. */
+        if (s.chunks_elapsed < s.chunks_per_frame) {
+            s.chunks_elapsed++;
+        }
+
+        if (s.chunks_elapsed < s.chunks_per_frame) {
+            continue;
+        }
+        if (s.accum_count == 0) {
+            /* Due, but no usable data yet: stay due and emit on the first
+             * usable chunk. */
+            continue;
+        }
+
+        /* accum now holds the full-resolution DC-shifted mean. */
+        frame_sub_consume(s);
+
+        if (s.cb) {
+            float level_min, level_max;
+            dsp_resolve_levels(tx, &level_min, &level_max);
+            decimate_emit(s, tx, base_freq, width_hz, fft_dec, level_min, level_max);
+        }
+
+        frame_sub_zero(s);
+        s.chunks_elapsed = 0;
     }
 }
-void dsp_set_spectrum_enabled(bool enabled) {
-    spectrum_enabled.store(enabled, std::memory_order_relaxed);
-    if (enabled) {
-        psd_delay = 4;
-        spectrum_time = get_time();
+
+void dsp_samples(cfloat *buf_samples, uint16_t size, bool tx, uint32_t base_freq, bool vary_freq, uint8_t fft_dec) {
+    if (!ready) {
+        return;
+    }
+
+    if (base_freq != 0) {
+        if (cur_freq != base_freq) {
+            cur_freq = base_freq;
+
+            pthread_mutex_lock(&spectrum_mux);
+            spgram_rx->reset();
+            spgram_tx->reset();
+            pthread_mutex_unlock(&spectrum_mux);
+
+            reset_accumulators();
+        }
+    }
+
+    if (fft_dec && (fft_dec != spectrum_factor)) {
+        set_spectrum_factor(fft_dec);
+    }
+
+    if (psd_delay) {
+        psd_delay--;
+    }
+
+    /* Subscriber accumulators do not survive a direction change; the meter keeps
+     * its own window and the cadence counters are preserved. */
+    if (cur_tx != tx) {
+        cur_tx = tx;
+
+        reset_accumulators();
+    }
+
+    pthread_mutex_lock(&spectrum_mux);
+    process_samples(buf_samples, size, tx);
+    pthread_mutex_unlock(&spectrum_mux);
+
+    deliver_frames(tx, base_freq, fft_dec, vary_freq);
+}
+
+static void set_spectrum_factor(uint8_t factor) {
+    if (factor == spectrum_factor) {
+        return;
+    }
+
+    pthread_mutex_lock(&spectrum_mux);
+    spectrum_factor = factor;
+    spgram_rx->reset();
+    spgram_tx->reset();
+    pthread_mutex_unlock(&spectrum_mux);
+
+    reset_accumulators();
+}
+
+static void on_zoom_change(Subject *subj, void *user_data) {
+    int32_t new_zoom = cfg.mode.zoom()->get();
+
+    zoom_level_offset = log2f(new_zoom) * 3.0f;
+
+    if (base_ver.rev < 8) {
+        // OEM BASE >= 1.1.9 decimates in firmware but does not report fft_dec
+        // back via flow_info, so the feedback path in dsp_samples() never fires
+        // and spectrum_factor stays at 1. Sync it locally instead.
+        set_spectrum_factor(new_zoom);
+    }
+}
+
+static void update_filters(Subject *subj, void *user_data) {
+    auto low = cfg.filter.low()->get();
+    auto high = cfg.filter.high()->get();
+    auto if_shift = cfg.band.if_shift()->get();
+    auto mode = cfg.cur.mode()->get();
+    switch (mode) {
+        case x6100_mode_lsb:
+        case x6100_mode_lsb_dig:
+        case x6100_mode_cwr:
+            filter_from = -high + if_shift;
+            filter_to = -low + if_shift;
+            break;
+
+        case x6100_mode_am:
+        case x6100_mode_nfm:
+            filter_from = -high + if_shift;
+            filter_to = high + if_shift;
+            break;
+        default:
+            filter_from = low + if_shift;
+            filter_to = high + if_shift;
+            break;
+    }
+}
+
+static void update_cur_mode(Subject *subj, void *user_data) {
+    cur_mode = (x6100_mode_t)cfg.cur.mode()->get();
+}
+
+static void on_pre_att_change(Subject *subj, void *user_data) {
+    std::atomic<bool> *flag = static_cast<std::atomic<bool> *>(user_data);
+    flag->store(static_cast<SubjectT<int32_t> *>(subj)->get() != 0);
+}
+
+static void on_cur_freq_change(Subject *subj, void *user_data) {
+    int32_t new_freq = static_cast<SubjectT<int32_t> *>(subj)->get();
+    if (base_ver.rev < 8) {
+        psd_delay = OEM_PSD_DELAY;
+        cur_freq = new_freq;
+    } else {
+        psd_delay = R8_PSD_DELAY;
+    }
+}
+
+float dsp_get_s_meter_db() {
+    return s_meter_db_raw.load();
+}
+
+static uint32_t alloc_sub_id() {
+    if (next_sub_id == AUDIO_SUB_INVALID) {
+        next_sub_id = 1;
+    }
+    return next_sub_id++;
+}
+
+uint32_t dsp_audio_subscribe_raw(audio_raw_cb_t cb, bool exclusive) {
+    if (!cb) {
+        return AUDIO_SUB_INVALID;
+    }
+
+    std::lock_guard<std::mutex> lock(subs_mutex);
+
+    for (size_t i = 0; i < MAX_AUDIO_SUBS; i++) {
+        if (subs[i].kind != AUDIO_SUB_FREE) {
+            continue;
+        }
+        subs[i].id        = alloc_sub_id();
+        subs[i].kind      = AUDIO_SUB_RAW;
+        subs[i].raw_cb    = cb;
+        subs[i].exclusive = exclusive;
+        subs[i].active.store(false, std::memory_order_relaxed);
+        return subs[i].id;
+    }
+
+    return AUDIO_SUB_INVALID;
+}
+
+uint32_t dsp_audio_subscribe_float(audio_float_cb_t cb, uint32_t target_rate_hz) {
+    if (!cb) {
+        return AUDIO_SUB_INVALID;
+    }
+    Resampler *resampler = NULL;
+    if (target_rate_hz < AUDIO_CAPTURE_RATE) {
+        uint8_t N = AUDIO_CAPTURE_RATE / target_rate_hz;
+        if (target_rate_hz * N != AUDIO_CAPTURE_RATE) {
+            LV_LOG_WARN("Requested sample rate is not supported: %u\n", target_rate_hz);
+            return AUDIO_SUB_INVALID;
+        }
+        resampler = new Resampler(N);
+    }
+
+    std::lock_guard<std::mutex> lock(subs_mutex);
+
+    for (size_t i = 0; i < MAX_AUDIO_SUBS; i++) {
+        if (subs[i].kind != AUDIO_SUB_FREE) {
+            continue;
+        }
+        subs[i].id        = alloc_sub_id();
+        subs[i].kind      = AUDIO_SUB_FLOAT;
+        subs[i].float_cb  = cb;
+        subs[i].rate_hz   = target_rate_hz;
+        subs[i].resampler = resampler;
+        subs[i].active.store(false, std::memory_order_relaxed);
+        return subs[i].id;
+    }
+    if (resampler) {
+        delete resampler;
+    }
+    return AUDIO_SUB_INVALID;
+}
+
+void dsp_audio_set_active(uint32_t id, bool active) {
+    if (id == AUDIO_SUB_INVALID) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(subs_mutex);
+
+    for (size_t i = 0; i < MAX_AUDIO_SUBS; i++) {
+        if (subs[i].kind != AUDIO_SUB_FREE && subs[i].id == id) {
+            subs[i].active.store(active, std::memory_order_release);
+            return;
+        }
+    }
+}
+
+void dsp_audio_unsubscribe(uint32_t id) {
+    if (id == AUDIO_SUB_INVALID) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(subs_mutex);
+
+    for (size_t i = 0; i < MAX_AUDIO_SUBS; i++) {
+        if (subs[i].kind == AUDIO_SUB_FREE || subs[i].id != id) {
+            continue;
+        }
+
+        subs[i].active.store(false, std::memory_order_relaxed);
+
+        if (subs[i].kind == AUDIO_SUB_FLOAT) {
+            if (subs[i].resampler) {
+                delete subs[i].resampler;
+                subs[i].resampler = nullptr;
+            }
+            subs[i].float_cb  = nullptr;
+        } else {
+            subs[i].raw_cb = nullptr;
+        }
+
+        subs[i].kind = AUDIO_SUB_FREE;
+        subs[i].id   = 0;
+        return;
+    }
+}
+
+uint32_t dsp_frame_subscribe(const dsp_frame_cfg_t *cfg, dsp_frame_cb_t cb, void *user_data) {
+    if (!cfg || !cb) {
+        LV_LOG_WARN("Empty cfg or cb");
+        return DSP_FRAME_SUB_INVALID;
+    }
+    if (cfg->nfft == 0 || cfg->chunks_per_frame == 0) {
+        LV_LOG_WARN("Wrong nfft or chunks_per_frame");
+        return DSP_FRAME_SUB_INVALID;
+    }
+    if (cfg->nfft > DSP_MAX_NFFT) {
+        LV_LOG_WARN("dsp_frame_subscribe: nfft %u > %d", cfg->nfft, DSP_MAX_NFFT);
+        return DSP_FRAME_SUB_INVALID;
+    }
+
+    std::lock_guard<std::mutex> lock(frame_subs_mutex);
+
+    for (size_t i = 0; i < MAX_FRAME_SUBS; i++) {
+        if (frame_subs[i].used) {
+            continue;
+        }
+        FrameSub &s = frame_subs[i];
+
+        if (next_frame_sub_id == DSP_FRAME_SUB_INVALID) {
+            next_frame_sub_id = 1;
+        }
+        s.id               = next_frame_sub_id++;
+        s.nfft             = cfg->nfft;
+        s.chunks_per_frame = cfg->chunks_per_frame;
+        s.allow_vary_freq  = cfg->allow_vary_freq;
+        s.cb               = cb;
+        s.ud               = user_data;
+        build_decim_ranges(s);
+        frame_sub_zero(s);
+        s.chunks_elapsed = 0;
+        s.used           = true;
+        s.active.store(true, std::memory_order_relaxed);
+        return s.id;
+    }
+
+    return DSP_FRAME_SUB_INVALID;
+}
+
+void dsp_frame_set_active(uint32_t id, bool active) {
+    if (id == DSP_FRAME_SUB_INVALID) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(frame_subs_mutex);
+
+    for (size_t i = 0; i < MAX_FRAME_SUBS; i++) {
+        if (frame_subs[i].used && frame_subs[i].id == id) {
+            if (active) {
+                /* Start the accumulation window fresh so a resumed subscriber
+                 * does not blend in samples from before the pause. The cadence
+                 * counter is kept, so the first usable chunk after resume is
+                 * delivered immediately. */
+                frame_sub_zero(frame_subs[i]);
+            }
+            frame_subs[i].active.store(active, std::memory_order_release);
+            return;
+        }
+    }
+}
+
+void dsp_frame_set_chunks_per_frame(uint32_t id, uint16_t chunks_per_frame) {
+    if (id == DSP_FRAME_SUB_INVALID || chunks_per_frame == 0) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(frame_subs_mutex);
+
+    for (size_t i = 0; i < MAX_FRAME_SUBS; i++) {
+        if (frame_subs[i].used && frame_subs[i].id == id) {
+            /* The accumulation window and the cadence counter are intentionally
+             * left as is: already accumulated samples are valid, only the
+             * averaging interval changes. Lowering the interval below the
+             * current chunks_elapsed makes the subscriber immediately due, so
+             * the current window is emitted on the next usable chunk. */
+            frame_subs[i].chunks_per_frame = chunks_per_frame;
+            return;
+        }
+    }
+}
+
+void dsp_frame_unsubscribe(uint32_t id) {
+    if (id == DSP_FRAME_SUB_INVALID) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(frame_subs_mutex);
+
+    for (size_t i = 0; i < MAX_FRAME_SUBS; i++) {
+        if (frame_subs[i].used && frame_subs[i].id == id) {
+            frame_subs[i].active.store(false, std::memory_order_relaxed);
+            frame_subs[i].cb   = nullptr;
+            frame_subs[i].ud   = nullptr;
+            frame_subs[i].used = false;
+            frame_subs[i].id   = 0;
+            return;
+        }
+    }
+}
+
+void dsp_put_audio_samples(size_t nsamples, int16_t *samples) {
+    if (!ready) {
+        return;
+    }
+
+    std::lock_guard<std::mutex> lock(subs_mutex);
+
+    for (size_t i = 0; i < MAX_AUDIO_SUBS; i++) {
+        if (subs[i].kind == AUDIO_SUB_RAW && subs[i].raw_cb != nullptr && subs[i].exclusive &&
+            subs[i].active.load(std::memory_order_acquire)) {
+            subs[i].raw_cb(nsamples, samples);
+            return;
+        }
+    }
+
+    for (size_t i = 0; i < MAX_AUDIO_SUBS; i++) {
+        if (subs[i].kind == AUDIO_SUB_RAW && subs[i].raw_cb != nullptr && !subs[i].exclusive &&
+            subs[i].active.load(std::memory_order_acquire)) {
+            subs[i].raw_cb(nsamples, samples);
+        }
+    }
+
+    float float_samples[nsamples];
+    vector_s16_to_f(samples, float_samples, nsamples);
+    for (size_t i = 0; i < nsamples; i++) {
+        iirfilt_rrrf_execute(audio_dc_blocker, float_samples[i], &float_samples[i]);
+    }
+
+    for (size_t si = 0; si < MAX_AUDIO_SUBS; si++) {
+        if (subs[si].kind != AUDIO_SUB_FLOAT) {
+            continue;
+        }
+        if (!subs[si].active.load(std::memory_order_acquire)) {
+            continue;
+        }
+
+        Resampler *s = subs[si].resampler;
+        if (!s) {
+            // No resample
+            subs[si].float_cb(nsamples, float_samples);
+        } else {
+            size_t decim = s->decim_factor();
+            size_t out_n = 0;
+            float scratch[nsamples / decim + 1];
+
+            for (size_t i = 0; i < nsamples; i++) {
+                if (s->feed(float_samples[i])) {
+                    scratch[out_n++] = s->execute();
+                }
+            }
+            if (out_n > 0) {
+                subs[si].float_cb(out_n, scratch);
+            }
+        }
+    }
+}
+
+/* Resolve the min/max pair passed to the spectrum/waterfall/scope consumers.
+ * Single point of level policy: TX defaults, auto levels + offset, or the
+ * manual grid levels. Called once per frame from deliver_frames(). */
+static void dsp_resolve_levels(bool tx, float *out_min, float *out_max) {
+    if (tx) {
+        *out_min = DSP_TX_LEVEL_MIN;
+        *out_max = DSP_TX_LEVEL_MAX;
+    } else if (cfg.ui.auto_level_enabled()->get()) {
+        float offset = cfg.ui.auto_level_offset()->get();
+        *out_min = auto_min - offset;
+        *out_max = auto_max - offset;
+    } else {
+        *out_min = cfg.band.grid_min()->get();
+        *out_max = cfg.band.grid_max()->get();
     }
 }

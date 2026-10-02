@@ -9,28 +9,23 @@
 #include "gps.h"
 
 #include "lvgl/lvgl.h"
-#include "events.h"
-#include "dialog_gps.h"
+#include "scheduler.h"
 #include "usb_devices.h"
 #include "pubsub_ids.h"
 
 #include <errno.h>
-#include <math.h>
-#include <time.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <unistd.h>
 
 static struct gps_data_t    gpsdata;
+static struct gps_data_t    snapshot;
 static uint64_t             prev_time = 0;
 static gps_status_t         status=GPS_STATUS_WAITING;
 
 static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  cond = PTHREAD_COND_INITIALIZER;
-
-/* The latest 2D/3D fix, for apps that need a position (JS8's APRS spot). */
-static pthread_mutex_t fix_lock = PTHREAD_MUTEX_INITIALIZER;
-static double          fix_lat, fix_lon;
-static time_t          fix_when; /* 0: none yet */
+static pthread_mutex_t snapshot_mux = PTHREAD_MUTEX_INITIALIZER;
 
 static bool connect() {
     if (gps_open("localhost", "2947", &gpsdata) == -1) {
@@ -51,20 +46,12 @@ static void data_receive() {
                 continue;
             }
             status = GPS_STATUS_WORKING;
-            if (gpsdata.fix.mode >= MODE_2D && isfinite(gpsdata.fix.latitude) &&
-                isfinite(gpsdata.fix.longitude)) {
-                pthread_mutex_lock(&fix_lock);
-                fix_lat  = gpsdata.fix.latitude;
-                fix_lon  = gpsdata.fix.longitude;
-                fix_when = time(NULL);
-                pthread_mutex_unlock(&fix_lock);
-            }
-            if (dialog_gps->run) {
-                struct gps_data_t *msg = malloc(sizeof(struct gps_data_t));
 
-                memcpy(msg, &gpsdata, sizeof(*msg));
-                event_send(dialog_gps->obj, EVENT_GPS, msg);
-            }
+            pthread_mutex_lock(&snapshot_mux);
+            memcpy(&snapshot, &gpsdata, sizeof(snapshot));
+            pthread_mutex_unlock(&snapshot_mux);
+
+            scheduler_msg_send(MSG_GPS, NULL);
         }
     }
 }
@@ -111,14 +98,8 @@ gps_status_t gps_status() {
     return status;
 }
 
-bool gps_last_fix(double *lat, double *lon, int *age_s) {
-    pthread_mutex_lock(&fix_lock);
-    bool ok = fix_when != 0;
-    if (ok) {
-        *lat   = fix_lat;
-        *lon   = fix_lon;
-        *age_s = (int)(time(NULL) - fix_when);
-    }
-    pthread_mutex_unlock(&fix_lock);
-    return ok;
+void gps_get_snapshot(struct gps_data_t *out) {
+    pthread_mutex_lock(&snapshot_mux);
+    memcpy(out, &snapshot, sizeof(*out));
+    pthread_mutex_unlock(&snapshot_mux);
 }

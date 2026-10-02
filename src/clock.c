@@ -8,10 +8,13 @@
 
 #include "clock.h"
 
+#include "settings_types.h"
+#include "cfg/cfg_api.h"
+
 #include "styles.h"
 #include "radio.h"
 #include "util.h"
-#include "backlight.h"
+#include "display.h"
 #include "voice.h"
 #include "msg.h"
 
@@ -51,12 +54,10 @@ static void set_state(clock_state_t new_state) {
     switch (state) {
         case CLOCK_TIME:
             lv_obj_set_style_text_font(obj, &sony_38, 0);
-            lv_obj_set_style_pad_ver(obj, 18, 0);
             break;
 
         case CLOCK_POWER:
             lv_obj_set_style_text_font(obj, &sony_30, 0);
-            lv_obj_set_style_pad_ver(obj, 5, 0);
             break;
     }
 }
@@ -65,11 +66,12 @@ static void show_time() {
     time_t      now;
     struct tm   *t;
 
-    if (params.clock_view == CLOCK_TIME_ALLWAYS) {
+    int32_t clock_view = param_i_get(cfg.ui.clock_view());
+    if (clock_view == CLOCK_TIME_ALLWAYS) {
         set_state(CLOCK_TIME);
-    } else if (params.clock_view == CLOCK_POWER_ALLWAYS) {
+    } else if (clock_view == CLOCK_POWER_ALLWAYS) {
         set_state(CLOCK_POWER);
-    } else if (params.clock_view == CLOCK_TIME_POWER) {
+    } else if (clock_view == CLOCK_TIME_POWER) {
         uint64_t    ms = get_time();
 
         if (radio_get_state() == RADIO_RX) {
@@ -77,18 +79,18 @@ static void show_time() {
                 switch (state) {
                     case CLOCK_TIME:
                         set_state(CLOCK_POWER);
-                        timeout = ms + params.clock_power_timeout * 1000;
+                        timeout = ms + param_i_get(cfg.ui.clock_power_timeout()) * 1000;
                         break;
 
                     case CLOCK_POWER:
                         set_state(CLOCK_TIME);
-                        timeout = ms + params.clock_time_timeout * 1000;
+                        timeout = ms + param_i_get(cfg.ui.clock_time_timeout()) * 1000;
                         break;
                 }
             }
         } else {
             set_state(CLOCK_POWER);
-            timeout = ms + params.clock_tx_timeout * 1000;
+            timeout = ms + param_i_get(cfg.ui.clock_tx_timeout()) * 1000;
         }
     }
 
@@ -140,59 +142,44 @@ static void show_time() {
     lv_label_set_text(obj, str);
 }
 
+static void clock_power_cb(const radio_power_t *power) {
+    pthread_mutex_lock(&power_mux);
+    v_ext = power->vext;
+    v_bat = power->vbat;
+    cap_bat = power->cap;
+    charging = power->charging;
+    pthread_mutex_unlock(&power_mux);
+}
+
+static void on_clock_param_change(Subject *subj, void *user_data) {
+    timeout = get_time();
+}
+
 lv_obj_t * clock_init(lv_obj_t * parent) {
     pthread_mutex_init(&power_mux, NULL);
+    radio_power_set_cb(clock_power_cb);
 
-    obj = lv_label_create(parent);
+    lv_obj_t * container = lv_obj_create(parent);
+    lv_obj_remove_style_all(container);
+    lv_obj_add_style(container, &style.clock, 0);
 
-    lv_obj_add_style(obj, &clock_style, 0);
-    lv_obj_set_style_text_align(obj, LV_TEXT_ALIGN_CENTER, 0);
+    obj = lv_label_create(container);
+    lv_obj_remove_style_all(obj);
+    lv_obj_center(obj);
 
     set_state(CLOCK_TIME);
-    timeout = get_time() + params.clock_time_timeout * 1000;
+    timeout = get_time() + param_i_get(cfg.ui.clock_time_timeout()) * 1000;
 
     show_time();
     lv_timer_create(show_time, 500, NULL);
 
     last_time_sync = get_last_sync_time();
     timer_time_sync = lv_timer_create(check_time_sync_cb, 200, NULL);
-}
 
-void clock_update_power(float ext, float bat, uint8_t cap, bool charge_flag) {
-    pthread_mutex_lock(&power_mux);
-    v_ext = ext;
-    v_bat = bat;
-    cap_bat = cap;
-    charging = charge_flag;
-    pthread_mutex_unlock(&power_mux);
-}
-
-void clock_set_view(clock_view_t x) {
-    params_lock();
-    params.clock_view = x;
-    params_unlock(&params.dirty.clock_view);
-    timeout = get_time();
-}
-
-void clock_set_time_timeout(uint8_t sec) {
-    params_lock();
-    params.clock_time_timeout = sec;
-    params_unlock(&params.dirty.clock_time_timeout);
-    timeout = get_time();
-}
-
-void clock_set_power_timeout(uint8_t sec) {
-    params_lock();
-    params.clock_power_timeout = sec;
-    params_unlock(&params.dirty.clock_power_timeout);
-    timeout = get_time();
-}
-
-void clock_set_tx_timeout(uint8_t sec) {
-    params_lock();
-    params.clock_tx_timeout = sec;
-    params_unlock(&params.dirty.clock_tx_timeout);
-    timeout = get_time();
+    subject_subscribe_delayed((Subject *)cfg.ui.clock_view(), on_clock_param_change, NULL);
+    subject_subscribe_delayed((Subject *)cfg.ui.clock_time_timeout(), on_clock_param_change, NULL);
+    subject_subscribe_delayed((Subject *)cfg.ui.clock_power_timeout(), on_clock_param_change, NULL);
+    subject_subscribe_delayed((Subject *)cfg.ui.clock_tx_timeout(), on_clock_param_change, NULL);
 }
 
 void clock_say_bat_info() {

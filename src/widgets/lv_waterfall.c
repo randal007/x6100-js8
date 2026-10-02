@@ -61,6 +61,20 @@ void lv_waterfall_set_palette(lv_obj_t * obj, lv_color_t * palette, uint16_t cnt
     waterfall->palette_cnt = cnt;
 
     memcpy(waterfall->palette, palette, cnt * sizeof(waterfall->palette[0]));
+    for (size_t i = 0; i < cnt; i++) {
+        waterfall->palette[i].ch.alpha = 0xff;
+    }
+}
+
+/* Opaque black: the GUI draws apps on a see-through overlay plane, where a
+ * pixel with alpha 0 would show the plane below through the waterfall. */
+static void clear_ring(lv_waterfall_t * waterfall) {
+    lv_color_t *px = (lv_color_t *)waterfall->ring;
+    size_t      n  = 2 * waterfall->dsc->data_size / sizeof(lv_color_t);
+    for (size_t i = 0; i < n; i++) {
+        px[i]          = lv_color_black();
+        px[i].ch.alpha = 0xff;
+    }
 }
 
 /* The image is a window of `h` lines into a ring of 2 x h lines, the newest
@@ -91,7 +105,7 @@ void lv_waterfall_set_size(lv_obj_t * obj, lv_coord_t w, lv_coord_t h) {
 
     waterfall->ring = lv_mem_alloc(2 * waterfall->dsc->data_size);
     LV_ASSERT_MALLOC(waterfall->ring);
-    memset(waterfall->ring, 0, 2 * waterfall->dsc->data_size);
+    clear_ring(waterfall);
     waterfall->head = 0;
     waterfall->dsc->data = waterfall->ring;
 
@@ -107,7 +121,7 @@ void lv_waterfall_clear_data(lv_obj_t * obj) {
     if (!waterfall->ring) {
         return;
     }
-    memset(waterfall->ring, 0, 2 * waterfall->dsc->data_size);
+    clear_ring(waterfall);
     lv_img_cache_invalidate_src(waterfall->dsc);
     invalidate_exact(obj);
 }

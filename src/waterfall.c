@@ -7,27 +7,33 @@
  */
 #include "waterfall.h"
 
+#include "globals.h"
 #include "styles.h"
 #include "radio.h"
 #include "events.h"
-#include "params/params.h"
 #include "cfg/cfg_api.h"
 #include "band_info.h"
 #include "meter.h"
-#include "backlight.h"
+#include "display.h"
 #include "dsp.h"
 #include "util.h"
 #include "pubsub_ids.h"
-#include "scheduler.h"
+
+#include "lv_drivers/display/drm.h"
 
 #include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
 
-#define PX_BYTES    sizeof(lv_color_t)
-#define DEFAULT_MIN S4
-#define DEFAULT_MAX S9_20
-#define WIDTH 800
+#if LV_DRAW_NEON && LV_COLOR_DEPTH == 32
+#include <arm_neon.h>
+#endif
+
+#define WIDTH SCREEN_WIDTH
+
+/* Rows are preallocated once for the largest possible strip so that resizing
+ * never reallocates the ring while the DSP thread writes into it. */
+#define WATERFALL_MAX_HEIGHT SCREEN_HEIGHT
 
 typedef struct {
     uint8_t values[WATERFALL_NFFT];
@@ -36,26 +42,15 @@ typedef struct {
 } wf_data_row_t;
 
 static lv_obj_t         *obj;
-static lv_obj_t         *img;
 static bool             ready = false;
 
-static lv_style_t       middle_line_style;
-static lv_obj_t         *middle_line;
-static lv_point_t       middle_line_points[] = { {0, 0}, {0, 0} };
-
-static lv_coord_t       height;
 static int32_t          width_hz = 100000;
 
-static float            grid_min = DEFAULT_MIN;
-static float            grid_max = DEFAULT_MAX;
-
-static lv_img_dsc_t     *frame;
 static uint8_t          delay = 0;
 
 static wf_data_row_t    *wf_rows;
 static uint16_t         last_row_id;
 
-static int32_t          radio_center_freq = 0;
 static int32_t          wf_center_freq = 0;
 static int32_t          mode_lo_offset = 0;
 static int32_t          if_shift = 0;
@@ -65,58 +60,101 @@ static uint8_t          refresh_counter = 0;
 
 static uint8_t          zoom = 1;
 
-static void refresh_waterfall( void * arg);
-static void update_middle_line();
-static void middle_line_cb(lv_event_t * event);
-static void redraw_cb(lv_event_t * e);
+/* Direct-render state. At render time the actual physical geometry (x offset in
+ * columns, strip width) is derived from the arguments passed to waterfall_init():
+ *   s_wf_x  = y  (logical y  -> physical x)
+ *   s_wf_w  = h  (logical h  -> physical width/stride)
+ *   s_wf_h  = WIDTH (800) constant (logical w -> physical height) */
+static int16_t   s_wf_x;
+static int16_t   s_wf_w;
+
+/* Cross-thread flags set by the DSP thread (waterfall_data) / config callbacks
+ * and consumed by waterfall_process() on the main thread. */
+static int s_data_ready = 0;
+static int s_cond_dirty = 1;
+
 static void on_zoom_changed(Subject *subj, void *user_data);
-static void on_fg_freq_change(Subject *subj, void *user_data);
+static void update_freq_cb(Subject *subj, void *user_data);
 static void on_mode_lo_offset_change(Subject *subj, void *user_data);
-static void on_if_shift_changed(Subject *subj, void *user_data);
-static void on_grid_min_change(Subject *subj, void *user_data);
-static void on_grid_max_change(Subject *subj, void *user_data);
+// static void on_if_shift_changed(Subject *subj, void *user_data);
+static void on_dialog_start_cb(void *s, lv_msg_t *m);
+static void on_dialog_stop_cb(void *s, lv_msg_t *m);
 
+static uint32_t waterfall_sub_id = DSP_FRAME_SUB_INVALID;
 
-lv_obj_t * waterfall_init(lv_obj_t * parent) {
-    subject_subscribe_and_notify((Subject*)cfg_fg_freq, on_fg_freq_change, NULL);
-    wf_center_freq = radio_center_freq;
+static void waterfall_frame_cb(const dsp_frame_t *frame, void *user_data) {
+    (void)user_data;
+    waterfall_data(frame->psd_db, frame->size, frame->tx, frame->base_freq, frame->width_hz, frame->min, frame->max);
+}
 
-    obj = lv_obj_create(parent);
+lv_obj_t * waterfall_init(lv_obj_t * overlay_parent, lv_coord_t y, lv_coord_t h) {
+    s_wf_x = y;
+    s_wf_w = h;
 
-    lv_obj_add_style(obj, &waterfall_style, 0);
-    lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
+    wf_rows = calloc(WATERFALL_MAX_HEIGHT, sizeof(*wf_rows));
+    for (size_t i = 0; i < WATERFALL_MAX_HEIGHT; i++) {
+        wf_rows[i].center_freq = wf_center_freq;
+        memset(wf_rows[i].values, 0, WATERFALL_NFFT);
+    }
+    last_row_id = 0;
 
-    // Middle line style
-    lv_style_init(&middle_line_style);
-    lv_style_set_line_width(&middle_line_style, 1);
-    lv_style_set_line_color(&middle_line_style, lv_color_hex(0xAAAAAA));
-    lv_style_set_line_opa(&middle_line_style, LV_OPA_60);
-    lv_style_set_blend_mode(&middle_line_style, LV_BLEND_MODE_ADDITIVE);
-    lv_style_set_pad_all(&middle_line_style, 0);
+    obj = lv_obj_create(overlay_parent);
+    lv_obj_remove_style_all(obj);
+    lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_bg_color(obj, lv_color_black(), 0);
+    lv_obj_set_pos(obj, 0, y);
+    lv_obj_set_size(obj, WIDTH, h);
 
-    middle_line = lv_line_create(obj);
-    // lv_line_set_points(middle_line, middle_line_points, 2);
-    lv_obj_add_style(middle_line, &middle_line_style, 0);
-    lv_obj_center(middle_line);
-    lv_obj_add_event_cb(obj, middle_line_cb, LV_EVENT_DRAW_POST_END, NULL);
+    band_info_init(obj);
 
-    subject_subscribe_delayed_and_notify((Subject*)cfg_mode_zoom, on_zoom_changed, NULL);
-    subject_subscribe_delayed_and_notify((Subject*)cfg_band_if_shift, on_if_shift_changed, NULL);
+    ready = true;
 
-    subject_subscribe_and_notify((Subject*)cfg_mode_lo_offset, on_mode_lo_offset_change, NULL);
-    subject_subscribe((Subject*)cfg_auto_level_enabled, on_grid_min_change, NULL);
-    subject_subscribe_and_notify((Subject*)cfg_band_grid_min, on_grid_min_change, NULL);
-    subject_subscribe((Subject*)cfg_auto_level_enabled, on_grid_max_change, NULL);
-    subject_subscribe_and_notify((Subject*)cfg_band_grid_max, on_grid_max_change, NULL);
+    subject_subscribe((Subject*)cfg.cur.fg_freq(), update_freq_cb, NULL);
+    subject_subscribe_and_notify((Subject*)cfg.band.if_shift(), update_freq_cb, NULL);
+    subject_subscribe_delayed_and_notify((Subject*)cfg.mode.zoom(), on_zoom_changed, NULL);
+    subject_subscribe_and_notify((Subject*)cfg.cur.mode_lo_offset(), on_mode_lo_offset_change, NULL);
+
+    lv_msg_subscribe(MSG_DIALOG_START, on_dialog_start_cb, NULL);
+    lv_msg_subscribe(MSG_DIALOG_STOP, on_dialog_stop_cb, NULL);
+
+    if (waterfall_sub_id == DSP_FRAME_SUB_INVALID) {
+        const dsp_frame_cfg_t sub_cfg = {
+            .nfft             = WATERFALL_NFFT,
+            .chunks_per_frame = DSP_FRAME_DEFAULT_CHUNKS,
+            .allow_vary_freq  = false,
+        };
+        waterfall_sub_id = dsp_frame_subscribe(&sub_cfg, waterfall_frame_cb, NULL);
+    }
 
     return obj;
 }
 
-static void scroll_down() {
-    last_row_id = (last_row_id + 1) % height;
+void waterfall_set_geometry(lv_coord_t y, lv_coord_t h) {
+    if (h < 1 || h > WATERFALL_MAX_HEIGHT) {
+        return;
+    }
+
+    s_wf_x = y;
+    s_wf_w = h;
+
+    lv_obj_set_pos(obj, 0, y);
+    lv_obj_set_size(obj, WIDTH, h);
+
+    __atomic_store_n(&s_cond_dirty, 1, __ATOMIC_RELEASE);
 }
 
-void waterfall_data(float *data_buf, uint16_t size, bool tx, uint32_t base_freq, uint32_t width_hz) {
+void waterfall_set_enabled(bool enabled) {
+    dsp_frame_set_active(waterfall_sub_id, enabled);
+}
+
+static void scroll_down() {
+    last_row_id = (last_row_id + 1) % WATERFALL_MAX_HEIGHT;
+}
+
+void waterfall_data(const float *data_buf, uint16_t size, bool tx, uint32_t base_freq, uint32_t width_hz, float min, float max) {
+    if (!ready) {
+        return;
+    }
     if (delay && (base_freq == 0))
     {
         delay--;
@@ -124,16 +162,8 @@ void waterfall_data(float *data_buf, uint16_t size, bool tx, uint32_t base_freq,
     }
     scroll_down();
 
-    float min, max;
-    if (tx) {
-        min = DEFAULT_MIN;
-        max = DEFAULT_MAX;
-    } else {
-        min = grid_min;
-        max = grid_max;
-    }
     if (base_freq == 0) {
-        base_freq = radio_center_freq + mode_lo_offset;
+        base_freq = wf_center_freq + mode_lo_offset;
     } else if (tx) {
         // New patched firmware
         base_freq += mode_lo_offset;
@@ -141,11 +171,10 @@ void waterfall_data(float *data_buf, uint16_t size, bool tx, uint32_t base_freq,
     wf_rows[last_row_id].center_freq = base_freq;
     wf_rows[last_row_id].width = width_hz;
 
-    float temp_buf[size];
-    liquid_vectorf_addscalar(data_buf, size, -min, temp_buf);
-    liquid_vectorf_mulscalar(temp_buf, size, 255.0f / (max - min), temp_buf);
+    const float scale = 255.0f / (max - min);
+
     for (uint16_t x = 0; x < size; x++) {
-        float   v = temp_buf[x];
+        float   v = (data_buf[x] - min) * scale;
         uint8_t id;
 
         if (v < 0.0f) {
@@ -158,210 +187,218 @@ void waterfall_data(float *data_buf, uint16_t size, bool tx, uint32_t base_freq,
 
         wf_rows[last_row_id].values[x] = id;
     }
-    scheduler_put_noargs(refresh_waterfall);
-}
 
-static void do_scroll_cb(lv_event_t * event) {
-    if (wf_center_freq == radio_center_freq) {
-        return;
-    }
-    if (params.waterfall_smooth_scroll.x) {
-        wf_center_freq += (radio_center_freq - wf_center_freq) / 10 + 1;
-    } else {
-        wf_center_freq = radio_center_freq;
-    }
-    scheduler_put_noargs(refresh_waterfall);
-}
-
-void waterfall_set_height(lv_coord_t h) {
-    lv_obj_set_height(obj, h);
-    lv_obj_update_layout(obj);
-
-    /* For more accurate horizontal scroll, it should be a "multiple of 500Hz" */
-    /* 800 * 500Hz / 100000Hz = 4.0px */
-
-    height = lv_obj_get_height(obj);
-
-    frame = lv_img_buf_alloc(WIDTH, height, LV_IMG_CF_TRUE_COLOR);
-
-    img = lv_img_create(obj);
-    lv_obj_align(img, LV_ALIGN_CENTER, 0, 0);
-    lv_img_set_src(img, frame);
-
-    wf_rows = calloc(height, sizeof(*wf_rows));
-    for (size_t i = 0; i < height; i++) {
-        wf_rows[i].center_freq = radio_center_freq;
-        memset(wf_rows[i].values, 0, WATERFALL_NFFT);
-    }
-    last_row_id = 0;
-
-    lv_obj_add_event_cb(img, do_scroll_cb, LV_EVENT_DRAW_MAIN_END, NULL);
-
-    waterfall_min_max_reset();
-    band_info_init(obj);
-    middle_line_points[1].y = height;
-    lv_line_set_points(middle_line, middle_line_points, 2);
-    lv_obj_move_background(img);
-    ready = true;
-}
-
-static void middle_line_cb(lv_event_t * event) {
-    if (params.waterfall_center_line.x && lv_obj_has_flag(middle_line, LV_OBJ_FLAG_HIDDEN)) {
-        lv_obj_clear_flag(middle_line, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-    if (!params.waterfall_center_line.x && !lv_obj_has_flag(middle_line, LV_OBJ_FLAG_HIDDEN)) {
-        lv_obj_add_flag(middle_line, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-}
-
-void waterfall_min_max_reset() {
-    if (param_i_get(cfg_auto_level_enabled)) {
-        grid_min = DEFAULT_MIN;
-        grid_max = DEFAULT_MAX;
-    } else {
-        grid_min = param_i_get(cfg_band_grid_min);
-        grid_max = param_i_get(cfg_band_grid_max);
-    }
-}
-
-void waterfall_update_max(float db) {
-    if (param_i_get(cfg_auto_level_enabled)) {
-        grid_max = db - param_f_get(cfg_auto_level_offset);
-    }
-}
-
-void waterfall_update_min(float db) {
-    if (param_i_get(cfg_auto_level_enabled)) {
-        grid_min = db - param_f_get(cfg_auto_level_offset);
-    }
-}
-
-void waterfall_refresh_reset() {
-    refresh_period = 1;
-}
-
-void waterfall_refresh_period_set(uint8_t k) {
-    if (k == 0) {
-        return;
-    }
-    refresh_period = k;
-}
-
-
-#define LERP_INTERP_M 3
-#define LERP_INTERP_FRAC (1 << LERP_INTERP_M)
-static inline void lerp_row(wf_data_row_t *row_data, uint32_t dst_center_freq, uint32_t dst_width_hz, uint8_t *dst) {
-    // Skip empty rows at start
-    if (!row_data->width) {
-        memset(dst, 0, WIDTH);
-        return;
-    }
-    uint32_t src_start = row_data->center_freq - row_data->width / 2;
-    uint32_t src_end = src_start + row_data->width;
-
-    uint32_t dst_start = dst_center_freq - dst_width_hz / 2;
-    uint32_t dst_end = dst_start + dst_width_hz;
-
-    if ((src_start > dst_end) || (src_end < dst_start)) {
-        // No overlap
-        memset(dst, 0, WIDTH);
-        return;
-    }
-
-    uint32_t dst_half_width_hz = dst_width_hz / 2;
-    for (size_t i = 0; i < WIDTH; i++) {
-        int32_t freq = dst_center_freq + (dst_width_hz * i + dst_half_width_hz) / WIDTH - dst_half_width_hz;
-        // src pos is multiplied by 8
-        int32_t src_pos = (freq - src_start) * (WATERFALL_NFFT << LERP_INTERP_M) / row_data->width;
-        if (src_pos < 0) {
-            dst[i] = 0;
-            continue;
-        }
-        uint32_t src_pos_int = (uint32_t)src_pos >> LERP_INTERP_M;
-        if (src_pos_int >= (WATERFALL_NFFT - 2)) {
-            dst[i] = 0;
-        } else {
-            int16_t v0 = row_data->values[src_pos_int];
-            int16_t v1 = row_data->values[src_pos_int + 1];
-            v0 += ((v1 - v0) * (src_pos - ((uint32_t)src_pos_int << LERP_INTERP_M))) >> LERP_INTERP_M;
-            dst[i] = v0;
-        }
-    }
-}
-
-static void redraw_cb(lv_event_t * e) {
-    int32_t src_x_offset;
-    uint16_t src_y, src_x0, dst_y, dst_x;
-
-    uint8_t current_zoom = 1;
-    uint32_t bandwidth = width_hz;
-    if (params.waterfall_zoom.x) {
-        current_zoom = zoom;
-        bandwidth /= zoom;
-    }
-    lv_color_t black = lv_color_black();
-    lv_color_t px_color;
-    uint8_t dst[WIDTH];
-
-    for (src_y = 0; src_y < height; src_y++) {
-        wf_data_row_t row_data = wf_rows[src_y];
-        dst_y = ((height - src_y + last_row_id) % height);
-
-        lerp_row(&row_data, wf_center_freq, bandwidth, dst);
-        for (size_t i = 0; i < WIDTH; i++) {
-            *((lv_color_t*)frame->data + (dst_y * WIDTH + i)) = (lv_color_t)wf_palette[dst[i]];
-        }
-    }
-}
-
-static void refresh_waterfall( void * arg) {
-    if (!ready) {
-        return;
-    }
     refresh_counter++;
     if (refresh_counter >= refresh_period) {
         refresh_counter = 0;
-        redraw_cb(NULL);
-        lv_obj_invalidate(img);
+        __atomic_store_n(&s_data_ready, 1, __ATOMIC_RELEASE);
     }
+}
+
+
+#define LERP_INTERP_M      3
+#define LERP_INTERP_FRAC   (1 << LERP_INTERP_M)                 // 8
+#define SCALE              (WATERFALL_NFFT * LERP_INTERP_FRAC)  // 8192
+#define MAX_SRC_POS        ((WATERFALL_NFFT - 2) * LERP_INTERP_FRAC)
+/**
+ * Render one waterfall row directly into one rotated-buffer column using integer
+ * DDA stepping.
+ *
+ * Eliminates the two per-pixel 32-bit multiplications and two 32-bit divisions
+ * from the original lerp_row by precomputing the rational step and using a
+ * Bresenham-style accumulator. Also writes palette result directly into
+ * buf[(WIDTH - 1 - i) * stride + col], removing the intermediate dst[800]
+ * buffer and its separate copy loop.
+ */
+static void lerp_row_to_col(const wf_data_row_t *row_data, uint32_t dst_center_freq,
+                            uint32_t dst_width_hz, uint32_t *buf, int stride, int col)
+{
+    if (!row_data->width) {
+        for (size_t i = 0; i < WIDTH; i++) {
+            buf[(WIDTH - 1 - i) * stride + col] = 0xFF000000;
+        }
+        return;
+    }
+
+    const int32_t src_start = (int32_t)(row_data->center_freq - row_data->width / 2);
+    const int32_t src_end   = src_start + (int32_t)row_data->width;
+
+    const int32_t dst_start = (int32_t)(dst_center_freq - dst_width_hz / 2);
+    const int32_t dst_end   = dst_start + (int32_t)dst_width_hz;
+
+    if ((src_start > dst_end) || (src_end < dst_start)) {
+        for (size_t i = 0; i < WIDTH; i++) {
+            buf[(WIDTH - 1 - i) * stride + col] = 0xFF000000;
+        }
+        return;
+    }
+
+    const int32_t dst_half   = (int32_t)(dst_width_hz / 2);
+    const int32_t freq_start = (int32_t)dst_center_freq - dst_half;
+    const int32_t src_width  = (int32_t)row_data->width;
+
+    /*
+     * src_pos[i] = (OFFSET + STEP * i) / DENOM    (exact rational)
+     *
+     *   STEP   = dst_width_hz * SCALE
+     *   DENOM  = WIDTH * src_width
+     *   OFFSET = ((freq_start - src_start) * WIDTH + dst_half) * SCALE
+     *
+     * DDA:  accum += STEP  →  src_pos += accum / DENOM;  accum %= DENOM
+     *       Pre-split STEP into quotient q=STEP/DENOM and remainder r=STEP%DENOM
+     *       so the inner loop contains only additions and comparisons.
+     */
+    const int32_t DENOM = WIDTH * src_width;
+    const int32_t STEP  = (int32_t)dst_width_hz * SCALE;
+
+    /* 64-bit intermediate — harmless: one divmod per row, not per pixel */
+    const int64_t OFFSET = ((int64_t)(freq_start - src_start) * WIDTH + dst_half) * SCALE;
+
+    int64_t accum   = OFFSET % DENOM;
+    int32_t src_pos = (int32_t)(OFFSET / DENOM);
+
+    /* Normalize accumulator to [0, DENOM) for unsigned-style stepping */
+    if (accum < 0) {
+        accum += DENOM;
+        src_pos--;
+    }
+
+    const int32_t step_q = STEP / DENOM;
+    const int32_t step_r = STEP % DENOM;
+
+    for (size_t i = 0; i < WIDTH; i++) {
+        if (src_pos < 0 || src_pos > MAX_SRC_POS) {
+            buf[(WIDTH - 1 - i) * stride + col] = 0xFF000000;
+        } else {
+            const uint32_t idx  = (uint32_t)src_pos >> LERP_INTERP_M;
+            const int16_t  v0   = row_data->values[idx];
+            const int16_t  v1   = row_data->values[idx + 1];
+            const int32_t  frac = src_pos - ((int32_t)idx << LERP_INTERP_M);
+            const uint8_t  v    = (uint8_t)(v0 + (((v1 - v0) * frac) >> LERP_INTERP_M));
+
+            buf[(WIDTH - 1 - i) * stride + col] = style.wf_palette[v] | 0xFF000000;
+        }
+
+        /* DDA step: additions and comparisons only, zero division */
+        accum   += step_r;
+        src_pos += step_q;
+        if (accum >= DENOM) {
+            accum -= DENOM;
+            src_pos++;
+        }
+    }
+}
+
+static inline uint32_t add_px(uint32_t bg, uint8_t fr, uint8_t fg, uint8_t fb) {
+    uint32_t r = ((bg >> 16) & 0xFF) + fr;
+    r = r > 255 ? 255 : r;
+    uint32_t g = ((bg >> 8) & 0xFF) + fg;
+    g = g > 255 ? 255 : g;
+    uint32_t b = ((bg >> 0) & 0xFF) + fb;
+    b = b > 255 ? 255 : b;
+    return 0xFF000000 | (r << 16) | (g << 8) | b;
+}
+
+static void draw_additive_row(uint32_t *line, uint32_t n, uint8_t fr, uint8_t fg, uint8_t fb) {
+#if LV_DRAW_NEON && LV_COLOR_DEPTH == 32
+    const uint8x16_t fg_v = {
+        fb, fg, fr, 0, fb, fg, fr, 0, fb, fg, fr, 0, fb, fg, fr, 0,
+    };
+    uint8_t *p = (uint8_t *)line;
+    uint8_t *end = p + (size_t)n * 4;
+    for (; p + 16 <= end; p += 16) {
+        uint8x16_t bg = vld1q_u8(p);
+        vst1q_u8(p, vqaddq_u8(bg, fg_v));
+    }
+    line = (uint32_t *)p;
+    n = (uint32_t)(end - p) / 4;
+#endif
+    for (uint32_t i = 0; i < n; i++) {
+        line[i] = add_px(line[i], fr, fg, fb);
+    }
+}
+
+static void waterfall_render_rotated(uint32_t *buf, int stride) {
+    uint32_t bandwidth = width_hz / zoom;
+
+    // circular history oldest->newest; newest (last_row_id) -> column 0 (logical top)
+    for (uint16_t col = 0; col < s_wf_w; col++) {
+        int row = (int)(last_row_id - col + WATERFALL_MAX_HEIGHT) % WATERFALL_MAX_HEIGHT;
+        lerp_row_to_col(&wf_rows[row], wf_center_freq, bandwidth, buf, stride, col);
+    }
+
+    lv_style_value_t style_val;
+    lv_style_get_prop(&style.waterfall_middle_line, LV_STYLE_LINE_COLOR, &style_val);
+    lv_color_t line_color = style_val.color;
+    lv_style_get_prop(&style.waterfall_middle_line, LV_STYLE_LINE_WIDTH, &style_val);
+    lv_coord_t style_width = style_val.num;
+    lv_style_get_prop(&style.waterfall_middle_line, LV_STYLE_LINE_OPA, &style_val);
+    lv_opa_t line_opa = (lv_opa_t)style_val.num;
+
+    bool line_visible = param_i_get(cfg.ui.waterfall_center_line());
+    lv_coord_t line_width = LV_MAX(zoom / 2 + 2, style_width);
+
+    if (line_visible && line_opa > LV_OPA_MIN) {
+        int32_t center_f = if_shift * zoom * WIDTH / width_hz + (WIDTH + line_width) / 2;
+
+        /* Pre-scale foreground once (constant color + opacity). */
+        uint8_t fr = (uint8_t)((line_color.ch.red * line_opa + 255u) >> 8);
+        uint8_t fg = (uint8_t)((line_color.ch.green * line_opa + 255u) >> 8);
+        uint8_t fb = (uint8_t)((line_color.ch.blue * line_opa + 255u) >> 8);
+
+        for (lv_coord_t w = 0; w < line_width; w++) {
+            int32_t freq_col = (int32_t)center_f - w;
+            if (freq_col < 0 || freq_col >= WIDTH) continue;
+            int32_t row = WIDTH - 1 - freq_col;
+            draw_additive_row(&buf[row * stride], (uint32_t)s_wf_w, fr, fg, fb);
+        }
+    }
+}
+
+/* Called from the main loop (between lv_timer_handler() and drm_flip()) when the
+ * direct-render path is enabled. Returns true if a frame was produced. */
+bool waterfall_process(void) {
+    bool data = __atomic_exchange_n(&s_data_ready, 0, __ATOMIC_ACQUIRE);
+    bool cond = __atomic_exchange_n(&s_cond_dirty, 0, __ATOMIC_ACQUIRE);
+    if (!data && !cond) {
+        return false;
+    }
+
+    drm_direct_ctx_t ctx;
+    if (!drm_primary_begin_direct(&ctx, (uint32_t)s_wf_w * WIDTH)) {
+        return false;
+    }
+
+    waterfall_render_rotated((uint32_t *)ctx.buf, s_wf_w);
+
+    lv_area_t area = { .x1 = s_wf_x, .y1 = 0,
+                       .x2 = s_wf_x + s_wf_w - 1,
+                       .y2 = WIDTH - 1 };
+    drm_primary_end_direct(&area);
+    return true;
+}
+
+static void update_freq_cb(Subject *subj, void *user_data) {
+    delay = 2;
+    if_shift = param_i_get(cfg.band.if_shift());
+    wf_center_freq = cparam_i_get(cfg.cur.fg_freq()) - if_shift;
+    __atomic_store_n(&s_cond_dirty, 1, __ATOMIC_RELEASE);
 }
 
 static void on_zoom_changed(Subject *subj, void *user_data) {
     zoom = subject_i_get((SubjectInt*)subj);
-    update_middle_line();
-}
-
-static void on_if_shift_changed(Subject *subj, void *user_data) {
-    delay = 2;
-    if_shift = subject_i_get((SubjectInt*)subj);
-    radio_center_freq = cparam_i_get(cfg_fg_freq) - if_shift;
-    update_middle_line();
-}
-
-static void on_fg_freq_change(Subject *subj, void *user_data) {
-    delay = 2;
-    radio_center_freq = subject_i_get((SubjectInt*)subj) - if_shift;
+    __atomic_store_n(&s_cond_dirty, 1, __ATOMIC_RELEASE);
 }
 
 static void on_mode_lo_offset_change(Subject *subj, void *user_data) {
     mode_lo_offset = subject_i_get((SubjectInt*)subj);
+    __atomic_store_n(&s_cond_dirty, 1, __ATOMIC_RELEASE);
 }
 
-static void update_middle_line() {
-    lv_coord_t width = zoom / 2 + 2;
-    lv_obj_set_pos(middle_line, if_shift * zoom * WIDTH / width_hz + width / 2, 0);
-    lv_style_set_line_width(&middle_line_style, width);
+static void on_dialog_start_cb(void *s, lv_msg_t *m) {
+    refresh_period = 2;
 }
 
-static void on_grid_min_change(Subject *subj, void *user_data) {
-    if (!param_i_get(cfg_auto_level_enabled)) {
-        grid_min = param_i_get(cfg_band_grid_min);
-    }
-}
-static void on_grid_max_change(Subject *subj, void *user_data) {
-    if (!param_i_get(cfg_auto_level_enabled)) {
-        grid_max = param_i_get(cfg_band_grid_max);
-    }
+static void on_dialog_stop_cb(void *s, lv_msg_t *m) {
+    refresh_period = 1;
 }

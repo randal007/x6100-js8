@@ -7,8 +7,6 @@
  */
 #include "cw_encoder.h"
 
-#include "cw_decoder.h"
-#include "params/params.h"
 #include "cfg/cfg_api.h"
 #include "radio.h"
 #include "msg.h"
@@ -22,6 +20,84 @@
 #include <sched.h>
 
 
+typedef struct {
+    char    *morse;
+    char    *character;
+} cw_characters_t;
+
+
+static cw_characters_t cw_characters[] = {
+    { .morse = ".-",        .character = "A" },
+    { .morse = "-...",      .character = "B" },
+    { .morse = "-.-.",      .character = "C" },
+    { .morse = "-..",       .character = "D" },
+    { .morse = ".",         .character = "E" },
+    { .morse = "..-.",      .character = "F" },
+    { .morse = "--.",       .character = "G" },
+    { .morse = "....",      .character = "H" },
+    { .morse = "..",        .character = "I" },
+    { .morse = ".---",      .character = "J" },
+    { .morse = "-.-",       .character = "K" },
+    { .morse = ".-..",      .character = "L" },
+    { .morse = "--",        .character = "M" },
+    { .morse = "-.",        .character = "N" },
+    { .morse = "---",       .character = "O" },
+    { .morse = ".--.",      .character = "P" },
+    { .morse = "--.-",      .character = "Q" },
+    { .morse = ".-.",       .character = "R" },
+    { .morse = "...",       .character = "S" },
+    { .morse = "-",         .character = "T" },
+    { .morse = "..-",       .character = "U" },
+    { .morse = "...-",      .character = "V" },
+    { .morse = ".--",       .character = "W" },
+    { .morse = "-..-",      .character = "X" },
+    { .morse = "-.--",      .character = "Y" },
+    { .morse = "--..",      .character = "Z" },
+
+    { .morse = ".----",     .character = "1" },
+    { .morse = "..---",     .character = "2" },
+    { .morse = "...--",     .character = "3" },
+    { .morse = "....-",     .character = "4" },
+    { .morse = ".....",     .character = "5" },
+    { .morse = "-....",     .character = "6" },
+    { .morse = "--...",     .character = "7" },
+    { .morse = "---..",     .character = "8" },
+    { .morse = "----.",     .character = "9" },
+    { .morse = "-----",     .character = "0" },
+
+    { .morse = "-.-.--",    .character = "!" },
+    { .morse = "..--.",     .character = "!" },
+    { .morse = ".-..-.",    .character = "\"" },
+    { .morse = "...-..-",   .character = "$" },
+    { .morse = ".----.",    .character = "'" },
+    { .morse = "--..--",    .character = "," },
+    { .morse = "-....-",    .character = "-" },
+    { .morse = ".-.-.-",    .character = "." },
+    { .morse = "-..-.",     .character = "/" },
+    { .morse = "---...",    .character = ":" },
+    { .morse = "-.-.-.",    .character = ";" },
+    { .morse = "-...-",     .character = "=" },
+    { .morse = "..--..",    .character = "?" },
+    { .morse = ".--.-.",    .character = "@" },
+    { .morse = "..--.-",    .character = "_" },
+
+    { .morse = ".-.-.",     .character = "<AR>" },
+    { .morse = ".-...",     .character = "<AS>" },
+    { .morse = "-...-.-",   .character = "<BK>" },
+    { .morse = "-.-..-..",  .character = "<CL>" },
+    { .morse = "-.-.-",     .character = "<CT>" },
+    { .morse = "-.--.",     .character = "<KN>" },
+    { .morse = "...-.-",    .character = "<SK>" },
+    { .morse = "...-.",     .character = "<SN>" },
+    { .morse = "...---...", .character = "<SOS>" },
+    { .morse = "-.-.--.-",  .character = "<CQ>" },
+
+    { .morse = "......",    .character = "<ERR>" },
+    { .morse = ".......",   .character = "<ERR>" },
+    { .morse = "........",  .character = "<ERR>" },
+    { .morse = NULL }
+};
+
 static cw_encoder_state_t   state = CW_ENCODER_IDLE;
 static pthread_t            thread;
 
@@ -29,7 +105,8 @@ static char                 *current_msg = NULL;
 static char                 *current_char = NULL;
 
 static uint8_t get_morse(char *str, char **morse) {
-    cw_characters_t *character = &cw_characters[0];
+
+    cw_characters_t *character = cw_characters;
 
     while (character->morse) {
         uint8_t char_len = strlen(character->character);
@@ -81,8 +158,8 @@ static void * endecode_thread(void *arg) {
     pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
 
 
-    time_t dit_nsec = 20000000L / (param_i_get(cfg_key_speed)) * 60;
-    time_t dah_nsec = dit_nsec * param_f_get(cfg_key_ratio);
+    time_t dit_nsec = 20000000L / (param_i_get(cfg.cw.key_speed())) * 60;
+    time_t dah_nsec = dit_nsec * param_f_get(cfg.cw.key_ratio());
     time_t world_space_nsec = dit_nsec * 7;
 
     struct timespec t;
@@ -117,8 +194,9 @@ static void * endecode_thread(void *arg) {
                 break;
             } else {
                 state = CW_ENCODER_BEACON_IDLE;
-                msg_update_text_fmt("Beacon pause: %i s", params.cw_encoder_period);
-                sleep(params.cw_encoder_period);
+                int32_t period = param_i_get(cfg.cw.encoder_period());
+                msg_update_text_fmt("Beacon pause: %i s", period);
+                sleep(period);
 
                 state = CW_ENCODER_BEACON;
                 current_char = current_msg;

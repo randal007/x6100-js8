@@ -22,17 +22,22 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "../ports/app_ports.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#include "../tx_player.h" /* tx_abort_fn_t */
+void tx_worker_construct(const app_ports_t *ports, uint32_t sample_rate);
+void tx_worker_destruct();
+
+/* Abort-check callback. Return true to stop TX after the current block. */
+typedef bool (*tx_abort_fn_t)(void *ctx);
 
 /* Transmit tx_text. Returns true on normal completion (or no-op when
  * sample generation fails); returns false if the abort callback fired
  * mid-transmit. */
 bool tx_worker_run(const char    *tx_text,
-                   int32_t        audio_sample_rate,
                    float          base_gain_offset,
                    tx_abort_fn_t  abort_check,
                    void          *abort_check_ctx);

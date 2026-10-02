@@ -18,11 +18,10 @@
 #include "events.h"
 #include "util.h"
 #include "keyboard.h"
-#include "params/params.h"
-#include "info.h"
 #include "panel.h"
 #include "main_screen.h"
 #include "msg.h"
+#include "voice.h"
 
 static lv_obj_t *text;
 
@@ -33,7 +32,6 @@ static dialog_t             dialog = {
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = NULL,
-    .audio_cb = NULL,
     .key_cb = key_cb
 };
 
@@ -44,7 +42,7 @@ static void construct_cb(lv_obj_t *parent) {
 
     lv_obj_remove_style_all(obj);
 
-    lv_obj_add_style(obj, &msg_tiny_style, 0);
+    lv_obj_add_style(obj, &style.msg_tiny, 0);
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 
     dialog.obj = obj;
@@ -53,7 +51,7 @@ static void construct_cb(lv_obj_t *parent) {
 
     lv_obj_remove_style(text, NULL, LV_STATE_ANY | LV_PART_MAIN);
 
-    lv_obj_set_style_text_color(text, lv_color_white(), 0);
+    lv_obj_add_style(text, &style.text_base_color, LV_PART_MAIN);
     lv_obj_set_style_bg_color(text, lv_color_white(), LV_PART_CURSOR);
     lv_obj_set_style_bg_opa(text, 255, LV_PART_CURSOR);
 

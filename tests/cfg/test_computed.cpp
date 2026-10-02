@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "computed_api.h"       // C-compatible opaque-types and set/get functions
+#include "cfg_api.h"            // C-compatible opaque-types and set/get functions
 #include "computed_parameter.h" // ComputedParameter<T>
 #include "subject.h"            // SubjectT, Observer, Subscription
 
@@ -49,6 +49,22 @@ TEST_CASE("ComputedParameter recomputes on source change", "[computed]") {
     REQUIRE(cp.get() == 105);
 }
 
+TEST_CASE("ComputedParameter clear_sources stops recomputing on source change", "[computed]") {
+    SubjectT<int>          source(10);
+    ComputedParameter<int> cp([&] { return source.get() + 5; });
+    cp.bind(source);
+    REQUIRE(cp.get() == 15);
+
+    cp.clear_sources();
+    source.set(100);
+    REQUIRE(cp.get() == 15); // no longer subscribed
+
+    // Rebinding after clear works (no leftover/duplicated observers).
+    cp.bind(source);
+    cp.recompute();
+    REQUIRE(cp.get() == 105);
+}
+
 TEST_CASE("ComputedParameter aggregates multiple sources", "[computed]") {
     SubjectT<int>          a(1), b(2);
     ComputedParameter<int> cp([&] { return a.get() + b.get(); });
@@ -68,10 +84,9 @@ TEST_CASE("ComputedParameter notifies its subscribers", "[computed]") {
     cp.bind(source);
 
     TestObserver obs;
-    auto         sub = cp.subscribe(TestObserver::staticCallback, &obs);
+    Subscription sub{cp.subscribe(TestObserver::staticCallback, &obs)};
     source.set(7);
     REQUIRE(obs.values == std::vector<int>{14});
-    delete sub;
 }
 
 TEST_CASE("ComputedParameter does not notify when recomputed value is equal", "[computed]") {
@@ -85,7 +100,7 @@ TEST_CASE("ComputedParameter does not notify when recomputed value is equal", "[
     REQUIRE(compute_evals == 1);
 
     TestObserver obs;
-    auto         sub = cp.subscribe(TestObserver::staticCallback, &obs);
+    Subscription sub{cp.subscribe(TestObserver::staticCallback, &obs)};
     cp.bind(a);
 
     a.set(10); // recompute -> 10, same as current value -> no notify
@@ -95,7 +110,6 @@ TEST_CASE("ComputedParameter does not notify when recomputed value is equal", "[
     a.set(7); // recompute -> still 10 -> still no notify
     REQUIRE(obs.values.empty());
     REQUIRE(compute_evals == 3);
-    delete sub;
 }
 
 TEST_CASE("ComputedParameter set routes through reverse fn", "[computed]") {

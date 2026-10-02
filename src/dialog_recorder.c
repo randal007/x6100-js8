@@ -7,11 +7,11 @@
  */
 #include "dialog_recorder.h"
 
+#include "radio.h"
 #include "audio.h"
 #include "recorder.h"
 #include "dialog.h"
 #include "styles.h"
-#include "params/params.h"
 #include "events.h"
 #include "util.h"
 #include "panel.h"
@@ -43,6 +43,10 @@ static int16_t              table_rows = 0;
 static SNDFILE              *file = NULL;
 static bool                 play_state = false;
 
+static void                 *tx_sub;
+static void                 *recorder_start_sub;
+static void                 *recorder_stop_sub;
+
 static char                 *prev_filename;
 static pthread_t            thread;
 static int16_t              samples_buf[BUF_SIZE];
@@ -54,6 +58,10 @@ static void construct_cb(lv_obj_t *parent);
 static void destruct_cb();
 static void key_cb(lv_event_t * e);
 static void load_btn_page();
+
+static void refresh_buttons(bool on);
+static void recorder_start_cb(void *s, lv_msg_t *msg);
+static void recorder_stop_cb(void *s, lv_msg_t *msg);
 
 static void update_level_cb(lv_timer_t * timer);
 
@@ -108,7 +116,6 @@ static dialog_t             dialog = {
     .run = false,
     .construct_cb = construct_cb,
     .destruct_cb = destruct_cb,
-    .audio_cb = NULL,
     .btn_page = &btn_page,
     .key_cb = NULL
 };
@@ -192,18 +199,21 @@ static void play_item() {
 
     play_state = true;
 
+    audio_player_t *player = audio_get_player(sfinfo.samplerate, sfinfo.channels);
+
     while (play_state) {
         int res = sf_read_short(file, samples_buf, BUF_SIZE);
 
         if (res > 0) {
-            audio_play(samples_buf, res);
+            audio_player_send(player, samples_buf, res);
         } else {
             play_state = false;
         }
     }
 
     sf_close(file);
-    audio_play_wait();
+    audio_player_wait(player);
+    audio_player_release(player);
 }
 
 static void * play_thread(void *arg) {
@@ -250,7 +260,7 @@ static bool textarea_window_edit_ok_cb() {
     return true;
 }
 
-static void tx_cb(lv_event_t * e) {
+static void tx_cb(void * s, lv_msg_t * msg) {
     if (play_state) {
         play_state = false;
 
@@ -265,7 +275,9 @@ static void construct_cb(lv_obj_t *parent) {
     buttons_unload_page();
     buttons_load_page(&btn_page);
 
-    lv_obj_add_event_cb(dialog.obj, tx_cb, EVENT_RADIO_TX, NULL);
+    tx_sub = lv_msg_subscribe(MSG_RADIO_TX, tx_cb, NULL);
+    recorder_start_sub = lv_msg_subscribe(MSG_RECORDER_START, recorder_start_cb, NULL);
+    recorder_stop_sub = lv_msg_subscribe(MSG_RECORDER_STOP, recorder_stop_cb, NULL);
 
     table = lv_table_create(dialog.obj);
 
@@ -279,7 +291,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_border_width(table, 0, LV_PART_ITEMS);
 
     lv_obj_set_style_bg_opa(table, LV_OPA_TRANSP, LV_PART_ITEMS);
-    lv_obj_set_style_text_color(table, lv_color_white(), LV_PART_ITEMS);
+    lv_obj_add_style(table, &style.text_base_color, LV_PART_ITEMS);
     lv_obj_set_style_pad_top(table, 5, LV_PART_ITEMS);
     lv_obj_set_style_pad_bottom(table, 5, LV_PART_ITEMS);
     lv_obj_set_style_pad_left(table, 0, LV_PART_ITEMS);
@@ -350,6 +362,13 @@ static void destruct_cb() {
     play_state = false;
     textarea_window_close();
     lv_timer_del(level_timer);
+
+    lv_msg_unsubscribe(tx_sub);
+    tx_sub = NULL;
+    lv_msg_unsubscribe(recorder_start_sub);
+    recorder_start_sub = NULL;
+    lv_msg_unsubscribe(recorder_stop_sub);
+    recorder_stop_sub = NULL;
 }
 
 static void key_cb(lv_event_t * e) {
@@ -378,7 +397,6 @@ static void dialog_recorder_rec_cb(button_data_t *btn_data) {
 
 static void rec_stop_cb(button_data_t *btn_data) {
     recorder_set_on(false);
-    load_table();
 }
 
 static void dialog_recorder_play_cb(button_data_t *btn_data) {
@@ -417,7 +435,7 @@ static void dialog_recorder_delete_cb(button_data_t *btn_data) {
     }
 }
 
-void dialog_recorder_set_on(bool on) {
+static void refresh_buttons(bool on) {
     if (!dialog.run) {
         return;
     }
@@ -430,6 +448,14 @@ void dialog_recorder_set_on(bool on) {
         buttons_load_page(&btn_page);
         load_table();
     }
+}
+
+static void recorder_start_cb(void *s, lv_msg_t *msg) {
+    refresh_buttons(true);
+}
+
+static void recorder_stop_cb(void *s, lv_msg_t *msg) {
+    refresh_buttons(false);
 }
 
 static void update_level_cb(lv_timer_t * timer) {

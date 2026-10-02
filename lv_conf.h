@@ -86,7 +86,7 @@
 #define LV_DISP_DEF_REFR_PERIOD 33      /*[ms]*/
 
 /*Input device read period in milliseconds*/
-#define LV_INDEV_DEF_READ_PERIOD 10     /*[ms]*/
+#define LV_INDEV_DEF_READ_PERIOD 33     /*[ms]*/
 
 /*Use a custom tick source that tells the elapsed time in milliseconds.
  *It removes the need to manually update the tick with `lv_tick_inc()`)*/
@@ -596,7 +596,7 @@
 #define LV_USE_THEME_BASIC 1
 
 /*A theme designed for monochrome displays*/
-#define LV_USE_THEME_MONO 1
+#define LV_USE_THEME_MONO 0
 
 /*-----------
  * Layouts

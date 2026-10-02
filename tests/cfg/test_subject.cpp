@@ -1,12 +1,10 @@
 // test_subject.cpp
 #include <catch2/catch_test_macros.hpp>
 
-#include "lvgl.h"    // lv_init / lv_timer_handler for delayed-notify tests
-#include "subject.h" // SubjectT, Observer, Subscription, ObserverDeleter
+#include "subject.h" // SubjectT, Observer, Subscription
 #include <atomic>
 #include <thread>
 #include <vector>
-
 
 struct TestObserver {
     std::vector<int> values;
@@ -30,21 +28,19 @@ TEST_CASE("SubjectT basic get/set", "[subject]") {
 TEST_CASE("SubjectT set same value does not notify", "[subject]") {
     SubjectT<int> s(10);
     TestObserver  obs;
-    auto          sub = s.subscribe(TestObserver::staticCallback, &obs);
+    Subscription  sub{s.subscribe(TestObserver::staticCallback, &obs)};
     s.set(10);
     REQUIRE(obs.values.empty());
-    delete sub;
 }
 
 TEST_CASE("SubjectT notifies observer on change", "[subject]") {
     SubjectT<int> s(0);
     TestObserver  obs;
-    auto          sub = s.subscribe(TestObserver::staticCallback, &obs);
+    Subscription  sub{s.subscribe(TestObserver::staticCallback, &obs)};
     s.set(5);
     REQUIRE(obs.values == std::vector<int>{5});
     s.set(10);
     REQUIRE(obs.values == std::vector<int>{5, 10});
-    delete sub;
 }
 
 TEST_CASE("Subscription RAII unsubscribe", "[subject]") {
@@ -62,26 +58,24 @@ TEST_CASE("Subscription RAII unsubscribe", "[subject]") {
 TEST_CASE("Unsubscribe observer", "[subject]") {
     SubjectT<int> s(0);
     TestObserver  obs;
-    auto          sub = s.subscribe(TestObserver::staticCallback, &obs);
+    // A borrowed observer (no Subscription): unsubscribe() releases the only
+    // reference and destroys it.
+    Observer *sub = s.subscribe(TestObserver::staticCallback, &obs);
     s.set(5);
     REQUIRE(obs.values == std::vector<int>{5});
     sub->unsubscribe();
     s.set(10);
     REQUIRE(obs.values == std::vector<int>{5});
-    delete sub;
 }
 
 TEST_CASE("Multiple observers", "[subject]") {
     SubjectT<int> s(0);
     TestObserver  obs1, obs2;
-    auto          sub1 = s.subscribe(TestObserver::staticCallback, &obs1);
-    auto          sub2 = s.subscribe(TestObserver::staticCallback, &obs2);
+    Subscription  sub1{s.subscribe(TestObserver::staticCallback, &obs1)};
+    Subscription  sub2{s.subscribe(TestObserver::staticCallback, &obs2)};
     s.set(42);
     REQUIRE(obs1.values == std::vector<int>{42});
     REQUIRE(obs2.values == std::vector<int>{42});
-
-    delete sub1;
-    delete sub2;
 }
 
 TEST_CASE("Observer manual unsubscribe", "[subject]") {
@@ -93,7 +87,6 @@ TEST_CASE("Observer manual unsubscribe", "[subject]") {
     raw->unsubscribe();
     s.set(2);
     REQUIRE(obs.values.size() == 1);
-    delete raw;
 }
 
 TEST_CASE("Concurrent set/get integrity", "[subject][threads]") {
@@ -127,10 +120,9 @@ TEST_CASE("Concurrent set/get integrity", "[subject][threads]") {
 
 // Delayed observers deliver through lvgl's async queue. lv_init() makes that
 // queue functional in the test process; pending calls are run by
-// lv_timer_handler().
+// ObserverDelayed::drain().
 
 TEST_CASE("ObserverDelayed coalesces many sets into one latest delivery", "[subject][delayed]") {
-    lv_init();
     SubjectT<int> s(0);
     TestObserver  obs;
     Subscription  sub{s.subscribe_delayed(TestObserver::staticCallback, &obs)};
@@ -143,14 +135,13 @@ TEST_CASE("ObserverDelayed coalesces many sets into one latest delivery", "[subj
     // Nothing delivered yet (async work is pending, not run inline).
     REQUIRE(obs.values.empty());
 
-    lv_timer_handler();
+    ObserverDelayed::drain();
 
     // Exactly one callback, carrying the final (latest) value.
     REQUIRE(obs.values == std::vector<int>{3});
 }
 
 TEST_CASE("ObserverDelayed cancels pending delivery on destruction", "[subject][delayed]") {
-    lv_init();
     SubjectT<int> s(0);
     TestObserver  obs;
     {
@@ -159,7 +150,7 @@ TEST_CASE("ObserverDelayed cancels pending delivery on destruction", "[subject][
         // Subscription is destroyed here: the pending async call is cancelled
         // so the stale observer is never invoked after it is gone.
     }
-    lv_timer_handler();
+    ObserverDelayed::drain();
     REQUIRE(obs.values.empty());
 }
 
@@ -259,7 +250,6 @@ TEST_CASE("NotifySuppressGuard RAII suppresses the whole scope", "[subject][supp
 }
 
 TEST_CASE("ObserverDelayed keeps one coalesced delivery through suppression", "[subject][suppress][delayed]") {
-    lv_init();
     SubjectT<int> s(0);
     TestObserver  obs;
     Subscription  sub{s.subscribe_delayed(TestObserver::staticCallback, &obs)};
@@ -270,7 +260,85 @@ TEST_CASE("ObserverDelayed keeps one coalesced delivery through suppression", "[
     Subject::pop_suppress();
     REQUIRE(obs.values.empty()); // delivery is async
 
-    lv_timer_handler();
+    ObserverDelayed::drain();
     REQUIRE(obs.values == std::vector<int>{2});
+}
+
+// Subject lifetime: the Subject owns one reference per subscribed observer
+// while it holds it in its list. A borrowed observer (subscribe* result kept as
+// a raw pointer) is destroyed together with the Subject; a Subscription holds an
+// extra reference and may outlive the Subject (e.g. a static Subscription
+// destroyed after a global SettingsManager). ~Subject() detaches every observer
+// and releases the Subject's reference, so the late unsubscribe is a no-op and
+// never touches freed memory (checked by the test build's ASan/UBSan).
+
+TEST_CASE("Subscription outliving its Subject is safe", "[subject][lifetime]") {
+    auto        *s = new SubjectT<int>(0);
+    TestObserver obs;
+    Subscription sub{s->subscribe(TestObserver::staticCallback, &obs)};
+
+    delete s; // subject destroyed first; sub destructor runs at scope exit
+    REQUIRE(obs.values.empty());
+}
+
+TEST_CASE("Subject destruction unlinks multiple observers", "[subject][lifetime]") {
+    auto        *s = new SubjectT<int>(0);
+    TestObserver obs1, obs2;
+    Subscription sub1{s->subscribe(TestObserver::staticCallback, &obs1)};
+    Subscription sub2{s->subscribe(TestObserver::staticCallback, &obs2)};
+
+    delete s;
+    REQUIRE(obs1.values.empty());
+    REQUIRE(obs2.values.empty());
+}
+
+TEST_CASE("Subject destruction frees borrowed observers", "[subject][lifetime]") {
+    // Borrowed observers (fire-and-forget subscribe*) are owned by the Subject:
+    // deleting it releases the only reference and destroys them. A leak here is
+    // reported by the test build's LeakSanitizer.
+    auto        *s = new SubjectT<int>(0);
+    TestObserver obs;
+    s->subscribe(TestObserver::staticCallback, &obs);
+    s->subscribe_delayed(TestObserver::staticCallback, &obs);
+
+    delete s;
+    REQUIRE(obs.values.empty());
+}
+
+TEST_CASE("Queued ObserverDelayed skipped when Subject is destroyed", "[subject][lifetime][delayed]") {
+    auto        *s = new SubjectT<int>(0);
+    TestObserver obs;
+    Subscription sub{s->subscribe_delayed(TestObserver::staticCallback, &obs)};
+
+    s->set(5); // schedules a deferred delivery
+    delete s;  // subject dies while the observer is still queued
+
+    ObserverDelayed::drain(); // stale observer must be skipped, not invoked
+    REQUIRE(obs.values.empty());
+}
+
+TEST_CASE("ObserverDelayed::shutdown clears pending deliveries without invoking callbacks",
+          "[subject][lifetime][delayed]") {
+    auto        *s = new SubjectT<int>(0);
+    TestObserver obs;
+    Subscription sub{s->subscribe_delayed(TestObserver::staticCallback, &obs)};
+
+    s->set(5);                   // schedules a deferred delivery
+    ObserverDelayed::shutdown(); // drops it without firing the callback
+    REQUIRE(obs.values.empty());
+
+    delete s; // still subscribed: Subject releases its reference, sub the other
+}
+
+TEST_CASE("Subscription destroyed before its Subject keeps normal behaviour", "[subject][lifetime]") {
+    auto        *s = new SubjectT<int>(0);
+    TestObserver obs;
+    {
+        Subscription sub{s->subscribe(TestObserver::staticCallback, &obs)};
+        s->set(1);
+        REQUIRE(obs.values == std::vector<int>{1});
+    } // sub unsubscribes here
+    delete s;
+    REQUIRE(obs.values == std::vector<int>{1});
 }
 

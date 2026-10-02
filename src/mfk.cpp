@@ -7,6 +7,8 @@
  */
 #include "mfk.h"
 
+#include <vector>
+
 #include "util.hpp"
 #include "cw.h"
 #include "voice.h"
@@ -14,17 +16,14 @@
 #include "knobs.h"
 #include "dsp.h"
 #include "controls.h"
+#include "display.h"
 
-#include <vector>
 
 extern "C" {
-    #include "params/params.h"
     #include "spectrum.h"
     #include "waterfall.h"
     #include "msg.h"
     #include "radio.h"
-    #include "info.h"
-    #include "backlight.h"
     #include "cw_tune_ui.h"
     #include "band_info.h"
     #include "pubsub_ids.h"

@@ -9,18 +9,18 @@
 #include "meter.h"
 #include "styles.h"
 #include "events.h"
-#include "params/params.h"
-#include "cfg/cfg_api.h"
 #include "spectrum.h"
 #include "util.h"
 #include "scheduler.h"
+#include "audio.h"
+#include "widgets/lv_bar_indicator.h"
+#include "cfg/cfg_api.h"
 
-#define NUM_ITEMS   7
 #define METER_PEAK_HOLD 1500
 #define METER_PEAK_SPEED 20
 
-static int16_t          min_db = S1;
-static int16_t          max_db = S9_40;
+#define LEVEL_MIN_DB    (-50.0f)
+#define LEVEL_MAX_DB    (0.5f)
 
 static float            meter_db = S1;
 static float            meter_db_raw = S1;
@@ -30,186 +30,203 @@ static float            meter_peak = S1;
 static int64_t          meter_peak_time;
 static int64_t          now;
 
-static bool             pre=false;
-static bool             att=false;
-
 static lv_obj_t         *obj;
+static lv_obj_t         *s_bar;
+static lv_obj_t         *level_bar;
 static lv_obj_t         *db_val_label;
 
-typedef struct {
-    char    *label;
-    int16_t db;
-} s_item_t;
+static lv_timer_t       *level_timer;
+static float            level_peak = LEVEL_MIN_DB;
+static int64_t          level_peak_time;
 
-static s_item_t s_items[NUM_ITEMS] = {
-    { .label = "S1",    .db = S1 },
-    { .label = "3",     .db = S3 },
-    { .label = "5",     .db = S5 },
-    { .label = "7",     .db = S7 },
-    { .label = "9",     .db = S9 },
-    { .label = "+20",   .db = S9_20 },
-    { .label = "+40",   .db = S9_40 }
+static meter_mode_t     meter_mode = METER_MODE_S;
+
+static bar_tick_t s_items[] = {
+    { .label = "S1",    .val = S1 },
+    { .label = "3",     .val = S3 },
+    { .label = "5",     .val = S5 },
+    { .label = "7",     .val = S7 },
+    { .label = "9",     .val = S9 },
+    { .label = "+20",   .val = S9_20 },
+    { .label = "+40",   .val = S9_40 }
 };
 
-static void on_bool_value_change(Subject *subj, void *user_data) {
-    *(bool*)user_data = subject_i_get((SubjectInt*)subj);
+static bar_tick_t level_items[] = {
+    { .label = "0",     .val = 0 },
+    { .label = "-12",   .val = -12 },
+    { .label = "-24",   .val = -24 },
+    { .label = "-36",   .val = -36 },
+    { .label = "-48",   .val = -48 }
+};
+
+static void on_show_meter_value_change(Subject *, void *) {
+    if (param_i_get(cfg.ui.show_meter_value())) {
+        lv_obj_clear_flag(db_val_label, LV_OBJ_FLAG_HIDDEN);
+    } else {
+        lv_obj_add_flag(db_val_label, LV_OBJ_FLAG_HIDDEN);
+    }
 }
 
-static void update_db_label() {
+static void meter_scheduled_refresh(void *unused) {
+    (void)unused;
+    lv_bar_indicator_set_value(s_bar, meter_db);
+    lv_bar_indicator_set_peak_value(s_bar, meter_peak);
+}
+
+static void update_db_label_cb(lv_timer_t *t) {
+    // TODO: add check for visibility
     lv_label_set_text_fmt(db_val_label, "%.1f", meter_db_raw);
 }
 
-static void meter_draw_cb(lv_event_t * e) {
-    lv_obj_t            *obj = lv_event_get_target(e);
-    lv_draw_ctx_t       *draw_ctx = lv_event_get_draw_ctx(e);
-    lv_draw_rect_dsc_t  rect_dsc;
-    lv_draw_label_dsc_t label_dsc;
-    lv_area_t           area;
-
-    lv_coord_t x1 = obj->coords.x1 + 7;
-    lv_coord_t y1 = obj->coords.y1 + 17;
-
-    lv_coord_t w = lv_obj_get_width(obj) - 80;
-    // lv_coord_t h = lv_obj_get_height(obj) - 1;
-
-    uint8_t     slice_db = 3;
-    uint8_t     slices_total = (max_db - min_db) / slice_db + 1;
-    uint8_t     slice_w = w / slices_total;
-    uint8_t     slice_spacing = slice_w * 2 / 10;
-
-    /* Rects */
-
-    lv_draw_rect_dsc_init(&rect_dsc);
-
-    rect_dsc.bg_opa = LV_OPA_80;
-
-    uint32_t count = (meter_db - min_db) / slice_db + 1.5f;
-    count = LV_MIN(count, slices_total);
-
-    area.y1 = y1 - 5;
-    area.y2 = y1 + 32;
-
-    int16_t db = s_items[0].db;
-
-    for (uint16_t i = 0; i < count; i++) {
-        if (db <= noise_level) {
-            rect_dsc.bg_color = lv_color_hex(0x777777);
-        } else if (db <= -73) {
-            rect_dsc.bg_color = lv_color_hex(0xAAAAAA);
-        } else if (db <= -53) {
-            rect_dsc.bg_color = lv_color_hex(0xAAAA00);
-        } else {
-            rect_dsc.bg_color = lv_color_hex(0xAA0000);
-        }
-        area.x1 = x1 + 30 + i * slice_w - slice_w / 2 + slice_spacing / 2;
-        area.x2 = area.x1 + slice_w - slice_spacing;
-
-        lv_draw_rect(draw_ctx, &rect_dsc, &area);
-
-        db += slice_db;
-    }
-
-    /* Peak */
-    if (meter_peak > meter_db + 1.5f * slice_db) {
-        area.x1 = x1 + 30 - slice_w / 2 + slice_w * (uint8_t)((meter_peak - min_db) / slice_db + 0.5f) + slice_spacing / 2;
-        area.x2 = area.x1 + slice_w - slice_spacing;
-        rect_dsc.bg_opa = LV_OPA_50;
-        rect_dsc.bg_color = lv_color_hex(0xAAAAAA);
-        lv_draw_rect(draw_ctx, &rect_dsc, &area);
-    }
-
-    /* Labels */
-
-    lv_draw_label_dsc_init(&label_dsc);
-
-    label_dsc.color = lv_color_white();
-    label_dsc.font = &sony_22;
-
-    area.x1 = x1;
-    area.x2 = x1 + 20;
-    area.y1 = y1 + 5;
-    area.y2 = area.y1 + 18;
-
-    lv_point_t label_size;
-
-    for (uint8_t i = 0; i < NUM_ITEMS; i++) {
-        char    *label = s_items[i].label;
-        int16_t db = s_items[i].db;
-
-        lv_txt_get_size(&label_size, label, label_dsc.font, 0, 0, LV_COORD_MAX, 0);
-
-        area.x1 = x1 + 30 + slice_w * ((db  - min_db) / slice_db) - label_size.x / 2;
-        area.x2 = area.x1 + label_size.x;
-
-        lv_draw_label(draw_ctx, &label_dsc, &area, label, NULL);
-    }
-}
-
-static void tx_cb(lv_event_t * e) {
+static void tx_cb(void * s, lv_msg_t * msg) {
     lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
 }
 
-static void rx_cb(lv_event_t * e) {
+static void rx_cb(void * s, lv_msg_t * msg) {
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+}
+
+static lv_color_t meter_color_cb(float val) {
+    if (val <= noise_level) {
+        return style.colors.s_meter.noise;
+    } else if (val <= S9) {
+        return style.colors.s_meter.low;
+    } else if (val <= S9_20) {
+        return style.colors.s_meter.mid;
+    }
+    return style.colors.s_meter.high;
+}
+
+static lv_color_t level_color_cb(float val) {
+    if (val <= -12.0f) {
+        return style.colors.s_meter.low;
+    } else if (val <= -6.0f) {
+        return style.colors.s_meter.mid;
+    }
+    return style.colors.s_meter.high;
+}
+
+static void level_refresh_cb(lv_timer_t *t) {
+    float db = audio_get_peak_db();
+
+    int64_t t_now = get_time();
+
+    if (db > level_peak) {
+        level_peak = db;
+        level_peak_time = t_now;
+    } else if (t_now - level_peak_time > METER_PEAK_HOLD) {
+        level_peak -= (t_now - level_peak_time - METER_PEAK_HOLD) * METER_PEAK_SPEED / 1000;
+    }
+
+    lv_bar_indicator_set_value(level_bar, db);
+    lv_bar_indicator_set_peak_value(level_bar, level_peak);
 }
 
 
 lv_obj_t * meter_init(lv_obj_t * parent) {
     obj = lv_obj_create(parent);
-
-    lv_obj_add_style(obj, &meter_style, 0);
+    lv_obj_remove_style_all(obj);
+    lv_obj_add_style(obj, &style.s_meter, 0);
     lv_obj_set_scrollbar_mode(obj, LV_SCROLLBAR_MODE_OFF);
 
-    lv_obj_add_event_cb(obj, tx_cb, EVENT_RADIO_TX, NULL);
-    lv_obj_add_event_cb(obj, rx_cb, EVENT_RADIO_RX, NULL);
-    lv_obj_add_event_cb(obj, meter_draw_cb, LV_EVENT_DRAW_MAIN_END, NULL);
+    // Use pad to align
+    lv_coord_t pad = lv_obj_get_style_pad_top(obj, 0);
+    lv_obj_update_layout(obj);
+    lv_coord_t w = lv_obj_get_content_width(obj);
+    lv_coord_t h = lv_obj_get_content_height(obj);
 
-    subject_subscribe_delayed_and_notify((Subject*)cfg_cur_pre, on_bool_value_change, &pre);
-    subject_subscribe_delayed_and_notify((Subject*)cfg_cur_att, on_bool_value_change, &att);
+    lv_msg_subscribe(MSG_RADIO_TX, tx_cb, NULL);
+    lv_msg_subscribe(MSG_RADIO_RX, rx_cb, NULL);
+
+    s_bar = lv_bar_indicator_create(obj);
+    lv_obj_set_size(s_bar, w, h);
+    lv_obj_center(s_bar);
+
+    lv_bar_indicator_set_range(s_bar, S1, S9_40 + 5, 3.0f);
+
+    lv_bar_indicator_set_ticks(s_bar, s_items, ARRAY_SIZE(s_items));
+    lv_bar_indicator_set_font(s_bar, &sony_22);
+    lv_bar_indicator_set_default_color(s_bar, style.colors.s_meter.low);
+    lv_bar_indicator_set_color_cb(s_bar, meter_color_cb);
+
+    lv_bar_indicator_set_peak_enable(s_bar, true);
+    lv_bar_indicator_set_peak_color(s_bar, style.colors.s_meter.peak);
+
+    level_bar = lv_bar_indicator_create(obj);
+    lv_obj_set_size(level_bar, w, h);
+    lv_obj_center(level_bar);
+    lv_obj_add_flag(level_bar, LV_OBJ_FLAG_HIDDEN);
+
+    lv_bar_indicator_set_range(level_bar, LEVEL_MIN_DB, LEVEL_MAX_DB, 1.0f);
+
+    lv_bar_indicator_set_ticks(level_bar, level_items, ARRAY_SIZE(level_items));
+    lv_bar_indicator_set_font(level_bar, &sony_22);
+    lv_bar_indicator_set_default_color(level_bar, style.colors.s_meter.low);
+    lv_bar_indicator_set_color_cb(level_bar, level_color_cb);
+
+    lv_bar_indicator_set_peak_enable(level_bar, true);
+    lv_bar_indicator_set_peak_color(level_bar, style.colors.s_meter.peak);
 
     db_val_label = lv_label_create(obj);
+    lv_obj_add_style(db_val_label, &style.text_base_color, LV_PART_MAIN);
     lv_obj_set_style_text_font(db_val_label, &sony_20, 0);
-    lv_obj_align(db_val_label, LV_ALIGN_BOTTOM_RIGHT, 12, 16);
-    lv_obj_set_style_text_color(db_val_label, lv_color_white(), 0);
+    lv_obj_align(db_val_label, LV_ALIGN_BOTTOM_RIGHT, pad - 3, pad - 2);
     lv_label_set_text(db_val_label, "");
+
+    lv_timer_create(update_db_label_cb, LV_DISP_DEF_REFR_PERIOD * 3, NULL);
+
+    subject_subscribe_delayed_and_notify((Subject *)cfg.ui.show_meter_value(), on_show_meter_value_change, NULL);
+
     return obj;
 }
 
 void meter_set_noise(float val) {
     noise_level = val;
-    if (att) {
-        noise_level+= 14.0f;
+}
+
+void meter_set_mode(meter_mode_t mode) {
+    if (mode == meter_mode) {
+        return;
     }
-    if (pre){
-        noise_level -= 14.0f;
+
+    meter_mode = mode;
+
+    if (meter_mode == METER_MODE_LEVEL) {
+        lv_obj_add_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_add_flag(db_val_label, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(level_bar, LV_OBJ_FLAG_HIDDEN);
+
+        level_peak = LEVEL_MIN_DB;
+        level_peak_time = get_time();
+
+        if (level_timer == NULL) {
+            level_timer = lv_timer_create(level_refresh_cb, LV_DISP_DEF_REFR_PERIOD * 2, NULL);
+        }
+    } else {
+        if (level_timer) {
+            lv_timer_del(level_timer);
+            level_timer = NULL;
+        }
+
+        lv_obj_add_flag(level_bar, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(s_bar, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_clear_flag(db_val_label, LV_OBJ_FLAG_HIDDEN);
     }
 }
 
 void meter_update(float db, float beta) {
-    if (att) {
-        db += 15.0f;
-    }
-    if (pre){
-        db -= 19.0f;
-    }
-    if (db < min_db) {
-        db = min_db;
-    } else if (db > max_db) {
-        db = max_db;
-    }
+    meter_db = meter_db * beta + db * (1.0f - beta);
+
     meter_db_raw = db;
     now = get_time();
-    if (db > meter_peak) {
-        meter_peak = db;
+    if (meter_db > meter_peak) {
+        meter_peak = meter_db;
         meter_peak_time = now;
     } else if (now - meter_peak_time > METER_PEAK_HOLD) {
         meter_peak -= (now - meter_peak_time - METER_PEAK_HOLD) * METER_PEAK_SPEED / 1000;
     }
-    meter_db = meter_db * beta + db * (1.0f - beta);
-    scheduler_put_noargs(update_db_label);
-    event_send(obj, LV_EVENT_REFRESH, NULL);
-}
 
-int16_t meter_get_raw_db() {
-    return meter_db_raw;
+    if (meter_mode == METER_MODE_S) {
+        scheduler_put_noargs(meter_scheduled_refresh);
+    }
 }

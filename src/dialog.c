@@ -13,16 +13,16 @@
 #include "keyboard.h"
 #include "events.h"
 #include "waterfall.h"
-#include "knobs.h"
+#include "scheduler.h"
 
 static lv_obj_t     *obj;
 static dialog_t     *current_dialog = NULL;
 
+static bool dialog_is_running();
+
 void dialog_construct(dialog_t *dialog, lv_obj_t *parent) {
     if (dialog && !dialog->run) {
-        knobs_display(false);
-        waterfall_refresh_period_set(2);
-        main_screen_keys_enable(false);
+        scheduler_msg_send(MSG_DIALOG_START, NULL);
         dialog->prev_page = buttons_get_cur_page();
         buttons_unload_page();
         if (dialog->btn_page) {
@@ -38,8 +38,6 @@ void dialog_construct(dialog_t *dialog, lv_obj_t *parent) {
 
 void dialog_destruct() {
     if (current_dialog && current_dialog->run) {
-        knobs_display(true);
-        waterfall_refresh_reset();
         current_dialog->run = false;
 
         if (current_dialog->destruct_cb) {
@@ -53,13 +51,13 @@ void dialog_destruct() {
         if (current_dialog->prev_page) {
             buttons_load_page(current_dialog->prev_page);
         }
-        main_screen_keys_enable(true);
         current_dialog = NULL;
+        scheduler_msg_send(MSG_DIALOG_STOP, NULL);
     }
 }
 
 void dialog_send(lv_event_code_t event_code, void *param) {
-    if (dialog_is_run()) {
+    if (dialog_is_running()) {
         event_send(current_dialog->obj, event_code, param);
     }
 }
@@ -74,7 +72,7 @@ bool dialog_key(dialog_t *dialog, lv_event_t * e) {
 }
 
 bool dialog_is_run() {
-    return (current_dialog != NULL) && current_dialog->run;
+    return dialog_is_running();
 }
 
 bool dialog_type_is_run(dialog_t *dialog) {
@@ -85,7 +83,7 @@ lv_obj_t * dialog_init(lv_obj_t *parent) {
     obj = lv_obj_create(parent);
 
     lv_obj_remove_style_all(obj);
-    lv_obj_add_style(obj, &dialog_style, 0);
+    lv_obj_add_style(obj, &style.dialog.base, 0);
 
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_SCROLLABLE);
 
@@ -93,12 +91,12 @@ lv_obj_t * dialog_init(lv_obj_t *parent) {
 }
 
 void dialog_item(dialog_t *dialog, lv_obj_t *obj) {
-    lv_obj_add_style(obj, &dialog_item_style, LV_STATE_DEFAULT);
-    lv_obj_add_style(obj, &dialog_item_focus_style, LV_STATE_FOCUSED);
-    lv_obj_add_style(obj, &dialog_item_edited_style, LV_STATE_EDITED);
+    lv_obj_add_style(obj, &style.dialog.item, LV_STATE_DEFAULT);
+    lv_obj_add_style(obj, &style.dialog.item_focus, LV_STATE_FOCUSED);
+    lv_obj_add_style(obj, &style.dialog.item_edited, LV_STATE_EDITED);
 
     lv_obj_set_style_bg_opa(obj, LV_OPA_TRANSP, LV_PART_CURSOR);
-    lv_obj_set_style_text_color(obj, lv_color_white(), LV_PART_CURSOR);
+    lv_obj_add_style(obj, &style.text_base_color, LV_PART_CURSOR);
     lv_obj_set_style_text_color(obj, lv_color_black(), LV_PART_CURSOR | LV_STATE_FOCUSED);
     lv_obj_set_style_bg_opa(obj, 128, LV_PART_CURSOR | LV_STATE_EDITED);
 
@@ -114,18 +112,13 @@ void dialog_item(dialog_t *dialog, lv_obj_t *obj) {
     }
 }
 
-bool dialog_need_audio() {
-    return dialog_is_run() && current_dialog->audio_cb;
-}
-
-void dialog_audio_samples(unsigned int n, float *samples) {
-    if (dialog_need_audio()) {
-        current_dialog->audio_cb(n, samples);
-    }
-}
-
 void dialog_rotary(int32_t diff) {
-    if (dialog_is_run() && current_dialog->rotary_cb) {
+    if (dialog_is_running() && current_dialog->rotary_cb) {
         current_dialog->rotary_cb(diff);
     }
+}
+
+
+static bool dialog_is_running() {
+    return (current_dialog != NULL) && current_dialog->run;
 }

@@ -47,15 +47,15 @@ struct TestDbGuard {
         REQUIRE(rc == SQLITE_OK);
         if (err)
             sqlite3_free(err);
-        ParamsTable::Init(db);
-        BandParamsTable::Init(db);
-        ModeParamsTable::Init(db);
+        KeyValueTable<StorageType::GLOBAL>::Init(db);
+        KeyValueTable<StorageType::BAND>::Init(db);
+        KeyValueTable<StorageType::MODE>::Init(db);
     }
 
     ~TestDbGuard() {
-        ParamsTable::Shutdown();
-        BandParamsTable::Shutdown();
-        ModeParamsTable::Shutdown();
+        KeyValueTable<StorageType::GLOBAL>::Shutdown();
+        KeyValueTable<StorageType::BAND>::Shutdown();
+        KeyValueTable<StorageType::MODE>::Shutdown();
         if (db) {
             sqlite3_close(db);
         }
@@ -142,6 +142,30 @@ TEST_CASE("Parameter set_quiet does not enqueue", "[parameter]") {
     REQUIRE(sink.records.empty());
 }
 
+TEST_CASE("Parameter reset restores the construction-time default quietly", "[parameter]") {
+    MockWriteSink           sink;
+    Parameter<int, int32_t> p(
+        "volume", 50, [](int v) { return v < 0 ? 0 : (v > 100 ? 100 : v); }, StorageType::GLOBAL, sink);
+
+    p.set(80);
+    REQUIRE(p.get() == 80);
+    REQUIRE(sink.records.size() == 1);
+
+    // reset() restores the default and is quiet: no deferred write is enqueued.
+    p.reset();
+    REQUIRE(p.get() == 50);
+    REQUIRE(sink.records.size() == 1);
+
+    // A reset to the current value neither notifies nor enqueues.
+    int          notify_count = 0;
+    auto         count_cb     = [](Subject *, void *ud) { ++(*static_cast<int *>(ud)); };
+    Subscription sub(p.subscribe(count_cb, &notify_count));
+    p.reset();
+    REQUIRE(p.get() == 50);
+    REQUIRE(notify_count == 0);
+    REQUIRE(sink.records.size() == 1);
+}
+
 TEST_CASE("Parameter float->int32 scaling round-trip", "[parameter]") {
     TestDbGuard   db;
     MockWriteSink sink;
@@ -224,6 +248,36 @@ TEST_CASE("Parameter save/load text round-trip", "[parameter]") {
     Parameter<std::string, std::string> loaded("callsign", "", {}, StorageType::GLOBAL, sink);
     REQUIRE(loaded.load() == SUCCESS);
     REQUIRE(loaded.get() == "R2ABC");
+}
+
+TEST_CASE("Parameter float quantize rounds at the storage boundary", "[parameter]") {
+    MockWriteSink    sink;
+    Parameter<float> p("pwr", 5.0f, {}, StorageType::GLOBAL, sink, {}, nullptr, 0, 10);
+
+    p.set(3.74f);
+    REQUIRE(p.get() == Catch::Approx(3.74f)); // runtime keeps full precision
+    REQUIRE(sink.records.size() == 1);
+    REQUIRE(sink.records[0].kind == MockWriteSink::Record::Kind::Float);
+    REQUIRE(sink.records[0].value_float == Catch::Approx(3.7f));
+}
+
+TEST_CASE("Parameter float quantize round-trips through the DB", "[parameter][storage]") {
+    TestDbGuard      db;
+    MockWriteSink    sink;
+    Parameter<float> p("pwr", 5.0f, {}, StorageType::GLOBAL, sink, {}, nullptr, 0, 10);
+    p.set(2.46f);
+    REQUIRE(p.save() == SUCCESS);
+
+    Parameter<float> loaded("pwr", 0.0f, {}, StorageType::GLOBAL, sink, {}, nullptr, 0, 10);
+    REQUIRE(loaded.load() == SUCCESS);
+    REQUIRE(loaded.get() == Catch::Approx(2.5f));
+}
+
+TEST_CASE("Parameter float quantize=0 stores raw value", "[parameter]") {
+    MockWriteSink    sink;
+    Parameter<float> p("gain", 0.0f, {}, StorageType::GLOBAL, sink);
+    p.set(0.123456f);
+    REQUIRE(sink.records[0].value_float == Catch::Approx(0.123456f));
 }
 
 TEST_CASE("Parameter self-registers into a ParamBase group", "[parameter]") {

@@ -8,16 +8,14 @@
 #include <cstring>
 
 #include "panel.h"
-#include "knobs.h"
 #include "util.h"
-#include "cfg/settings_manager.h"
+#include "cfg/cfg_api.h"
+#include "scheduler.h"
 
 extern "C" {
     #include "rtty.h"
     #include "styles.h"
-    #include "scheduler.h"
     #include "radio.h"
-    #include "params/params.h"
 }
 
 static lv_obj_t    *obj;
@@ -25,33 +23,41 @@ static lv_obj_t    *info;
 static lv_anim_t    dim_anim;
 static char         buf[1024] = "";
 static char        *buf_write = buf;
+static uint8_t      max_line_count;
 static x6100_mode_t prev_mode;
 
 static void update_visibility_cb(Subject *subj, void *user_data);
 static void on_freq_change(Subject *subj, void *user_data);
 
 static void set_opa(void * panel_obj, int32_t opa);
+static void update_line_count();
 
 
-static void check_lines() {
+static void truncate() {
     char        *second_line = NULL;
     char        *ptr = buf;
-    uint16_t    count = 0;
+    uint16_t    count = 1;
 
     // Count lines, store start of 2nd in `second_line`
     while (*ptr) {
         if (*ptr == '\n') {
             count++;
 
-            if (count == 1) {
+            if (count == 2) {
                 second_line = ptr + 1;
             }
         }
         ptr++;
     }
-
+    if (ptr == buf) {
+        return;
+    }
+    // Skip last empty line, if exists
+    if (*(ptr - 1) == '\n') {
+        count--;
+    }
     // Too long, cut first line
-    if (count > 7) {
+    if (count > max_line_count) {
         memmove(buf, second_line, strlen(second_line) + 1);
         buf_write = buf + strlen(buf);
     }
@@ -67,19 +73,20 @@ static void panel_update_text_cb(const char *text) {
     old_write = buf_write;
     // TODO: check len of text is not exceed width
     buf_write = stpcpy(buf_write, text);
+    const lv_font_t *font = lv_obj_get_style_text_font(obj, LV_PART_MAIN);
     if (buf_write - buf >= 2) {
         // new line text only
         if (strcmp(buf_write - 2, "\n\n") == 0) {
             *buf_write-- = '\0';
         } else {
-            lv_txt_get_size(&text_size, buf, &sony_24, 0, 0, LV_COORD_MAX, 0);
+            lv_txt_get_size(&text_size, buf, font, 0, 0, LV_COORD_MAX, 0);
             if (text_size.x > (lv_obj_get_width(obj) - 20)) {
                 *old_write = '\n';
                 buf_write = stpcpy(old_write + 1, text);
             }
         }
     }
-    check_lines();
+    truncate();
     lv_label_set_text_static(obj, buf);
 }
 
@@ -92,26 +99,35 @@ lv_obj_t * panel_init(lv_obj_t *parent) {
 
     lv_label_set_text_static(obj, buf);
 
-    lv_obj_add_style(obj, &panel_style, 0);
+    lv_obj_add_style(obj, &style.panels.base, 0);
     lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    panel_hide();
     lv_obj_add_flag(obj, LV_OBJ_FLAG_OVERFLOW_VISIBLE);
+
+    update_line_count();
 
     lv_anim_init(&dim_anim);
     lv_anim_set_exec_cb(&dim_anim, set_opa);
     lv_anim_set_var(&dim_anim, obj);
     lv_anim_set_time(&dim_anim, 200);
 
-    prev_mode = (x6100_mode_t)cfg_sm.cp_cur_mode.get();
+    prev_mode = (x6100_mode_t)cfg.cur.mode()->get();
 
-    cfg_sm.cp_cur_mode.subscribe_delayed(update_visibility_cb, NULL);
-    cfg_sm.p_cw_decoder.subscribe_delayed_and_notify(update_visibility_cb, NULL);
-    cfg_sm.cp_fg_freq.subscribe_delayed(on_freq_change, NULL);
+    cfg.cur.mode()->subscribe_delayed(update_visibility_cb);
+    cfg.cw.decoder()->subscribe_delayed_and_notify(update_visibility_cb);
+    cfg.cur.fg_freq()->subscribe_delayed(on_freq_change);
 
     info = lv_label_create(obj);
-    lv_obj_add_style(info, &panel_info_style, 0);
+    lv_obj_add_style(info, &style.panels.info, 0);
     lv_label_set_text(info, "");
 
     return obj;
+}
+
+void panel_set_height(lv_coord_t h) {
+    styles_panel_set_height(h);
+    update_line_count();
+    truncate();
 }
 
 void panel_add_text(const char * text) {
@@ -124,7 +140,7 @@ void panel_set_info(const char *text) {
 
 void panel_hide() {
     lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
-    knobs_display(true);
+    scheduler_msg_send(MSG_PANEL_HIDE, NULL);
 }
 
 void panel_clear() {
@@ -136,13 +152,13 @@ void panel_clear() {
 }
 
 void panel_update_visibility(bool clear) {
-    x6100_mode_t    mode = (x6100_mode_t)cfg_sm.cp_cur_mode.get();
+    x6100_mode_t    mode = (x6100_mode_t)cfg.cur.mode()->get();
     bool            on = false;
 
     switch (mode) {
         case x6100_mode_cw:
         case x6100_mode_cwr:
-            on = cfg_sm.p_cw_decoder.get();
+            on = cfg.cw.decoder()->get();
             break;
 
         case x6100_mode_usb:
@@ -156,19 +172,27 @@ void panel_update_visibility(bool clear) {
     if (on) {
         if (lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) {
             lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
-            knobs_display(false);
+            scheduler_msg_send(MSG_PANEL_SHOW, NULL);
         }
     } else {
         lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
-        knobs_display(true);
+        scheduler_msg_send(MSG_PANEL_HIDE, NULL);
     }
     if (clear) {
         panel_clear();
     }
 }
 
+static void update_line_count() {
+    lv_obj_update_layout(obj);
+    lv_coord_t line_space = lv_obj_get_style_text_line_space(obj, LV_PART_MAIN);
+    const lv_font_t *font = lv_obj_get_style_text_font(obj, LV_PART_MAIN);
+    // TODO: check for padding
+    max_line_count = (lv_obj_get_content_height(obj) + line_space) / (line_space + font->line_height);
+}
+
 static void update_visibility_cb(Subject *subj, void *user_data) {
-    x6100_mode_t cur_mode = (x6100_mode_t)cfg_sm.cp_cur_mode.get();
+    x6100_mode_t cur_mode = (x6100_mode_t)cfg.cur.mode()->get();
     x6100_mode_t tmp_mode = prev_mode;
     bool clear = true;
 

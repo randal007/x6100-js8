@@ -9,7 +9,6 @@
 #pragma once
 
 #include <gps.h>
-#include <stdbool.h>
 
 typedef enum {
     GPS_STATUS_WAITING=0,
@@ -22,5 +21,9 @@ void gps_init();
 
 gps_status_t gps_status();
 
-/* Latest 2D/3D fix from gpsd and its age in seconds; false if none yet. */
-bool gps_last_fix(double *lat, double *lon, int *age_s);
+/**
+ * Copy the latest GPS data into out. The internal snapshot is guarded by a
+ * mutex, so this is safe to call from the main thread while the GPS thread
+ * updates it. Intended to be called from a MSG_GPS subscriber.
+ */
+void gps_get_snapshot(struct gps_data_t *out);

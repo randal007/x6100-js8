@@ -1,7 +1,6 @@
 #include "subject.h"
 
-#include "../lvgl/lvgl.h"
-
+#include <queue>
 
 void Observer::notify() {
     if (fn && subj) {
@@ -9,44 +8,86 @@ void Observer::notify() {
     }
 }
 
+void Observer::release() {
+    if (refs_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+        delete this;
+    }
+}
+
 void Observer::unsubscribe() {
     if (subj) {
         subj->unsubscribe(this);
+        // Clear the back-pointer before releasing the Subject's reference: the
+        // release may destroy this observer, and the write to `subj` must happen
+        // first.
         subj = nullptr;
+        release();
     }
 };
 
+// ---- Delayed-observer queue (static, thread-safe) ----
+// Producers (any thread) push; consumer (Subject::drain_delayed) drains on
+// the main thread only. The queue is shallow — at most one entry per active
+// ObserverDelayed because of the coalescing scheduled_ guard. Each queued entry
+// holds one observer reference until drain()/shutdown() pops it.
+
+static std::mutex                    delayed_mutex_;
+static std::queue<ObserverDelayed *> delayed_queue_;
+
 void ObserverDelayed::notify() {
     // Coalesce: only one deferred delivery per observer is queued at a time.
-    // The pending entry carries no state to refresh, so a later notify() while
-    // a delivery is already scheduled simply collapses into it (latest value
-    // wins when the trampoline runs).
     bool expected = false;
     if (!scheduled_.compare_exchange_strong(expected, true)) {
         return;
     }
-    lv_res_t res = lv_async_call(ObserverDelayed::async_trampoline, this);
-    if (res != LV_RES_OK) {
-        // Roll back so a later notify() retries.
-        scheduled_.store(false);
+    // Hold a reference for as long as the observer is queued, so it cannot be
+    // destroyed between the enqueue and the drain.
+    add_ref();
+    {
+        std::lock_guard<std::mutex> lock(delayed_mutex_);
+        delayed_queue_.push(this);
     }
 }
 
-ObserverDelayed::~ObserverDelayed() {
-    // Delete/unsubscribe happens only on the main thread, and async_trampoline
-    // also runs on the main thread (lv_async), so the two never race here. The
-    // atomic flag still closes the window against a background producer thread
-    // calling notify() during destruction.
-    if (scheduled_.exchange(false)) {
-        lv_async_call_cancel(ObserverDelayed::async_trampoline, this);
+ObserverDelayed::~ObserverDelayed() = default;
+
+void ObserverDelayed::drain() {
+    std::queue<ObserverDelayed *> batch;
+    {
+        std::lock_guard<std::mutex> lock(delayed_mutex_);
+        batch.swap(delayed_queue_);
+    }
+
+    while (!batch.empty()) {
+        auto *obs = batch.front();
+        batch.pop();
+
+        obs->scheduled_.store(false);
+
+        // Observer::notify() is a no-op when the observer was already unsubscribed
+        // (subj == nullptr). The queue reference keeps the observer alive across
+        // the callback; release it afterwards.
+        obs->Observer::notify();
+        obs->release();
     }
 }
 
-void ObserverDelayed::async_trampoline(void *user_data) {
-    auto *obs = static_cast<ObserverDelayed *>(user_data);
-    // Task is executing: nothing left to cancel, so release the schedule flag.
-    obs->scheduled_.store(false);
-    obs->Observer::notify();
+void ObserverDelayed::shutdown() {
+    std::queue<ObserverDelayed *> batch;
+    {
+        std::lock_guard<std::mutex> lock(delayed_mutex_);
+        batch.swap(delayed_queue_);
+    }
+
+    // Drop every pending delivery without invoking callbacks and release the
+    // queue reference. Observers that still have other references (Subject or
+    // Subscription) are destroyed later by their owner.
+    while (!batch.empty()) {
+        auto *obs = batch.front();
+        batch.pop();
+        obs->scheduled_.store(false);
+        obs->release();
+    }
 }
 
 Observer *Subject::subscribe(observer_cb fn, void *user_data) {
@@ -78,7 +119,28 @@ ObserverDelayed *Subject::subscribe_delayed_and_notify(observer_cb fn, void *use
 
 void Subject::unsubscribe(Observer *observer) {
     const std::lock_guard<std::mutex> lock(mutex_subscribe);
-    observers.erase(std::find(observers.begin(), observers.end(), observer));
+    auto                              it = std::find(observers.begin(), observers.end(), observer);
+    if (it != observers.end()) {
+        observers.erase(it);
+    }
+}
+
+Subject::~Subject() {
+    // Detach every still-subscribed observer and release the Subject's
+    // reference. Offsets the initial reference taken by subscribe(). Detaching
+    // must happen under the lock, but the release itself is done outside of it:
+    // the last release destroys the observer.
+    std::vector<Observer *> detached;
+    {
+        const std::lock_guard<std::mutex> lock(mutex_subscribe);
+        detached.swap(observers);
+        for (Observer *o : detached) {
+            o->subj = nullptr;
+        }
+    }
+    for (Observer *o : detached) {
+        o->release();
+    }
 }
 
 // Thread-local suppression state: a depth counter plus the queue of subjects

@@ -12,6 +12,7 @@
 #include <aether_radio/x6100_control/control.h>
 
 #include "lvgl/lvgl.h"
+#include "cfg/subject_api.h"
 
 #define RADIO_SAMPLES   (512)
 
@@ -37,10 +38,12 @@ typedef void (*radio_rx_tx_change_t) (bool tx);
 
 void radio_init();
 void radio_start();
-void radio_set_rx_tx_notify_fn(radio_rx_tx_change_t cb);
-void radio_set_low_power_cb(void(*cb)(bool));
+void radio_shutdown();
 void radio_bb_reset();
 radio_state_t radio_get_state();
+
+extern SubjectInt *radio_fg_freq_subj; // FG freq according split and tx
+extern SubjectInt *radio_bg_freq_subj; // BG freq according split and tx
 
 /**
  * Set freq for radio without updating corresponding subject.
@@ -52,12 +55,11 @@ bool radio_check_freq(int32_t freq);
 x6100_vfo_t radio_toggle_vfo();
 
 uint16_t radio_change_vol(int16_t df);
-bool radio_change_spmode(int16_t df);
 
 void radio_change_mute();
 
 void radio_set_pwr(float d);
-/* Radio only, not saved: settings keep cfg_tx_filter_low/high. */
+/* Radio only, not saved: the settings keep cfg.dsp.tx_filter_low/high. */
 void radio_set_tx_filter(uint16_t low, uint16_t high);
 /* Noise reduction, noise blanker, notch and auto-notch off (the base
  * applies them in every mode, DIGI included), or back to the settings.
@@ -71,6 +73,40 @@ void radio_start_atu();
 bool radio_start_swrscan();
 void radio_stop_swrscan();
 
+/**
+ * Register a callback invoked from the radio thread for each SWR-scan sample.
+ * The callback must return quickly and must not take the radio lock itself
+ * beyond what radio_set_freq already does. Registering NULL unregisters; the
+ * call waits for any in-flight callback to finish, so the consumer's state is
+ * guaranteed to be unused once radio_swrscan_set_cb(NULL) returns.
+ */
+typedef void (*radio_swrscan_cb_t)(float vswr);
+void radio_swrscan_set_cb(radio_swrscan_cb_t cb);
+
+/**
+ * Power telemetry published by the radio thread (external/battery voltage,
+ * battery capacity and charging flag). Consumers (e.g. the clock widget)
+ * register a callback via radio_power_set_cb() and copy the scalars into their
+ * own state; they must not do UI work in the callback, it runs on the radio
+ * thread.
+ */
+typedef struct {
+    float   vext;
+    float   vbat;
+    uint8_t cap;
+    bool    charging;
+} radio_power_t;
+
+typedef void (*radio_power_cb_t)(const radio_power_t *power);
+
+/**
+ * Register the power-telemetry callback. The callback must return quickly and
+ * must not take the radio lock. Registering NULL unregisters; the call waits
+ * for any in-flight callback to finish, so the consumer's state is guaranteed
+ * to be unused once radio_power_set_cb(NULL) returns.
+ */
+void radio_power_set_cb(radio_power_cb_t cb);
+
 void radio_poweroff();
 void radio_set_ptt(bool tx);
 void radio_set_modem(bool tx);
@@ -78,9 +114,6 @@ void radio_set_modem(bool tx);
  * recorder do) - and while it does, the audio it sends us isn't the
  * receiver's. Off puts the mics back. */
 void radio_speaker_play(bool on);
-
-void radio_set_line_in(uint8_t d);
-void radio_set_line_out(uint8_t d);
 
 void radio_set_morse_key(bool on);
 

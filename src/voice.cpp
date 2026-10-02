@@ -9,6 +9,7 @@
 #include "voice.h"
 
 #include "util.h"
+#include "display.h"
 
 extern "C" {
 #include <unistd.h>
@@ -16,11 +17,11 @@ extern "C" {
 #include <aether_radio/x6100_control/control.h>
 
 #include "audio.h"
-#include "params/params.h"
-#include "backlight.h"
 #include "recorder.h"
 #include "msg.h"
 }
+
+#include "cfg/cfg_api.h"
 
 #include <memory>
 #include <stdexcept>
@@ -50,6 +51,8 @@ private:
 audio_player::audio_player() {
     stream.set_sample_rate(24000);
     stream.set_buffer_size(512);
+    // TODO: handle audio routing on BT connection
+    // stream.set_device("pa_sink_name");
     stream.open();
 }
 
@@ -95,7 +98,7 @@ static void * say_thread(void *arg) {
 
     run = true;
 
-    profile = eng->create_voice_profile(voice_item[params.voice_lang.x].name);
+    profile = eng->create_voice_profile(voice_item[cfg.voice.lang()->get()].name);
 
     char *ptr = strchr(buf, '|');
 
@@ -125,9 +128,9 @@ static void * say_thread(void *arg) {
     std::istreambuf_iterator<char>  text_end;
     std::unique_ptr<document>       doc = document::create_from_plain_text(eng, text_start, text_end, content_text, profile);
 
-    doc->speech_settings.relative.rate = params.voice_rate.x / 100.0;
-    doc->speech_settings.relative.pitch = params.voice_pitch.x / 100.0;
-    doc->speech_settings.relative.volume = params.voice_volume.x / 100.0;
+    doc->speech_settings.relative.rate = cfg.voice.rate()->get() / 100.0;
+    doc->speech_settings.relative.pitch = cfg.voice.pitch()->get() / 100.0;
+    doc->speech_settings.relative.volume = cfg.voice.volume()->get() / 100.0;
     doc->set_owner(player);
 
     audio_set_play_mode(AUDIO_PLAY_ON);
@@ -147,21 +150,21 @@ void voice_sure() {
 void voice_change_mode() {
     voice_sure();
 
-    switch (params.voice_mode.x) {
+    switch (cfg.voice.mode()->get()) {
         case VOICE_OFF:
-            params_uint8_set(&params.voice_mode, VOICE_LCD);
+            cfg.voice.mode()->set(VOICE_LCD);
             msg_update_text_fmt("Voice mode: LCD");
             voice_say_text("Voice mode|", "is LCD");
             break;
 
         case VOICE_LCD:
-            params_uint8_set(&params.voice_mode, VOICE_ALWAYS);
+            cfg.voice.mode()->set(VOICE_ALWAYS);
             msg_update_text_fmt("Voice mode: Always");
             voice_say_text("Voice mode|", "is always");
             break;
 
         case VOICE_ALWAYS:
-            params_uint8_set(&params.voice_mode, VOICE_OFF);
+            cfg.voice.mode()->set(VOICE_OFF);
             msg_update_text_fmt("Voice mode: Off");
             voice_say_text("Voice mode|", "is off");
             break;
@@ -177,7 +180,7 @@ bool voice_enable() {
         return true;
     }
 
-    switch (params.voice_mode.x) {
+    switch (cfg.voice.mode()->get()) {
         case VOICE_OFF:
             return false;
 
@@ -185,7 +188,7 @@ bool voice_enable() {
             return true;
 
         case VOICE_LCD:
-            return !backlight_is_on();
+            return !display_is_on();
     }
 
     return false;
@@ -273,5 +276,5 @@ void voice_say_text(const char *prompt, const char *x) {
 }
 
 void voice_say_lang() {
-    voice_delay_say_text_fmt(voice_item[params.voice_lang.x].welcome);
+    voice_delay_say_text_fmt(voice_item[cfg.voice.lang()->get()].welcome);
 }

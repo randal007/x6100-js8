@@ -11,8 +11,10 @@
 #include "rotary.h"
 #include "encoder.h"
 
-#define VERSION "v0.34.2"
+#define VERSION "v1.0.2"
 
 
 extern rotary_t     *vol;
 extern encoder_t    *mfk;
+extern lv_obj_t     *overlay_scr;
+extern lv_obj_t     *primary_scr;
