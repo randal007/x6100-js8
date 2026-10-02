@@ -52,8 +52,11 @@ These change decision D1 from the code review (heartbeats pause for
   (research in [feature-ideas.md](feature-ideas.md): MPAD is worldwide,
   WXBOT US only; answers come back through every relay station that
   heard you).
-- [ ] Remove ACKs from the Winlink settings for APRS (stops the
-  double-ACK spam).
+- [ ] **Winlink: no ACK request.** Winlink works on the air, but the
+  WLNK-1 gateway answers with its own message anyway, so the `{nn}` we
+  add to ask for a receipt brings a second ACK. Stop adding it for WLNK-1
+  (`want_id` in `aprs_prepare()`, `src/dialog_js8.c`); SMS and email keep
+  theirs.
 - [ ] Contact book for SMS (no typing phone numbers each time).
 - [ ] Saved messages / macros, as desktop JS8Call has.
 
@@ -69,25 +72,26 @@ These change decision D1 from the code review (heartbeats pause for
 ## Bugs
 
 - [ ] **Can they reach...? (QUERY CALL)** only works when you type the `?`
-  yourself after the call. Desktop sends `CALL QUERY CALL W1ABC?`: add
+  yourself after the call (the one thing that failed in on-air testing). Desktop sends `CALL QUERY CALL W1ABC?`: add
   the `?` for you.
 - [ ] **An @ALLCALL QUERY CALL** ("can anyone reach W1ABC?") to send to
   everyone, as well as to one station.
 
 ## Carried over from beta 4
 
-From the README's "Coming next" and the fix plan:
+On the air with beta 4 (VE7NHW, up to 2026-10-02): relays, messaging,
+store and forward and Winlink all work; only QUERY CALL failed (above).
 
-- [ ] On-air tests: relays and store and forward with desktop JS8Call
-  stations, the other APRS gateways (POTA, SOTA, email, Winlink), a long
-  message watched to the end, and the safe-TX checks into a dummy load
-  (GEN or a band key in the middle of a frame).
-- [ ] Performance: each part's CPU use on the radio, spread over its four
-  cores.
+- [ ] On-air tests still to do: POTA and SOTA spots through the gateways.
 - [ ] Show Map: a Setting for your own square's colour (orange for now),
   polish from use on the air ([MAP_PLAN.md](MAP_PLAN.md)).
-- [ ] Low-priority leftovers in the [fix plan](review/fix-plan.md)
-  ("Not now": I-02, I-04, I-10 with B-11).
+
+## Low priority (after the features)
+
+- [ ] Performance: each part's CPU use on the radio, spread over its four
+  cores.
+- [ ] Leftovers in the [fix plan](review/fix-plan.md) ("Not now": I-02,
+  I-04, I-10 with B-11).
 
 ## Merge notes (checked 2026-10-02)
 

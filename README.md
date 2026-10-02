@@ -740,12 +740,16 @@ are, and its new settings start at their defaults.
 
 ## Known issues in beta 4
 
-- **Relays and store and forward** follow desktop JS8Call's code but
-  haven't been tried on the air with desktop stations yet. Reports welcome.
-- **APRS:** the grid spot and two-way SMS are confirmed on the air. Reply
-  by SMS's filled-in number and the "delivered" line for the gateway's
-  receipt are new in this release. POTA and SOTA spots, position
-  messages, email and Winlink are untested through the gateways.
+- **Can they reach...? (QUERY CALL)** only works if you type the `?`
+  after the call yourself. Fixed in the next beta.
+- **Relays, store and forward and messaging** work on the air with
+  desktop JS8Call stations (tested since this release came out).
+- **APRS:** the grid spot, two-way SMS and Winlink work on the air.
+  Winlink messages get two ACKs (the gateway's and Winlink's own reply);
+  the next beta drops the extra one. Reply by SMS's filled-in number and
+  the "delivered" line for the gateway's receipt are new in this release.
+  POTA and SOTA spots, position messages and email are untested through
+  the gateways.
 - **The map is new:** tried on the radio, not yet on a busy band. Your own
   square is orange for now; a Setting to pick its colour is to come.
 - Long messages have been seen arriving live, but not yet watched all the
@@ -782,8 +786,10 @@ Beta 5 is being planned; the full list with notes is in
   under 1 W into an amplifier
 - [ ] Fixes: Can they reach...? adds the `?` for you, and an @ALLCALL
   version
-- [ ] Still from beta 4: on-air tests (relays, the other APRS gateways, a
-  long message), performance, the map's home colour Setting
+- [ ] Still from beta 4: the map's home colour Setting; POTA and SOTA
+  spots tried on the air
+- [ ] Later, after the features: performance (spreading the work over the
+  radio's four cores)
 
 Ideas for later:
 
