@@ -65,6 +65,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `PARTIAL` | a long message growing in place as it arrives |
 | `QSOFREQ` | Directed view shows what's on the selected station's frequency |
 | `RELAY` | relays passed on and received, ACK back along the path |
+| `QUERYCALL` | Query list: *Can anyone reach...?* with no station selected, *Can they reach...?* with one; the `?` added when left off, never twice |
 | `REPLYQ` | automatic replies queue (see below) |
 | `RETUNE`, `TXSAFE` | transmitting safely (see below) |
 | `ROWS` | info rows survive rebuilds, a cut-off message stops growing, the Inbox lists all 200 |

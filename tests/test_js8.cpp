@@ -2816,6 +2816,29 @@ TEST_CASE("group messages: kept for members of our groups, fetched by any member
     CHECK_FALSE(held.push_due({Heard("W1ABC", -5, t0)}, t0 + 1000));
 }
 
+TEST_CASE("a QUERY CALL gets desktop's '?' when it's left off", "[js8][relay]") {
+    CHECK(query_call_question("K2XYZ QUERY CALL W1ABC") == "K2XYZ QUERY CALL W1ABC?");
+    CHECK(query_call_question("K2XYZ QUERY CALL W1ABC  ") == "K2XYZ QUERY CALL W1ABC?");
+    CHECK(query_call_question("@ALLCALL QUERY CALL VE7ABC/P") == "@ALLCALL QUERY CALL VE7ABC/P?");
+    CHECK(query_call_question("K2XYZ QUERY CALL W1ABC?") == "K2XYZ QUERY CALL W1ABC?");
+    CHECK(query_call_question("K2XYZ QUERY CALL") == "K2XYZ QUERY CALL");                 // nothing to ask about
+    CHECK(query_call_question("K2XYZ QUERY CALL W1ABC PSE") == "K2XYZ QUERY CALL W1ABC PSE"); // more than a call
+    CHECK(query_call_question("K2XYZ QUERY MSGS") == "K2XYZ QUERY MSGS");
+    CHECK(query_call_question("K2XYZ MSG QUERY CALL W1ABC") == "K2XYZ MSG QUERY CALL W1ABC");
+    CHECK(query_call_question("N0XYZ>K2XYZ QUERY CALL W1ABC") == "N0XYZ>K2XYZ QUERY CALL W1ABC"); // a relay: as typed
+
+    // What goes on the air is desktop's menu text, '?' included.
+    for (auto speed : {JS8_SPEED_NORMAL, JS8_SPEED_FAST}) {
+        auto typed = plan_message("VE7NHW", "CN89", "n0xyz query call w1abc", speed);
+        auto desk  = plan_message("VE7NHW", "CN89", "N0XYZ QUERY CALL W1ABC?", speed);
+        REQUIRE(typed.ok());
+        CHECK(typed.text == "N0XYZ QUERY CALL W1ABC?");
+        CHECK(typed.preview == desk.preview);
+        REQUIRE(typed.frames.size() == desk.frames.size());
+        for (std::size_t i = 0; i < typed.frames.size(); i++) CHECK(typed.frames[i].frame == desk.frames[i].frame);
+    }
+}
+
 TEST_CASE("QUERY CALL, RETRIEVE MSG and APRS gateway messages follow desktop", "[js8][held]") {
     auto               s   = settings();
     const std::int64_t now = 10'000'000;

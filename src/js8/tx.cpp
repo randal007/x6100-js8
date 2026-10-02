@@ -9,6 +9,7 @@
 
 #include "assembler.hpp"
 #include "classify.hpp"
+#include "directed.hpp"
 #include "render.hpp"
 
 #include "js8core/decoder.hpp"
@@ -83,7 +84,9 @@ TxPlan plan_message(const std::string &my_call, const std::string &my_grid, cons
     const Speed &sp = speed(speed_id);
     TxPlan plan;
     plan.speed = sp.id;
-    plan.text  = normalise(text);
+    // "K2XYZ QUERY CALL W1ABC" goes as desktop's menu sends it, with the
+    // '?' (BETA5_PLAN: without it, desktop stations didn't answer).
+    plan.text  = query_call_question(normalise(text));
 
     if (my_call.empty()) {
         plan.error = "set your callsign first";

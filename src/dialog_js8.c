@@ -4708,8 +4708,11 @@ static const struct {
     {"Any messages?", NULL, NULL}, /* QUERY MSGS */
     {"Fetch message #...", "%s QUERY MSG ", "Type the number of the message %s holds for you"},
     {"Relay via them...", "%s>", "Passed on by %s: type the call it's for, a space, the message"},
-    {"Can they reach...?", "%s QUERY CALL ", "Ask %s if they hear a station: type its call and ?"},
+    {"Can they reach...?", "%s QUERY CALL ", "Ask %s if they hear a station: type its call (the ? goes on by itself)"},
+    /* To everyone, so it's there without a station selected too. */
+    {"Can anyone reach...?", "@ALLCALL QUERY CALL ", "Ask everyone if they hear a station: type its call (the ? goes on by itself)"},
 };
+#define QUERY_ALLCALL_ITEM 6 /* the one above that needs no selected station */
 #define QUERY_MSG_ITEMS (int)(sizeof(query_msg_items) / sizeof(query_msg_items[0]))
 
 static void query_msg_cb(lv_event_t *e) {
@@ -4718,6 +4721,11 @@ static void query_msg_cb(lv_event_t *e) {
     float freq;
     int   snr;
     bool  have = selected_station(call, sizeof(call), &freq, &snr);
+    if (which == QUERY_ALLCALL_ITEM) {
+        popup_leave(&query_list); /* into the keyboard */
+        if (popup_to_keyboard(NULL, 0, query_msg_items[which].prefill)) msg_update_text_fmt("%s", query_msg_items[which].hint);
+        return;
+    }
     if (!query_msg_items[which].prefill || !have) {
         query_close();
         if (!have) return;
@@ -4751,10 +4759,8 @@ static void query_cb(button_data_t *btn) {
     char  call[JS8_RX_CALL_LEN];
     float freq;
     int   snr;
-    if (!selected_station(call, sizeof(call), &freq, &snr)) {
-        msg_update_text_fmt("Select a station first (MFK)");
-        return;
-    }
+    /* No station selected: only what goes to everyone (@ALLCALL). */
+    bool have = selected_station(call, sizeof(call), &freq, &snr);
 
     lv_group_remove_obj(table);
     query_list = lv_list_create(dialog.obj);
@@ -4765,12 +4771,13 @@ static void query_cb(button_data_t *btn) {
     lv_obj_set_style_border_color(query_list, lv_color_white(), 0);
 
     char title[40];
-    snprintf(title, sizeof(title), "To %s (%+d dB)", call, snr);
+    if (have) snprintf(title, sizeof(title), "To %s (%+d dB)", call, snr);
+    else snprintf(title, sizeof(title), "To @ALLCALL"); /* no station selected */
     lv_obj_t *t = lv_list_add_text(query_list, title);
     lv_obj_set_style_text_font(t, &sony_22, 0);
 
     lv_obj_t *first = NULL;
-    for (int q = 0; q < JS8_Q_COUNT; q++) {
+    for (int q = 0; have && q < JS8_Q_COUNT; q++) {
         lv_obj_t *b = list_add_item(query_list, js8_query_label((js8_query_t)q));
         lv_obj_add_event_cb(b, query_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)q);
         lv_obj_add_event_cb(b, query_key_cb, LV_EVENT_KEY, NULL);
@@ -4778,11 +4785,13 @@ static void query_cb(button_data_t *btn) {
         if (!first) first = b;
     }
     for (int i = 0; i < QUERY_MSG_ITEMS; i++) {
+        if (!have && i != QUERY_ALLCALL_ITEM) continue;
         lv_obj_t *b = list_add_item(query_list, query_msg_items[i].label);
         lv_obj_set_style_text_color(b, lv_color_hex(0x80ff80), 0);
         lv_obj_add_event_cb(b, query_msg_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
         lv_obj_add_event_cb(b, query_key_cb, LV_EVENT_KEY, NULL);
         lv_group_add_obj(keyboard_group, b);
+        if (!first) first = b;
     }
     /* Last, so one step back from the first item (the group wraps). */
     lv_obj_t *close = list_add_item(query_list, "Close");

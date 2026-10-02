@@ -60,6 +60,11 @@ std::vector<std::string> relay_path_calls(const std::string &from, const std::st
 /// -> {" MSG TO:", "W1ABC HI *DE* N0XYZ"}.
 std::optional<std::pair<std::string, std::string>> relayed_command(const std::string &text);
 
+/// A QUERY CALL as desktop's menu sends it, "K2XYZ QUERY CALL [CALLSIGN]?":
+/// the '?' added when it's left off after the one call ("K2XYZ QUERY CALL
+/// W1ABC", "@ALLCALL QUERY CALL W1ABC"). Anything else comes back as it is.
+std::string query_call_question(const std::string &text);
+
 /// Desktop's parseCallsigns(): the valid callsigns in `text`, grids left out.
 std::vector<std::string> parse_callsigns(const std::string &text);
 
