@@ -8,6 +8,7 @@ This folder holds the plans, research and reviews behind it.
 | File | What |
 |---|---|
 | [BETA5_PLAN.md](BETA5_PLAN.md) | **Beta 5: the current work list**, with merge notes |
+| [upgrade-1.0.2/](upgrade-1.0.2/README.md) | **Moving to gdyuldin v1.0.2** (without the Murus fork for now): the study, the trial merge, every upstream commit |
 | [feature-ideas.md](feature-ideas.md) | Brainstorm of features to pick from (APRS services, off-grid, desktop parity) |
 | [MAP_PLAN.md](MAP_PLAN.md) | Show Map design and decisions; phases 1–4 built, the home colour Setting and on-air polish left |
 | [UPSTREAM_README.md](UPSTREAM_README.md) | The upstream firmware's README, plus our rule for merging upstream (stored numbers) |
