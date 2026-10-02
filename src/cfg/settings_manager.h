@@ -324,6 +324,50 @@ class SettingsManager {
     Parameter<std::string> p_ft8_cq_modifier{"ft8_cq_modifier", "", {},
         StorageType::GLOBAL, pending_writes_, {}, &global_params_};
 
+    // JS8 (the names are the ones beta 1-4 stored in params.db: values carry over)
+    Parameter<int32_t> p_js8_tx_freq{"js8_tx_freq", 1500, {},
+        StorageType::GLOBAL, pending_writes_, {}, &global_params_}; // TX offset in the passband, Hz
+    Parameter<int32_t> p_js8_hold_offset{"js8_hold_offset", 0, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_};
+    Parameter<int32_t> p_js8_auto{"js8_auto", 0, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // AUTO: automatic replies
+    Parameter<int32_t> p_js8_hb{"js8_hb", 0, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // heartbeats
+    Parameter<int32_t> p_js8_hb_ack{"js8_hb_ack", 0, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_};
+    Parameter<int32_t> p_js8_relay{"js8_relay", 1, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // pass relays (>) on and hold MSG TO: for others, as desktop
+    Parameter<int32_t> p_js8_st_keep{"js8_st_keep", 2, 0, 5,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // Settings: how long stations stay listed (index; 2 = 1 hour)
+    Parameter<int32_t> p_js8_msg_keep{"js8_msg_keep", 0, 0, 4,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // Settings: how long messages stay listed (index; 0 = all)
+    Parameter<int32_t> p_js8_miles{"js8_miles", 0, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // Settings: distances in miles, not km
+    Parameter<int32_t> p_js8_decode_marks{"js8_decode_marks", 0, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // Settings: decode attempts marked on the waterfall
+    Parameter<int32_t> p_js8_map_mode{"js8_map_mode", 0, 0, 2,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // Show Map: 0 Auto, 1 Close-in, 2 World
+    Parameter<int32_t> p_js8_hb_interval{"js8_hb_interval", 30, {},
+        StorageType::GLOBAL, pending_writes_, {}, &global_params_}; // minutes
+    Parameter<int32_t> p_js8_cq_interval{"js8_cq_interval", 1, {},
+        StorageType::GLOBAL, pending_writes_, {}, &global_params_}; // auto CQ: minutes after each CQ ends
+    Parameter<int32_t> p_js8_log_prompt{"js8_log_prompt", 1, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // offer to log when a QSO ends
+    Parameter<int32_t> p_js8_log_activation{"js8_log_activation", 0, 0, 2,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // 0 off, 1 POTA, 2 SOTA
+    Parameter<int32_t> p_js8_alerts{"js8_alerts", 7, 0, 31,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // JS8_ALERT_* bits in dialog_js8.c (7: beep, to me, inbox)
+    Parameter<int32_t> p_js8_speed{"js8_speed", 0, 0, 3,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // js8_speed_t we transmit at (0: Normal)
+    Parameter<int32_t> p_js8_rx_all{"js8_rx_all", 1, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // decode every speed (desktop's multi-decoder)
+    Parameter<int32_t> p_js8_ghostnet{"js8_ghostnet", 0, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // band keys step through GhostNet's frequencies
+    Parameter<int32_t> p_js8_custom_on{"js8_custom_on", 0, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // tuned to custom_hz, not a preset
+    Parameter<int32_t> p_js8_custom_hz{"js8_custom_hz", 0, {},
+        StorageType::GLOBAL, pending_writes_, {}, &global_params_}; // last custom dial frequency, 0 = none
+
     // Station identity
     Parameter<std::string> p_qth{"qth", "", {},
         StorageType::GLOBAL, pending_writes_, {}, &global_params_};
