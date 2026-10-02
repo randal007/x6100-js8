@@ -6,6 +6,7 @@
 
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
+#include <catch2/generators/catch_generators.hpp>
 
 #include "assembler.hpp"
 #include "classify.hpp"
@@ -377,9 +378,11 @@ TEST_CASE("commands without a buffered payload have no checksum", "[js8][checksu
 
 /* ---- End to end: radio-rate audio through the receiver ---------------- */
 
-TEST_CASE("receiver decodes a multi-frame message from 11025 Hz audio", "[js8][receiver][slow]") {
-    constexpr int    RATE = 11025;
-    constexpr double NSPS = 0.160 * RATE; // 1764 samples per symbol
+TEST_CASE("receiver decodes a multi-frame message from the radio's audio", "[js8][receiver][slow]") {
+    // R1CBU 0.34 gave apps 11025 Hz (resampled here), 1.0 gives 12000 Hz.
+    const int    RATE = GENERATE(11025, 12000);
+    const double NSPS = 0.160 * RATE; // samples per symbol
+    INFO("input rate " << RATE);
 
     auto frames = vc::build_message_frames("W1ABC", "FN42", "K2XYZ", "K2XYZ HELLO FROM THE X6100 TEST", false,
                                            false, 0);
@@ -451,7 +454,7 @@ TEST_CASE("receiver decodes a multi-frame message from 11025 Hz audio", "[js8][r
     // Feed at 10x real time: fast, but in steady pieces like a sound card,
     // and slow enough that each slot's decode finishes before the next one
     // is due (the engine skips a decode while one is still running).
-    constexpr std::size_t PIECE = RATE / 10; // 100 ms of audio per 10 ms
+    const std::size_t PIECE = RATE / 10; // 100 ms of audio per 10 ms
     auto feed_range = [&](std::size_t from, std::size_t to) {
         for (std::size_t i = from; i < to; i += PIECE) {
             rx.feed(&audio[i], std::min<std::size_t>(PIECE, to - i));

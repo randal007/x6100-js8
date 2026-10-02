@@ -26,17 +26,20 @@
 #include "dialog.h"
 #include "dsp.h"
 #include "events.h"
+#include "gps.h"
 #include "keyboard.h"
+#include "lock_manager.h"
 #include "main_screen.h"
 #include "msg.h"
-#include "params/params.h"
 #include "radio.h"
 #include "keypad.h"
 #include "scheduler.h"
+#include "spectrum.h"
 #include "styles.h"
 #include "textarea_window.h"
 #include "tx_player.h"
 #include "util.h"
+#include "waterfall.h"
 #include "widgets/lv_finder.h"
 #include "widgets/lv_waterfall.h"
 
@@ -56,7 +59,10 @@
 #include <time.h>
 #include <unistd.h>
 
-#define SAMPLE_RATE      (AUDIO_CAPTURE_RATE / AUDIO_DECIM)
+/* Asked of R1CBU 1.0's audio subscription, which divides its 48 kHz by 4
+ * with the Kaiser decimator 0.34 used to give us 11025 Hz: JS8's own rate,
+ * nothing left to resample. */
+#define SAMPLE_RATE      12000
 #define WIDTH            771
 #define WF_HEIGHT        325
 #define WF_VISIBLE       55     /* waterfall rows left uncovered by the list */
@@ -137,7 +143,25 @@ typedef enum {
 
 static void construct_cb(lv_obj_t *parent);
 static void destruct_cb(void);
-static void audio_cb(unsigned int n, float *samples);
+static void audio_cb(size_t n, float *samples);
+static void gps_msg_cb(void *s, lv_msg_t *m);
+
+/* R1CBU 1.0 hands text settings out as copies: the station's call and grid
+ * for the GUI thread, valid until the next call. */
+static const char *my_call(void) {
+    static char buf[PARAM_TEXT_MAX];
+    return param_t_get_into(cfg.callsign(), buf, sizeof(buf));
+}
+
+static const char *my_grid(void) {
+    static char buf[PARAM_TEXT_MAX];
+    return param_t_get_into(cfg.qth(), buf, sizeof(buf));
+}
+
+static uint32_t audio_sub = AUDIO_SUB_INVALID; /* receive audio, 12 kHz (dsp_audio_subscribe_float) */
+static void    *gps_sub;            /* MSG_GPS while JS8 is open */
+static double   gps_lat, gps_lon;   /* the latest 2D/3D fix */
+static time_t   gps_when;           /* when it came; 0: none since JS8 opened */
 static void key_cb(lv_event_t *e);
 
 static const char *show_label_getter(void);
@@ -616,7 +640,6 @@ static dialog_t dialog = {
     .run          = false,
     .construct_cb = construct_cb,
     .destruct_cb  = destruct_cb,
-    .audio_cb     = audio_cb,
     .key_cb       = key_cb,
     .rotary_cb    = rotary_cb,
     .btn_page     = &page_1,
@@ -775,11 +798,11 @@ static const struct {
 #define MSG_KEEP_N (int)(sizeof(msg_keep_opts) / sizeof(msg_keep_opts[0]))
 
 static int64_t msg_keep_ms(void) {
-    return (int64_t)msg_keep_opts[params.js8_msg_keep.x < MSG_KEEP_N ? params.js8_msg_keep.x : 0].min * 60000;
+    return (int64_t)msg_keep_opts[param_i_get(cfg.js8.msg_keep()) < MSG_KEEP_N ? param_i_get(cfg.js8.msg_keep()) : 0].min * 60000;
 }
 
 static void apply_station_keep(void) {
-    js8_stations_set_expire_ms((int64_t)st_keep_opts[params.js8_st_keep.x < ST_KEEP_N ? params.js8_st_keep.x : 2].min *
+    js8_stations_set_expire_ms((int64_t)st_keep_opts[param_i_get(cfg.js8.st_keep()) < ST_KEEP_N ? param_i_get(cfg.js8.st_keep()) : 2].min *
                                60000);
 }
 
@@ -832,13 +855,13 @@ static void rebuild_rows(void) {
 
 /* The speed we transmit at (page 6). */
 static js8_speed_t cur_speed(void) {
-    return params.js8_speed.x < JS8_SPEED_COUNT ? (js8_speed_t)params.js8_speed.x : JS8_SPEED_NORMAL;
+    return param_i_get(cfg.js8.speed()) < JS8_SPEED_COUNT ? (js8_speed_t)param_i_get(cfg.js8.speed()) : JS8_SPEED_NORMAL;
 }
 
 /* What the receiver decodes: every speed (desktop's multi-decoder, the
  * default) or only the one we transmit at. */
 static int rx_speed_mask(void) {
-    if (!params.js8_rx_all.x) return js8_speed_rx_mask(cur_speed());
+    if (!param_i_get(cfg.js8.rx_all())) return js8_speed_rx_mask(cur_speed());
     int mask = 0;
     for (int s = 0; s < JS8_SPEED_COUNT; s++) mask |= js8_speed_rx_mask((js8_speed_t)s);
     return mask;
@@ -888,11 +911,11 @@ static void process_message(js8_rx_msg_t *m) {
      * the list an hour after they were last heard beeped again (B-20). */
     bool new_station = !m->tx && m->from[0] && !js8_stations_heard_before(stations, m->from);
     if (new_station) map_popup_add(m->from); /* pops up on the map for a few seconds */
-    js8_stations_add(stations, m, params.callsign.x, now_wall_ms());
+    js8_stations_add(stations, m, my_call(), now_wall_ms());
     if (m->tx) return;
-    if (params.js8_relay.x) { /* stations a relay to us came through, as desktop lists them */
+    if (param_i_get(cfg.js8.relay())) { /* stations a relay to us came through, as desktop lists them */
         char via_calls[4][JS8_RX_CALL_LEN], via[JS8_RX_CALL_LEN];
-        int  n = js8_relay_stations(m, params.callsign.x, via_calls, 4, via, sizeof(via));
+        int  n = js8_relay_stations(m, my_call(), via_calls, 4, via, sizeof(via));
         for (int i = 0; i < n; i++)
             js8_stations_add_via(stations, via_calls[i], via, m->freq_hz, m->submode, now_wall_ms());
     }
@@ -912,7 +935,7 @@ static void process_message(js8_rx_msg_t *m) {
     }
     handle_incoming(m);
     char ended[JS8_RX_CALL_LEN];
-    if (js8_qsos_received(qsos, m, params.callsign.x, now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
+    if (js8_qsos_received(qsos, m, my_call(), now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
     if (m->to_me && log_list) log_refresh();
 }
 
@@ -1080,12 +1103,12 @@ static void station_fields(const js8_station_t *st, int64_t now, station_fields_
             snprintf(heard, sizeof(f->heard), "heard you (%s)", hage);
         }
     }
-    if (st->grid[0] && params.qth.x[0]) {
+    if (st->grid[0] && my_grid()[0]) {
         double lat, lon, my_lat, my_lon;
         qth_str_to_pos(st->grid, &lat, &lon);
-        qth_str_to_pos(params.qth.x, &my_lat, &my_lon);
+        qth_str_to_pos(my_grid(), &my_lat, &my_lon);
         double km = qth_pos_dist(lat, lon, my_lat, my_lon);
-        if (params.js8_miles.x) snprintf(dist, sizeof(f->dist), "%.0f mi", km * 0.621371);
+        if (param_i_get(cfg.js8.miles())) snprintf(dist, sizeof(f->dist), "%.0f mi", km * 0.621371);
         else snprintf(dist, sizeof(f->dist), "%.0f km", km);
         snprintf(f->az, sizeof(f->az), "%.0f\xC2\xB0", bearing_deg(my_lat, my_lon, lat, lon)); /* ° */
     }
@@ -1133,7 +1156,7 @@ static struct {
 } worked_cache[WORKED_CACHE];
 
 static bool worked_before(const char *call) {
-    qso_log_band_t band = qso_log_freq_to_band(cparam_i_get(cfg_fg_freq));
+    qso_log_band_t band = qso_log_freq_to_band(cparam_i_get(cfg.cur.fg_freq()));
     unsigned       h    = 5381;
     for (const char *p = call; *p; p++) h = h * 33 + (unsigned char)*p;
     h = (h * 33 + (unsigned)band) % WORKED_CACHE;
@@ -1596,12 +1619,12 @@ static void update_status(void) {
     /* Always show what may transmit by itself. */
     char    flags[80] = "";
     int64_t now_ms    = now_wall_ms();
-    bool    any_auto  = params.js8_auto.x || params.js8_hb.x;
+    bool    any_auto  = param_i_get(cfg.js8.auto_mode()) || param_i_get(cfg.js8.hb());
     if (any_auto && js8_auto_idle(autop, now_ms)) {
         snprintf(flags, sizeof(flags), "AUTO/HB PAUSED (idle)  ");
     } else {
-        if (params.js8_auto.x) strcat(flags, "AUTO  ");
-        if (params.js8_hb.x) {
+        if (param_i_get(cfg.js8.auto_mode())) strcat(flags, "AUTO  ");
+        if (param_i_get(cfg.js8.hb())) {
             char hb[40];
             if (!js8_speed_heartbeats(cur_speed())) {
                 snprintf(hb, sizeof(hb), "HB paused (Turbo)  ");
@@ -1614,13 +1637,13 @@ static void update_status(void) {
                 time_t    t = (time_t)(hb_next_ms / 1000);
                 struct tm nt;
                 gmtime_r(&t, &nt);
-                snprintf(hb, sizeof(hb), "HB %um next %02d:%02d  ", params.js8_hb_interval.x, nt.tm_hour, nt.tm_min);
+                snprintf(hb, sizeof(hb), "HB %um next %02d:%02d  ", param_i_get(cfg.js8.hb_interval()), nt.tm_hour, nt.tm_min);
             } else {
-                snprintf(hb, sizeof(hb), "HB %um  ", params.js8_hb_interval.x);
+                snprintf(hb, sizeof(hb), "HB %um  ", param_i_get(cfg.js8.hb_interval()));
             }
             strcat(flags, hb);
         }
-        if (params.js8_hb_ack.x && params.js8_auto.x && params.js8_hb.x) strcat(flags, "ACK  ");
+        if (param_i_get(cfg.js8.hb_ack()) && param_i_get(cfg.js8.auto_mode()) && param_i_get(cfg.js8.hb())) strcat(flags, "ACK  ");
     }
     int unread = js8_inbox_unread(inbox);
     if (unread) {
@@ -1756,7 +1779,7 @@ static void marks_tick(void) {
     memcpy(batch, mark_queue, n * sizeof(batch[0]));
     mark_count = 0;
     pthread_mutex_unlock(&mark_lock);
-    if (!params.js8_decode_marks.x || !waterfall) return;
+    if (!param_i_get(cfg.js8.decode_marks()) || !waterfall) return;
     for (unsigned i = 0; i < n; i++) mark_show(&batch[i]);
 }
 
@@ -1920,11 +1943,11 @@ static void rx_start(void) {
         .on_mark       = on_mark,
     };
     marks_reset();
-    rx = js8_rx_create(SAMPLE_RATE, rx_speed_mask(), params.callsign.x, &cb);
+    rx = js8_rx_create(SAMPLE_RATE, rx_speed_mask(), my_call(), &cb);
     if (!rx) msg_schedule_text_fmt("JS8: cannot start decoder");
     js8_rx_set_decode_range(rx, filter_low, filter_high);
-    js8_rx_set_qso_offset(rx, params.js8_tx_freq.x);
-    js8_rx_set_sync_marks(rx, params.js8_decode_marks.x);
+    js8_rx_set_qso_offset(rx, param_i_get(cfg.js8.tx_freq()));
+    js8_rx_set_sync_marks(rx, param_i_get(cfg.js8.decode_marks()));
 }
 
 static void rx_stop(void) {
@@ -1947,7 +1970,7 @@ static bool beep_guard_active(void) {
     return atomic_load(&beep_guard) || now_mono_ms() < atomic_load(&beep_guard_end);
 }
 
-static void audio_cb(unsigned int n, float *samples) {
+static void audio_cb(size_t n, float *samples) {
     if (atomic_load(&keyed)) return; /* our own TX, or nothing useful */
     if (beep_guard_active()) {
         static const float silence[512];
@@ -1964,7 +1987,7 @@ static void audio_cb(unsigned int n, float *samples) {
         float db             = (float)(10.0 * log10(sq / n + 1e-24));
         beep_level_before_db = beep_level_before_db < -150.0f ? db : 0.9f * beep_level_before_db + 0.1f * db;
     }
-    js8_rx_feed(rx, samples, n);
+    js8_rx_feed(rx, samples, (unsigned)n);
 }
 
 /* ---- Transmit ---------------------------------------------------------- */
@@ -2061,7 +2084,7 @@ static void ui_tx_status(void *arg) {
         /* Only what you send is your side of a QSO: an unattended station
          * answering SNR? and hearing "TNX 73" hasn't had one. */
         char ended[JS8_RX_CALL_LEN];
-        if (!tx_auto && js8_qsos_sent(qsos, m.text, params.callsign.x, now_wall_ms(), ended, sizeof(ended)))
+        if (!tx_auto && js8_qsos_sent(qsos, m.text, my_call(), now_wall_ms(), ended, sizeof(ended)))
             log_offer(ended);
     }
     if (st->frame > 0 && tx_row_ok()) { /* how far it got, for "(stopped 2/5)" */
@@ -2187,17 +2210,17 @@ static void wf_frame_set(bool on) {
 static void update_tx_bar(void) {
     if (!tx_bar) return;
     char     line[JS8_RX_TEXT_LEN + 64];
-    uint16_t offset = params.js8_tx_freq.x;
+    uint16_t offset = param_i_get(cfg.js8.tx_freq());
 
     if (cq_adjusting && tx_status.state == JS8_TX_IDLE) {
         snprintf(line, sizeof(line), "Auto CQ %u min after each CQ: turn the knob (%d-%d), press CQ when done",
-                 params.js8_cq_interval.x, CQ_MIN_INTERVAL, CQ_MAX_INTERVAL);
+                 param_i_get(cfg.js8.cq_interval()), CQ_MIN_INTERVAL, CQ_MAX_INTERVAL);
         tx_bar_set(0x5a4a00, false, line);
         return;
     }
     if (hb_adjusting && tx_status.state == JS8_TX_IDLE) {
         snprintf(line, sizeof(line), "HB every %u min: turn the knob (5-30), press HB when done",
-                 params.js8_hb_interval.x);
+                 param_i_get(cfg.js8.hb_interval()));
         tx_bar_set(0x5a4a00, false, line);
         return;
     }
@@ -2224,7 +2247,7 @@ static void update_tx_bar(void) {
     default:
         /* A locked station in red (recolor only here: sent text may hold '#'). */
         snprintf(line, sizeof(line), "TX %4u Hz %s   ready%s%s", offset, js8_speed_name(cur_speed()),
-                 params.callsign.x[0] ? "" : "  (set your callsign: APP > Callsign)",
+                 my_call()[0] ? "" : "  (set your callsign: APP > Callsign)",
                  !sel_call[0] ? "" : sel_locked ? "      #ff5050 locked: " : "      selected: ");
         if (sel_call[0]) strncat(line, sel_call, sizeof(line) - strlen(line) - 1);
         if (sel_call[0] && sel_locked) strncat(line, "#", sizeof(line) - strlen(line) - 1);
@@ -2267,7 +2290,7 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
     }
 
     js8_tx_preview_t pv;
-    js8_tx_preview(params.callsign.x, params.qth.x, text, cur_speed(), &pv);
+    js8_tx_preview(my_call(), my_grid(), text, cur_speed(), &pv);
     if (!pv.ok) {
         msg_update_text_fmt("JS8: %s", pv.error);
         return false;
@@ -2276,7 +2299,7 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
     char err[JS8_TX_ERR_LEN] = "";
     atomic_store(&tx_offset_active, offset_hz);
     snprintf(tx_preview, sizeof(tx_preview), "%s", pv.preview);
-    if (!js8_tx_send(tx, params.callsign.x, params.qth.x, text, (float)offset_hz, cur_speed(), err, sizeof(err))) {
+    if (!js8_tx_send(tx, my_call(), my_grid(), text, (float)offset_hz, cur_speed(), err, sizeof(err))) {
         msg_update_text_fmt("JS8: %s", err);
         return false;
     }
@@ -2294,7 +2317,7 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
     /* Anything you send by hand, except a heartbeat, pauses heartbeats. */
     if (!automatic) {
         char hb[48];
-        js8_heartbeat_text(params.callsign.x, params.qth.x, hb, sizeof(hb));
+        js8_heartbeat_text(my_call(), my_grid(), hb, sizeof(hb));
         if (strcmp(text, hb) != 0) hb_pause(strncmp(text, "CQ ", 3) == 0 ? "CQ" : "you sent");
     }
     return true;
@@ -2302,17 +2325,17 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
 
 /* At our TX offset (the red band), sent by you. */
 static bool tx_queue(const char *text) {
-    return tx_queue_at(text, params.js8_tx_freq.x, false);
+    return tx_queue_at(text, param_i_get(cfg.js8.tx_freq()), false);
 }
 
 /* Hold off: answer on the other station's offset. Hold on (default): stay
  * on ours, which is JS8 etiquette. */
 static void apply_hold(float their_freq) {
-    if (params.js8_hold_offset.x) return;
+    if (param_i_get(cfg.js8.hold_offset())) return;
     int f = (int)(their_freq + 0.5f);
     if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
     if (f > js8_speed_max_offset_hz(cur_speed())) f = js8_speed_max_offset_hz(cur_speed());
-    params_uint16_set(&params.js8_tx_freq, (uint16_t)f);
+    param_i_set(cfg.js8.tx_freq(), (uint16_t)f);
     js8_rx_set_qso_offset(rx, f);
     lv_finder_set_value(finder, (int16_t)f);
     lv_obj_invalidate(finder);
@@ -2328,13 +2351,13 @@ static void rotary_cb(int32_t diff) {
         return;
     }
     if (hb_adjusting) {
-        int v = (int)params.js8_hb_interval.x + (diff > 0 ? 1 : -1);
+        int v = (int)param_i_get(cfg.js8.hb_interval()) + (diff > 0 ? 1 : -1);
         if (v < JS8_HB_MIN_INTERVAL) v = JS8_HB_MIN_INTERVAL;
         if (v > JS8_HB_MAX_INTERVAL) v = JS8_HB_MAX_INTERVAL;
-        params_uint16_set(&params.js8_hb_interval, (uint16_t)v);
+        param_i_set(cfg.js8.hb_interval(), (uint16_t)v);
         hb_adjust_ms = now_wall_ms();
         if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
-        if (params.js8_hb.x && hb_next_ms) hb_next_ms = hb_first_ms();
+        if (param_i_get(cfg.js8.hb()) && hb_next_ms) hb_next_ms = hb_first_ms();
         update_tx_bar();
         update_status();
         return;
@@ -2342,10 +2365,10 @@ static void rotary_cb(int32_t diff) {
     int32_t abs_diff = abs(diff);
     if (abs_diff > 3) diff *= (abs_diff < 6) ? 5 : 10;
 
-    int32_t f = (int32_t)params.js8_tx_freq.x + diff;
+    int32_t f = (int32_t)param_i_get(cfg.js8.tx_freq()) + diff;
     if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
     if (f > js8_speed_max_offset_hz(cur_speed())) f = js8_speed_max_offset_hz(cur_speed());
-    params_uint16_set(&params.js8_tx_freq, (uint16_t)f);
+    param_i_set(cfg.js8.tx_freq(), (uint16_t)f);
     js8_rx_set_qso_offset(rx, f);
 
     lv_finder_set_value(finder, (int16_t)f);
@@ -2359,7 +2382,7 @@ static void compose_changed_cb(lv_event_t *e) {
     (void)e;
     js8_tx_preview_t pv;
     const char *typed = textarea_window_get();
-    js8_tx_preview(params.callsign.x, params.qth.x, typed, cur_speed(), &pv);
+    js8_tx_preview(my_call(), my_grid(), typed, cur_speed(), &pv);
     if (pv.ok) msg_update_text_fmt("%d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
     /* Why it can't go ("too long: 21 frames (max 20)"), as you type, not
      * the last good count frozen until Enter (B-23). */
@@ -2436,10 +2459,10 @@ static bool compose_ok_cb(void) {
         while (*typed == ' ') typed++;
         if (!*typed) {
             operator_call[0] = '\0';
-            msg_update_text_fmt("Operator: the station call (%s)", params.callsign.x);
+            msg_update_text_fmt("Operator: the station call (%s)", my_call());
         } else if (js8_operator_call_valid(typed, operator_call, sizeof(operator_call))) {
             msg_update_text_fmt("Operator %s: logged as OPERATOR; %s is still sent on the air", operator_call,
-                                params.callsign.x);
+                                my_call());
         } else {
             msg_update_text_fmt("Not a callsign: letters, digits and /, e.g. VA7XYZ");
             return false; /* keep the keyboard open */
@@ -2517,7 +2540,7 @@ static void compose_open(const char *prefill) {
      * frequency, alert words, INFO or a log field can be typed without one
      * (B-16). Refused, the edit mode the caller set is undone, or the next
      * Send... would open in it. */
-    if (!params.callsign.x[0] && (edit_target == 0 || edit_target >= EDIT_BEACON_GRID)) {
+    if (!my_call()[0] && (edit_target == 0 || edit_target >= EDIT_BEACON_GRID)) {
         msg_update_text_fmt("Set your callsign first: APP > Callsign");
         edit_target        = 0;
         deliver_pending.id = 0;
@@ -2595,9 +2618,9 @@ static void format_khz(int32_t hz, char *buf, size_t size) {
 /* What the top bar and the info rows call where we are. */
 static const char *where_label(void) {
     static char buf[32];
-    if (!params.js8_custom_on.x) return cfg_digital_label_get();
+    if (!param_i_get(cfg.js8.custom_on())) return cfg_digital_label_get();
     char khz[16];
-    format_khz(params.js8_custom_hz.x, khz, sizeof(khz));
+    format_khz(param_i_get(cfg.js8.custom_hz()), khz, sizeof(khz));
     snprintf(buf, sizeof(buf), "JS8 %s kHz", khz);
     return buf;
 }
@@ -2606,13 +2629,13 @@ static const char *where_label(void) {
  * Tuning into another band loads that band's saved mode (USB if it was
  * last used for SSB), so this follows every retune. */
 static void js8_usb_dig(void) {
-    if (cparam_i_get(cfg_cur_mode) != x6100_mode_usb_dig) cparam_i_set(cfg_cur_mode, x6100_mode_usb_dig);
+    if (cparam_i_get(cfg.cur.mode()) != x6100_mode_usb_dig) cparam_i_set(cfg.cur.mode(), x6100_mode_usb_dig);
 }
 
 /* The presets the band keys step through: JS8Call's or GhostNet's. False
  * past either end of the list (nothing changes). */
 static bool load_band(int8_t dir) {
-    cfg_digital_type_t set = params.js8_ghostnet.x ? CFG_DIG_TYPE_JS8_GHOSTNET : CFG_DIG_TYPE_JS8;
+    cfg_digital_type_t set = param_i_get(cfg.js8.ghostnet()) ? CFG_DIG_TYPE_JS8_GHOSTNET : CFG_DIG_TYPE_JS8;
     bool               ok  = cfg_digital_load(dir, set);
     js8_usb_dig(); /* even with no preset found */
     if (!ok) return false;
@@ -2621,7 +2644,7 @@ static bool load_band(int8_t dir) {
 }
 
 static js8_stations_t *stations_for_band(void) {
-    int32_t khz = cparam_i_get(cfg_fg_freq) / 1000;
+    int32_t khz = cparam_i_get(cfg.cur.fg_freq()) / 1000;
     for (int i = 0; i < BAND_LISTS; i++) {
         if (band_lists[i].list && band_lists[i].dial_khz == khz) return band_lists[i].list;
     }
@@ -2671,10 +2694,10 @@ static void band_cb(lv_event_t *e) {
         return;
     }
     if (!load_band(lv_event_get_code(e) == EVENT_BAND_UP ? 1 : -1)) {
-        msg_update_text_fmt("End of the %s list", params.js8_ghostnet.x ? "GhostNet" : "JS8");
+        msg_update_text_fmt("End of the %s list", param_i_get(cfg.js8.ghostnet()) ? "GhostNet" : "JS8");
         return;
     }
-    if (params.js8_custom_on.x) params_bool_set(&params.js8_custom_on, false);
+    if (param_i_get(cfg.js8.custom_on())) param_i_set(cfg.js8.custom_on(), false);
     retuned();
 }
 
@@ -2713,36 +2736,36 @@ static void construct_cb(lv_obj_t *parent) {
 
     /* Nothing transmits on its own when the app opens: AUTO, HB, HB ACK
      * and auto CQ start off every time (the HB interval is remembered). */
-    params_bool_set(&params.js8_auto, false);
-    params_bool_set(&params.js8_hb, false);
-    params_bool_set(&params.js8_hb_ack, false);
+    param_i_set(cfg.js8.auto_mode(), false);
+    param_i_set(cfg.js8.hb(), false);
+    param_i_set(cfg.js8.hb_ack(), false);
     auto_cq = false;
     tx_rows_stopped(); /* a message JS8 was closed on stopped then */
 
     /* Full-screen app with its own waterfall: skip main-screen DSP. */
-    dsp_set_waterfall_enabled(false);
-    dsp_set_spectrum_enabled(false);
+    waterfall_set_enabled(false);
+    spectrum_set_enabled(false);
 
     lv_obj_add_event_cb(dialog.obj, band_cb, EVENT_BAND_UP, NULL);
     lv_obj_add_event_cb(dialog.obj, band_cb, EVENT_BAND_DOWN, NULL);
 
     mem_save(MEM_BACKUP_ID);
     load_band(0); /* also sets the mode */
-    if (params.js8_custom_on.x) {
-        if (params.js8_custom_hz.x >= CUSTOM_MIN_HZ && params.js8_custom_hz.x <= CUSTOM_MAX_HZ)
-            cparam_i_set(cfg_fg_freq, params.js8_custom_hz.x);
+    if (param_i_get(cfg.js8.custom_on())) {
+        if (param_i_get(cfg.js8.custom_hz()) >= CUSTOM_MIN_HZ && param_i_get(cfg.js8.custom_hz()) <= CUSTOM_MAX_HZ)
+            cparam_i_set(cfg.cur.fg_freq(), param_i_get(cfg.js8.custom_hz()));
         else
-            params_bool_set(&params.js8_custom_on, false);
+            param_i_set(cfg.js8.custom_on(), false);
     }
     js8_usb_dig(); /* a custom frequency on another band loaded that band's mode */
 
     /* 200-3000 Hz while JS8 is open. High first: each edge is validated
      * against the other. */
-    saved_filter_low  = cparam_i_get(cfg_cur_filter_low);
-    saved_filter_high = cparam_i_get(cfg_cur_filter_high);
+    saved_filter_low  = cparam_i_get(cfg.filter.low());
+    saved_filter_high = cparam_i_get(cfg.filter.high());
     filter_saved      = true;
-    cparam_i_set(cfg_cur_filter_high, JS8_FILTER_HIGH);
-    cparam_i_set(cfg_cur_filter_low, JS8_FILTER_LOW);
+    cparam_i_set(cfg.filter.high(), JS8_FILTER_HIGH);
+    cparam_i_set(cfg.filter.low(), JS8_FILTER_LOW);
     /* The TX filter too, so a signal up to 3000 Hz goes out whole. Only the
      * radio is told: the setting itself is untouched, so a power loss here
      * can't leave it changed. */
@@ -2752,8 +2775,8 @@ static void construct_cb(lv_obj_t *parent) {
      * exactly such steady tones). Off while the app is open, radio only. */
     radio_set_rx_dsp_off(true);
 
-    filter_low  = cparam_i_get(cfg_cur_filter_low);
-    filter_high = cparam_i_get(cfg_cur_filter_high);
+    filter_low  = cparam_i_get(cfg.filter.low());
+    filter_high = cparam_i_get(cfg.filter.high());
 
     /* Waterfall, in an opaque black box. LVGL 8.3's lv_img never reports
      * that it covers what's behind it (its cover check reads the event
@@ -2771,9 +2794,8 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_pos(wf_box, 13, 13);
 
     waterfall = lv_waterfall_create(wf_box);
-    lv_obj_add_style(waterfall, &waterfall_style, 0);
     lv_obj_clear_flag(waterfall, LV_OBJ_FLAG_SCROLLABLE);
-    lv_waterfall_set_palette(waterfall, (lv_color_t *)wf_palette, 256);
+    lv_waterfall_set_palette(waterfall, (lv_color_t *)style.wf_palette, 256);
     lv_waterfall_set_size(waterfall, WIDTH, WF_HEIGHT);
     lv_waterfall_set_min(waterfall, WF_MIN_DB);
     lv_waterfall_set_max(waterfall, WF_MAX_DB);
@@ -2787,14 +2809,14 @@ static void construct_cb(lv_obj_t *parent) {
     lv_finder_set_range(finder, filter_low, filter_high);
     /* A stored offset outside the usable range (an old or damaged setting)
      * would make every send fail; start from 1500 Hz instead. */
-    if (params.js8_tx_freq.x < JS8_TX_MIN_OFFSET || params.js8_tx_freq.x > js8_speed_max_offset_hz(cur_speed())) {
-        params_uint16_set(&params.js8_tx_freq, 1500);
+    if (param_i_get(cfg.js8.tx_freq()) < JS8_TX_MIN_OFFSET || param_i_get(cfg.js8.tx_freq()) > js8_speed_max_offset_hz(cur_speed())) {
+        param_i_set(cfg.js8.tx_freq(), 1500);
     }
 
     /* The finder's band is our TX offset; its cursor line marks the
      * selected message. */
     lv_finder_set_width(finder, js8_speed_bandwidth_hz(cur_speed()));
-    lv_finder_set_value(finder, params.js8_tx_freq.x);
+    lv_finder_set_value(finder, param_i_get(cfg.js8.tx_freq()));
     lv_finder_clear_cursor(finder);
     qso_freq       = -1;
     sel_call[0]    = '\0';
@@ -2806,7 +2828,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_radius(finder, 0, LV_PART_MAIN);
     lv_obj_set_style_border_width(finder, 0, LV_PART_MAIN);
     lv_obj_set_style_bg_opa(finder, LV_OPA_0, LV_PART_MAIN);
-    lv_obj_set_style_bg_color(finder, bg_color, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(finder, style.colors.mark, LV_PART_INDICATOR);
     lv_obj_set_style_bg_opa(finder, LV_OPA_50, LV_PART_INDICATOR);
     lv_obj_set_style_border_width(finder, 1, LV_PART_INDICATOR);
     lv_obj_set_style_border_color(finder, lv_color_white(), LV_PART_INDICATOR);
@@ -2868,11 +2890,11 @@ static void construct_cb(lv_obj_t *parent) {
     rebuild_rows();
     add_info_row("%s", where_label());
 
-    main_screen_lock_ab(true);
+    lm_set_ab(true);
     keypad_set_long_time(HOLD_MS); /* page back, auto CQ etc. without the long wait */
-    main_screen_lock_mode(true);
-    main_screen_lock_freq(true);
-    main_screen_lock_band(true);
+    lm_set_mode(true);
+    lm_set_freq(true);
+    lm_set_band(true);
 
     cycles = cycle_decodes = 0;
     ev_clear(); /* anything left from the last time JS8 was open */
@@ -2880,10 +2902,15 @@ static void construct_cb(lv_obj_t *parent) {
     worked_forget();
     wf_queue_clear();
     rx_start();
+    /* Receive audio from here on (dsp's thread, into the receiver). */
+    if (audio_sub == AUDIO_SUB_INVALID) audio_sub = dsp_audio_subscribe_float(audio_cb, SAMPLE_RATE);
+    dsp_audio_set_active(audio_sub, true);
+    gps_when = 0;
+    gps_sub  = lv_msg_subscribe(MSG_GPS, gps_msg_cb, NULL);
     update_status();
 
     /* Transmit: same 5 W cap and gain start as the FT8 app. */
-    if (param_f_get(cfg_pwr) > TX_PLAYER_MAX_PWR_W) {
+    if (param_f_get(cfg.pwr()) > TX_PLAYER_MAX_PWR_W) {
         radio_set_pwr(TX_PLAYER_MAX_PWR_W);
         msg_schedule_text_fmt("Power was limited to %0.0fW", TX_PLAYER_MAX_PWR_W);
     }
@@ -2945,30 +2972,35 @@ static void destruct_cb(void) {
         *popups[i].list = NULL;
     }
     hb_adjusting = false;
-    radio_set_pwr(param_f_get(cfg_pwr));
+    radio_set_pwr(param_f_get(cfg.pwr()));
 
+    /* No audio callback after this returns (it takes dsp's lock), so the
+     * receiver can go. */
+    dsp_audio_set_active(audio_sub, false);
+    if (gps_sub) lv_msg_unsubscribe(gps_sub);
+    gps_sub = NULL;
     rx_stop();
     wf_queue_clear();
     partials_end(); /* shown as ended when JS8 opens again */
 
-    dsp_set_waterfall_enabled(true);
-    dsp_set_spectrum_enabled(true);
+    waterfall_set_enabled(true);
+    spectrum_set_enabled(true);
 
     /* Your filter back, before the saved band and mode return. */
     if (filter_saved) {
-        cparam_i_set(cfg_cur_filter_high, saved_filter_high);
-        cparam_i_set(cfg_cur_filter_low, saved_filter_low);
-        radio_set_tx_filter(param_i_get(cfg_tx_filter_low), param_i_get(cfg_tx_filter_high));
+        cparam_i_set(cfg.filter.high(), saved_filter_high);
+        cparam_i_set(cfg.filter.low(), saved_filter_low);
+        radio_set_tx_filter(param_i_get(cfg.dsp.tx_filter_low()), param_i_get(cfg.dsp.tx_filter_high()));
         radio_set_rx_dsp_off(false);
         filter_saved = false;
     }
     mem_load(MEM_BACKUP_ID);
 
-    main_screen_lock_mode(false);
-    main_screen_lock_ab(false);
+    lm_set_mode(false);
+    lm_set_ab(false);
     keypad_set_long_time(0);
-    main_screen_lock_freq(false);
-    main_screen_lock_band(false);
+    lm_set_freq(false);
+    lm_set_band(false);
 
     /* LVGL objects are children of dialog.obj, deleted by dialog_destruct()
      * right after this returns. */
@@ -3235,7 +3267,7 @@ static void map_talk_note(const js8_rx_msg_t *m) {
         size_t n = 0;
         while (*p && *p != ' ' && *p != '>' && n + 1 < sizeof(next)) next[n++] = *p++;
         next[n] = '\0';
-        if (!n || !strpbrk(next, "0123456789") || strcasecmp(next, params.callsign.x) == 0) return;
+        if (!n || !strpbrk(next, "0123456789") || strcasecmp(next, my_call()) == 0) return;
         map_talk_add(prev, next);
         snprintf(prev, sizeof(prev), "%s", next);
     }
@@ -3353,17 +3385,17 @@ static void map_strip_update(void) {
     if (!found && !lv_obj_has_flag(map_strip_box, LV_OBJ_FLAG_HIDDEN)) lv_obj_add_flag(map_strip_box, LV_OBJ_FLAG_HIDDEN);
 }
 
-/* The inside of the dialog's border, from the theme's image: simple
- * (dialog_dark.bin, 795 x 347) has a 1 px white border at its edge; legacy
- * (dialog.bin, 796 x 348) a 2 px border 2 px in. */
+/* The inside of the dialog's border. R1CBU 1.0 draws the dialog itself
+ * (styles.c, DIALOG_WIDTH x DIALOG_HEIGHT in every theme): Simple and Flat
+ * with a 1 px border and 8 px corners, Black with no border and 7 px. */
 static void map_geometry(void) {
-    if (params.theme.x == THEME_LEGACY) {
-        map_x = 4, map_y = 4, map_w = 788, map_h = 339;
-        map_corner_r = 12, map_edge = 7; /* its corners are cut 10 px across */
-    } else {
-        map_x = 1, map_y = 1, map_w = 793, map_h = 345;
-        map_corner_r = 9, map_edge = 4;
-    }
+    int border   = param_i_get(cfg.ui.theme()) == THEME_BLACK ? 0 : 1;
+    map_x        = border;
+    map_y        = border;
+    map_w        = DIALOG_WIDTH - 2 * border;
+    map_h        = DIALOG_HEIGHT - 2 * border;
+    map_corner_r = 8;
+    map_edge     = 4;
 }
 
 /* The border's corners as the dialog image draws them (over the screen
@@ -3390,7 +3422,7 @@ static void map_corners_load(void) {
     if (!src || lv_img_decoder_open(&dsc, src, lv_color_white(), 0) != LV_RES_OK) return;
     if (dsc.header.cf == LV_IMG_CF_TRUE_COLOR_ALPHA && sizeof(lv_color_t) == sizeof(lv_color32_t) &&
         MAP_X + MAP_W < (int)dsc.header.w && MAP_Y + MAP_H < (int)dsc.header.h) {
-        lv_color32_t bg = {.full = lv_color_to32(bg_color)};
+        lv_color32_t bg = {.full = lv_color_to32(lv_color_black())}; /* PORT: behind the overlay plane */
         for (int corner = 0; corner < 4; corner++) {
             bool right = corner & 1, bottom = corner & 2;
             int  x0    = right ? MAP_W - MAP_CORNER : 0;
@@ -3546,7 +3578,7 @@ static void map_show(bool on) {
     }
     view_map = on;
     if (on) {
-        js8_map_my_continent(params.callsign.x, params.qth.x, map_my_cont);
+        js8_map_my_continent(my_call(), my_grid(), map_my_cont);
         if (!js8_map_load_worked(JS8_QSO_DB_PATH)) LV_LOG_USER("JS8 map: no QSO log at %s", JS8_QSO_DB_PATH);
         lv_obj_add_flag(wf_box, LV_OBJ_FLAG_HIDDEN); /* decoding goes on; rows just aren't drawn */
         lv_obj_clear_flag(map_box, LV_OBJ_FLAG_HIDDEN);
@@ -3736,9 +3768,9 @@ static void map_legend(bool have_home) {
                                                         : "Your continent";
     if (!have_home) snprintf(right, sizeof(right), "Set your grid: APP > QTH");
     else if (map_follow) snprintf(right, sizeof(right), sel_call[0] ? "Following %s" : "Following: select one", sel_call);
-    else if (params.js8_map_mode.x == JS8_MAP_WORLD) snprintf(right, sizeof(right), "World");
+    else if (param_i_get(cfg.js8.map_mode()) == JS8_MAP_WORLD) snprintf(right, sizeof(right), "World");
     else if (map_world) snprintf(right, sizeof(right), "World (DX heard)");
-    else snprintf(right, sizeof(right), "%s%s", cont, params.js8_map_mode.x == JS8_MAP_CLOSE ? " (close-in)" : "");
+    else snprintf(right, sizeof(right), "%s%s", cont, param_i_get(cfg.js8.map_mode()) == JS8_MAP_CLOSE ? " (close-in)" : "");
     if (map_heard_me_only) strncat(right, ", heard me", sizeof(right) - strlen(right) - 1);
     lv_point_t sz;
     lv_txt_get_size(&sz, right, &sony_18, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
@@ -3819,7 +3851,7 @@ static void map_stats(const js8_map_place_t *home) {
         int len = snprintf(text, sizeof(text), "%d heard  %d hear you", heard, heard_me);
         if (best_call && len < (int)sizeof(text))
             snprintf(text + len, sizeof(text) - len, "  DX %s %.0f %s", best_call,
-                     params.js8_miles.x ? best * 0.621371 : best, params.js8_miles.x ? "mi" : "km");
+                     param_i_get(cfg.js8.miles()) ? best * 0.621371 : best, param_i_get(cfg.js8.miles()) ? "mi" : "km");
     }
     if (strcmp(lv_label_get_text(map_stats_label), text) != 0) lv_label_set_text(map_stats_label, text);
     if (!text[0]) {
@@ -3835,7 +3867,7 @@ static void map_stats(const js8_map_place_t *home) {
 /* "  1234 km" (or mi) from home to a place, for labels. */
 static void map_dist(char *buf, size_t size, const js8_map_place_t *home, const js8_map_place_t *p) {
     double km = js8_map_distance_km(home->lat, home->lon, p->lat, p->lon);
-    snprintf(buf, size, "  %.0f %s", params.js8_miles.x ? km * 0.621371 : km, params.js8_miles.x ? "mi" : "km");
+    snprintf(buf, size, "  %.0f %s", param_i_get(cfg.js8.miles()) ? km * 0.621371 : km, param_i_get(cfg.js8.miles()) ? "mi" : "km");
 }
 
 /* Place, fit, draw. The base map is redrawn only when the view moves; the
@@ -3845,7 +3877,7 @@ static void map_update(bool force) {
     if (!view_map || !map_canvas || !map_base) return;
     int64_t                now = now_mono_ms();
     js8_map_place_t        home;
-    bool                   have_home = js8_map_place(params.callsign.x, params.qth.x, &home);
+    bool                   have_home = js8_map_place(my_call(), my_grid(), &home);
     static js8_map_place_t pl[MAX_ROWS];
     static bool            shown[MAX_ROWS];
     static js8_map_point_t pts[MAX_ROWS];
@@ -3888,7 +3920,7 @@ static void map_update(bool force) {
     js8_map_view_t v;
     bool world = follow_i >= 0 ? js8_map_choose_view(JS8_MAP_AUTO, have_home ? home.lat : 0, have_home ? home.lon : 0,
                                                      map_my_cont, &fp, 1, MAP_W, MAP_FIT_H, &v)
-                               : js8_map_choose_view((js8_map_mode_t)params.js8_map_mode.x, have_home ? home.lat : 0,
+                               : js8_map_choose_view((js8_map_mode_t)param_i_get(cfg.js8.map_mode()), have_home ? home.lat : 0,
                                                      have_home ? home.lon : 0, map_my_cont, pts, n, MAP_W, MAP_FIT_H, &v);
     /* Drawn over the whole area; the fitted part sits above the legend. */
     v.merc_c -= (MAP_H / 2.0 - MAP_FIT_H / 2.0) / v.px_deg;
@@ -4040,13 +4072,13 @@ static void map_update(bool force) {
     if (have_home) {
         int             hx, hy;
         js8_map_place_t me = home;
-        me.approx          = strlen(params.qth.x) < 4;
-        int hside = map_station_mark(params.qth.x, &me, MAP_HOME, 220, MAP_HOME, LV_OPA_COVER, 0, &hx, &hy);
+        me.approx          = strlen(my_grid()) < 4;
+        int hside = map_station_mark(my_grid(), &me, MAP_HOME, 220, MAP_HOME, LV_OPA_COVER, 0, &hx, &hy);
         if (transmitting) map_rect(hx - 10, hy - 10, 21, 21, 0, LV_OPA_TRANSP, MAP_TX, 3, 0);
         map_tx_drawn = transmitting;
         my_badge     = my_cq && map_badge_box(hx, hy, transmitting ? 21 : hside, "CQ", &my_badge_box);
         map_take(hx - 6, hy - 6, hx + 6, hy + 6); /* no label over you */
-        map_label(hx, hy, params.callsign.x, MAP_HOME, 0x000000, 170, 8, true);
+        map_label(hx, hy, my_call(), MAP_HOME, 0x000000, 170, 8, true);
     }
 
     /* "CQ" on the corner of stations that called CQ in the last 5 min:
@@ -4116,7 +4148,7 @@ bool dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_p
     int64_t now = now_mono_ms();
     int     n   = 0;
     for (int i = 0; i < MAP_POPUPS; i++) n += (map_popups[i].until_ms > now) + (map_qso[i].ring_ms > now);
-    if (world) *world = map_world || params.js8_map_mode.x == JS8_MAP_WORLD;
+    if (world) *world = map_world || param_i_get(cfg.js8.map_mode()) == JS8_MAP_WORLD;
     if (popups) *popups = n;
     if (tx_outline) *tx_outline = map_tx_drawn;
     if (qso_paths) *qso_paths = map_qso_drawn;
@@ -4149,7 +4181,7 @@ static const char *map_view_label_getter(void) {
     static char buf[24];
     if (!view_map) return ""; /* only while the map shows */
     snprintf(buf, sizeof(buf), "Map:\n%s",
-             map_follow ? "Follow" : map_mode_names[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
+             map_follow ? "Follow" : map_mode_names[param_i_get(cfg.js8.map_mode()) < 3 ? param_i_get(cfg.js8.map_mode()) : 0]);
     return buf;
 }
 
@@ -4162,15 +4194,15 @@ static void map_view_cb(button_data_t *btn) {
         map_follow = false;
         buttons_refresh(btn);
         map_update(true);
-        msg_update_text_fmt("Map: %s", map_mode_names[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
+        msg_update_text_fmt("Map: %s", map_mode_names[param_i_get(cfg.js8.map_mode()) < 3 ? param_i_get(cfg.js8.map_mode()) : 0]);
         return;
     }
-    params_uint8_set(&params.js8_map_mode, (params.js8_map_mode.x + 1) % 3);
+    param_i_set(cfg.js8.map_mode(), (param_i_get(cfg.js8.map_mode()) + 1) % 3);
     buttons_refresh(btn);
     map_update(true);
     static const char *const what[3] = {"Map: your continent, the world when DX is heard",
                                         "Map: your continent only", "Map: the whole world"};
-    msg_update_text_fmt("%s", what[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
+    msg_update_text_fmt("%s", what[param_i_get(cfg.js8.map_mode()) < 3 ? param_i_get(cfg.js8.map_mode()) : 0]);
 }
 
 /* Hold: follow the selected station (the view frames you and them, the
@@ -4182,7 +4214,7 @@ static void map_follow_cb(button_data_t *btn) {
     map_follow = !map_follow;
     buttons_refresh(btn);
     map_update(true);
-    if (!map_follow) msg_update_text_fmt("Map: %s", map_mode_names[params.js8_map_mode.x < 3 ? params.js8_map_mode.x : 0]);
+    if (!map_follow) msg_update_text_fmt("Map: %s", map_mode_names[param_i_get(cfg.js8.map_mode()) < 3 ? param_i_get(cfg.js8.map_mode()) : 0]);
     else if (sel_call[0]) msg_update_text_fmt("Map: following %s (press Map to stop)", sel_call);
     else msg_update_text_fmt("Map: following the selected station: turn the MFK to pick one");
 }
@@ -4368,15 +4400,15 @@ static void hw_cpy_cb(button_data_t *btn) {
 /* CQ with the 4-character grid, as desktop JS8Call sends it. */
 static bool send_cq(bool automatic) {
     char text[32];
-    snprintf(text, sizeof(text), "CQ CQ CQ %.4s", params.qth.x);
-    if (!tx_queue_at(text, params.js8_tx_freq.x, automatic)) return false;
+    snprintf(text, sizeof(text), "CQ CQ CQ %.4s", my_grid());
+    if (!tx_queue_at(text, param_i_get(cfg.js8.tx_freq()), automatic)) return false;
     tx_cq = true;
     if (automatic) hb_pause("CQ"); /* by hand, tx_queue_at did it */
     return true;
 }
 
 static int64_t cq_interval_ms(void) {
-    unsigned m = params.js8_cq_interval.x;
+    unsigned m = param_i_get(cfg.js8.cq_interval());
     if (m < CQ_MIN_INTERVAL || m > CQ_MAX_INTERVAL) m = CQ_MIN_INTERVAL;
     return (int64_t)m * 60000;
 }
@@ -4384,7 +4416,7 @@ static int64_t cq_interval_ms(void) {
 static const char *cq_label_getter(void) {
     static char buf[24];
     if (cq_adjusting) {
-        snprintf(buf, sizeof(buf), "CQ: knob\n< %u min >", params.js8_cq_interval.x);
+        snprintf(buf, sizeof(buf), "CQ: knob\n< %u min >", param_i_get(cfg.js8.cq_interval()));
         return buf;
     }
     if (!auto_cq) return "CQ";
@@ -4412,15 +4444,15 @@ static void cq_adjust_end(void) {
     cq_adjusting = false;
     if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
     update_tx_bar();
-    if (auto_cq) msg_update_text_fmt("Auto CQ %u min after each CQ (press CQ to stop)", params.js8_cq_interval.x);
+    if (auto_cq) msg_update_text_fmt("Auto CQ %u min after each CQ (press CQ to stop)", param_i_get(cfg.js8.cq_interval()));
 }
 
 /* Knob turn while setting it: the next CQ moves with it. */
 static void cq_adjust_turn(int32_t diff) {
-    int v = (int)params.js8_cq_interval.x + (diff > 0 ? 1 : -1);
+    int v = (int)param_i_get(cfg.js8.cq_interval()) + (diff > 0 ? 1 : -1);
     if (v < CQ_MIN_INTERVAL) v = CQ_MIN_INTERVAL;
     if (v > CQ_MAX_INTERVAL) v = CQ_MAX_INTERVAL;
-    params_uint16_set(&params.js8_cq_interval, (uint16_t)v);
+    param_i_set(cfg.js8.cq_interval(), (uint16_t)v);
     cq_adjust_ms = now_wall_ms();
     if (auto_cq && !js8_tx_busy(tx)) auto_cq_next_ms = auto_cq_from_ms + cq_interval_ms();
     if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
@@ -4506,7 +4538,7 @@ static void auto_cq_tick(void) {
  * 30 s (call or not). A heartbeat stays on our own offset when that is
  * 1000 Hz or below. Our chat offset (the red band) doesn't move. */
 static int free_hb_offset(bool heartbeat) {
-    if (heartbeat && params.js8_tx_freq.x <= 1000) return params.js8_tx_freq.x;
+    if (heartbeat && param_i_get(cfg.js8.tx_freq()) <= 1000) return param_i_get(cfg.js8.tx_freq());
     float   offsets[ACTIVITY];
     int64_t times[ACTIVITY];
     for (int i = 0; i < ACTIVITY; i++) {
@@ -4522,14 +4554,14 @@ static bool send_heartbeat(bool automatic) {
         return false;
     }
     char text[48];
-    js8_heartbeat_text(params.callsign.x, params.qth.x, text, sizeof(text));
+    js8_heartbeat_text(my_call(), my_grid(), text, sizeof(text));
     return tx_queue_at(text, free_hb_offset(true), automatic);
 }
 
 /* The first automatic heartbeat: an interval from now, on the slot grid
  * (desktop's TxLoop). */
 static int64_t hb_first_ms(void) {
-    return js8_next_heartbeat_ms(now_wall_ms(), params.js8_hb_interval.x, js8_speed_period_s(cur_speed()));
+    return js8_next_heartbeat_ms(now_wall_ms(), param_i_get(cfg.js8.hb_interval()), js8_speed_period_s(cur_speed()));
 }
 
 /* One now. With HB on, the automatic ones count again from this one, so
@@ -4538,22 +4570,22 @@ static void heartbeat_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
     (void)btn;
-    if (!send_heartbeat(false) || !params.js8_hb.x) return;
+    if (!send_heartbeat(false) || !param_i_get(cfg.js8.hb())) return;
     hb_next_ms = hb_first_ms();
-    add_info_row("HB timer restarted: next in %u min", params.js8_hb_interval.x);
+    add_info_row("HB timer restarted: next in %u min", param_i_get(cfg.js8.hb_interval()));
     update_status();
 }
 
 static const char *hold_label_getter(void) {
-    return params.js8_hold_offset.x ? "Hold:\nOn" : "Hold:\nOff";
+    return param_i_get(cfg.js8.hold_offset()) ? "Hold:\nOn" : "Hold:\nOff";
 }
 
 static void hold_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
-    params_bool_set(&params.js8_hold_offset, !params.js8_hold_offset.x);
+    param_i_set(cfg.js8.hold_offset(), !param_i_get(cfg.js8.hold_offset()));
     buttons_refresh(btn);
-    msg_update_text_fmt(params.js8_hold_offset.x ? "Replies stay on your offset" : "Replies move to their offset");
+    msg_update_text_fmt(param_i_get(cfg.js8.hold_offset()) ? "Replies stay on your offset" : "Replies move to their offset");
 }
 
 static const char *stations_label_getter(void) {
@@ -4610,7 +4642,7 @@ static void query_item_cb(lv_event_t *e) {
     if (!have) return;
 
     char text[64];
-    if (!js8_query_text(q, call, snr, params.qth.x, text, sizeof(text))) {
+    if (!js8_query_text(q, call, snr, my_grid(), text, sizeof(text))) {
         msg_update_text_fmt(q == JS8_Q_MY_GRID ? "Set your grid first: APP > QTH" : "Nothing to send");
         return;
     }
@@ -4853,12 +4885,12 @@ static unsigned heard_stations(js8_heard_t *out, unsigned max) {
 /* The switches as they are now, for deciding again at send time. */
 static js8_auto_settings_t auto_settings(void) {
     js8_auto_settings_t st = {
-        .autoreply = params.js8_auto.x,
-        .heartbeat = params.js8_hb.x && !hb_paused(),
-        .hb_ack    = params.js8_hb_ack.x && !hb_paused(),
-        .relay     = params.js8_relay.x,
-        .my_call   = params.callsign.x,
-        .my_grid   = params.qth.x,
+        .autoreply = param_i_get(cfg.js8.auto_mode()),
+        .heartbeat = param_i_get(cfg.js8.hb()) && !hb_paused(),
+        .hb_ack    = param_i_get(cfg.js8.hb_ack()) && !hb_paused(),
+        .relay     = param_i_get(cfg.js8.relay()),
+        .my_call   = my_call(),
+        .my_grid   = my_grid(),
         .info      = info_text,
         .status    = status_text,
         .groups    = groups_text,
@@ -4925,7 +4957,7 @@ static void auto_try_send(void) {
         reply_drop(i);
         if (js8_auto_decide(autop, &r, &st, now) != JS8_AUTO_SEND) continue; /* switched off meanwhile */
         if (r.hb_ack && !js8_speed_heartbeats(cur_speed())) continue;        /* desktop: no HB ACKs in Turbo */
-        int offset = r.hb_ack ? free_hb_offset(false) : params.js8_tx_freq.x;
+        int offset = r.hb_ack ? free_hb_offset(false) : param_i_get(cfg.js8.tx_freq());
         LV_LOG_USER("JS8 auto: '%s' at %d Hz", r.text, offset);
         if (!tx_queue_at(r.text, offset, true)) continue;
         js8_auto_sent(autop, &r, now);
@@ -4985,7 +5017,7 @@ static bool hb_paused(void) {
 }
 
 static void hb_pause(const char *why) {
-    if (!params.js8_hb.x && !params.js8_hb_ack.x) return;
+    if (!param_i_get(cfg.js8.hb()) && !param_i_get(cfg.js8.hb_ack())) return;
     bool was = hb_paused();
     hb_paused_until = now_wall_ms() + HB_PAUSE_MS;
     if (hb_adjusting) hb_adjust_end();
@@ -5067,7 +5099,7 @@ static void push_tick(void) {
     if (!push_next_ms) push_next_ms = now + PUSH_INTERVAL_MS;
     if (now < push_next_ms) return;
     push_next_ms = now + PUSH_INTERVAL_MS;
-    if (!params.js8_auto.x || !held || js8_auto_idle(autop, now) || !params.callsign.x[0]) return;
+    if (!param_i_get(cfg.js8.auto_mode()) || !held || js8_auto_idle(autop, now) || !my_call()[0]) return;
     if (tx_active || n_replies || composing) return;
     js8_heard_t heard[32];
     unsigned    n = heard_stations(heard, 32);
@@ -5077,7 +5109,7 @@ static void push_tick(void) {
     LV_LOG_USER("JS8 auto: '%s'", text);
     /* Told only once it's queued: one that couldn't go out is tried at the
      * next look, not in 8 hours (bug hunt S4). */
-    if (!tx_queue_at(text, params.js8_tx_freq.x, true)) return;
+    if (!tx_queue_at(text, param_i_get(cfg.js8.tx_freq()), true)) return;
     js8_held_push_sent(held, id, now);
     add_info_row("Auto: %s", text);
 }
@@ -5115,7 +5147,7 @@ static void hb_tick(void) {
     push_tick();
     msg_age_tick();
     if (hb_paused_until && !hb_paused()) hb_resume();
-    if (!params.js8_hb.x) {
+    if (!param_i_get(cfg.js8.hb())) {
         hb_next_ms = 0;
         return;
     }
@@ -5131,36 +5163,36 @@ static void hb_tick(void) {
     if (now < hb_next_ms - 5000) return;   /* desktop prepares it 5 s early */
     /* Lists don't hold it up, only the keyboard. Waiting replies went
      * first (auto_try_send above). */
-    if (tx_active || composing || !params.callsign.x[0]) return;
+    if (tx_active || composing || !my_call()[0]) return;
     LV_LOG_USER("JS8 auto: heartbeat (due %lld)", (long long)hb_next_ms);
     if (send_heartbeat(true)) {
         /* On desktop's fixed schedule: an interval after the one due, not
          * after this one went (later if it waited). */
-        hb_next_ms = js8_following_heartbeat_ms(hb_next_ms, now, params.js8_hb_interval.x);
+        hb_next_ms = js8_following_heartbeat_ms(hb_next_ms, now, param_i_get(cfg.js8.hb_interval()));
         update_status();
     }
 }
 
 static const char *auto_label_getter(void) {
-    return params.js8_auto.x ? "AUTO:\nOn" : "AUTO:\nOff";
+    return param_i_get(cfg.js8.auto_mode()) ? "AUTO:\nOn" : "AUTO:\nOff";
 }
 
 static void auto_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
-    params_bool_set(&params.js8_auto, !params.js8_auto.x);
+    param_i_set(cfg.js8.auto_mode(), !param_i_get(cfg.js8.auto_mode()));
     buttons_refresh(btn);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
-    msg_update_text_fmt(params.js8_auto.x ? "AUTO on: answers SNR? GRID? INFO? STATUS? HEARING? AGN?"
+    msg_update_text_fmt(param_i_get(cfg.js8.auto_mode()) ? "AUTO on: answers SNR? GRID? INFO? STATUS? HEARING? AGN?"
                                           : "AUTO off: answers are offered on Reply");
     update_status();
 }
 
 static const char *hb_label_getter(void) {
     static char buf[24];
-    if (!params.js8_hb.x) return "HB:\nOff";
+    if (!param_i_get(cfg.js8.hb())) return "HB:\nOff";
     if (hb_paused() && !hb_adjusting) return "HB:\npaused";
-    snprintf(buf, sizeof(buf), hb_adjusting ? "HB: knob\n< %u min >" : "HB:\n%u min", params.js8_hb_interval.x);
+    snprintf(buf, sizeof(buf), hb_adjusting ? "HB: knob\n< %u min >" : "HB:\n%u min", param_i_get(cfg.js8.hb_interval()));
     return buf;
 }
 
@@ -5179,7 +5211,7 @@ static void hb_adjust_end(void) {
     hb_adjusting = false;
     if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
     update_tx_bar();
-    if (params.js8_hb.x) msg_update_text_fmt("HB every %u min", params.js8_hb_interval.x);
+    if (param_i_get(cfg.js8.hb())) msg_update_text_fmt("HB every %u min", param_i_get(cfg.js8.hb_interval()));
 }
 
 static void hb_cb(button_data_t *btn) {
@@ -5189,17 +5221,17 @@ static void hb_cb(button_data_t *btn) {
         hb_adjust_end();
         return;
     }
-    if (params.js8_hb.x && hb_paused()) {
+    if (param_i_get(cfg.js8.hb()) && hb_paused()) {
         hb_resume();
         msg_update_text_fmt("Heartbeats resumed");
         return;
     }
-    params_bool_set(&params.js8_hb, !params.js8_hb.x);
+    param_i_set(cfg.js8.hb(), !param_i_get(cfg.js8.hb()));
     hb_next_ms      = 0;
     hb_paused_until = 0;
     buttons_refresh(btn);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
-    if (params.js8_hb.x) {
+    if (param_i_get(cfg.js8.hb())) {
         hb_adjust_start(btn);
     } else {
         msg_update_text_fmt("HB off");
@@ -5214,17 +5246,17 @@ static void hb_hold_cb(button_data_t *btn) {
 }
 
 static const char *hb_ack_label_getter(void) {
-    if (!params.js8_hb_ack.x) return "HB ACK:\nOff";
-    if (hb_paused() && params.js8_hb.x) return "HB ACK:\npaused";
-    return (params.js8_auto.x && params.js8_hb.x) ? "HB ACK:\nOn" : "HB ACK:\nOn (idle)";
+    if (!param_i_get(cfg.js8.hb_ack())) return "HB ACK:\nOff";
+    if (hb_paused() && param_i_get(cfg.js8.hb())) return "HB ACK:\npaused";
+    return (param_i_get(cfg.js8.auto_mode()) && param_i_get(cfg.js8.hb())) ? "HB ACK:\nOn" : "HB ACK:\nOn (idle)";
 }
 
 static void hb_ack_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
-    params_bool_set(&params.js8_hb_ack, !params.js8_hb_ack.x);
+    param_i_set(cfg.js8.hb_ack(), !param_i_get(cfg.js8.hb_ack()));
     buttons_refresh(btn);
-    if (params.js8_hb_ack.x && !(params.js8_auto.x && params.js8_hb.x)) {
+    if (param_i_get(cfg.js8.hb_ack()) && !(param_i_get(cfg.js8.auto_mode()) && param_i_get(cfg.js8.hb()))) {
         msg_update_text_fmt("HB ACK acts only while AUTO and HB are on");
     }
     update_status();
@@ -5312,7 +5344,7 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_TRESET   106
 
 static const char *relay_label(void) {
-    return params.js8_relay.x ? "Relay: On" : "Relay: Off";
+    return param_i_get(cfg.js8.relay()) ? "Relay: On" : "Relay: Off";
 }
 
 /* The label of a line that changes in place. */
@@ -5322,14 +5354,14 @@ static const char *settings_label(int which) {
     case SETTINGS_RELAY: return relay_label();
     case SETTINGS_ST_KEEP:
         snprintf(buf, sizeof(buf), "Stations kept: %s",
-                 st_keep_opts[params.js8_st_keep.x < ST_KEEP_N ? params.js8_st_keep.x : 2].label);
+                 st_keep_opts[param_i_get(cfg.js8.st_keep()) < ST_KEEP_N ? param_i_get(cfg.js8.st_keep()) : 2].label);
         return buf;
     case SETTINGS_MSG_KEEP:
         snprintf(buf, sizeof(buf), "Messages kept: %s",
-                 msg_keep_opts[params.js8_msg_keep.x < MSG_KEEP_N ? params.js8_msg_keep.x : 0].label);
+                 msg_keep_opts[param_i_get(cfg.js8.msg_keep()) < MSG_KEEP_N ? param_i_get(cfg.js8.msg_keep()) : 0].label);
         return buf;
-    case SETTINGS_MILES: return params.js8_miles.x ? "Distance: miles" : "Distance: km";
-    case SETTINGS_MARKS: return params.js8_decode_marks.x ? "Decode marks: On" : "Decode marks: Off";
+    case SETTINGS_MILES: return param_i_get(cfg.js8.miles()) ? "Distance: miles" : "Distance: km";
+    case SETTINGS_MARKS: return param_i_get(cfg.js8.decode_marks()) ? "Decode marks: On" : "Decode marks: Off";
     case SETTINGS_TSYNC:
         if (js8_drift_ms()) snprintf(buf, sizeof(buf), "Time Sync now (drift %+.1f s)", js8_drift_ms() / 1000.0);
         else snprintf(buf, sizeof(buf), "Time Sync now");
@@ -5346,36 +5378,36 @@ static void texts_item_cb(lv_event_t *e) {
         case SETTINGS_RELAY:
             /* Desktop's "Disable message relay (>)": it stops holding MSG
              * TO: messages for others too. */
-            params_bool_set(&params.js8_relay, !params.js8_relay.x);
-            msg_update_text_fmt(params.js8_relay.x
+            param_i_set(cfg.js8.relay(), !param_i_get(cfg.js8.relay()));
+            msg_update_text_fmt(param_i_get(cfg.js8.relay())
                                     ? "Relay on: relays (>) are passed on and MSG TO: messages held, as desktop JS8Call"
                                     : "Relay off: relays (>) and MSG TO: messages for others are ignored");
             break;
         case SETTINGS_ST_KEEP:
-            params_uint8_set(&params.js8_st_keep, (params.js8_st_keep.x + 1) % ST_KEEP_N);
+            param_i_set(cfg.js8.st_keep(), (param_i_get(cfg.js8.st_keep()) + 1) % ST_KEEP_N);
             apply_station_keep();
             if (view_stations) rebuild_rows();
             msg_update_text_fmt("Stations stay listed %s after they were last heard",
-                                st_keep_opts[params.js8_st_keep.x].min ? st_keep_opts[params.js8_st_keep.x].label
+                                st_keep_opts[param_i_get(cfg.js8.st_keep())].min ? st_keep_opts[param_i_get(cfg.js8.st_keep())].label
                                                                        : "until the radio is switched off, however long");
             break;
         case SETTINGS_MSG_KEEP:
-            params_uint8_set(&params.js8_msg_keep, (params.js8_msg_keep.x + 1) % MSG_KEEP_N);
+            param_i_set(cfg.js8.msg_keep(), (param_i_get(cfg.js8.msg_keep()) + 1) % MSG_KEEP_N);
             if (!view_stations) rebuild_rows();
-            if (params.js8_msg_keep.x)
+            if (param_i_get(cfg.js8.msg_keep()))
                 msg_update_text_fmt("Messages leave the list %s after they arrived",
-                                    msg_keep_opts[params.js8_msg_keep.x].label);
+                                    msg_keep_opts[param_i_get(cfg.js8.msg_keep())].label);
             else msg_update_text_fmt("Messages stay in the list (the newest %d)", KEEP_ROWS);
             break;
         case SETTINGS_MILES:
-            params_bool_set(&params.js8_miles, !params.js8_miles.x);
+            param_i_set(cfg.js8.miles(), !param_i_get(cfg.js8.miles()));
             if (view_stations) rebuild_rows();
             break;
         case SETTINGS_MARKS:
-            params_bool_set(&params.js8_decode_marks, !params.js8_decode_marks.x);
-            js8_rx_set_sync_marks(rx, params.js8_decode_marks.x);
-            if (!params.js8_decode_marks.x) marks_reset();
-            msg_update_text_fmt(params.js8_decode_marks.x
+            param_i_set(cfg.js8.decode_marks(), !param_i_get(cfg.js8.decode_marks()));
+            js8_rx_set_sync_marks(rx, param_i_get(cfg.js8.decode_marks()));
+            if (!param_i_get(cfg.js8.decode_marks())) marks_reset();
+            msg_update_text_fmt(param_i_get(cfg.js8.decode_marks())
                                     ? "Decode marks on: where the decoder is trying (cyan, white) and what it decoded (yellow)"
                                     : "Decode marks off");
             break;
@@ -5625,7 +5657,7 @@ static void aprs_compose(const char *head, const char *tail) {
  * shown, if it isn't set. Any out-pointer may be NULL. */
 static bool aprs_grid(char grid[8], double *lat, double *lon) {
     char g[8];
-    snprintf(g, sizeof(g), "%.6s", params.qth.x);
+    snprintf(g, sizeof(g), "%.6s", my_grid());
     if (strlen(g) < 4) {
         msg_update_text_fmt("Set your grid first: APP > QTH");
         return false;
@@ -5635,8 +5667,27 @@ static bool aprs_grid(char grid[8], double *lat, double *lon) {
     return true;
 }
 
-/* From the firmware's gps.c (gpsd): the latest fix and its age. */
-bool gps_last_fix(double *lat, double *lon, int *age_s);
+/* GPS: R1CBU 1.0 announces each gpsd report (MSG_GPS, on the GUI thread);
+ * a 2D/3D fix and when it came are kept while JS8 is open. */
+static void gps_msg_cb(void *s, lv_msg_t *m) {
+    (void)s;
+    (void)m;
+    struct gps_data_t d;
+    gps_get_snapshot(&d);
+    if (d.fix.mode < MODE_2D || !isfinite(d.fix.latitude) || !isfinite(d.fix.longitude)) return;
+    gps_lat  = d.fix.latitude;
+    gps_lon  = d.fix.longitude;
+    gps_when = time(NULL);
+}
+
+/* The latest fix and its age in seconds; false if none since JS8 opened. */
+static bool gps_last_fix(double *lat, double *lon, int *age_s) {
+    if (!gps_when) return false;
+    *lat   = gps_lat;
+    *lon   = gps_lon;
+    *age_s = (int)(time(NULL) - gps_when);
+    return true;
+}
 
 /* A current GPS fix, and its 10-character grid (about 20 x 35 m). False,
  * with the reason shown, if there is none. */
@@ -5703,9 +5754,9 @@ static void aprs_beacon(bool gps, const char *message) {
     while (*message == ' ') message++;
     if (!tx_queue(text)) return;
     if (!*message)
-        add_info_row("APRS: spotting %s at %s%s", params.callsign.x, grid, gps ? " (GPS)" : "");
+        add_info_row("APRS: spotting %s at %s%s", my_call(), grid, gps ? " (GPS)" : "");
     else
-        add_info_row("APRS: position %s (%s%s) with \"%s\"", params.callsign.x, grid, gps ? ", GPS" : "", message);
+        add_info_row("APRS: position %s (%s%s) with \"%s\"", my_call(), grid, gps ? ", GPS" : "", message);
 }
 
 /* While typing a beacon message: how long it will be on the air. */
@@ -5714,7 +5765,7 @@ static void beacon_changed_cb(lv_event_t *e) {
     char text[112], grid[12];
     if (!beacon_text(edit_target == EDIT_BEACON_GPS, textarea_window_get(), text, sizeof(text), grid)) return;
     js8_tx_preview_t pv;
-    js8_tx_preview(params.callsign.x, params.qth.x, text, cur_speed(), &pv);
+    js8_tx_preview(my_call(), my_grid(), text, cur_speed(), &pv);
     if (!pv.ok) return;
     const char *msg = textarea_window_get();
     while (*msg == ' ') msg++;
@@ -5800,7 +5851,7 @@ static void aprs_cb(button_data_t *btn) {
     }
     if (popup_guard()) return;
     if (query_list || texts_list || composing) return;
-    if (!params.callsign.x[0]) {
+    if (!my_call()[0]) {
         msg_update_text_fmt("Set your callsign first: APP > Callsign");
         return;
     }
@@ -5858,7 +5909,7 @@ static const char *spot_mode_now(void) {
 }
 
 static int32_t spot_hz(void) {
-    return spot_use_typed && spot_typed_hz ? spot_typed_hz : cparam_i_get(cfg_fg_freq);
+    return spot_use_typed && spot_typed_hz ? spot_typed_hz : cparam_i_get(cfg.cur.fg_freq());
 }
 
 /* MHz with at least 3 decimals, more only when needed: "7.078", "7.1855". */
@@ -5880,7 +5931,7 @@ static void spot_body(char *out, size_t size) {
     format_mhz(spot_hz(), mhz, sizeof(mhz));
     const char *note = spot_comment();
     if (spot_sota)
-        snprintf(out, size, "%s %s %s %s%s%s", last_sota[0] ? last_sota : "?", mhz, spot_mode_now(), params.callsign.x,
+        snprintf(out, size, "%s %s %s %s%s%s", last_sota[0] ? last_sota : "?", mhz, spot_mode_now(), my_call(),
                  note[0] ? " " : "", note);
     else
         snprintf(out, size, "! POTA %s %s %s%s%s", last_pota[0] ? last_pota : "?", mhz, spot_mode_now(), note[0] ? " " : "",
@@ -6086,7 +6137,7 @@ static void my_log_grid(char *out, size_t size) {
     double lat, lon;
     int    age;
     if (gps_last_fix(&lat, &lon, &age) && age <= 120 && js8_latlon_to_grid(lat, lon, 6, out, size)) return;
-    snprintf(out, size, "%s", params.qth.x);
+    snprintf(out, size, "%s", my_grid());
 }
 
 /* Sent: the report we gave them, else how we heard them. Rcvd: the report
@@ -6116,14 +6167,14 @@ static void log_prepare(const char *call) {
 
     log_entry.on_ms   = have_q ? q.start_ms : now;
     log_entry.off_ms  = now;
-    log_entry.freq_hz = (uint64_t)cparam_i_get(cfg_fg_freq) + params.js8_tx_freq.x;
-    snprintf(log_entry.my_call, sizeof(log_entry.my_call), "%s", params.callsign.x);
+    log_entry.freq_hz = (uint64_t)cparam_i_get(cfg.cur.fg_freq()) + param_i_get(cfg.js8.tx_freq());
+    snprintf(log_entry.my_call, sizeof(log_entry.my_call), "%s", my_call());
     snprintf(log_entry.op_call, sizeof(log_entry.op_call), "%s", operator_call);
     my_log_grid(log_entry.my_grid, sizeof(log_entry.my_grid));
-    float pwr          = param_f_get(cfg_pwr);
+    float pwr          = param_f_get(cfg.pwr());
     log_entry.tx_pwr_w = pwr > TX_PLAYER_MAX_PWR_W ? TX_PLAYER_MAX_PWR_W : pwr;
-    if (params.js8_log_activation.x == 1) snprintf(log_entry.pota_ref, sizeof(log_entry.pota_ref), "%s", last_pota);
-    if (params.js8_log_activation.x == 2) snprintf(log_entry.sota_ref, sizeof(log_entry.sota_ref), "%s", last_sota);
+    if (param_i_get(cfg.js8.log_activation()) == 1) snprintf(log_entry.pota_ref, sizeof(log_entry.pota_ref), "%s", last_pota);
+    if (param_i_get(cfg.js8.log_activation()) == 2) snprintf(log_entry.sota_ref, sizeof(log_entry.sota_ref), "%s", last_sota);
 }
 
 static void log_close(void) {
@@ -6363,7 +6414,7 @@ static void log_cb(button_data_t *btn) {
     }
     if (popup_guard()) return;
     if (composing) return;
-    if (!params.callsign.x[0]) {
+    if (!my_call()[0]) {
         msg_update_text_fmt("Set your callsign first: APP > Callsign");
         return;
     }
@@ -6389,7 +6440,7 @@ static void log_cb(button_data_t *btn) {
 /* A two-way QSO ended with 73 / SK. */
 static void log_offer(const char *call) {
     snprintf(log_pending, sizeof(log_pending), "%s", call);
-    if (!params.js8_log_prompt.x) {
+    if (!param_i_get(cfg.js8.log_prompt())) {
         add_info_row("QSO with %s ended: Log QSO (page 5) to log it", call);
         return;
     }
@@ -6404,15 +6455,15 @@ static void log_offer(const char *call) {
 }
 
 static const char *prompt_label_getter(void) {
-    return params.js8_log_prompt.x ? "Log\nprompt: On" : "Log\nprompt: Off";
+    return param_i_get(cfg.js8.log_prompt()) ? "Log\nprompt: On" : "Log\nprompt: Off";
 }
 
 static void prompt_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
-    params_bool_set(&params.js8_log_prompt, !params.js8_log_prompt.x);
+    param_i_set(cfg.js8.log_prompt(), !param_i_get(cfg.js8.log_prompt()));
     buttons_refresh(btn);
-    msg_update_text_fmt(params.js8_log_prompt.x ? "Offer to log when a QSO ends with 73 or SK"
+    msg_update_text_fmt(param_i_get(cfg.js8.log_prompt()) ? "Offer to log when a QSO ends with 73 or SK"
                                                 : "No log prompt: use Log QSO");
 }
 
@@ -6420,7 +6471,7 @@ static void prompt_cb(button_data_t *btn) {
  * reference is the one last spotted via APRS, or set by holding this. */
 static const char *act_label_getter(void) {
     static char label[40];
-    switch (params.js8_log_activation.x) {
+    switch (param_i_get(cfg.js8.log_activation())) {
     case 1:
         snprintf(label, sizeof(label), "POTA\n%s", last_pota[0] ? last_pota : "(hold: set)");
         break;
@@ -6437,8 +6488,8 @@ static const char *act_label_getter(void) {
 static void act_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
-    uint8_t v = (params.js8_log_activation.x + 1) % 3;
-    params_uint8_set(&params.js8_log_activation, v);
+    uint8_t v = (param_i_get(cfg.js8.log_activation()) + 1) % 3;
+    param_i_set(cfg.js8.log_activation(), v);
     buttons_refresh(btn);
     const char *ref = v == 1 ? last_pota : last_sota;
     if (v == 0) msg_update_text_fmt("Not activating: no park or summit in the log");
@@ -6450,7 +6501,7 @@ static void act_hold_cb(button_data_t *btn) {
     (void)btn;
     user_touch();
     if (popup_guard() || composing) return;
-    uint8_t v = params.js8_log_activation.x;
+    uint8_t v = param_i_get(cfg.js8.log_activation());
     if (v == 0) {
         msg_update_text_fmt("Press to choose POTA or SOTA first");
         return;
@@ -6499,7 +6550,7 @@ static void stored_received(const js8_stored_t *k) {
         else if (!k->resend && group) msg_update_text_fmt("New message to %s from %s - Inbox on page 3", k->to, from);
         else if (!k->resend) msg_update_text_fmt("New message from %s - Inbox on page 3", from);
         if (!k->resend) add_info_row("Message from %s in the Inbox: %s", from, k->text);
-        if (!k->resend && (params.js8_alerts.x & JS8_ALERT_INBOX)) alert_beep(2);
+        if (!k->resend && (param_i_get(cfg.js8.alerts()) & JS8_ALERT_INBOX)) alert_beep(2);
         inbox_refresh_button();
         update_status();
     } else if (k->kind == JS8_STORED_HELD && !k->resend) {
@@ -6986,7 +7037,7 @@ static void beep_log_level(void) {
 }
 
 static void alert_beep(int count) {
-    if (!(params.js8_alerts.x & JS8_ALERT_BEEP)) return;
+    if (!(param_i_get(cfg.js8.alerts()) & JS8_ALERT_BEEP)) return;
     if (atomic_load(&keyed) || js8_tx_busy(tx)) return;
     int64_t now = now_wall_ms();
     if (now - beep_last_ms < BEEP_EVERY_MS) return;
@@ -7020,7 +7071,7 @@ static void alert_check(js8_rx_msg_t *m, bool new_station) {
         alert_beep(2);
         return;
     }
-    uint8_t a      = params.js8_alerts.x;
+    uint8_t a      = param_i_get(cfg.js8.alerts());
     bool    hb_ack = strstr(m->text, " HEARTBEAT SNR") != NULL;
     if ((a & JS8_ALERT_TO_ME) && m->to_me && !hb_ack) alert_beep(1);
     else if ((a & JS8_ALERT_CQ) && m->cq) alert_beep(1);
@@ -7054,7 +7105,7 @@ static const struct {
 
 static void alerts_switch_label(alerts_item_t item, char *buf, size_t size) {
     snprintf(buf, size, "%s: %s", alert_switches[item].label,
-             (params.js8_alerts.x & alert_switches[item].bit) ? "On" : "Off");
+             (param_i_get(cfg.js8.alerts()) & alert_switches[item].bit) ? "On" : "Off");
 }
 
 static void alerts_close(void) {
@@ -7079,7 +7130,7 @@ static void alerts_item_cb(lv_event_t *e) {
     case AL_TEST: {
         int64_t last = beep_last_ms;
         beep_last_ms = 0;
-        if (!(params.js8_alerts.x & JS8_ALERT_BEEP)) msg_update_text_fmt("Beep is off");
+        if (!(param_i_get(cfg.js8.alerts()) & JS8_ALERT_BEEP)) msg_update_text_fmt("Beep is off");
         else if (atomic_load(&keyed) || js8_tx_busy(tx)) msg_update_text_fmt("Not while transmitting");
         alert_beep(2);
         if (!beep_last_ms) beep_last_ms = last;
@@ -7091,7 +7142,7 @@ static void alerts_item_cb(lv_event_t *e) {
             msg_update_text_fmt("Calls or words to watch for, separated by spaces");
         return;
     default: /* a switch: flip it, relabel in place */
-        params_uint8_set(&params.js8_alerts, params.js8_alerts.x ^ alert_switches[item].bit);
+        param_i_set(cfg.js8.alerts(), param_i_get(cfg.js8.alerts()) ^ alert_switches[item].bit);
         alerts_switch_label(item, line, sizeof(line));
         lv_label_set_text(lv_obj_get_child(btn, 0), line);
         return;
@@ -7192,15 +7243,15 @@ static void set_speed(js8_speed_t s) {
         msg_update_text_fmt("Not while sending - Stop TX first");
         return;
     }
-    params_uint8_set(&params.js8_speed, (uint8_t)s);
+    param_i_set(cfg.js8.speed(), (uint8_t)s);
     /* The offset must leave room for the wider signal below 3000 Hz. */
     int max = js8_speed_max_offset_hz(s);
-    if (params.js8_tx_freq.x > max) params_uint16_set(&params.js8_tx_freq, (uint16_t)max);
-    js8_rx_set_qso_offset(rx, params.js8_tx_freq.x);
+    if (param_i_get(cfg.js8.tx_freq()) > max) param_i_set(cfg.js8.tx_freq(), (uint16_t)max);
+    js8_rx_set_qso_offset(rx, param_i_get(cfg.js8.tx_freq()));
     lv_finder_set_width(finder, js8_speed_bandwidth_hz(s));
-    lv_finder_set_value(finder, (int16_t)params.js8_tx_freq.x);
+    lv_finder_set_value(finder, (int16_t)param_i_get(cfg.js8.tx_freq()));
     lv_obj_invalidate(finder);
-    if (!params.js8_rx_all.x) js8_rx_set_submodes(rx, rx_speed_mask());
+    if (!param_i_get(cfg.js8.rx_all())) js8_rx_set_submodes(rx, rx_speed_mask());
     /* A heartbeat that fell due while in Turbo mustn't go out the moment we
      * leave it: start the interval again. */
     hb_next_ms = 0;
@@ -7242,16 +7293,16 @@ static void speed_hold_cb(button_data_t *btn) {
 }
 
 static const char *decode_label_getter(void) {
-    return params.js8_rx_all.x ? "Decode:\nAll speeds" : "Decode:\nMy speed";
+    return param_i_get(cfg.js8.rx_all()) ? "Decode:\nAll speeds" : "Decode:\nMy speed";
 }
 
 static void decode_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
-    params_bool_set(&params.js8_rx_all, !params.js8_rx_all.x);
+    param_i_set(cfg.js8.rx_all(), !param_i_get(cfg.js8.rx_all()));
     js8_rx_set_submodes(rx, rx_speed_mask());
     buttons_refresh(btn);
-    if (params.js8_rx_all.x) msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Slow)");
+    if (param_i_get(cfg.js8.rx_all())) msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Slow)");
     else msg_update_text_fmt("Decoding %s only", js8_speed_name(cur_speed()));
 }
 
@@ -7270,13 +7321,13 @@ typedef enum {
 
 static const char *freq_label_getter(void) {
     static char buf[32];
-    if (params.js8_custom_on.x) {
+    if (param_i_get(cfg.js8.custom_on())) {
         char khz[16];
-        format_khz(params.js8_custom_hz.x, khz, sizeof(khz));
+        format_khz(param_i_get(cfg.js8.custom_hz()), khz, sizeof(khz));
         snprintf(buf, sizeof(buf), "Freq:\n%s", khz);
         return buf;
     }
-    return params.js8_ghostnet.x ? "Freq:\nGhostNet" : "Freq:\nJS8";
+    return param_i_get(cfg.js8.ghostnet()) ? "Freq:\nGhostNet" : "Freq:\nJS8";
 }
 
 static void freq_close(void) {
@@ -7296,8 +7347,8 @@ static void use_presets(bool ghostnet) {
         msg_update_text_fmt("Not while sending - Stop TX first");
         return;
     }
-    params_bool_set(&params.js8_ghostnet, ghostnet);
-    params_bool_set(&params.js8_custom_on, false);
+    param_i_set(cfg.js8.ghostnet(), ghostnet);
+    param_i_set(cfg.js8.custom_on(), false);
     load_band(0);
     retuned();
 }
@@ -7327,9 +7378,9 @@ static bool parse_custom(const char *text, int32_t *out) {
 static void tune_custom(const char *text) {
     int32_t hz;
     if (!parse_custom(text, &hz)) return;
-    params_int32_set(&params.js8_custom_hz, hz);
-    params_bool_set(&params.js8_custom_on, true);
-    cparam_i_set(cfg_fg_freq, hz);
+    param_i_set(cfg.js8.custom_hz(), hz);
+    param_i_set(cfg.js8.custom_on(), true);
+    cparam_i_set(cfg.cur.fg_freq(), hz);
     js8_usb_dig();
     retuned();
     msg_update_text_fmt("%s", where_label());
@@ -7346,7 +7397,7 @@ static void freq_item_cb(lv_event_t *e) {
     case FQ_CUSTOM: {
         /* Into the keyboard with the last one filled in. */
         char khz[16] = "";
-        if (params.js8_custom_hz.x) format_khz(params.js8_custom_hz.x, khz, sizeof(khz));
+        if (param_i_get(cfg.js8.custom_hz())) format_khz(param_i_get(cfg.js8.custom_hz()), khz, sizeof(khz));
         if (popup_to_keyboard(&freq_list, EDIT_FREQ, khz)) msg_update_text_fmt("Dial frequency in kHz, then Enter");
         return;
     }
@@ -7382,12 +7433,12 @@ static void freq_show(void) {
     lv_obj_t *t = lv_list_add_text(freq_list, line);
     lv_obj_set_style_text_font(t, &sony_22, 0);
 
-    bool      custom = params.js8_custom_on.x, ghost = params.js8_ghostnet.x;
+    bool      custom = param_i_get(cfg.js8.custom_on()), ghost = param_i_get(cfg.js8.ghostnet());
     lv_obj_t *js8    = freq_add(FQ_JS8, "JS8Call frequencies (7.078, 14.078...)");
     lv_obj_t *gn     = freq_add(FQ_GHOSTNET, "GhostNet (3.575, 7.107, 14.107)");
     char      khz[16];
-    if (params.js8_custom_hz.x) {
-        format_khz(params.js8_custom_hz.x, khz, sizeof(khz));
+    if (param_i_get(cfg.js8.custom_hz())) {
+        format_khz(param_i_get(cfg.js8.custom_hz()), khz, sizeof(khz));
         snprintf(line, sizeof(line), "Custom kHz... (last %s)", khz);
     } else {
         snprintf(line, sizeof(line), "Custom kHz...");

@@ -15,7 +15,6 @@
 
 #include "audio.h"
 #include "cfg/cfg_api.h"
-#include "params/params.h"
 #include "radio.h"
 #include "tx_info.h"
 
@@ -32,7 +31,7 @@ static float get_correction(void) {
     float alc        = 0.0f;
 
     if (tx_info_refresh(&msg_id, &alc, &pwr, NULL)) {
-        float target_pwr = LV_MIN(param_f_get(cfg_pwr), TX_PLAYER_MAX_PWR_W);
+        float target_pwr = LV_MIN(param_f_get(cfg.pwr()), TX_PLAYER_MAX_PWR_W);
         if (alc > 0.5f) {
             correction = log10f(log10f(11.1f - alc)) * 20.0f - 0.38f;
         } else if (pwr < target_pwr * 0.8f && target_pwr - pwr > 0.1f) {
@@ -47,7 +46,7 @@ static float get_correction(void) {
 }
 
 float tx_player_base_gain_offset(void) {
-    float target_pwr = LV_MIN(param_f_get(cfg_pwr), TX_PLAYER_MAX_PWR_W);
+    float target_pwr = LV_MIN(param_f_get(cfg.pwr()), TX_PLAYER_MAX_PWR_W);
     if (x6100_control_get_base_ver().rev >= 3) {
         // patched firmware has a true power control
         return -9.4f;
@@ -61,15 +60,15 @@ bool tx_player_play(int16_t      *samples,
                     float         base_gain_offset,
                     tx_abort_fn_t abort_check,
                     void         *abort_check_ctx) {
-    if (param_f_get(cfg_pwr) > TX_PLAYER_MAX_PWR_W) {
+    if (param_f_get(cfg.pwr()) > TX_PLAYER_MAX_PWR_W) {
         radio_set_pwr(TX_PLAYER_MAX_PWR_W);
     }
 
-    float gain_offset      = base_gain_offset + params.ft8_output_gain_offset.x;
+    float gain_offset      = base_gain_offset + param_f_get(cfg.ft8.output_gain_offset());
     float play_gain_offset = audio_set_play_vol(gain_offset + 6.0f);
     gain_offset           -= play_gain_offset;
 
-    uint64_t radio_freq = cparam_i_get(cfg_fg_freq);
+    uint64_t radio_freq = cparam_i_get(cfg.cur.fg_freq());
     radio_set_freq((int32_t)radio_freq + tx_offset_hz - TX_PLAYER_AUDIO_HZ);
     radio_set_modem(true);
 
@@ -104,19 +103,18 @@ bool tx_player_play(int16_t      *samples,
             audio_gain_db_transition(ptr, part, prev_gain_offset, gain_offset, ptr);
             prev_gain_offset = gain_offset;
         }
-        audio_play(ptr, part);
+        audio_play(ptr, part); /* R1CBU 1.0: its default player, AUDIO_PLAY_RATE */
         n_samples -= part;
         ptr       += part;
         counter++;
     }
 
     /* The learned gain offset is shared by FT8 and JS8: same audio path. */
-    params_float_set(&params.ft8_output_gain_offset,
-                     gain_offset - base_gain_offset + play_gain_offset);
+    param_f_set(cfg.ft8.output_gain_offset(), gain_offset - base_gain_offset + play_gain_offset);
     audio_play_wait();
     radio_set_modem(false);
     radio_set_freq((int32_t)radio_freq);
-    audio_set_play_vol(params.play_gain_db_f.x);
+    audio_set_play_vol(param_f_get(cfg.audio.play_gain_db()));
 
     return !aborted;
 }

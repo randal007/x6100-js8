@@ -195,7 +195,10 @@ void Receiver::worker_loop() {
         if (!in.empty()) {
             if (cb_.on_audio) cb_.on_audio(in.data(), in.size());
             out.clear();
-            resampler_.process(in.data(), in.size(), out);
+            if (config_.input_rate == JS8_RATE) // R1CBU 1.0 delivers 12 kHz: nothing to resample
+                out.assign(in.begin(), in.end());
+            else
+                resampler_.process(in.data(), in.size(), out);
             in.clear();
             submit(out);
         }
