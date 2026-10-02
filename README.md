@@ -760,21 +760,33 @@ are, and its new settings start at their defaults.
 
 ## Coming next
 
-- [ ] On-air tests: relays and store and forward with desktop JS8Call
-  stations, the other APRS gateways (POTA, SOTA, email, Winlink), a long
-  message watched to the end
-- [ ] Performance: measure each part's CPU use on the radio and spread the
-  work over its four cores (the screen drawing and the JS8 decoder each
-  lean on one core today)
-- [ ] Show Map: a Setting for your own square's colour, polish from use on
-  the air ([docs/MAP_PLAN.md](docs/MAP_PLAN.md))
-- [ ] A few low-priority items left in the
-  [fix plan](docs/review/fix-plan.md)
+Beta 5 is being planned; the full list with notes is in
+[docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). The highlights:
+
+- [ ] **Time sync overhaul:** automatic time sync like desktop JS8Call's
+- [ ] **High-SWR protection** for unattended stations: shut-down modes and
+  a beep
+- [ ] **The latest firmware underneath:** the Murus team's SSTV app and
+  gdyuldin's v1.0 (a cleaner screen with more room for the map)
+- [ ] **Station history:** QSOs, messages, INFO and STATUS for every
+  station, opened by pressing it in the list or on the map; a Sort
+  button; a QRZ light on the list and the map
+- [ ] **Heartbeats:** keep going while you call CQ, pause only when
+  someone answers; hold for Auto like CQ; the TX bar shows the
+  heartbeat's frequency
+- [ ] **APRS:** a commands menu (weather and more), a contact book for
+  SMS, no double ACKs on Winlink
+- [ ] **Saved messages and macros**, as desktop JS8Call has
+- [ ] **GPS** time and location from a USB GPS
+- [ ] The green receive bar as wide as the station's speed; ALC for
+  under 1 W into an amplifier
+- [ ] Fixes: Can they reach...? adds the `?` for you, and an @ALLCALL
+  version
+- [ ] Still from beta 4: on-air tests (relays, the other APRS gateways, a
+  long message), performance, the map's home colour Setting
 
 Ideas for later:
 
-- Time Sync from a USB GPS (true UTC, no stations needed)
-- Automatic time drift, like desktop JS8Call's auto sync
 - Waterfall: an option for a solid (not see-through) list, for even less
   work, and the same drawing fix for the FT8 app's waterfall
 - Decode marks: an option to hide the dim ones (faint maybes, mostly noise)
