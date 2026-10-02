@@ -4,8 +4,10 @@
 #include "dialog_js8.h"
 #include "events.h"
 #include "keyboard.h"
-#include "params/params.h"
+#include "cfg/cfg_api.h"
+#include "cfg/db.h"
 #include "styles.h"
+#include "pubsub_ids.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,40 +16,79 @@
 extern buttons_page_t *stub_page;
 
 /* The station callsign (APP > Callsign). */
-void ui_set_callsign(const char *call) { snprintf(params.callsign.x, sizeof(params.callsign.x), "%s", call); }
+void ui_set_callsign(const char *call) { param_t_set(cfg.callsign(), call); }
 /* One VOL knob step at the focus (the knob is a keypad). */
 void ui_vol(int dir) {
     uint32_t key = dir > 0 ? KEY_VOL_RIGHT_EDIT : KEY_VOL_LEFT_EDIT;
     lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_KEY, &key);
 }
 
-/* JS8's alert switches (params.js8_alerts bits). */
-void ui_set_alerts(unsigned bits) { params.js8_alerts.x = (uint8_t)bits; }
+/* JS8's alert switches (cfg.js8.alerts() bits). */
+void ui_set_alerts(unsigned bits) { param_i_set(cfg.js8.alerts(), (int32_t)bits); }
+
+/* What the radio would be told, as the old stand-ins printed it. */
+static void print_dial(Subject *s, void *u) {
+    (void)s, (void)u;
+    printf("[radio] dial %d Hz, mode %d\n", cparam_i_get(cfg.cur.fg_freq()), cparam_i_get(cfg.cur.mode()));
+}
+static void print_filter(Subject *s, void *u) {
+    (void)s, (void)u;
+    printf("[radio] filter %d-%d Hz\n", cparam_i_get(cfg.filter.low()), cparam_i_get(cfg.filter.high()));
+}
+
+/* A new card's settings (the image's params.db, copied for this run), read
+ * by R1CBU 1.0's own settings code: migrations, JS8's step, the defaults. */
+static void settings_open(void) {
+    FILE *in = fopen(HARNESS_DB_DEFAULT, "rb"), *out = fopen(HARNESS_DB, "wb");
+    if (!in || !out) {
+        printf("[harness] FAIL: cannot copy %s\n", HARNESS_DB_DEFAULT);
+        exit(1);
+    }
+    char   buf[65536];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) fwrite(buf, 1, n, out);
+    fclose(in);
+    fclose(out);
+    remove(HARNESS_DB "-wal");
+    remove(HARNESS_DB "-shm");
+    if (!cfg_db_open(HARNESS_DB)) {
+        printf("[harness] FAIL: settings database\n");
+        exit(1);
+    }
+    cfg_db_init(cfg_db_get());
+    cfg_api_init(NULL);
+}
 
 void ui_init(void) {
-    EVENT_BAND_UP   = lv_event_register_id();
+    EVENT_BAND_UP   = lv_event_register_id(); /* events.c on the radio */
     EVENT_BAND_DOWN = lv_event_register_id();
-    styles_init(THEME_SIMPLE);
-    lv_obj_set_style_bg_color(lv_scr_act(), bg_color, 0);
+    settings_open();
+    /* HARNESS_THEME=simple|black|flat (the radio's default is Simple). */
+    const char *t     = getenv("HARNESS_THEME");
+    themes_t    theme = t && !strcmp(t, "black") ? THEME_BLACK : t && !strcmp(t, "flat") ? THEME_FLAT : THEME_SIMPLE;
+    param_i_set(cfg.ui.theme(), theme);
+    styles_init(theme);
+    /* The radio draws apps on a see-through plane over its own (black
+     * while JS8 is open: its spectrum and waterfall are off). */
+    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_black(), 0);
     keyboard_group = lv_group_create();
-    strcpy(params.callsign.x, "K2XYZ");
-    strcpy(params.qth.x, "FN42AB");
-    params.js8_hold_offset.x = false; /* the firmware defaults */
-    params.js8_hb_interval.x = 30;
-    params.js8_cq_interval.x = 1;
-    params.js8_log_prompt.x  = true;
-    params.js8_relay.x       = true;
-    params.js8_st_keep.x     = 2;
-    params.js8_msg_keep.x    = 0;
-    params.js8_miles.x       = false;
-    params.js8_decode_marks.x = false;
-    params.js8_map_mode.x     = 0;
-    params.js8_log_activation.x = 0;
-    params.js8_alerts.x = 7;
-    params.js8_speed.x  = 0;
-    params.js8_rx_all.x = true;
+    param_t_set(cfg.callsign(), "K2XYZ");
+    param_t_set(cfg.qth(), "FN42AB");
+    param_f_set(cfg.pwr(), 10.0f); /* radio set to 10 W */
+    subject_subscribe((Subject *)cfg.cur.fg_freq(), print_dial, NULL);
+    subject_subscribe((Subject *)cfg.filter.low(), print_filter, NULL);
+    subject_subscribe((Subject *)cfg.filter.high(), print_filter, NULL);
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
+
+/* gpsd's reports, once a second as the radio's gps.c announces them, while
+ * HARNESS_GPS gives a position (stubs.c's gps_get_snapshot()). */
+void ui_gps_tick(void) {
+    static uint32_t last;
+    if (!getenv("HARNESS_GPS") || lv_tick_elaps(last) < 1000) return;
+    last = lv_tick_get();
+    lv_msg_send(MSG_GPS, NULL);
+}
 void ui_press(int i) {
     button_data_t *b = stub_page->items[i];
     if (!b) {

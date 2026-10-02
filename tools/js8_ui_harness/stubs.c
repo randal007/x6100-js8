@@ -1,13 +1,17 @@
 /* Stand-ins for radio hardware and main-screen plumbing, so the real
- * dialog_js8.c / dialog.c / LVGL / src/js8 can run headless on a PC. */
+ * dialog_js8.c / dialog.c / LVGL / src/js8 can run headless on a PC. The
+ * settings are R1CBU 1.0's real ones (src/cfg, linked; driver.c opens a
+ * fresh params.db): the dial, mode, filter and frequency lists included. */
 
+#include "audio.h"
 #include "buttons.h"
 #include "cfg/cfg_api.h"
 #include "cfg/digital_modes.h"
 #include "dsp.h"
+#include "gps.h"
 #include "keyboard.h"
 #include "main_screen.h"
-#include "params/params.h"
+#include "pubsub_ids.h"
 #include "radio.h"
 
 #include <stdarg.h>
@@ -17,80 +21,33 @@
 #include <string.h>
 #include <time.h>
 
-params_t    params;
-lv_group_t *keyboard_group;
-uint32_t    EVENT_BAND_UP;
-uint32_t    EVENT_BAND_DOWN;
+lv_group_t     *keyboard_group;
+lv_event_code_t EVENT_BAND_UP;
+lv_event_code_t EVENT_BAND_DOWN;
 
-/* Filter edges the dialog reads through the computed-param API. */
-static int               dummy_low, dummy_high, dummy_fg, dummy_mode;
-ComputedParamInt        *cfg_cur_filter_low  = (ComputedParamInt *)&dummy_low;
-ComputedParamInt        *cfg_cur_filter_high = (ComputedParamInt *)&dummy_high;
-ComputedParamInt        *cfg_fg_freq         = (ComputedParamInt *)&dummy_fg; /* dial, Hz */
-ComputedParamInt        *cfg_cur_mode        = (ComputedParamInt *)&dummy_mode;
-/* Each band keeps its own mode, as the settings manager does: tuning into
- * another band loads that band's (an implicit band switch). All USB to
- * start, as after SSB use. */
-static int band_mode[64];
-static int stub_band(int hz) { return hz / 1000000 < 64 ? hz / 1000000 : 63; } /* by MHz: enough here */
-int        stub_mode(void);
-/* The dial: a preset (see presets[] below) or any frequency set. */
-static int dial_hz = 14078000;
-/* The radio's filter: 100-2900 Hz (a typical USB setting) until the app sets it. */
-static int32_t filter_low = 100, filter_high = 2900;
-int stub_mode(void) { return band_mode[stub_band(dial_hz)] ? band_mode[stub_band(dial_hz)] : x6100_mode_usb; }
-int32_t cparam_i_get(const ComputedParamInt *p) {
-    if (p == cfg_fg_freq) return dial_hz;
-    if (p == cfg_cur_mode) return stub_mode();
-    return p == cfg_cur_filter_low ? filter_low : filter_high;
-}
-void cparam_i_set(ComputedParamInt *p, int32_t v) {
-    if (p == cfg_fg_freq) {
-        dial_hz = v;
-        printf("[radio] dial %d Hz, mode %d\n", v, stub_mode());
-        return;
-    }
-    if (p == cfg_cur_mode) {
-        band_mode[stub_band(dial_hz)] = v;
-        printf("[radio] mode %d\n", v);
-        return;
-    }
-    if (p == cfg_cur_filter_low) filter_low = v;
-    else if (p == cfg_cur_filter_high) filter_high = v;
-    printf("[radio] filter %d-%d Hz\n", filter_low, filter_high);
-}
+int stub_mode(void) { return cparam_i_get(cfg.cur.mode()); }
+int stub_dial_hz(void) { return cparam_i_get(cfg.cur.fg_freq()); }
 
-/* The same lookups as DigitalModesTable: next above, closest, next below. */
-static const struct {
-    const char *label;
-    int         hz, type;
-} presets[] = {
-    {"JS8 40m", 7078000, CFG_DIG_TYPE_JS8},
-    {"JS8 30m", 10130000, CFG_DIG_TYPE_JS8},
-    {"JS8 20m", 14078000, CFG_DIG_TYPE_JS8},
-    {"JS8 17m", 18104000, CFG_DIG_TYPE_JS8},
-    {"GhostNet 80m", 3575000, CFG_DIG_TYPE_JS8_GHOSTNET},
-    {"GhostNet 40m", 7107000, CFG_DIG_TYPE_JS8_GHOSTNET},
-    {"GhostNet 20m", 14107000, CFG_DIG_TYPE_JS8_GHOSTNET},
-};
-static const char *preset_label = "JS8 20m";
-bool cfg_digital_load(int8_t dir, cfg_digital_type_t type) {
-    int best = -1;
-    for (int i = 0; i < (int)(sizeof(presets) / sizeof(presets[0])); i++) {
-        if (presets[i].type != (int)type) continue;
-        int f = presets[i].hz;
-        if (dir > 0 && f > dial_hz && (best < 0 || f < presets[best].hz)) best = i;
-        if (dir < 0 && f < dial_hz && (best < 0 || f > presets[best].hz)) best = i;
-        if (dir == 0 && (best < 0 || abs(f - dial_hz) < abs(presets[best].hz - dial_hz))) best = i;
-    }
-    if (best < 0) return false;
-    dial_hz      = presets[best].hz;
-    preset_label = presets[best].label;
-    band_mode[stub_band(dial_hz)] = x6100_mode_usb_dig; /* the preset's mode, as cfg_digital_load sets it */
-    return true;
+/* Receive audio: the app subscribes (dsp_audio_subscribe_float); the
+ * harness feeds it through dialog_audio_samples(), as dsp.cpp would. */
+static audio_float_cb_t audio_sub_cb;
+static uint32_t         audio_sub_rate;
+static bool             audio_sub_on;
+uint32_t dsp_audio_subscribe_float(audio_float_cb_t cb, uint32_t target_rate_hz) {
+    audio_sub_cb   = cb;
+    audio_sub_rate = target_rate_hz;
+    printf("[dsp] audio subscription at %u Hz\n", target_rate_hz);
+    return 1;
 }
-const char *cfg_digital_label_get(void) { return preset_label; }
-int         stub_dial_hz(void) { return dial_hz; }
+void dsp_audio_set_active(uint32_t id, bool active) {
+    (void)id;
+    audio_sub_on = active;
+    printf("[dsp] audio %s\n", active ? "on" : "off");
+}
+uint32_t stub_audio_rate(void) { return audio_sub_rate; }
+void     dialog_audio_samples(unsigned int n, float *samples) {
+    if (audio_sub_cb && audio_sub_on) audio_sub_cb(n, samples);
+}
 
 /* Buttons: remember the loaded page so the driver can press them. */
 buttons_page_t *stub_page;
@@ -112,14 +69,10 @@ void knobs_display(bool v) { (void)v; }
 void waterfall_refresh_period_set(uint8_t k) { (void)k; }
 void waterfall_refresh_reset() {}
 void main_screen_keys_enable(bool v) { printf("[main] keys %s\n", v ? "enabled" : "disabled"); }
-void main_screen_lock_freq(bool l) { (void)l; }
-void main_screen_lock_band(bool l) { (void)l; }
-void main_screen_lock_mode(bool l) { (void)l; }
-void main_screen_lock_ab(bool l) { printf("[main] locks %s\n", l ? "on" : "off"); }
 void mem_save(uint16_t id) { printf("[mem] save %u\n", id); }
 void mem_load(uint16_t id) { printf("[mem] load %u\n", id); }
-void dsp_set_waterfall_enabled(bool v) { (void)v; }
-void dsp_set_spectrum_enabled(bool v) { (void)v; }
+void waterfall_set_enabled(bool v) { printf("[main] waterfall %s\n", v ? "on" : "off"); }
+void spectrum_set_enabled(bool v) { (void)v; }
 int      stub_vol_turns; /* radio_change_vol() calls */
 uint16_t radio_change_vol(int16_t d) { stub_vol_turns++; printf("[radio] vol %+d\n", d); return 0; }
 
@@ -147,20 +100,10 @@ void event_send(lv_obj_t *obj, lv_event_code_t code, void *param) { lv_event_sen
 #include "tx_player.h"
 #include <unistd.h>
 
-static int dummy_pwr;
-ParamFloat *cfg_pwr = (ParamFloat *)&dummy_pwr;
-float param_f_get(const ParamFloat *p) { (void)p; return 10.0f; }  /* radio set to 10 W */
-/* The saved TX filter (settings defaults 160-3000 Hz). */
-static int dummy_txf_low, dummy_txf_high;
-ParamInt  *cfg_tx_filter_low  = (ParamInt *)&dummy_txf_low;
-ParamInt  *cfg_tx_filter_high = (ParamInt *)&dummy_txf_high;
-int32_t    param_i_get(const ParamInt *p) { return p == cfg_tx_filter_low ? 160 : 3000; }
 void  radio_set_pwr(float w) { printf("[radio] power %.0f W\n", w); }
 void  radio_set_tx_filter(uint16_t low, uint16_t high) { printf("[radio] TX filter %u-%u Hz\n", low, high); }
 int   stub_usb_kbd;                                                /* a USB keyboard is plugged in */
 bool  keyboard_ready() { return stub_usb_kbd; }                   /* else show the on-screen keyboard */
-void  params_uint16_set(params_uint16_t *var, uint16_t x) { var->x = x; }
-void  params_int32_set(params_int32_t *var, int32_t x) { var->x = x; }
 
 float tx_player_base_gain_offset(void) { return -9.4f; }
 
@@ -187,8 +130,8 @@ bool tx_player_play(int16_t *samples, uint32_t n, int32_t offset, float gain, tx
     stub_tx_offset  = offset;
     stub_tx_samples = n;
     stub_tx_peak    = peak;
-    printf("[radio] PTT on: frame %d, %u samples (%.2f s at 44.1 kHz), offset %d Hz, peak %d\n", stub_tx_frames, n,
-           n / 44100.0, offset, peak);
+    printf("[radio] PTT on: frame %d, %u samples (%.2f s at %d kHz), offset %d Hz, peak %d\n", stub_tx_frames, n,
+           n / (double)AUDIO_PLAY_RATE, AUDIO_PLAY_RATE / 1000, offset, peak);
     for (int i = 0; i < 30; i++) {
         if (abort_check && abort_check(ctx)) {
             printf("[radio] PTT off: aborted\n");
@@ -202,16 +145,13 @@ bool tx_player_play(int16_t *samples, uint32_t n, int32_t offset, float gain, tx
     stub_tx_keyed = 0;
     return true;
 }
-void params_bool_set(params_bool_t *var, bool x) { var->x = x; }
-
-/* GPS: a fix from HARNESS_GPS="lat,lon" (age 5 s), none otherwise. */
-bool gps_last_fix(double *lat, double *lon, int *age_s) {
+/* GPS: gpsd's latest report, a 3D fix from HARNESS_GPS="lat,lon" (driver.c
+ * announces it with MSG_GPS once a second), no fix otherwise. */
+void gps_get_snapshot(struct gps_data_t *out) {
+    memset(out, 0, sizeof(*out));
     const char *e = getenv("HARNESS_GPS");
-    if (!e || sscanf(e, "%lf,%lf", lat, lon) != 2) return false;
-    *age_s = 5;
-    return true;
+    if (e && sscanf(e, "%lf,%lf", &out->fix.latitude, &out->fix.longitude) == 2) out->fix.mode = MODE_3D;
 }
-void params_uint8_set(params_uint8_t *var, uint8_t x) { var->x = x; }
 
 /* The radio's QSO database: remembers calls saved this run. */
 #include "qso_log.h"
@@ -263,7 +203,7 @@ int audio_play(int16_t *buf, size_t samples) {
         abort();
     }
     printf("[audio] beep %zu samples\n", samples);
-    usleep(samples * 1000000ull / 44100); /* in real time, as the radio plays it */
+    usleep(samples * 1000000ull / AUDIO_PLAY_RATE); /* in real time, as the radio plays it */
     return 0;
 }
 void audio_play_wait(void) {
@@ -274,10 +214,16 @@ void keypad_set_long_time(uint32_t ms) { printf("[keypad] hold time %u ms\n", (u
 void radio_set_rx_dsp_off(bool off) { printf("[radio] NR/NB/notches %s\n", off ? "off" : "back to the settings"); }
 void radio_speaker_play(bool on) { printf("[radio] speaker play %s\n", on ? "on" : "off"); }
 
-/* ONLY_MODE: on 14.2 MHz in USB with a custom 27.245 MHz (CB) saved. */
+/* ONLY_MODE: on 14.2 MHz in USB with a custom 27.245 MHz (CB) saved, and
+ * CB last used in USB too: the settings manager loads a band's own mode
+ * when the dial moves into it. */
 void stub_mode_setup(void) {
-    dial_hz                   = 14200000;
-    params.js8_custom_on.x    = true;
-    params.js8_custom_hz.x    = 27245000;
+    cparam_i_set(cfg.cur.fg_freq(), 27245000);
+    cparam_i_set(cfg.cur.mode(), x6100_mode_usb);
+    cparam_i_set(cfg.cur.fg_freq(), 14200000);
+    cparam_i_set(cfg.cur.mode(), x6100_mode_usb);
+    param_i_set(cfg.js8.custom_on(), true);
+    param_i_set(cfg.js8.custom_hz(), 27245000);
+    printf("[mode] setup: dial %d mode %d\n", stub_dial_hz(), stub_mode());
 }
 int stub_usb_dig(void) { return x6100_mode_usb_dig; }

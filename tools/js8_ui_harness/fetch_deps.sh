@@ -3,12 +3,16 @@
 # versions the X6100 image uses (AetherX6100Buildroot / buildroot 2022.11).
 set -euo pipefail
 cd "$(dirname "$0")"
+HERE="$PWD"
 mkdir -p deps/include deps/src
 cd deps
 
 # LVGL: stock v8.3.11, the version the firmware's NEON fork is based on. The
 # fork's non-NEON fallback does not compile, and only ARM builds use NEON.
 [ -d src/lvgl ] || git clone -q --depth 1 --branch v8.3.11 https://github.com/lvgl/lvgl src/lvgl
+# Plus the fork's gradient-cache fix (R1CBU 1.0's themes need it).
+git -C src/lvgl apply --reverse --check "$HERE/lvgl-gradient-cache.patch" 2>/dev/null ||
+    git -C src/lvgl apply "$HERE/lvgl-gradient-cache.patch"
 
 # ft8_lib headers: params.h includes ft8lib/constants.h.
 if [ ! -d include/ft8lib ]; then
@@ -23,6 +27,13 @@ if [ ! -f include/aether_radio/x6100_control/api.h ]; then
     cmake -S src/X6100Control -B src/X6100Control/build >/dev/null
     cp -r src/X6100Control/include/aether_radio include/
     cp src/X6100Control/build/include/aether_radio/x6100_control/api.h include/aether_radio/x6100_control/
+fi
+
+# gpsd's client header (struct gps_data_t), the version buildroot 2022.11
+# ships (3.25): R1CBU 1.0's gps.h includes it.
+if [ ! -f include/libgps/gps.h ]; then
+    mkdir -p include/libgps
+    curl -sfL -o include/libgps/gps.h https://gitlab.com/gpsd/gpsd/-/raw/release-3.25/include/gps.h
 fi
 
 # liquid-dsp 1.4.0, static, for the waterfall spectrogram.

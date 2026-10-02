@@ -11,6 +11,9 @@ extern "C" {
 void dialog_destruct(void);
 void dialog_audio_samples(unsigned int n, float *samples);
 void scheduler_work();
+void observer_delayed_drain(void);
+void ui_gps_tick(void);
+uint32_t stub_audio_rate(void);
 void ui_init(void);
 void ui_open(void);
 void ui_press(int i);
@@ -95,7 +98,8 @@ extern int stub_vol_turns;
 
 namespace vc = js8core::protocol::varicode;
 
-static constexpr int W = 800, H = 480, RATE = 11025;
+static constexpr int W = 800, H = 480, RATE = 12000; /* what JS8 asks R1CBU 1.0 for */
+static constexpr int NSPS = RATE * 4 / 25;             /* samples per JS8 Normal symbol (0.16 s) */
 static std::vector<uint32_t> fb(W *H);
 
 // ONLY_WFPERF: the radio's flush path, timed: fbdev.c copies each area into
@@ -183,7 +187,9 @@ static void pump(int ms) {
     auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
     while (std::chrono::steady_clock::now() < end) {
         lv_tick_inc(5);
+        observer_delayed_drain(); /* the radio's main loop, in its order */
         scheduler_work();
+        ui_gps_tick();
         lv_timer_handler();
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
@@ -215,6 +221,7 @@ static void load_measure(const char *label, int ms, bool noise) {
             }
         }
         double a = now_ms_f();
+        observer_delayed_drain();
         scheduler_work();
         lv_timer_handler();
         busy += now_ms_f() - a;
@@ -262,8 +269,8 @@ static void feed_band(const std::vector<Station> &band, std::size_t first = 0, s
             double      phi   = 0;
             for (int s = 0; s < js8core::kJs8NumSymbols; s++) {
                 double dphi = 2 * M_PI * (band[i].offset_hz + tones[i][k][s] * 6.25) / RATE;
-                for (int j = 0; j < 1764; j++) {
-                    audio[start + s * 1764 + j] += band[i].amp * (float)std::sin(phi);
+                for (int j = 0; j < NSPS; j++) {
+                    audio[start + s * NSPS + j] += band[i].amp * (float)std::sin(phi);
                     phi += dphi;
                 }
             }
@@ -429,6 +436,7 @@ int main() {
         chmod(JS8_TEXTS_PATH, 0);
     }
     ui_open();
+    if (stub_audio_rate() != RATE) printf("[harness] FAIL: JS8 asked for %u Hz audio, the harness feeds %d\n", stub_audio_rate(), RATE);
     if (getenv("ONLY_GEN")) {
         // GEN / APP on the radio close the app with a list popup open.
         const char *which = getenv("ONLY_GEN");
@@ -3081,8 +3089,8 @@ int main() {
             double      phi   = 0;
             for (int s = 0; s < js8core::kJs8NumSymbols; s++) {
                 double dphi = 2 * M_PI * (stations[i].offset_hz + tones[i][k][s] * 6.25) / RATE;
-                for (int j = 0; j < 1764; j++) {
-                    audio[start + s * 1764 + j] += stations[i].amp * (float)std::sin(phi);
+                for (int j = 0; j < NSPS; j++) {
+                    audio[start + s * NSPS + j] += stations[i].amp * (float)std::sin(phi);
                     phi += dphi;
                 }
             }

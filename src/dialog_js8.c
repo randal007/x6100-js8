@@ -1790,7 +1790,7 @@ static int64_t now_mono_ms(void) {
 }
 
 /* At most one row per tick, each when it's due by the clock. Rows are made
- * per 735 samples at 11025 Hz and the audio clock isn't the CPU's, so a
+ * per WF_ROW_SAMPLES (800 at 12 kHz) and the audio clock isn't the CPU's, so a
  * queue that builds up is drained by drawing slightly faster, never by a
  * jump. */
 static void wf_timer_cb(lv_timer_t *t) {
