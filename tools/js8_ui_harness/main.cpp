@@ -1904,6 +1904,70 @@ int main() {
         printf("[held] HW CPY? sent: %d\n", ui_list_has("W1ABC HW CPY?"));
         return 0;
     }
+    if (getenv("ONLY_QUERYCALL")) {
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        auto focus_on = [&](const char *text) {
+            for (int i = 0; i < 40 && !strstr(ui_focused_text(), text); i++) ui_key(LV_KEY_RIGHT);
+            return strstr(ui_focused_text(), text) != nullptr;
+        };
+        pump(300);
+
+        // Nothing selected: Query > opens with the @ALLCALL item only.
+        ui_page(1);
+        printf("[querycall] page 1 button 3: '%s' (want Query >)\n", ui_button_label(3));
+        ui_press(3);
+        pump(200);
+        printf("[querycall] no selection: list for @ALLCALL %d (want 1), focused '%s' (want Can anyone reach...?)\n",
+               ui_popup_has("To @ALLCALL"), ui_focused_text());
+        printf("[querycall] station items shown: %d (want 0)\n", ui_popup_has("Can they reach"));
+        screenshot("c0_query_allcall.ppm");
+        ui_click_focused();
+        pump(300);
+        printf("[querycall] prefill '%s' (want @ALLCALL QUERY CALL )\n", ui_compose_text());
+        ui_compose_append("w1abc");
+        ui_compose_enter();
+        wait_tx();
+        printf("[querycall] sent with the ?: %d (want 1)\n", ui_list_has("@ALLCALL QUERY CALL W1ABC?"));
+
+        // A station selected: Can they reach...?, typed without the '?'.
+        feed_band({{"N0XYZ", "EN34", "@ALLCALL", "@ALLCALL CQ CQ CQ EN34", 1320, 0.05f}});
+        ui_select_row_from("N0XYZ");
+        ui_page(1);
+        ui_press(3);
+        pump(200);
+        printf("[querycall] selected: on Can they reach %d, Can anyone reach also there %d (want 1 1)\n",
+               focus_on("Can they reach"), ui_popup_has("Can anyone reach"));
+        ui_click_focused();
+        pump(300);
+        printf("[querycall] prefill '%s' (want N0XYZ QUERY CALL )\n", ui_compose_text());
+        ui_compose_append("ve7abc");
+        ui_compose_enter();
+        wait_tx();
+        printf("[querycall] sent with the ?: %d (want 1)\n", ui_list_has("N0XYZ QUERY CALL VE7ABC?"));
+
+        // Typed with the '?' already: still just one.
+        ui_page(1);
+        ui_press(3);
+        pump(200);
+        focus_on("Can they reach");
+        ui_click_focused();
+        pump(300);
+        ui_compose_append("w7xyz?");
+        ui_compose_enter();
+        wait_tx();
+        printf("[querycall] one ?: %d, two: %d (want 1 0)\n", ui_list_has("N0XYZ QUERY CALL W7XYZ?"),
+               ui_list_has("W7XYZ??"));
+        return 0;
+    }
     if (getenv("ONLY_RELAY")) {
         auto wait_tx = [&]() {
             int b = stub_tx_frames;

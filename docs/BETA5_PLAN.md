@@ -15,14 +15,20 @@ as they land.
   (automatic replies, heartbeats, beacons). The radio already reports SWR
   during TX (`vswr` in `radio.c`).
 - [ ] **High-SWR beep.**
-- [ ] **Merge the Murus team's SSTV release** (custom-r1cbu
-  [releases](https://github.com/TheMurusTeam/custom-r1cbu/releases)):
-  the list said beta 7; **beta 8 came out 2026-10-02** (SSTV transmit
-  added). See "Merge notes" below.
 - [ ] **Update to the latest gdyuldin release**
   ([x6100_gui releases](https://github.com/gdyuldin/x6100_gui/releases)):
   the list said v1.0.1; **v1.0.2 came out 2026-10-02**. Cleaner UI with
-  more room for the map. See "Merge notes".
+  more room for the map. **First, and without the Murus fork** (user,
+  2026-10-02: build on 1.0.2, drop 1KO125's WeFax/NavTex/channel list for
+  now). **Studied:** [upgrade-1.0.2/](upgrade-1.0.2/README.md) (trial
+  merge, every upstream commit, the power trap in the settings
+  migrations, the order of work, decisions for the user).
+- [ ] **Merge the Murus team's SSTV release** (custom-r1cbu
+  [releases](https://github.com/TheMurusTeam/custom-r1cbu/releases)):
+  the list said beta 7; **beta 8 came out 2026-10-02** (SSTV transmit
+  added). **After the 1.0.2 move:** the Murus team is bringing their fork
+  to 1.0.2 themselves, so it's merged once, from that (WeFax, NavTex, the
+  channel list and SSTV together). See "Merge notes" below.
 
 ## Heartbeat and CQ
 
@@ -71,11 +77,19 @@ These change decision D1 from the code review (heartbeats pause for
 
 ## Bugs
 
-- [ ] **Can they reach...? (QUERY CALL)** only works when you type the `?`
+- [x] **Can they reach...? (QUERY CALL)** only works when you type the `?`
   yourself after the call (the one thing that failed in on-air testing). Desktop sends `CALL QUERY CALL W1ABC?`: add
-  the `?` for you.
-- [ ] **An @ALLCALL QUERY CALL** ("can anyone reach W1ABC?") to send to
-  everyone, as well as to one station.
+  the `?` for you. **Done:** `query_call_question()` (`src/js8/directed.cpp`),
+  called by `plan_message()`, so the preview, the frames and our own row all
+  have it; the Query list's hint no longer asks for it. Why desktop didn't
+  answer without it isn't clear from its code (JS8Call-improved 1c6e27a's
+  `parseQueryCallArg` drops a trailing `?` and `parseCallsigns` finds the call
+  either way; the checksum isn't the cause either): desktop's menu always
+  sends the `?`, so now we do too.
+- [x] **An @ALLCALL QUERY CALL** ("can anyone reach W1ABC?") to send to
+  everyone, as well as to one station. **Done:** *Can anyone reach...?* in
+  the Query list, which now also opens with no station selected (that item
+  only). Harness `ONLY_QUERYCALL`, unit test "a QUERY CALL gets desktop's '?'".
 
 ## Carried over from beta 4
 
@@ -123,5 +137,6 @@ decoder, wfview and Bluetooth RFCOMM. Parts that meet JS8's code:
 - the stored-number rule again (migrations 4–5, `MODE_JS8 = 8`,
   `ACTION_APP_JS8`).
 
-The Murus team hasn't moved to 1.0 yet, so merging both means bringing
+(Superseded 2026-10-02: the Murus team is moving to 1.0.2 themselves; we
+wait for theirs.) The Murus team hasn't moved to 1.0 yet, so merging both means bringing
 their SSTV app onto 1.0 ourselves.

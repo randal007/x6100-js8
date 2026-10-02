@@ -286,7 +286,7 @@ to go back a page. In JS8 a hold is half a second.
 |---|---|---|
 | 1 | **CQ** | `CQ CQ CQ <grid>`. Pauses heartbeats for 10 minutes, like anything you send (see [Transmitting](#transmitting)). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it; answers and heartbeats sent in between don't move it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
 | 1 | **Heartbeat** | One heartbeat now: on your own offset if that is 1000 Hz or below, else at a free spot in the 500–1000 Hz heartbeat sub-band (clear of anything heard in the last 30 s), as desktop. With HB on, the automatic ones count again from this one. |
-| 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…? |
+| 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…?, Can anyone reach…? (with no station selected, only that one) |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. On [the map](#the-map): **All heard / Heard me**. |
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead (each station its own, for 5 minutes). |
@@ -408,7 +408,8 @@ to the selected station.
 | Any messages? | `N0XYZ QUERY MSGS` | they answer `YES MSG ID 3` (`+2`: two more after it) or `NO` |
 | Fetch message #… | `N0XYZ QUERY MSG 3` | the message they hold for you |
 | Relay via them… | `N0XYZ>W1ABC <text>` | N0XYZ passes it on to W1ABC ([Relays](#relays)) |
-| Can they reach…? | `N0XYZ QUERY CALL W1ABC?` | N0XYZ answers `YES -12 (5m)` if they've heard W1ABC |
+| Can they reach…? | `N0XYZ QUERY CALL W1ABC?` | N0XYZ answers `YES -12 (5m)` if they've heard W1ABC. Type just the call: the `?` goes on by itself, as desktop sends it |
+| Can anyone reach…? | `@ALLCALL QUERY CALL W1ABC?` | everyone with AUTO on who has heard W1ABC answers; in the list with no station selected too |
 
 When a station says it holds a message for you (`YES MSG ID 3`, `MSG ID
 3` on a heartbeat ack, or `RETRIEVE MSG 3`), **Reply** has `QUERY MSG 3`
@@ -770,8 +771,10 @@ Beta 5 is being planned; the full list with notes is in
 - [ ] **Time sync overhaul:** automatic time sync like desktop JS8Call's
 - [ ] **High-SWR protection** for unattended stations: shut-down modes and
   a beep
-- [ ] **The latest firmware underneath:** the Murus team's SSTV app and
-  gdyuldin's v1.0 (a cleaner screen with more room for the map)
+- [ ] **The latest firmware underneath:** gdyuldin's v1.0.2 first (a
+  cleaner screen with more room for the map;
+  [the study](docs/upgrade-1.0.2/README.md)), then the Murus team's WeFax,
+  NavTex and SSTV once their fork is on 1.0.2 too
 - [ ] **Station history:** QSOs, messages, INFO and STATUS for every
   station, opened by pressing it in the list or on the map; a Sort
   button; a QRZ light on the list and the map
@@ -784,8 +787,8 @@ Beta 5 is being planned; the full list with notes is in
 - [ ] **GPS** time and location from a USB GPS
 - [ ] The green receive bar as wide as the station's speed; ALC for
   under 1 W into an amplifier
-- [ ] Fixes: Can they reach...? adds the `?` for you, and an @ALLCALL
-  version
+- [x] Fixes: Can they reach...? adds the `?` for you, and an @ALLCALL
+  version (*Can anyone reach...?*)
 - [ ] Still from beta 4: the map's home colour Setting; POTA and SOTA
   spots tried on the air
 - [ ] Later, after the features: performance (spreading the work over the

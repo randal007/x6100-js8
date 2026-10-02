@@ -165,6 +165,15 @@ std::optional<std::pair<std::string, std::string>> relayed_command(const std::st
     return std::make_pair(first, rest);
 }
 
+std::string query_call_question(const std::string &text) {
+    auto d = parse_directed("X: " + text);
+    if (!d || d->cmd != " QUERY CALL") return text;
+    auto        e    = d->text.find_last_not_of(' ');
+    std::string word = e == std::string::npos ? "" : d->text.substr(0, e + 1);
+    if (word.empty() || word.find(' ') != std::string::npos || word.back() == '?') return text;
+    return text.substr(0, text.find_last_not_of(' ') + 1) + "?";
+}
+
 std::vector<std::string> parse_callsigns(const std::string &text) {
     namespace vc = js8core::protocol::varicode;
     std::vector<std::string> out;
