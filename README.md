@@ -4,15 +4,17 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Beta 4** is the current release. In daily use on the air since beta 1:
+> **Beta 4.1** is the current release. In daily use on the air since beta 1:
 > heartbeats acknowledged, queries answered, QSOs and messages with desktop
 > JS8Call stations, all four speeds decoding, two-way SMS through APRS.
-> Beta 4 adds a **map** of the stations heard in GridTracker's style,
-> decode marks on the waterfall, messages sent exactly as desktop JS8Call
-> sends them, automatic replies that follow desktop's rules, and the fixes
-> from a full code review ([New in beta 4](#new-in-beta-4)). Nothing
-> transmits by itself when the app opens; automatic replies and heartbeats
-> are switches you turn on.
+> Beta 4.1 moves JS8 onto the latest R1CBU firmware (gdyuldin v1.0.2: a
+> cleaner screen, new themes, more room for the waterfall and the map),
+> and brings a Heartbeat button that works like CQ, a red band that shows
+> where a heartbeat goes, a green band as wide as the station's speed, and
+> QUERY CALL fixed ([New in beta 4.1](#new-in-beta-41)). Beta 4 added the
+> map, decode marks and the code review's fixes ([New in beta 4](#new-in-beta-4)).
+> Nothing transmits by itself when the app opens; automatic replies and
+> heartbeats are switches you turn on.
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
@@ -36,8 +38,9 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
+- [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
-- [Known issues in beta 4](#known-issues-in-beta-4)
+- [Known issues in beta 4.1](#known-issues-in-beta-41)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -74,7 +77,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta4.img.zip` from the Assets.
+   download `sdcard.js8-beta4.1.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works.
 3. Put the card in the radio and switch on. The first start creates the
@@ -628,6 +631,42 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
+## New in beta 4.1
+
+New:
+
+- **The latest R1CBU firmware underneath** (gdyuldin's v1.0.2): a cleaner
+  screen with the Simple, Black and Flat themes, and JS8's waterfall,
+  list and map laid out for it with more room (788 × 337 instead of
+  771 × 325).
+- **Heartbeat works like CQ** (page 1): press for one heartbeat, **hold
+  for auto heartbeats** (one now, then the main knob sets 5–30 minutes,
+  press when done); press again to switch auto off. The button counts down
+  to the next one. Page 4's old HB button is gone.
+- **Heartbeats keep going while you call CQ** (by hand or auto CQ) and
+  pause when someone calls you (an answer to your CQ, HW CPY?, SNR? ...)
+  or when you send something yourself; they carry on 10 minutes later.
+- **The red band shows where a heartbeat goes:** heartbeats and heartbeat
+  ACKs pick a free spot at 500–999 Hz, and the band moves there while one
+  waits and goes out, then back to your offset.
+- **The green band is as wide as the selected station's speed** (Slow 25,
+  Normal 50, Fast 80, Turbo 160 Hz).
+- **Can anyone reach…?** in the Query list sends `@ALLCALL QUERY CALL`,
+  also with no station selected.
+
+Fixes:
+
+- **Can they reach…? (QUERY CALL)** adds the `?` for you, as desktop
+  JS8Call sends it (without it, desktop stations didn't answer).
+- The main knob on R1CBU 1.0: a fast turn moves 5 or 10 Hz a click again,
+  and turning it no longer makes the waterfall lag.
+
+**Updating from beta 4:** copy your DATA files off first as usual
+([Installing](#installing)) and put them back. R1CBU 1.0 converts the
+settings in `params.db` at its first start (power, TX gain and the band
+offsets are stored differently); to go back to beta 4 later, write its
+image **and put back the DATA files you saved before updating**.
+
 ## New in beta 4
 
 New:
@@ -748,24 +787,28 @@ with every change.
 ([Installing](#installing)) and put them back: beta 4 reads them as they
 are, and its new settings start at their defaults.
 
-## Known issues in beta 4
+## Known issues in beta 4.1
 
-- **Can they reach...? (QUERY CALL)** only works if you type the `?`
-  after the call yourself. Fixed in the next beta.
+- **WeFax, NavTex and the broadcast channel list are not in beta 4.1:**
+  they came from the Murus team's (1KO125) fork, which is still on the
+  older firmware. They come back once their fork is on R1CBU 1.0.
+- **A very faint stutter in JS8's waterfall** now and then (R1CBU 1.0 shows
+  frames at the panel's refresh); being measured, a fix is to come. It
+  doesn't affect decoding.
+- **Keep the radio's clock right:** it has no network time and gains a
+  few seconds a week; at 2–3 s off, decodes go missing. Set it in the
+  radio's Settings (General: *Hour, Min, Sec*) or use JS8's **Time Sync**
+  (JS8's Settings…).
 - **Relays, store and forward and messaging** work on the air with
-  desktop JS8Call stations (tested since this release came out).
+  desktop JS8Call stations.
 - **APRS:** the grid spot, two-way SMS and Winlink work on the air.
-  Winlink messages get two ACKs (the gateway's and Winlink's own reply);
-  the next beta drops the extra one. Reply by SMS's filled-in number and
-  the "delivered" line for the gateway's receipt are new in this release.
-  POTA and SOTA spots, position messages and email are untested through
-  the gateways.
-- **The map is new:** tried on the radio, not yet on a busy band. Your own
-  square is orange for now; a Setting to pick its colour is to come.
+  Winlink messages get two ACKs (the gateway's and Winlink's own reply); a
+  later beta drops the extra one. POTA and SOTA spots, position messages
+  and email are untested through the gateways.
+- **The map:** your own square is orange for now; a Setting to pick its
+  colour is to come.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
-- The main screen's waterfall, seen through JS8's buttons, stands still
-  while JS8 is open (cosmetic).
 - If the radio loses power, or you switch it off by holding POWER, while
   JS8 is open, the USB-D receive filter stays at 200–3000 Hz, which suits
   digital modes; set yours back by hand if it was different. Leaving the
