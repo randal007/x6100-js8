@@ -151,6 +151,11 @@ static void destruct_cb(void);
 static void audio_cb(size_t n, float *samples);
 static void gps_msg_cb(void *s, lv_msg_t *m);
 static void finder_invalidate_band(int32_t hz);
+static void finder_sync(void);
+static void cursor_place(void);
+static bool selected_speed(js8_speed_t *out);
+static int32_t   finder_shown = -1; /* the red band's offset on screen, -1 not drawn yet */
+static lv_obj_t *cursor_box;        /* the green band (cursor_place) */
 
 /* R1CBU 1.0 hands text settings out as copies: the station's call and grid
  * for the GUI thread, valid until the next call. */
@@ -1412,21 +1417,33 @@ static void table_draw_end_cb(lv_event_t *e) {
     }
 }
 
-/* Show the selected station's offset on the waterfall (the green line). */
-static int32_t cursor_shown = -1; /* the cursor band's offset on screen, -1 none */
+/* The green band: the selected station's offset, as wide as the speed it
+ * was last heard at (selected_speed(): its Stations entry, or the row's
+ * own), so a Turbo station's band covers its 160 Hz. JS8 draws it itself
+ * (lv_finder's cursor is as wide as the TX band, and lv_finder is FT8's
+ * too); moving an object redraws only its old and new place. Hidden
+ * only where the red band covers it exactly (same offset and width). */
+static void cursor_place(void) {
+    if (!cursor_box || !finder) return;
+    int32_t span = filter_high - filter_low;
+    int32_t hz   = qso_freq >= 0 ? (int32_t)(qso_freq + 0.5f) : -1;
+    js8_speed_t sp;
+    int32_t     bw = js8_speed_bandwidth_hz(table && selected_speed(&sp) ? sp : cur_speed());
+    if (hz < 0 || span <= 0 || (hz == finder_shown && bw == js8_speed_bandwidth_hz(cur_speed()))) {
+        lv_obj_add_flag(cursor_box, LV_OBJ_FLAG_HIDDEN);
+        return;
+    }
+    lv_coord_t  w  = lv_obj_get_width(finder);
+    lv_coord_t  x1 = (lv_coord_t)((int64_t)w * (hz - filter_low) / span);
+    lv_coord_t  x2 = (lv_coord_t)((int64_t)w * (hz + bw - filter_low) / span);
+    lv_obj_set_pos(cursor_box, x1, 1);
+    lv_obj_set_size(cursor_box, LV_MAX(x2 - x1 + 1, 3), lv_obj_get_height(finder) - 2);
+    lv_obj_clear_flag(cursor_box, LV_OBJ_FLAG_HIDDEN);
+}
 
 static void show_selection(void) {
     if (sel_call[0]) map_qrz_clear(sel_call); /* you've seen who called */
-    int32_t cursor = qso_freq >= 0 ? (int32_t)(qso_freq + 0.5f) : -1;
-    if (cursor >= 0) lv_finder_set_cursor(finder, (int16_t)cursor);
-    else lv_finder_clear_cursor(finder);
-    /* Only the old and new band: the MFK steps through stations here, and
-     * a whole-finder redraw is a whole-waterfall one (finder_invalidate_band). */
-    if (cursor != cursor_shown) {
-        if (cursor_shown >= 0) finder_invalidate_band(cursor_shown);
-        if (cursor >= 0) finder_invalidate_band(cursor);
-        cursor_shown = cursor;
-    }
+    cursor_place();
     lv_obj_invalidate(table);
     update_tx_bar();
     if (view_map) map_update(false);
@@ -2125,6 +2142,7 @@ static void ui_tx_done(void *arg) {
     deliver_end(done->text, completed);
     memset(&tx_status, 0, sizeof(tx_status));
     tx_active = false;
+    finder_sync();
     update_tx_bar();
     /* Auto CQ counts its minutes from the end of our CQ (your choice);
      * replies and heartbeats in between don't move it. */
@@ -2322,6 +2340,7 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
     tx_auto     = automatic;
     tx_cq       = false;
     tx_quiet_ms = 0;
+    finder_sync();
     msg_update_text_fmt("%sQueued: %d frame%s, %.0f s", automatic ? "Auto: " : "", pv.frames,
                         pv.frames == 1 ? "" : "s", pv.seconds);
 
@@ -2352,8 +2371,7 @@ static void apply_hold(float their_freq) {
     if (f > js8_speed_max_offset_hz(cur_speed())) f = js8_speed_max_offset_hz(cur_speed());
     param_i_set(cfg.js8.tx_freq(), (uint16_t)f);
     js8_rx_set_qso_offset(rx, f);
-    lv_finder_set_value(finder, (int16_t)f);
-    lv_obj_invalidate(finder);
+    finder_sync();
     update_tx_bar();
 }
 
@@ -2373,6 +2391,20 @@ static void finder_invalidate_band(int32_t hz) {
     a.x2 = finder->coords.x1 + (lv_coord_t)((int64_t)w * (hz + js8_speed_bandwidth_hz(cur_speed()) - filter_low) / span) + 2;
     if (!_lv_area_intersect(&a, &a, &finder->coords)) return;
     _lv_inv_area(lv_obj_get_disp(finder), &a);
+}
+
+/* The red band: your TX offset, or while a message on another offset is
+ * queued or going out (heartbeats and HB ACKs pick a free spot at 500-999
+ * Hz, as desktop does), that one, back when it ends or is stopped. */
+static void finder_sync(void) {
+    if (!finder) return;
+    int32_t hz = tx_active ? atomic_load(&tx_offset_active) : (int32_t)param_i_get(cfg.js8.tx_freq());
+    if (hz == finder_shown) return;
+    lv_finder_set_value(finder, (int16_t)hz);
+    if (finder_shown >= 0) finder_invalidate_band(finder_shown);
+    finder_invalidate_band(hz);
+    finder_shown = hz;
+    cursor_place(); /* hidden on the red band's offset */
 }
 
 static void rotary_cb(int32_t diff) {
@@ -2416,9 +2448,7 @@ static void rotary_cb(int32_t diff) {
     param_i_set(cfg.js8.tx_freq(), (uint16_t)f);
     js8_rx_set_qso_offset(rx, f);
 
-    lv_finder_set_value(finder, (int16_t)f);
-    finder_invalidate_band(old);
-    finder_invalidate_band(f);
+    finder_sync(); /* stays on a heartbeat's offset while that is on */
     update_tx_bar();
 }
 
@@ -2863,8 +2893,8 @@ static void construct_cb(lv_obj_t *parent) {
      * selected message. */
     lv_finder_set_width(finder, js8_speed_bandwidth_hz(cur_speed()));
     lv_finder_set_value(finder, param_i_get(cfg.js8.tx_freq()));
-    lv_finder_clear_cursor(finder);
-    cursor_shown   = -1;
+    finder_shown = param_i_get(cfg.js8.tx_freq());
+    lv_finder_clear_cursor(finder); /* the green band is cursor_box */
     qso_freq       = -1;
     sel_call[0]    = '\0';
     sel_locked     = false;
@@ -2880,6 +2910,18 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_border_width(finder, 1, LV_PART_INDICATOR);
     lv_obj_set_style_border_color(finder, lv_color_white(), LV_PART_INDICATOR);
     lv_obj_set_style_border_opa(finder, LV_OPA_50, LV_PART_INDICATOR);
+
+    /* The green band, as lv_finder drew its cursor: green at 30 % with a
+     * 1 px green border at 70 %, over the red band. */
+    cursor_box = lv_obj_create(finder);
+    lv_obj_remove_style_all(cursor_box);
+    lv_obj_clear_flag(cursor_box, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_style_bg_color(cursor_box, lv_color_hex(0x50FF50), 0);
+    lv_obj_set_style_bg_opa(cursor_box, LV_OPA_30, 0);
+    lv_obj_set_style_border_color(cursor_box, lv_color_hex(0x50FF50), 0);
+    lv_obj_set_style_border_opa(cursor_box, LV_OPA_70, 0);
+    lv_obj_set_style_border_width(cursor_box, 1, 0);
+    lv_obj_add_flag(cursor_box, LV_OBJ_FLAG_HIDDEN);
 
     status = lv_label_create(waterfall);
     lv_obj_set_style_text_font(status, &sony_18, 0);
@@ -3051,7 +3093,7 @@ static void destruct_cb(void) {
 
     /* LVGL objects are children of dialog.obj, deleted by dialog_destruct()
      * right after this returns. */
-    waterfall = finder = table = status = tx_bar = NULL;
+    waterfall = finder = table = status = tx_bar = cursor_box = NULL;
     wf_box    = NULL;
     map_free();
 }
@@ -4886,6 +4928,18 @@ static void query_cb(button_data_t *btn) {
     speed_warn();
 }
 
+/* For tools/js8_ui_harness: the red band's offset, and the green band's
+ * place and width in pixels (false when it isn't shown). */
+int dialog_js8_finder_hz(void) {
+    return finder_shown;
+}
+bool dialog_js8_cursor_band(int *x, int *w) {
+    if (!cursor_box || lv_obj_has_flag(cursor_box, LV_OBJ_FLAG_HIDDEN)) return false;
+    *x = lv_obj_get_x(cursor_box);
+    *w = lv_obj_get_width(cursor_box);
+    return true;
+}
+
 /* For tools/js8_ui_harness: the station the selection points at. */
 bool dialog_js8_selected_call(char *call, unsigned len) {
     float freq;
@@ -5187,7 +5241,10 @@ static void hb_tick(void) {
      * lost): don't wait for it for ever. */
     if (tx_active && !js8_tx_busy(tx)) {
         if (!tx_quiet_ms) tx_quiet_ms = now_wall_ms();
-        else if (now_wall_ms() - tx_quiet_ms > TX_DONE_LOST_MS) tx_active = false;
+        else if (now_wall_ms() - tx_quiet_ms > TX_DONE_LOST_MS) {
+            tx_active = false;
+            finder_sync();
+        }
     } else {
         tx_quiet_ms = 0;
     }
@@ -7299,7 +7356,8 @@ static void set_speed(js8_speed_t s) {
     if (param_i_get(cfg.js8.tx_freq()) > max) param_i_set(cfg.js8.tx_freq(), (uint16_t)max);
     js8_rx_set_qso_offset(rx, param_i_get(cfg.js8.tx_freq()));
     lv_finder_set_width(finder, js8_speed_bandwidth_hz(s));
-    lv_finder_set_value(finder, (int16_t)param_i_get(cfg.js8.tx_freq()));
+    finder_shown = -1; /* another width: all of it again */
+    finder_sync();
     lv_obj_invalidate(finder);
     if (!param_i_get(cfg.js8.rx_all())) js8_rx_set_submodes(rx, rx_speed_mask());
     /* A heartbeat that fell due while in Turbo mustn't go out the moment we

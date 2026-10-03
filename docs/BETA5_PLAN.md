@@ -35,8 +35,9 @@ as they land.
 - [ ] The heartbeat timer no longer pauses during CQ.
 - [ ] Heartbeats pause only when someone actually answers the CQ.
 - [ ] The heartbeat timer works like CQ's (hold = Auto).
-- [ ] The TX bar (red rectangle) moves to the heartbeat's frequency when a
-  heartbeat goes out.
+- [x] The TX bar (red rectangle) moves to the heartbeat's frequency when a
+  heartbeat goes out. **Done (port-1.0.2):** from queued to finished, HB
+  ACKs too (user's choices), finder_sync() in src/dialog_js8.c.
 
 These change decision D1 from the code review (heartbeats pause for
 10 minutes after anything you send by hand, CQ included;
@@ -68,8 +69,11 @@ These change decision D1 from the code review (heartbeats pause for
 
 ## Screen and radio
 
-- [ ] The green receive bar is as wide as the speed the station was last
-  heard at (today it is always Normal's width).
+- [x] The green receive bar is as wide as the speed the station was last
+  heard at (today it is always Normal's width). **Done (port-1.0.2):** the
+  Stations entry's speed, else the row's (selected_speed()); JS8 draws it
+  itself (cursor_box), lv_finder (shared with FT8) untouched; hidden only
+  where the red band covers it exactly. Harness ONLY_FINDER.
 - [ ] A small ALC rework for low power (under 1 W) into an amplifier.
   The TX audio path (`tx_player.c`) is shared with the FT8 app.
 - [ ] GPS time and location (USB GPS dongle ordered; testing when it

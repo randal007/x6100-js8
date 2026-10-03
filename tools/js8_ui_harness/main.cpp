@@ -48,6 +48,8 @@ void ui_indevs_init(void);
 int  ui_kb_select_ok(void);
 void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
+int  dialog_js8_finder_hz(void);
+bool dialog_js8_cursor_band(int *x, int *w);
 unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
 bool     dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_paths, int *qrz);
 const char *dialog_js8_map_stats(void);
@@ -1818,6 +1820,49 @@ int main() {
         ui_press(4); // Clear: this band only
         pump(300);
         printf("[bands] 20m after Clear empty: %d (want 1)\n", ui_list_has("No stations heard yet"));
+        return 0;
+    }
+    if (getenv("ONLY_FINDER")) {
+        // The green band as wide as the selected station's speed; the red
+        // band on a heartbeat's own offset while it's queued and sent.
+        using x6100::js8::TestStation;
+        pump(300);
+        feed_speeds({{"W1ABC", "FN42", "CQ CQ CQ FN42", 700, -5, JS8_SPEED_NORMAL},
+                     {"K9DEF", "EN52", "CQ CQ CQ EN52", 1100, -5, JS8_SPEED_FAST},
+                     {"N0XYZ", "EN34", "CQ CQ CQ EN34", 1500, -5, JS8_SPEED_TURBO},
+                     {"VE7ABC", "CN89", "K2XYZ SLOW ONE", 2000, -5, JS8_SPEED_SLOW}});
+        pump(300);
+        struct { const char *call; int bw; } sel[] = {{"W1ABC", 50}, {"K9DEF", 80}, {"N0XYZ", 160}, {"VE7ABC", 25}};
+        for (auto &c : sel) {
+            ui_select_row_from(c.call);
+            pump(200);
+            int x = 0, w = 0;
+            bool shown = dialog_js8_cursor_band(&x, &w);
+            int want = c.bw * 788 / 2800 + 1;
+            printf("[finder] %-6s green band shown %d, %d px wide (want about %d: %d Hz)\n", c.call, shown, w, want, c.bw);
+        }
+        screenshot("c5_finder_widths.ppm");
+
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 300 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 60 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        int before = dialog_js8_finder_hz();
+        ui_page(1);
+        printf("[finder] page 1 button 2: '%s' (want Heartbeat)\n", ui_button_label(2));
+        ui_press(2); // a heartbeat by hand: a free spot at 500-999 Hz
+        pump(300);
+        int queued = dialog_js8_finder_hz();
+        screenshot("c6_finder_hb.ppm");
+        printf("[finder] red band before %d, queued heartbeat %d (want 500-999)\n", before, queued);
+        wait_tx();
+        printf("[finder] after it went: %d (want %d)\n", dialog_js8_finder_hz(), before);
         return 0;
     }
     if (getenv("ONLY_SPEED")) {

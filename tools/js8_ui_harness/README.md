@@ -67,6 +67,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `RELAY` | relays passed on and received, ACK back along the path |
 | `QUERYCALL` | Query list: *Can anyone reach...?* with no station selected, *Can they reach...?* with one; the `?` added when left off, never twice |
 | `KNOB` | the main knob on the TX offset: clicks one at a time as R1CBU 1.0 sends them, a fast spin still speeds up (5/10 Hz per click), and only the finder's old and new band are redrawn (load per second; no band left behind after the knob or MFK selections) |
+| `FINDER` | the green band as wide as each selected station's speed (Normal, Fast, Turbo, Slow), shown over the red band when wider; the red band on a heartbeat's free offset while it's queued and sent, back after |
 | `REPLYQ` | automatic replies queue (see below) |
 | `RETUNE`, `TXSAFE` | transmitting safely (see below) |
 | `ROWS` | info rows survive rebuilds, a cut-off message stops growing, the Inbox lists all 200 |

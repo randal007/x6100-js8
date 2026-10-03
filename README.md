@@ -123,8 +123,12 @@ older firmware would misread them.
 | ![Replying](docs/screenshots/04_reply.png) | ![Stations](docs/screenshots/02_stations.png) |
 
 **Waterfall** (top): the band, 200–3000 Hz. The **red band** is where you
-transmit (turn the **main tuning knob** to move it); the **green line**
-marks the selected station.
+transmit (turn the **main tuning knob** to move it; a fast turn moves 5 or
+10 Hz a click). While a heartbeat or a heartbeat ACK waits or goes out, it
+shows where that one goes: they pick a free spot at 500–999 Hz, as desktop
+JS8Call does, and the band comes back to your offset after. The **green
+band** marks the selected station, as wide as the speed it was last heard
+at (Slow 25 Hz, Normal 50, Fast 80, Turbo 160).
 
 **Decode marks** (Settings, off to start), as desktop JS8Call's *Show
 decode attempts*: a bracket `|—|` as wide as the signal wherever the
