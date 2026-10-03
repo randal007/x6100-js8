@@ -102,6 +102,18 @@ heard paused them; [docs/review](review/)).
   the Query list, which now also opens with no station selected (that item
   only). Harness `ONLY_QUERYCALL`, unit test "a QUERY CALL gets desktop's '?'".
 
+- [x] **The waterfall stutters while the MFK steps through the list**
+  (VE7NHW, after beta 4.1: only while scrolling stations, the green bar
+  following). lv_table redrew the whole list on every step and scrolled
+  with an animation (a full redraw per frame), and a new selection redrew
+  the whole list again for the green marks; on R1CBU 1.0 every redrawn
+  pixel is also rotated in software. **Done:** `table_key_pre_cb()` in
+  `src/dialog_js8.c` takes the list's arrow keys before lv_table and
+  redraws only the two rows, scrolling at once; the marks redraw only the
+  rows whose mark changes (`marks_invalidate()`). Harness ONLY_KNOB: 8 MFK
+  steps 944 → 293 kpx; partial and full redraws match. Display only, the
+  decoder is untouched.
+
 ## Carried over from beta 4
 
 On the air with beta 4 (VE7NHW, up to 2026-10-02): relays, messaging,

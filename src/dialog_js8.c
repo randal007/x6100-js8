@@ -723,6 +723,7 @@ static bool auto_selecting; /* follow() is moving the selection, not the user */
 static int64_t now_wall_ms(void);
 static bool    hb_paused(void);
 static void    show_selection(void);
+static void    table_invalidate_row(uint16_t row);
 
 /* Keep following new rows if the cursor is on the last one, or once the
  * knob has been left alone for a while after scrolling up to read. The
@@ -749,9 +750,11 @@ static void select_row(uint16_t r) {
         lv_obj_invalidate(table);
     } else {
         static uint32_t key = LV_KEY_DOWN;
+        uint16_t        was = t->row_act;
         t->row_act          = r - 1;
         t->col_act          = 0;
         lv_event_send(table, LV_EVENT_KEY, &key);
+        if (was != t->row_act) table_invalidate_row(was); /* the step redraws r-1 and r only */
     }
     auto_selecting = false;
 }
@@ -1364,6 +1367,68 @@ static bool row_is_selected_station(int16_t h) {
     return strncasecmp(m->text, sel_call, n) == 0 && (m->text[n] == ' ' || m->text[n] == '\0');
 }
 
+/* Which rows have the green bar on the screen now (as last drawn), so a new
+ * selection redraws only the rows whose mark changes: on R1CBU 1.0 every
+ * redrawn pixel is rotated too, and the MFK steps through stations
+ * quickly (the user saw the waterfall stutter while scrolling). */
+static bool row_mark_drawn[MAX_ROWS + 1];
+
+/* A row's place on the screen, as lv_table's get_cell_area() has it. */
+static void table_row_area(uint16_t row, lv_area_t *a) {
+    lv_table_t *t = (lv_table_t *)table;
+    lv_coord_t  y = 0;
+    for (uint16_t r = 0; r < row && r < t->row_cnt; r++) y += t->row_h[r];
+    y += lv_obj_get_style_pad_top(table, 0) - lv_obj_get_scroll_y(table);
+    a->x1 = table->coords.x1;
+    a->x2 = table->coords.x2;
+    a->y1 = table->coords.y1 + y;
+    a->y2 = a->y1 + (row < t->row_cnt ? t->row_h[row] : 0) - 1;
+}
+
+static void table_invalidate_row(uint16_t row) {
+    if (!table || row >= ((lv_table_t *)table)->row_cnt || !lv_obj_is_visible(table)) return;
+    lv_area_t a;
+    table_row_area(row, &a);
+    if (_lv_area_intersect(&a, &a, &table->coords)) _lv_inv_area(lv_obj_get_disp(table), &a);
+}
+
+/* The rows whose green bar comes or goes with the selection now. */
+static void marks_invalidate(void) {
+    if (!table) return;
+    for (unsigned r = 0; r < rows && r <= MAX_ROWS; r++)
+        if (row_is_selected_station(row_hist[r]) != row_mark_drawn[r]) table_invalidate_row((uint16_t)r);
+}
+
+/* The MFK (and arrow keys) on the list, before lv_table's own handler: the
+ * same step, but only the old and new rows redrawn, and a scroll at once
+ * when the row leaves the view. lv_table redraws the whole list on every
+ * step and scrolls with an animation, which redraws all of it for each
+ * frame of the scroll. */
+static void table_key_pre_cb(lv_event_t *e) {
+    uint32_t key = *((uint32_t *)lv_event_get_param(e));
+    if (key != LV_KEY_LEFT && key != LV_KEY_RIGHT && key != LV_KEY_UP && key != LV_KEY_DOWN) return;
+    lv_table_t *t = (lv_table_t *)table;
+    if (!t->row_cnt || t->row_act == LV_TABLE_CELL_NONE) return; /* lv_table's first step: as it is */
+    lv_event_stop_processing(e);
+    user_touch(); /* key_cb's part for these keys */
+    int32_t row = t->row_act >= t->row_cnt ? 0 : t->row_act;
+    int32_t old = t->row_act;
+    if (key == LV_KEY_LEFT || key == LV_KEY_UP) row--;
+    else row++;
+    if (row < 0) row = 0;
+    if (row >= (int32_t)t->row_cnt) row = t->row_cnt - 1;
+    if (row == old) return;
+    t->col_act = 0;
+    t->row_act = (uint16_t)row;
+    table_invalidate_row((uint16_t)old);
+    table_invalidate_row((uint16_t)row);
+    lv_area_t a;
+    table_row_area((uint16_t)row, &a);
+    if (a.y1 < table->coords.y1) lv_obj_scroll_by_bounded(table, 0, table->coords.y1 - a.y1, LV_ANIM_OFF);
+    else if (a.y2 > table->coords.y2) lv_obj_scroll_by_bounded(table, 0, table->coords.y2 - a.y2, LV_ANIM_OFF);
+    lv_event_send(table, LV_EVENT_VALUE_CHANGED, NULL);
+}
+
 /* A green bar marks the selected station's rows; station view: draw the
  * fields at fixed x positions within the cell. */
 static void table_draw_end_cb(lv_event_t *e) {
@@ -1377,6 +1442,7 @@ static void table_draw_end_cb(lv_event_t *e) {
         cmd_draw.on = false;
         draw_recoloured(obj, dsc, row);
     }
+    if (row <= MAX_ROWS) row_mark_drawn[row] = h >= 0 && row_is_selected_station(h);
     if (h < 0) return;
 
     if (row_is_selected_station(h)) {
@@ -1447,7 +1513,7 @@ static void cursor_place(void) {
 static void show_selection(void) {
     if (sel_call[0]) map_qrz_clear(sel_call); /* you've seen who called */
     cursor_place();
-    lv_obj_invalidate(table);
+    marks_invalidate();
     update_tx_bar();
     if (view_map) map_update(false);
 }
@@ -1532,7 +1598,7 @@ static void table_select_cb(lv_event_t *e) {
     float f = auto_selecting ? -1 : callless_cursor_freq(); /* following new rows: back to the station */
     if (f != cursor_freq) {
         cursor_freq = f;
-        lv_obj_invalidate(table);
+        marks_invalidate();
     }
     if (auto_selecting) return;
     cursor_user_ms = now_wall_ms();
@@ -2953,6 +3019,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_add_event_cb(table, table_press_cb, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(table, table_select_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(table, table_hold_cb, LV_EVENT_LONG_PRESSED_REPEAT, NULL);
+    lv_obj_add_event_cb(table, table_key_pre_cb, LV_EVENT_KEY | LV_EVENT_PREPROCESS, NULL);
     lv_obj_add_event_cb(table, key_cb, LV_EVENT_KEY, NULL);
     lv_obj_add_event_cb(table, table_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
     lv_obj_add_event_cb(table, table_draw_end_cb, LV_EVENT_DRAW_PART_END, NULL);

@@ -911,6 +911,20 @@ int main() {
             pump(200);
         }
         printf("[knob] 5 selections: %ld kpx to the screen\n", (load_flush_px - px0) / 1000);
+        // The MFK itself, a click at a time through the stations: each step
+        // redraws the two rows it moves between (and the rows whose mark
+        // changes), not the whole list.
+        ui_indevs_init(); // the MFK
+        pump(100);
+        px0 = load_flush_px;
+        for (int i = 0; i < 8; i++) {
+            ui_mfk_turn(i < 4 ? -1 : 1);
+            pump(100);
+            char sel[32] = "";
+            dialog_js8_selected_call(sel, sizeof(sel));
+            printf("[knob] MFK step %d: %s, %ld kpx so far\n", i, sel, (load_flush_px - px0) / 1000);
+        }
+        printf("[knob] 8 MFK steps: %ld kpx to the screen\n", (load_flush_px - px0) / 1000);
         screenshot("c3_select_partial.ppm");
         lv_obj_invalidate(lv_scr_act());
         pump(300);

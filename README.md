@@ -794,9 +794,9 @@ are, and its new settings start at their defaults.
 - **WeFax, NavTex and the broadcast channel list are not in beta 4.1:**
   they came from the Murus team's (1KO125) fork, which is still on the
   older firmware. They come back once their fork is on R1CBU 1.0.
-- **A very faint stutter in JS8's waterfall** now and then (R1CBU 1.0 shows
-  frames at the panel's refresh); being measured, a fix is to come. It
-  doesn't affect decoding.
+- **A very faint stutter in JS8's waterfall** while the MFK steps through
+  the list (each step redrew the whole list, with an animated scroll);
+  fixed for beta 5. It doesn't affect decoding.
 - **Keep the radio's clock right:** it has no network time and gains a
   few seconds a week; at 2–3 s off, decodes go missing. Set it in the
   radio's Settings (General: *Hour, Min, Sec*) or use JS8's **Time Sync**
@@ -839,10 +839,12 @@ Beta 5 is being planned; the full list with notes is in
   SMS; no double ACKs on Winlink (done after 4.1: to be checked on the air)
 - [ ] **Saved messages and macros**, as desktop JS8Call has
 - [ ] **GPS** time and location from a USB GPS
-- [ ] The green receive bar as wide as the station's speed; ALC for
-  under 1 W into an amplifier
+- [x] The green receive bar as wide as the station's speed
+- [ ] ALC for under 1 W into an amplifier
 - [x] Fixes: Can they reach...? adds the `?` for you, and an @ALLCALL
   version (*Can anyone reach...?*)
+- [x] The waterfall's stutter while the MFK steps through the list: each
+  step now redraws only the rows it moves between (done after 4.1)
 - [ ] Still from beta 4: the map's home colour Setting; POTA and SOTA
   spots tried on the air
 - [ ] Later, after the features: performance (spreading the work over the
