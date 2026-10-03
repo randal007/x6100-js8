@@ -117,6 +117,9 @@ extern "C" js8_rx_t *js8_rx_create(int input_rate, int submodes, const char *my_
             rx->cb.on_audio(samples, (unsigned)n, rx->cb.ctx);
         };
     }
+    if (rx->cb.on_report) {
+        callbacks.on_report = [rx](const std::string &line) { rx->cb.on_report(line.c_str(), rx->cb.ctx); };
+    }
 
     try {
         rx->receiver = std::make_unique<Receiver>(config, std::move(callbacks));

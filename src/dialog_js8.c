@@ -9,6 +9,10 @@
  *  JS8's own queues (ev_push, the waterfall ring), not scheduler_put().
  */
 
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE /* pthread_setname_np (the radio build defines it for every file) */
+#endif
+
 #include "dialog_js8.h"
 
 #include "js8/js8_rx.h"
@@ -41,7 +45,7 @@
 #include "util.h"
 #include "waterfall.h"
 #include "widgets/lv_finder.h"
-#include "widgets/lv_waterfall.h"
+#include "js8_wf.h"
 
 #include <liquid/liquid.h>
 
@@ -355,7 +359,7 @@ static bool           view_stations;   /* list shows stations, not messages */
  * stays underneath (view_stations too), so the MFK selects as there. */
 static bool           view_map;
 static bool           map_heard_me_only; /* Show in the map: All heard / Heard me */
-static lv_obj_t      *wf_box;           /* the waterfall's opaque box (hidden under the map) */
+static lv_obj_t      *wf_box;           /* the waterfall: a hole down to the lower plane (hidden under the map) */
 static lv_obj_t      *map_box, *map_canvas, *map_status; /* made when the map first opens */
 static lv_obj_t      *map_qrz_label;    /* "QRZ 2  W7XYZ K9DEF" under the status line */
 static lv_obj_t      *map_stats_label;  /* "14 heard  5 hear you  DX ..." under the status line */
@@ -504,7 +508,6 @@ static const struct {
 };
 #define POPUPS (sizeof(popups) / sizeof(popups[0]))
 
-static lv_obj_t *waterfall;
 static lv_obj_t *finder;
 static lv_obj_t *table;
 static lv_obj_t *status;
@@ -596,6 +599,17 @@ static lv_timer_t *wf_timer;
 static int64_t    wf_due_us;   /* when the next row should be drawn (monotonic) */
 static float    wf_floor_db;   /* smoothed noise floor (receiver thread) */
 static bool     wf_floor_set;
+static unsigned wf_dropped;    /* rows the GUI fell too far behind to draw (wf_lock) */
+/* What makes the main screen's spectrum and waterfall redraw their part of
+ * the lower plane, over ours (js8_wf_repaint_soon). */
+static Observer *wf_watch[4];
+
+/* Health in the app log, once a minute and only if it happened: the GUI
+ * thread stalling (the waterfall then lags), rows dropped. */
+#define GUI_STALL_US  200000
+#define HEALTH_US     60000000
+static int64_t  gui_last_us, health_start_us, gui_stall_max_us;
+static unsigned gui_stalls;
 
 /* ---- Buttons ---------------------------------------------------------- */
 
@@ -1606,6 +1620,58 @@ static void table_select_cb(lv_event_t *e) {
     select_at_cursor(false);
 }
 
+/* ---- Log ----------------------------------------------------------------
+ *
+ * Health lines to the app's log (/tmp/x6100_log.txt on the radio), stamped
+ * with UTC so they line up with x6100-cpulog and the console. stderr: not
+ * buffered, so a line is there as it happens. Any thread. */
+static void js8_log(const char *fmt, ...) {
+    char            text[200];
+    va_list         ap;
+    struct timespec ts;
+    struct tm       tm;
+    va_start(ap, fmt);
+    vsnprintf(text, sizeof(text), fmt, ap);
+    va_end(ap);
+    clock_gettime(CLOCK_REALTIME, &ts);
+    gmtime_r(&ts.tv_sec, &tm);
+    fprintf(stderr, "JS8 %02d:%02d:%02d.%03ldZ %s\n", tm.tm_hour, tm.tm_min, tm.tm_sec, ts.tv_nsec / 1000000, text);
+}
+
+/* The receiver's and decoder's health lines (receiver.cpp on_report). */
+static void on_report(const char *line, void *ctx) {
+    (void)ctx;
+    js8_log("%s", line);
+}
+
+static void wf_watch_cb(Subject *subj, void *user_data) {
+    (void)subj;
+    (void)user_data;
+    js8_wf_repaint_soon();
+}
+
+/* GUI thread, every tick: a long gap since the last one is a stall. */
+static void health_tick(void) {
+    int64_t now = now_mono_ms() * 1000;
+    if (gui_last_us && now - gui_last_us > GUI_STALL_US) {
+        gui_stalls++;
+        if (now - gui_last_us > gui_stall_max_us) gui_stall_max_us = now - gui_last_us;
+    }
+    gui_last_us = now;
+    if (!health_start_us) health_start_us = now;
+    if (now - health_start_us < HEALTH_US) return;
+    pthread_mutex_lock(&wf_lock);
+    unsigned dropped = wf_dropped;
+    wf_dropped       = 0;
+    pthread_mutex_unlock(&wf_lock);
+    if (gui_stalls || dropped)
+        js8_log("GUI: %u stalls over %d ms (longest %.1f s), %u waterfall rows dropped", gui_stalls,
+                GUI_STALL_US / 1000, gui_stall_max_us / 1e6, dropped);
+    gui_stalls       = 0;
+    gui_stall_max_us = 0;
+    health_start_us  = now;
+}
+
 /* ---- From the worker threads to the GUI -------------------------------
  *
  * Messages, the end of each decode cycle and the transmitter's progress
@@ -1802,7 +1868,7 @@ static void wf_queue_clear(void) {
 
 typedef struct {
     float    freq_hz;
-    uint32_t row; /* lv_waterfall_get_rows() when drawn */
+    uint32_t row; /* js8_wf_rows() when drawn */
     uint8_t  submode;
     uint8_t  level;
     bool     used;
@@ -1845,9 +1911,9 @@ static void mark_draw(float freq_hz, int bw_hz, int y, uint8_t level) {
     lv_coord_t x2   = (lv_coord_t)((freq_hz + bw_hz - filter_low) * WIDTH / span);
     lv_coord_t half = MARK_LINE / 2, mid = y + MARK_ROWS / 2;
     lv_color_t c    = lv_color_hex(mark_colors[level]);
-    lv_waterfall_fill_rect(waterfall, x1 - half, y, x1 + half, y + MARK_ROWS - 1, c);
-    lv_waterfall_fill_rect(waterfall, x2 - half, y, x2 + half, y + MARK_ROWS - 1, c);
-    lv_waterfall_fill_rect(waterfall, x1, mid - half, x2, mid + half, c);
+    js8_wf_fill_rect(x1 - half, y, x1 + half, y + MARK_ROWS - 1, c);
+    js8_wf_fill_rect(x2 - half, y, x2 + half, y + MARK_ROWS - 1, c);
+    js8_wf_fill_rect(x1, mid - half, x2, mid + half, c);
 }
 
 /* A new bracket, unless it's the same signal as one drawn moments ago
@@ -1855,7 +1921,7 @@ static void mark_draw(float freq_hz, int bw_hz, int y, uint8_t level) {
  * where it has scrolled to, if this is stronger or decoded. */
 static void mark_show(const js8_rx_mark_t *m) {
     int      bw  = js8_speed_bandwidth_hz(js8_speed_from_submode(m->submode));
-    uint32_t now = lv_waterfall_get_rows(waterfall);
+    uint32_t now = js8_wf_rows();
     for (unsigned i = 0; i < MARK_MEMORY; i++) {
         mark_drawn_t *d = &marks_drawn[i];
         if (!d->used || d->submode != m->submode) continue;
@@ -1880,7 +1946,7 @@ static void marks_tick(void) {
     memcpy(batch, mark_queue, n * sizeof(batch[0]));
     mark_count = 0;
     pthread_mutex_unlock(&mark_lock);
-    if (!param_i_get(cfg.js8.decode_marks()) || !waterfall) return;
+    if (!param_i_get(cfg.js8.decode_marks()) || !wf_box) return;
     for (unsigned i = 0; i < n; i++) mark_show(&batch[i]);
 }
 
@@ -1893,11 +1959,14 @@ static int64_t now_mono_ms(void) {
 /* At most one row per tick, each when it's due by the clock. Rows are made
  * per WF_ROW_SAMPLES (800 at 12 kHz) and the audio clock isn't the CPU's, so a
  * queue that builds up is drained by drawing slightly faster, never by a
- * jump. */
+ * jump. A row goes straight onto the display's lower plane (js8_wf.c), and
+ * reaches the screen at the main loop's page flip right after this timer. */
 static void wf_timer_cb(lv_timer_t *t) {
     (void)t;
+    health_tick();
     marks_tick();
     ev_tick();
+    js8_wf_tick(); /* marks drawn, or a repaint due */
     pthread_mutex_lock(&wf_lock);
     unsigned waiting = wf_q_count;
     pthread_mutex_unlock(&wf_lock);
@@ -1918,12 +1987,9 @@ static void wf_timer_cb(lv_timer_t *t) {
     wf_q_head = (wf_q_head + 1) % WF_QUEUE;
     wf_q_count--;
     pthread_mutex_unlock(&wf_lock);
-    lv_waterfall_add_data(waterfall, row, WIDTH);
+    js8_wf_add_row(row, WIDTH);
     wf_due_us += period;
-    /* On the screen now, not at LVGL's next refresh: that comes every
-     * 33 ms by a tick that runs slow, so rows landed 66-134 ms apart
-     * instead of evenly. */
-    lv_refr_now(NULL);
+    js8_wf_tick();
 }
 
 /* The k-th smallest of v[0..n-1], reordering v: quickselect (Hoare's
@@ -1984,6 +2050,7 @@ static void wf_emit_row(void) {
     if (wf_q_count == WF_QUEUE) {
         wf_q_head = (wf_q_head + 1) % WF_QUEUE;
         wf_q_count--;
+        wf_dropped++;
     }
     memcpy(wf_rows[(wf_q_head + wf_q_count) % WF_QUEUE], wf_row, sizeof(wf_row));
     wf_q_count++;
@@ -2042,6 +2109,7 @@ static void rx_start(void) {
         .on_cycle_done = on_cycle_done,
         .on_audio      = on_audio,
         .on_mark       = on_mark,
+        .on_report     = on_report,
     };
     marks_reset();
     rx = js8_rx_create(SAMPLE_RATE, rx_speed_mask(), my_call(), &cb);
@@ -2294,8 +2362,8 @@ static void tx_bar_set(uint32_t bg, bool recolor, const char *text) {
     tx_bar_shown.recolor = recolor;
     snprintf(tx_bar_shown.text, sizeof(tx_bar_shown.text), "%s", text);
     if (fresh) { /* the frame too: its colour never changes */
-        lv_obj_set_style_border_color(waterfall, lv_color_hex(0xff2020), 0);
-        lv_obj_set_style_border_width(waterfall, 0, 0);
+        lv_obj_set_style_border_color(wf_box, lv_color_hex(0xff2020), 0);
+        lv_obj_set_style_border_width(wf_box, 0, 0);
         tx_bar_shown.frame = false;
         tx_bar_shown.fresh = false;
     }
@@ -2304,7 +2372,7 @@ static void tx_bar_set(uint32_t bg, bool recolor, const char *text) {
 /* A red frame round the waterfall while keyed. */
 static void wf_frame_set(bool on) {
     if (tx_bar_shown.frame == on) return;
-    lv_obj_set_style_border_width(waterfall, on ? 3 : 0, 0);
+    lv_obj_set_style_border_width(wf_box, on ? 3 : 0, 0);
     tx_bar_shown.frame = on;
 }
 
@@ -2821,7 +2889,7 @@ static void retuned(void) {
     js8_rx_clear(rx);
     bool ended = partials_end();
     stations   = stations_for_band(); /* that band's list, as we left it */
-    lv_waterfall_clear_data(waterfall);
+    js8_wf_clear();
     wf_queue_clear();
     marks_reset();
     clear_selection();
@@ -2924,34 +2992,30 @@ static void construct_cb(lv_obj_t *parent) {
     filter_low  = cparam_i_get(cfg.filter.low());
     filter_high = cparam_i_get(cfg.filter.high());
 
-    /* Waterfall, in an opaque black box. LVGL 8.3's lv_img never reports
-     * that it covers what's behind it (its cover check reads the event
-     * parameter as a clip area), so every row redrew the dialog's
-     * background image under the waterfall: 1 MB read from file line by
-     * line and alpha-blended, most of the cost of a row. A plain opaque
-     * object does cover, and drawing starts there, as for the main
-     * screen's waterfall. */
+    /* Waterfall: drawn on the display's lower plane (js8_wf.c), seen
+     * through a hole in this one, where LVGL draws the app. The list, TX
+     * bar and finder are over it as before, but a new row no longer makes
+     * LVGL redraw them: with the see-through list on top, each row used to
+     * redraw all of its text, two thirds of a row's cost. */
     wf_box = lv_obj_create(dialog.obj);
     lv_obj_remove_style_all(wf_box);
-    lv_obj_set_style_bg_color(wf_box, lv_color_black(), 0);
-    lv_obj_set_style_bg_opa(wf_box, LV_OPA_COVER, 0);
     lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(wf_box, WIDTH, WF_HEIGHT);
     lv_obj_set_pos(wf_box, INSET, INSET);
-
-    waterfall = lv_waterfall_create(wf_box);
-    lv_obj_clear_flag(waterfall, LV_OBJ_FLAG_SCROLLABLE);
-    lv_waterfall_set_palette(waterfall, (lv_color_t *)style.wf_palette, 256);
-    lv_waterfall_set_size(waterfall, WIDTH, WF_HEIGHT);
-    lv_waterfall_set_min(waterfall, WF_MIN_DB);
-    lv_waterfall_set_max(waterfall, WF_MAX_DB);
-    wf_due_us = 0;
+    if (!js8_wf_create(wf_box, (const lv_color_t *)style.wf_palette, WF_MIN_DB, WF_MAX_DB))
+        msg_schedule_text_fmt("JS8: no memory for the waterfall");
+    wf_watch[0] = subject_subscribe((Subject *)cfg.cur.fg_freq(), wf_watch_cb, NULL);
+    wf_watch[1] = subject_subscribe((Subject *)cfg.band.if_shift(), wf_watch_cb, NULL);
+    wf_watch[2] = subject_subscribe((Subject *)cfg.mode.zoom(), wf_watch_cb, NULL);
+    wf_watch[3] = subject_subscribe((Subject *)cfg.cur.mode_lo_offset(), wf_watch_cb, NULL);
+    wf_due_us   = 0;
+    gui_last_us = health_start_us = 0; /* no stall counted across a close */
+    gui_stalls  = 0;
     wf_timer  = lv_timer_create(wf_timer_cb, WF_TICK_MS, NULL);
-    lv_obj_set_pos(waterfall, 0, 0);
 
     /* Finder marks the offset of the selected message. */
 
-    finder = lv_finder_create(waterfall);
+    finder = lv_finder_create(wf_box);
     lv_finder_set_range(finder, filter_low, filter_high);
     /* A stored offset outside the usable range (an old or damaged setting)
      * would make every send fail; start from 1500 Hz instead. */
@@ -2993,7 +3057,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_border_width(cursor_box, 1, 0);
     lv_obj_add_flag(cursor_box, LV_OBJ_FLAG_HIDDEN);
 
-    status = lv_label_create(waterfall);
+    status = lv_label_create(wf_box);
     lv_obj_set_style_text_font(status, &sony_18, 0);
     lv_obj_set_style_text_color(status, lv_color_white(), 0);
     lv_obj_set_style_bg_color(status, lv_color_black(), 0);
@@ -3141,6 +3205,11 @@ static void destruct_cb(void) {
     gps_sub = NULL;
     rx_stop();
     wf_queue_clear();
+    for (unsigned i = 0; i < sizeof(wf_watch) / sizeof(wf_watch[0]); i++) {
+        if (wf_watch[i]) param_unsubscribe(wf_watch[i]);
+        wf_watch[i] = NULL;
+    }
+    js8_wf_destroy(); /* its part of the lower plane black for the main screen */
     partials_end(); /* shown as ended when JS8 opens again */
 
     waterfall_set_enabled(true);
@@ -3164,7 +3233,7 @@ static void destruct_cb(void) {
 
     /* LVGL objects are children of dialog.obj, deleted by dialog_destruct()
      * right after this returns. */
-    waterfall = finder = table = status = tx_bar = cursor_box = NULL;
+    finder = table = status = tx_bar = cursor_box = NULL;
     wf_box    = NULL;
     map_free();
 }
@@ -4424,7 +4493,7 @@ static void clear_cb(button_data_t *btn) {
     info_head = info_count = 0;
     js8_stations_clear(stations);
     js8_rx_clear(rx);
-    lv_waterfall_clear_data(waterfall);
+    js8_wf_clear();
     wf_queue_clear();
     marks_reset();
     clear_selection();
@@ -5030,6 +5099,15 @@ static void query_cb(button_data_t *btn) {
     lv_group_set_editing(keyboard_group, false);
     lv_group_focus_obj(first);
     speed_warn();
+}
+
+/* For tools/js8_ui_harness: the waterfall's place on the screen, and its
+ * palette (WF_MIN_DB..WF_MAX_DB over 256 colours). */
+bool dialog_js8_wf_area(lv_area_t *a, const lv_color_t **palette) {
+    if (!wf_box) return false;
+    lv_obj_get_coords(wf_box, a);
+    *palette = (const lv_color_t *)style.wf_palette;
+    return true;
 }
 
 /* For tools/js8_ui_harness: the red band's offset, and the green band's
@@ -7218,6 +7296,7 @@ static void beep_play(const int16_t *buf, size_t n) {
 
 static void *beep_thread(void *arg) {
     (void)arg;
+    pthread_setname_np(pthread_self(), "js8-beep");
     pthread_mutex_lock(&speaker_lock);
     if (atomic_load(&keyed)) goto out;
     /* The receiver's level just before, for the log. */

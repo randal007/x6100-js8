@@ -17,6 +17,7 @@
 #include "js8core/protocol/varicode.hpp"
 
 #include <algorithm>
+#include <pthread.h>
 #include <cctype>
 #include <chrono>
 #include <cmath>
@@ -239,6 +240,9 @@ void Transmitter::set_status(const Status &s) {
 }
 
 void Transmitter::run(TxPlan plan, double offset_hz, double synth_hz) {
+#if defined(__linux__)
+    pthread_setname_np(pthread_self(), "js8-tx"); // per-thread CPU tools tell it apart
+#endif
     const int count = (int)plan.frames.size();
     Status    st;
     st.frames    = count;

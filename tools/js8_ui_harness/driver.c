@@ -81,6 +81,22 @@ void ui_init(void) {
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
 
+/* The main screen's spectrum and waterfall redraw the lower plane when the
+ * frequency changes (main.cpp's pump() stands in for that). */
+static bool main_dirty;
+static void main_dirty_cb(Subject *subj, void *user_data) {
+    (void)subj;
+    (void)user_data;
+    main_dirty = true;
+}
+void ui_main_redraw_watch(void) { subject_subscribe((Subject *)cfg.cur.fg_freq(), main_dirty_cb, NULL); }
+bool ui_main_redraw_due(void) {
+    bool d     = main_dirty;
+    main_dirty = false;
+    return d;
+}
+void ui_retune_by(int hz) { cparam_i_set(cfg.cur.fg_freq(), cparam_i_get(cfg.cur.fg_freq()) + hz); }
+
 /* gpsd's reports, once a second as the radio's gps.c announces them, while
  * HARNESS_GPS gives a position (stubs.c's gps_get_snapshot()). */
 void ui_gps_tick(void) {

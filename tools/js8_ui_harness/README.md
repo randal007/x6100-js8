@@ -141,6 +141,17 @@ see.
 
 ## Waterfall measurements
 
+JS8's waterfall is drawn on the display's lower plane (`src/js8_wf.c`), as
+R1CBU 1.0 draws its main-screen waterfall; LVGL draws the app on a
+see-through plane over it. The harness does the same: its display is
+see-through (`screen_transp`), `stubs.c` stands in for the lower plane
+(`drm_primary_begin_direct()` / `drm_primary_end_direct()`, a portrait
+480 x 800 buffer), and screenshots blend the two as the display hardware
+does (`screen_px()` in `main.cpp`). `HARNESS_OPAQUE=1` makes the
+harness's display opaque again, for timings comparable with older logs
+(the waterfall then doesn't show): a see-through display costs LVGL a
+little more, on the radio too.
+
 Build without sanitizers for timings
 (`cmake -S . -B build-perf -DCMAKE_BUILD_TYPE=Release -DHARNESS_SANITIZE=OFF`).
 
@@ -151,22 +162,33 @@ Build without sanitizers for timings
   work per second, pixels sent to the screen and flushes. `LOAD_S` sets
   the seconds per case (10). Package 4 measured idle 7.2 → 0.6 ms/s and
   1031 → 10 kpx/s (the TX bar restyled 4 times a second), rows with a full
-  list 26.7 → 19 ms/s.
+  list 26.7 → 19 ms/s. The lower plane (2026-10-03): rows with a full list
+  19.6 → 3.8 ms/s, 3998 → 17 kpx/s from LVGL (LVGL no longer redraws the
+  see-through list for each row).
 - `ONLY_STALL=1`: feeds six stations (~50 s) without running the GUI
   thread, as if it were stuck, then checks every message is in the list.
   Before package 4 the shared scheduler queue (64 items) overflowed 852
   times and all six were lost; JS8 now has its own queues.
 
 - `ONLY_WFPERF=1`: fills the list, then adds waterfall rows as fast as they
-  render, with a full-screen draw buffer and the radio's flush path
-  (queue copy, 90° rotation, framebuffer copy), and prints the cost per row
-  split into add / render / flush, with parts of the screen hidden to show
-  their share. `WFPERF_PROFILE=full|bare` runs one case for 4000 rows, for
-  a gprof build (`-pg`).
+  go through the app's path: `js8_wf_add_row()`, the put on the lower plane
+  (`js8_wf_tick()`), then whatever LVGL redraws for it, flushed as the radio
+  does (queue copy, 90° rotation, framebuffer copy). Prints the cost per
+  row (add / plane put / LVGL render / flush, LVGL pixels): 0.05 ms and no
+  LVGL pixels, where drawing the waterfall through LVGL took 1.08 ms, two
+  thirds of it the list's text. `WFPERF_PROFILE=name` runs it for 4000
+  rows, for a gprof build (`-pg`).
 - `ONLY_WFTIME=1`: live audio; records when each new row reaches the screen
-  and prints the spread of the intervals (how even the scroll is).
+  (a put on the lower plane whose newest row changed) and prints the spread
+  of the intervals (how even the scroll is).
   `WFTIME_GAPS=1` also lists every gap over 200 ms. A ~1 s gap is the
   alert beep's waterfall pause (by design): it happens when `js8_texts.txt`
   in the build directory has `ALERTS=... @POTA` left by other scenarios.
-- `ONLY_WFRING=1`: the waterfall widget's ring buffer against a plain model,
-  pixel by pixel as drawn (run it in the ASan build).
+- `ONLY_WFRING=1`: the `lv_waterfall` widget's ring buffer (the FT8 app's)
+  against a plain model, pixel by pixel as drawn; then JS8's own waterfall
+  (`js8_wf.c`) the same way where the screen shows it through the hole:
+  rows past the ring's height, a decode mark scrolling down, a clear, and
+  the main screen redrawing the plane after a retune (`js8_wf_repaint_soon()`
+  must put it back); and the plane mapping (screen x, y = plane y, 799 - x)
+  against LVGL's own `LV_DISP_ROT_90` on a second display set up like the
+  radio's (run it in the ASan build).

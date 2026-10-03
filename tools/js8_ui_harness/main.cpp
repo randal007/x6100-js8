@@ -6,6 +6,7 @@
 #include "lvgl/lvgl.h"
 #include <sqlite3.h>
 #include "widgets/lv_waterfall.h"
+#include "js8_wf.h"
 #include "widgets/lv_finder.h"
 extern "C" {
 void dialog_destruct(void);
@@ -51,6 +52,10 @@ int  ui_kb_select_ok(void);
 void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 int  dialog_js8_finder_hz(void);
+void ui_main_redraw_watch(void);
+bool ui_main_redraw_due(void);
+void ui_retune_by(int hz);
+bool dialog_js8_wf_area(lv_area_t *a, const lv_color_t **palette);
 bool dialog_js8_cursor_band(int *x, int *w);
 unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
 bool     dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_paths, int *qrz);
@@ -139,10 +144,30 @@ static double now_ms_f() {
     return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-// ONLY_WFTIME: when each waterfall row reaches the screen (a flush that
-// includes the waterfall's top line).
+// The display's lower plane (stubs.c): JS8's waterfall, under the
+// see-through plane LVGL draws on (fb here).
+extern "C" {
+extern uint32_t      harness_plane[480 * 800];
+extern unsigned long harness_plane_puts, harness_plane_px;
+extern void        (*harness_plane_cb)(const lv_area_t *a);
+}
+
+// What the screen shows at (x, y): LVGL's plane over the lower one, as the
+// display hardware blends them.
+static uint32_t screen_px(int x, int y);
+
+// ONLY_WFTIME: when each waterfall row reaches the screen (a put on the
+// lower plane whose newest row changed).
 static bool                wftime_mode;
 static std::vector<double> wftime_stamps;
+static void                wftime_plane_cb(const lv_area_t *a) {
+    if (!wftime_mode) return;
+    static uint64_t last_sig;
+    uint64_t        sig = 1469598103934665603ull;
+    for (int y = a->y1; y <= a->y2; y += 23) sig = (sig ^ harness_plane[y * 480 + a->x1]) * 1099511628211ull;
+    if (sig != last_sig) wftime_stamps.push_back(now_ms_f());
+    last_sig = sig;
+}
 
 // ONLY_LOAD: pixels and flushes sent to the screen.
 static long load_flush_px;
@@ -152,14 +177,6 @@ static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *a, lv_color_t *px) {
     uint32_t w = a->x2 - a->x1 + 1, h = a->y2 - a->y1 + 1;
     load_flush_px += (long)w * h;
     load_flushes++;
-    if (wftime_mode && a->x1 <= 30 && a->x2 >= 770 && a->y1 <= 79 && a->y2 >= 79) {
-        /* a new row on top: the top line's pixels changed */
-        static uint64_t last_sig;
-        uint64_t        sig = 1469598103934665603ull;
-        for (int x = 30; x < 770; x += 23) sig = (sig ^ px[(79 - a->y1) * w + (x - a->x1)].full) * 1099511628211ull;
-        if (sig != last_sig) wftime_stamps.push_back(now_ms_f());
-        last_sig = sig;
-    }
     if (perf_mode) {
         double t0 = now_ms_f();
         memcpy(perf_queue.data(), px, w * h * 4);
@@ -174,20 +191,39 @@ static void flush_cb(lv_disp_drv_t *drv, const lv_area_t *a, lv_color_t *px) {
     lv_disp_flush_ready(drv);
 }
 
+static uint32_t screen_px(int x, int y) {
+    uint32_t top = fb[y * W + x], a = top >> 24;
+    if (a == 255) return top;
+    uint32_t bot = harness_plane[(799 - x) * 480 + y], out = 0;
+    for (int sh = 0; sh < 24; sh += 8) {
+        uint32_t c = (((top >> sh) & 255) * a + ((bot >> sh) & 255) * (255 - a) + 127) / 255;
+        out |= c << sh;
+    }
+    return out | 0xff000000u;
+}
+
 static void screenshot(const char *path) {
     lv_obj_invalidate(lv_scr_act());
     lv_refr_now(NULL);
     FILE *f = fopen(path, "wb");
     fprintf(f, "P6\n%d %d\n255\n", W, H);
-    for (auto p : fb) {
-        unsigned char rgb[3] = {(unsigned char)(p >> 16), (unsigned char)(p >> 8), (unsigned char)p};
-        fwrite(rgb, 1, 3, f);
-    }
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++) {
+            uint32_t      p      = screen_px(x, y);
+            unsigned char rgb[3] = {(unsigned char)(p >> 16), (unsigned char)(p >> 8), (unsigned char)p};
+            fwrite(rgb, 1, 3, f);
+        }
     fclose(f);
     printf("[shot] %s\n", path);
 }
 
 // Let LVGL and the scheduler run for `ms` of wall time.
+// main_redraw (ONLY_WFRING): the main screen's spectrum and waterfall
+// (spectrum_process() / waterfall_process() after lv_timer_handler() in the
+// radio's loop) redraw the lower plane in the pass the frequency changes,
+// over JS8's waterfall: here the whole plane, magenta.
+static bool main_redraw;
+
 static void pump(int ms) {
     auto end = std::chrono::steady_clock::now() + std::chrono::milliseconds(ms);
     while (std::chrono::steady_clock::now() < end) {
@@ -196,6 +232,8 @@ static void pump(int ms) {
         scheduler_work();
         ui_gps_tick();
         lv_timer_handler();
+        if (main_redraw && ui_main_redraw_due())
+            for (auto &p : harness_plane) p = 0xffff00ffu;
         std::this_thread::sleep_for(std::chrono::milliseconds(5));
     }
 }
@@ -343,53 +381,39 @@ struct Stat {
     }
 };
 
-// One waterfall row after another as fast as possible, each rendered and
-// flushed like the radio does; `strip` > 0 invalidates only that many top
-// rows instead of the widget's whole-object invalidate.
-static void wf_bench(const char *name, int frames, int strip = 0) {
-    lv_obj_t *wf = find_obj(lv_scr_act(), &lv_waterfall_class);
-    if (!wf) return;
-    std::vector<float>                    row(776);
+// One waterfall row after another as fast as possible, through the dialog's
+// own path: js8_wf_add_row(), the put on the lower plane (js8_wf_tick()),
+// then whatever LVGL redraws for it, flushed as the radio does. (The radio
+// then copies the put into its frame buffers at the page flip, twice.)
+static void wf_bench(const char *name, int frames) {
+    std::vector<float>                    row(788);
     std::mt19937                          rng(1);
     std::uniform_real_distribution<float> u(0, 30);
-    Stat                                  add, render, flush, px;
+    Stat                                  add, put, render, flush, lvpx;
     lv_refr_now(NULL);
+    unsigned long puts0 = harness_plane_puts, px0 = harness_plane_px;
     for (int i = 0; i < frames; i++) {
         for (auto &x : row) x = u(rng);
         double t0 = now_ms_f();
-        lv_waterfall_add_data(wf, row.data(), (uint16_t)row.size());
+        js8_wf_add_row(row.data(), (uint16_t)row.size());
         double t1 = now_ms_f();
-        if (strip) {
-            /* the widget invalidated all of itself: start over with just the strip */
-            lv_disp_t *d = lv_disp_get_default();
-            d->inv_p     = 0;
-            lv_area_t a;
-            lv_obj_get_coords(wf, &a);
-            a.y2 = a.y1 + strip - 1;
-            _lv_inv_area(d, &a);
-        }
-        if (i == 0) {
-            lv_disp_t *d = lv_disp_get_default();
-            lv_area_t  c;
-            lv_obj_get_coords(wf, &c);
-            printf("[wfperf]   waterfall %d,%d-%d,%d; %u invalid area(s):", c.x1, c.y1, c.x2, c.y2, (unsigned)d->inv_p);
-            for (unsigned k = 0; k < d->inv_p; k++)
-                printf(" %d,%d-%d,%d%s", d->inv_areas[k].x1, d->inv_areas[k].y1, d->inv_areas[k].x2, d->inv_areas[k].y2,
-                       d->inv_area_joined[k] ? "(joined)" : "");
-            printf("\n");
-        }
-        perf_flush_ms = 0;
-        perf_flush_px = 0;
-        lv_refr_now(NULL);
+        js8_wf_tick();
         double t2 = now_ms_f();
+        long   l0 = load_flush_px;
+        perf_flush_ms = 0;
+        lv_refr_now(NULL);
+        double t3 = now_ms_f();
         add.add(t1 - t0);
-        render.add(t2 - t1 - perf_flush_ms);
+        put.add(t2 - t1);
+        render.add(t3 - t2 - perf_flush_ms);
         flush.add(perf_flush_ms);
-        px.add((double)perf_flush_px);
+        lvpx.add((double)(load_flush_px - l0));
     }
-    printf("[wfperf] %-34s add %.2f ms  render %.2f ms (p95 %.2f)  flush %.2f ms  px %.0f  total %.2f ms/row\n", name,
-           add.mean(), render.mean(), render.pct(0.95), flush.mean(), px.mean(),
-           add.mean() + render.mean() + flush.mean());
+    unsigned long puts = harness_plane_puts - puts0;
+    printf("[wfperf] %-34s add %.3f ms  plane put %.3f ms (%lu puts, %lu px each)  LVGL render %.3f ms  flush %.3f ms  "
+           "LVGL px %.0f  total %.2f ms/row\n",
+           name, add.mean(), put.mean(), puts, puts ? (harness_plane_px - px0) / puts : 0, render.mean(), flush.mean(),
+           lvpx.mean(), add.mean() + put.mean() + render.mean() + flush.mean());
 }
 
 int main() {
@@ -407,7 +431,11 @@ int main() {
     drv.ver_res  = H;
     drv.flush_cb = flush_cb;
     drv.draw_buf = &draw_buf;
+    /* The radio's app plane is see-through (main.c): where JS8 leaves a
+     * hole, its waterfall on the lower plane shows. */
+    drv.screen_transp = getenv("HARNESS_OPAQUE") ? 0 : 1; /* HARNESS_OPAQUE: timing as before (no waterfall shows) */
     lv_disp_drv_register(&drv);
+    harness_plane_cb  = wftime_plane_cb;
 
     ui_init();
     if (getenv("ONLY_MODE")) stub_mode_setup();
@@ -585,6 +613,129 @@ int main() {
         printf("[wfring] %d pixels checked, %d wrong\n", checks, bad);
         lv_obj_del(box);
         lv_refr_now(NULL);
+
+        // JS8's own waterfall (js8_wf.c, the open dialog's, on the lower
+        // plane): rows, marks, the ring's wrap and a clear against a model,
+        // as the screen shows them where the app's plane is a hole.
+        lv_area_t         wa;
+        const lv_color_t *wpal = nullptr;
+        if (!dialog_js8_wf_area(&wa, &wpal)) {
+            printf("[wfring] FAIL: no JS8 waterfall\n");
+            return 1;
+        }
+        const int WFW = lv_area_get_width(&wa), WFH = lv_area_get_height(&wa);
+        std::vector<std::vector<uint32_t>> jmodel; // newest first, colours
+        int                                jbad = 0, jchecks = 0, holes = 0;
+        auto                               jcheck = [&](const char *what) {
+            lv_refr_now(NULL);
+            holes = 0;
+            for (int y = 0; y < WFH; y++)
+                for (int x = 0; x < WFW; x++) {
+                    if (fb[(wa.y1 + y) * W + wa.x1 + x] >> 24) continue; // something of the app's over it
+                    holes++;
+                    uint32_t got  = screen_px(wa.x1 + x, wa.y1 + y) & 0xffffff;
+                    uint32_t want = y < (int)jmodel.size() ? jmodel[y][x] : lv_color_to32(lv_color_black()) & 0xffffff;
+                    jchecks++;
+                    if (got != want && jbad++ < 5) printf("[wfring] js8 %s pixel %d,%d: %06x want %06x\n", what, x, y, got, want);
+                }
+        };
+        for (int r = 0; r < WFH + 60; r++) { // past the ring's height: it wraps
+            std::vector<float>    d(WFW);
+            std::vector<uint32_t> row(WFW);
+            for (int x = 0; x < WFW; x++) {
+                int id = (r * 31 + x * 17 + 5) % 256;
+                d[x]   = (id + 0.5f) * 30.0f / 255.0f; // WF_MIN_DB 0 .. WF_MAX_DB 30
+                row[x] = lv_color_to32(wpal[id]) & 0xffffff;
+            }
+            js8_wf_add_row(d.data(), (uint16_t)WFW);
+            js8_wf_tick();
+            jmodel.insert(jmodel.begin(), row);
+            if ((int)jmodel.size() > WFH) jmodel.pop_back();
+            if (r % 97 == 0 || r == WFH + 59) jcheck("rows");
+        }
+        // A decode mark's bracket: rows 3..17 below the newest, x 200..260.
+        lv_color_t mark = lv_color_hex(0xffd600);
+        js8_wf_fill_rect(200, 3, 260, 17, mark);
+        js8_wf_tick();
+        for (int y = 3; y <= 17; y++)
+            for (int x = 200; x <= 260; x++) jmodel[y][x] = lv_color_to32(mark) & 0xffffff;
+        jcheck("mark");
+        js8_wf_add_row(std::vector<float>(WFW, 0.0f).data(), (uint16_t)WFW); // the mark scrolls down with it
+        js8_wf_tick();
+        jmodel.insert(jmodel.begin(), std::vector<uint32_t>(WFW, lv_color_to32(wpal[0]) & 0xffffff));
+        jmodel.pop_back();
+        jcheck("mark scrolled");
+        js8_wf_clear();
+        js8_wf_tick();
+        jmodel.clear();
+        jcheck("clear");
+        printf("[wfring] js8 waterfall %dx%d: %d pixels checked (%d see-through), %d wrong\n", WFW, WFH, jchecks, holes,
+               jbad);
+
+        // A retune makes the main screen redraw the plane over the waterfall
+        // in that pass; js8_wf_repaint_soon() puts it back in the next ones.
+        main_redraw = true;
+        ui_main_redraw_watch();
+        jbad = jchecks = 0;
+        ui_retune_by(1000);
+        pump(100);
+        jmodel.clear(); // the retune clears it
+        jcheck("after a retune");
+        printf("[wfring] js8 waterfall after the main screen's redraw: %d pixels checked, %d wrong\n", jchecks, jbad);
+
+        // The plane's mapping (js8_wf.c: screen (x, y) is plane
+        // (y, hor_res-1-x)) against LVGL's own LV_DISP_ROT_90, which turns
+        // the radio's app plane: a second display set up like the radio's,
+        // single pixels drawn on it, and where they land.
+        {
+            static lv_color_t         rbuf[480 * 800];
+            static lv_disp_draw_buf_t rdb;
+            static uint32_t           rphys[480 * 800];
+            static lv_disp_drv_t      rdrv;
+            lv_disp_draw_buf_init(&rdb, rbuf, nullptr, 480 * 800);
+            lv_disp_drv_init(&rdrv);
+            rdrv.hor_res   = 480;
+            rdrv.ver_res   = 800;
+            rdrv.sw_rotate = 1;
+            rdrv.rotated   = LV_DISP_ROT_90;
+            rdrv.draw_buf  = &rdb;
+            rdrv.flush_cb  = [](lv_disp_drv_t *drv, const lv_area_t *a, lv_color_t *px) {
+                for (int y = a->y1; y <= a->y2; y++)
+                    for (int x = a->x1; x <= a->x2; x++) rphys[y * 480 + x] = (px++)->full;
+                lv_disp_flush_ready(drv);
+            };
+            lv_disp_t *def = lv_disp_get_default();
+            lv_disp_t *rd  = lv_disp_drv_register(&rdrv);
+            lv_obj_t  *scr = lv_disp_get_scr_act(rd);
+            lv_obj_set_style_bg_color(scr, lv_color_black(), 0);
+            lv_obj_set_style_bg_opa(scr, LV_OPA_COVER, 0);
+            int map_bad = 0;
+            const int pts[][2] = {{wa.x1, wa.y1}, {wa.x2, wa.y2}, {wa.x1, wa.y2}, {wa.x2, wa.y1}, {0, 0}, {799, 479}, {123, 45}};
+            for (auto &p : pts) {
+                lv_obj_t *dot = lv_obj_create(scr);
+                lv_obj_remove_style_all(dot);
+                lv_obj_set_style_bg_color(dot, lv_color_hex(0xff0000), 0);
+                lv_obj_set_style_bg_opa(dot, LV_OPA_COVER, 0);
+                lv_obj_set_size(dot, 1, 1);
+                lv_obj_set_pos(dot, p[0], p[1]);
+                lv_refr_now(rd);
+                int fx = -1, fy = -1, n = 0;
+                for (int i = 0; i < 480 * 800; i++)
+                    if ((rphys[i] & 0xffffff) == 0xff0000) fx = i % 480, fy = i / 480, n++;
+                int wx = p[1], wy = lv_disp_get_hor_res(rd) - 1 - p[0];
+                if (n != 1 || fx != wx || fy != wy) {
+                    map_bad++;
+                    printf("[wfring] FAIL: screen %d,%d landed at plane %d,%d (%d px), js8_wf puts it at %d,%d\n", p[0], p[1],
+                           fx, fy, n, wx, wy);
+                }
+                lv_obj_del(dot);
+                lv_refr_now(rd);
+            }
+            printf("[wfring] plane mapping vs LVGL's rotation: %d points, %d wrong\n", (int)(sizeof(pts) / sizeof(pts[0])),
+                   map_bad);
+            lv_disp_remove(rd);
+            lv_disp_set_default(def);
+        }
         return 0;
     }
     if (getenv("ONLY_WFTIME")) {
@@ -945,39 +1096,12 @@ int main() {
         ui_press(1); // All
         pump(500);
         screenshot("wfperf_before.ppm");
-        lv_obj_t *table = find_obj(lv_scr_act(), &lv_table_class);
         if (getenv("WFPERF_PROFILE")) { // one case, long enough for a profile
-            if (!strcmp(getenv("WFPERF_PROFILE"), "bare")) {
-                lv_obj_add_flag(table, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(find_obj(lv_scr_act(), &lv_finder_class), LV_OBJ_FLAG_HIDDEN);
-            }
             wf_bench(getenv("WFPERF_PROFILE"), 4000);
             return 0;
         }
-        wf_bench("as now (whole waterfall redrawn)", 300);
-        perf_rotate = 1;
-        wf_bench("  + tiled rotation", 300);
-        perf_rotate = 0;
-        lv_obj_add_flag(table, LV_OBJ_FLAG_HIDDEN);
-        wf_bench("list hidden (its share)", 300);
-        lv_obj_t *finder = find_obj(lv_scr_act(), &lv_finder_class);
-        lv_obj_add_flag(finder, LV_OBJ_FLAG_HIDDEN);
-        wf_bench("list + finder hidden", 300);
-        lv_obj_t *wf  = find_obj(lv_scr_act(), &lv_waterfall_class);
-        std::vector<lv_obj_t *> kids;
-        for (uint32_t i = 0; i < lv_obj_get_child_cnt(wf); i++)
-            if (!lv_obj_has_flag(lv_obj_get_child(wf, i), LV_OBJ_FLAG_HIDDEN)) kids.push_back(lv_obj_get_child(wf, i));
-        for (auto k : kids) lv_obj_add_flag(k, LV_OBJ_FLAG_HIDDEN);
-        printf("[wfperf] waterfall children hidden: %zu (plus the finder)\n", kids.size());
-        wf_bench("list + all waterfall children hidden", 300);
-        lv_obj_t *par = lv_obj_get_parent(wf);
-        printf("[wfperf] siblings over the waterfall: %u\n", (unsigned)lv_obj_get_child_cnt(par));
-        for (auto k : kids) lv_obj_clear_flag(k, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(finder, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(table, LV_OBJ_FLAG_HIDDEN);
-        wf_bench("only the uncovered strip (55 rows)", 300, 55);
-        perf_rotate = 1;
-        wf_bench("  + tiled rotation", 300, 55);
+        wf_bench("rows on the lower plane, full list", 300);
+        screenshot("wfperf_after.ppm");
         return 0;
     }
     if (getenv("ONLY_APRS")) {

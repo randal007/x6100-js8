@@ -1,3 +1,6 @@
+#if defined(__linux__)
+#include <pthread.h>
+#endif
 #include "js8core/engine.hpp"
 
 #include <algorithm>
@@ -1194,6 +1197,9 @@ public:
         if (!decode_queue_.empty()) {
           merge_windows(snapshot.params, decode_queue_.back().params);
           decode_queue_.back() = std::move(snapshot);
+          // x6100 patch 13: how often the decoder is still busy when the
+          // next window is ready (the app counts these).
+          if (callbacks_.on_log) callbacks_.on_log(LogLevel::Info, "decode window merged: the decoder was busy");
         } else {
           decode_queue_.push_back(std::move(snapshot));
         }
@@ -1224,6 +1230,10 @@ public:
     }
 
     void decode_worker_loop() {
+#if defined(__linux__)
+      // x6100 patch 13: named, so per-thread CPU tools can tell it apart.
+      pthread_setname_np(pthread_self(), "js8-decode");
+#endif
       for (;;) {
         DecodeState task;
         {

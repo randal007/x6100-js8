@@ -11,12 +11,14 @@
 #include "resampler.hpp"
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <cstdint>
 #include <functional>
 #include <memory>
 #include <mutex>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <vector>
 
@@ -76,6 +78,10 @@ public:
         std::function<void(const SyncMark &)> on_sync;
         /// Engine diagnostics. Very chatty; leave empty in production.
         std::function<void(const std::string &)> on_log;
+        /// Health, a few lines a minute at most: the decoder's load once a
+        /// minute, a decode pass that ran very long, audio missing (gap) or
+        /// thrown away (the worker fell behind), clock realigns.
+        std::function<void(const std::string &)> on_report;
     };
 
     Receiver(const Config &config, Callbacks callbacks);
@@ -112,6 +118,8 @@ private:
     void submit(const std::vector<float> &audio_12k);
     void check_clock(std::size_t new_samples);
     void push_pcm(const std::int16_t *pcm, std::size_t count);
+    void engine_log(std::string_view m);
+    void report(const std::string &line);
 
     Config    config_;
     Callbacks cb_;
@@ -132,6 +140,13 @@ private:
     std::int64_t          align_wall_ms_ = 0;
     std::uint64_t         samples_since_align_ = 0;
     std::atomic<unsigned> realigns_{0};
+
+    // Decode load for on_report, from the engine's log (decode thread; the
+    // merge note comes from the worker).
+    std::mutex                            stats_mutex_;
+    std::chrono::steady_clock::time_point stats_start_, pass_start_;
+    unsigned                              passes_ = 0, decodes_ = 0, merged_ = 0;
+    double                                busy_s_ = 0, longest_s_ = 0;
 
     // Decode-thread state; assembler also touched by the worker's flush.
     FrameRenderer    renderer_;

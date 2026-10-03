@@ -25,7 +25,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     rtty.c screenshot.c display.cpp gps.c
     dialog.c dialog_swrscan.c
     dialog_ft8.c dialog_freq.c dialog_gps.c dialog_msg_cw.c
-    dialog_js8.c
+    dialog_js8.c js8_wf.c
     tx_player.c
     ft8_ui/table_view.c
     dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c

@@ -86,6 +86,10 @@ typedef struct {
     /* Decode attempts, only while js8_rx_set_sync_marks(rx, true): many per
      * decode pass, from the decoder's thread. */
     void (*on_mark)(const js8_rx_mark_t *mark, void *ctx);
+    /* Health lines for the app's log, a few a minute at most: the decoder's
+     * load each minute, audio missing or thrown away, clock realigns. From
+     * the receiver's and the decoder's threads. */
+    void (*on_report)(const char *line, void *ctx);
     void *ctx;
 } js8_rx_cb_t;
 

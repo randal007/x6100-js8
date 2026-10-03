@@ -10,6 +10,8 @@
 #include "js8core/engine.hpp"
 
 #include <algorithm>
+#include <cstdio>
+#include <pthread.h>
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
@@ -28,6 +30,10 @@ constexpr double MAX_PENDING_SEC = 5.0;
 
 // How often the sample count is compared with the wall clock.
 constexpr std::int64_t CLOCK_CHECK_MS = 2000;
+
+// A decode pass longer than this is reported at once (others only in the
+// minute's summary): with four speeds decoding, the next windows wait.
+constexpr double LONG_PASS_S = 10.0;
 
 // Audio this far behind the clock went missing (a stall, or the caller
 // stopped feeding it during TX). The gap is filled with silence: a realign
@@ -116,8 +122,11 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
             if (cb_.on_cycle_done) cb_.on_cycle_done(fin->decoded);
         }
     };
-    if (cb_.on_log) {
-        ecb.on_log   = [this](js8core::LogLevel, std::string_view m) { cb_.on_log(std::string(m)); };
+    if (cb_.on_log || cb_.on_report) {
+        ecb.on_log   = [this](js8core::LogLevel, std::string_view m) {
+            engine_log(m);
+            if (cb_.on_log) cb_.on_log(std::string(m));
+        };
         ecb.on_error = [this](std::string_view m) { cb_.on_log("error: " + std::string(m)); };
     }
 
@@ -127,7 +136,8 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
     if (applied_drift_ms_) engine_->set_time_drift_ms(applied_drift_ms_);
     engine_->start();
 
-    worker_ = std::thread([this] { worker_loop(); });
+    stats_start_ = std::chrono::steady_clock::now();
+    worker_      = std::thread([this] { worker_loop(); });
 }
 
 Receiver::~Receiver() {
@@ -172,7 +182,52 @@ void Receiver::clear_messages() {
     assembler_.clear();
 }
 
+void Receiver::report(const std::string &line) {
+    if (cb_.on_report) cb_.on_report(line);
+    if (cb_.on_log) cb_.on_log(line);
+}
+
+// The engine logs each decode pass's start and end on its decode thread, and
+// a window merged because a pass was still running (patch 13).
+void Receiver::engine_log(std::string_view m) {
+    using clock = std::chrono::steady_clock;
+    auto now    = clock::now();
+    std::lock_guard<std::mutex> lock(stats_mutex_);
+    if (m.starts_with("Calling legacy_decode")) {
+        pass_start_ = now;
+        return;
+    }
+    if (m.starts_with("decode window merged")) {
+        merged_++;
+        return;
+    }
+    if (!m.starts_with("legacy_decode returned") || pass_start_ == clock::time_point{}) return;
+    double s    = std::chrono::duration<double>(now - pass_start_).count();
+    pass_start_ = {};
+    passes_++;
+    busy_s_ += s;
+    longest_s_ = std::max(longest_s_, s);
+    auto colon = m.find(':');
+    if (colon != std::string_view::npos) decodes_ += (unsigned)std::atoi(std::string(m.substr(colon + 1)).c_str());
+    char line[160];
+    if (s > LONG_PASS_S) {
+        snprintf(line, sizeof(line), "decode pass took %.1f s", s);
+        report(line);
+    }
+    double span = std::chrono::duration<double>(now - stats_start_).count();
+    if (span < 60) return;
+    snprintf(line, sizeof(line), "decode: %u passes in %.0f s, busy %.1f s (%.0f %%), longest %.1f s, %u decodes, %u windows waited",
+             passes_, span, busy_s_, 100 * busy_s_ / span, longest_s_, decodes_, merged_);
+    report(line);
+    stats_start_ = now;
+    passes_ = decodes_ = merged_ = 0;
+    busy_s_ = longest_s_ = 0;
+}
+
 void Receiver::worker_loop() {
+#if defined(__linux__)
+    pthread_setname_np(pthread_self(), "js8-rx"); // per-thread CPU tools tell it apart
+#endif
     std::vector<float> in;
     std::vector<float> out;
 
@@ -187,6 +242,10 @@ void Receiver::worker_loop() {
 
         if (in.size() > MAX_PENDING_SEC * config_.input_rate) {
             // We fell far behind; this audio is stale. Start over in sync.
+            char line[96];
+            snprintf(line, sizeof(line), "dropped %.1f s of audio: the receiver fell behind",
+                     (double)in.size() / config_.input_rate);
+            report(line);
             in.clear();
             resampler_.reset();
             aligned_ = false;
@@ -279,7 +338,7 @@ void Receiver::check_clock(std::size_t new_samples) {
         const std::int64_t fill_ms = std::min(error_ms, RING_MS);
         std::vector<std::int16_t> silence((std::size_t)(fill_ms * JS8_RATE / 1000), 0);
         push_pcm(silence.data(), silence.size());
-        if (cb_.on_log) cb_.on_log("gap: " + std::to_string(error_ms) + " ms of audio missing, filled with silence");
+        report("gap: " + std::to_string(error_ms) + " ms of audio missing, filled with silence");
         if (error_ms <= RING_MS) {
             samples_since_align_ += silence.size();
             return;
@@ -290,7 +349,7 @@ void Receiver::check_clock(std::size_t new_samples) {
     if (std::llabs(error_ms) > config_.realign_threshold_ms) {
         engine_->request_realign();
         realigns_++;
-        if (cb_.on_log) cb_.on_log("realign: audio/clock error " + std::to_string(error_ms) + " ms");
+        report("realign: audio/clock error " + std::to_string(error_ms) + " ms");
         align_wall_ms_       = now;
         samples_since_align_ = new_samples;
     }

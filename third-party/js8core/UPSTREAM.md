@@ -119,7 +119,14 @@ Each one is its own commit on top of the pristine import, so
     attempts" is on (`mainwindow.cpp` sets `dec_data.params.syncStats`
     from that option). Now a switch, off by default.
 
-All twelve are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
+13. **Decode thread name and merged-window log.** The decode thread is
+    named `js8-decode` (`pthread_setname_np`, Linux and Android), so
+    per-thread CPU tools tell it from the app's other threads. And patch
+    8's merge (a ready window waiting behind a running decode) logs
+    "decode window merged: the decoder was busy" at Info level: the app
+    counts these to show when decoding falls behind.
+
+All thirteen are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 

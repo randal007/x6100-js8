@@ -81,6 +81,31 @@ heard paused them; [docs/review](review/)).
   Stations entry's speed, else the row's (selected_speed()); JS8 draws it
   itself (cursor_box), lv_finder (shared with FT8) untouched; hidden only
   where the red band covers it exactly. Harness ONLY_FINDER.
+- [x] **The waterfall's CPU use** (user, 2026-10-03: it lags now and then;
+  could it cost decodes?). **Measured on the radio** (`x6100-cpulog`, a
+  read-only per-thread CPU logger over the USB console; 21 min in the
+  Messages view on beta 4.1 + MFK fix): the four cores averaged 43 % and
+  were never all busy at once, so the decoder (bursts of ~4 s per
+  Normal slot) always had a core. The GUI thread was the bottleneck: 79 %
+  of its core on average, over 90 % for 112 s in 47 short stretches (the
+  "random" lags); during each heartbeat (no rows drawn) it fell from ~80 to
+  29 %, so the waterfall cost about half a core. The PC harness showed
+  why: each row redrew the whole see-through list over it, two thirds of a
+  row's cost (a cached list image didn't help: LVGL pastes see-through
+  images about as slowly). **Done (after 4.1):** `src/js8_wf.c` draws
+  the waterfall on the display's lower plane, as R1CBU 1.0's main-screen
+  waterfall is (`drm_primary_begin_direct()`), through a hole in the app's
+  plane; the display hardware puts the list on top. A row is now 788
+  straight copies (a column-major ring), and LVGL redraws nothing: harness
+  ONLY_LOAD rows with a full list 19.6 → 3.8 ms/s, ONLY_WFPERF 1.08 →
+  0.05 ms a row. ONLY_WFRING checks the ring pixel by pixel and the plane
+  mapping against LVGL's own 90° rotation. To do: the same CPU log on the
+  radio. **Health lines** in the app log (stderr, UTC-stamped): `decode:`
+  once a minute (passes, busy time, longest pass, decodes, windows that
+  waited behind a running pass, js8core patch 13), `dropped ... of audio`,
+  `gap`, `realign`, and `GUI: stalls over 200 ms / waterfall rows
+  dropped` when they happen; JS8's threads are named (`js8-rx`,
+  `js8-decode`, `js8-tx`, `js8-beep`).
 - [ ] A small ALC rework for low power (under 1 W) into an amplifier.
   The TX audio path (`tx_player.c`) is shared with the FT8 app.
 - [ ] GPS time and location (USB GPS dongle ordered; testing when it
@@ -126,7 +151,8 @@ store and forward and Winlink all work; only QUERY CALL failed (above).
 ## Low priority (after the features)
 
 - [ ] Performance: each part's CPU use on the radio, spread over its four
-  cores.
+  cores. First measurement and the waterfall fix done (above, "Screen and
+  radio"); the GUI thread's remaining ~29 % with no rows is still to look at.
 - [ ] Leftovers in the [fix plan](review/fix-plan.md) ("Not now": I-02,
   I-04, I-10 with B-11).
 

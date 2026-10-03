@@ -845,6 +845,17 @@ Beta 5 is being planned; the full list with notes is in
   version (*Can anyone reach...?*)
 - [x] The waterfall's stutter while the MFK steps through the list: each
   step now redraws only the rows it moves between (done after 4.1)
+- [x] **A lighter waterfall:** measured on the radio, drawing JS8's
+  waterfall took about half of one CPU core, because each new row redrew
+  the see-through message list over it. The waterfall is now drawn
+  straight onto the display's lower layer, as the main screen's is, and
+  the display puts the list on top: a new row redraws nothing else (in the
+  PC tests the screen work for the waterfall fell by about 80 %). It
+  looks the same (done after 4.1, to be measured on the radio)
+- [x] **Health lines in the app log:** once a minute how busy the decoder
+  was (`JS8 ... decode: ...`), and a line whenever audio went missing or
+  the screen stalled, so a bug report shows whether the radio kept up
+  (done after 4.1)
 - [ ] Still from beta 4: the map's home colour Setting; POTA and SOTA
   spots tried on the air
 - [ ] Later, after the features: performance (spreading the work over the
@@ -852,8 +863,8 @@ Beta 5 is being planned; the full list with notes is in
 
 Ideas for later:
 
-- Waterfall: an option for a solid (not see-through) list, for even less
-  work, and the same drawing fix for the FT8 app's waterfall
+- The same lower-layer drawing for the FT8 app's waterfall (that's
+  upstream's code: an idea to offer them)
 - Decode marks: an option to hide the dim ones (faint maybes, mostly noise)
 
 ## Bug reports and feature requests
@@ -865,7 +876,8 @@ This is a beta: reports from testing are very welcome.
   release you're running (e.g. `js8-beta4`), the band and speed, what you
   did, what you expected and what happened. A photo or screenshot of the
   radio's screen helps, and so does the `app_logs` folder from the SD card's
-  DATA partition if the app closed or froze.
+  DATA partition if the app closed or froze (from beta 5 on it also has a
+  line a minute about how busy the decoder was, and notes screen stalls).
 - **Radio problems on Windows** (no power out, settings you can't find):
   [tools/windows](tools/windows) has a read-only script that collects
   the firmware and BASE versions, the transmit settings and the logs over
@@ -897,7 +909,8 @@ JS8 app by VE7NHW.
   found in the js8core engine, reported upstream, in
   [docs/js8core-bug-reports.md](docs/js8core-bug-reports.md).
 - **Code:** `src/js8/` (no LVGL, host-testable: receive, transmit, auto-reply,
-  inbox, log, alerts), `src/dialog_js8.c` (the app), vendored engine in
+  inbox, log, alerts), `src/dialog_js8.c` (the app), `src/js8_wf.c` (its
+  waterfall, drawn on the display's lower plane), vendored engine in
   `third-party/js8core` with local patches listed in
   [UPSTREAM.md](third-party/js8core/UPSTREAM.md).
 - **Tests:** `tests/test_js8.cpp` (Catch2; `[slow]` runs real-time decodes),

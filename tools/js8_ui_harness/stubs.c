@@ -13,6 +13,7 @@
 #include "main_screen.h"
 #include "pubsub_ids.h"
 #include "radio.h"
+#include "lv_drivers/display/drm.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -74,6 +75,34 @@ void mem_save(uint16_t id) { printf("[mem] save %u\n", id); }
 void mem_load(uint16_t id) { printf("[mem] load %u\n", id); }
 void waterfall_set_enabled(bool v) { printf("[main] waterfall %s\n", v ? "on" : "off"); }
 void spectrum_set_enabled(bool v) { (void)v; }
+
+/* R1CBU 1.0's lower display plane (lv_drivers/display/drm.c): the panel is
+ * portrait, 480 x 800, so screen (x, y) is plane (y, 799 - x). JS8 draws its
+ * waterfall there; LVGL draws the app on a see-through plane above it, and
+ * the harness's screenshots put the two together as the display does. Each
+ * put lands at once (the radio applies it at the next page flip). */
+uint32_t      harness_plane[480 * 800];
+unsigned long harness_plane_puts, harness_plane_px;
+void        (*harness_plane_cb)(const lv_area_t *a);
+static lv_color_t plane_queue[800 * 480 * 2]; /* drm.c's MAX_DIRTY_BUF */
+bool drm_primary_begin_direct(drm_direct_ctx_t *ctx, uint32_t pixels_needed) {
+    if (pixels_needed > sizeof(plane_queue) / sizeof(plane_queue[0])) return false;
+    ctx->buf        = plane_queue;
+    ctx->max_pixels = sizeof(plane_queue) / sizeof(plane_queue[0]);
+    return true;
+}
+void drm_primary_end_direct(const lv_area_t *a) {
+    int w = a->x2 - a->x1 + 1;
+    if (a->x1 < 0 || a->y1 < 0 || a->x2 >= 480 || a->y2 >= 800) {
+        printf("[plane] FAIL: area %d,%d-%d,%d off the plane\n", a->x1, a->y1, a->x2, a->y2);
+        return;
+    }
+    for (int y = a->y1; y <= a->y2; y++)
+        memcpy(&harness_plane[y * 480 + a->x1], &plane_queue[(size_t)(y - a->y1) * w], (size_t)w * 4);
+    harness_plane_puts++;
+    harness_plane_px += (unsigned long)w * (a->y2 - a->y1 + 1);
+    if (harness_plane_cb) harness_plane_cb(a);
+}
 int      stub_vol_turns; /* radio_change_vol() calls */
 uint16_t radio_change_vol(int16_t d) { stub_vol_turns++; printf("[radio] vol %+d\n", d); return 0; }
 
