@@ -1828,6 +1828,16 @@ static int64_t now_mono_ms(void) {
  * per WF_ROW_SAMPLES (800 at 12 kHz) and the audio clock isn't the CPU's, so a
  * queue that builds up is drained by drawing slightly faster, never by a
  * jump. */
+/* MEASUREMENT BUILD ONLY (branch measure-wf): rows drawn (R, with the
+ * queue depth), frames committed (C) and shown on the panel (F, vblank
+ * time), CLOCK_MONOTONIC us, to /tmp/js8_wf_timing.csv while JS8 is open. */
+static FILE  *wf_timing;
+static long   wf_timing_bytes;
+void drm_timing_hook(char kind, unsigned long long us) {
+    if (!wf_timing || wf_timing_bytes > 2000000) return;
+    wf_timing_bytes += fprintf(wf_timing, "%c,%llu\n", kind, us);
+}
+
 static void wf_timer_cb(lv_timer_t *t) {
     (void)t;
     marks_tick();
@@ -1853,6 +1863,12 @@ static void wf_timer_cb(lv_timer_t *t) {
     wf_q_count--;
     pthread_mutex_unlock(&wf_lock);
     lv_waterfall_add_data(waterfall, row, WIDTH);
+    if (wf_timing && wf_timing_bytes <= 2000000) {
+        struct timespec dn;
+        clock_gettime(CLOCK_MONOTONIC, &dn);
+        wf_timing_bytes += fprintf(wf_timing, "R,%llu,%u\n",
+                                   (unsigned long long)dn.tv_sec * 1000000ULL + dn.tv_nsec / 1000, waiting);
+    }
     wf_due_us += period;
     /* On the screen now, not at LVGL's next refresh: that comes every
      * 33 ms by a tick that runs slow, so rows landed 66-134 ms apart
@@ -2994,6 +3010,8 @@ static void construct_cb(lv_obj_t *parent) {
     edit_target = 0; /* a keyboard mode left from last time (B-16) */
     worked_forget();
     wf_queue_clear();
+    wf_timing       = fopen("/tmp/js8_wf_timing.csv", "w");
+    wf_timing_bytes = 0;
     rx_start();
     /* Receive audio from here on (dsp's thread, into the receiver). */
     if (audio_sub == AUDIO_SUB_INVALID) audio_sub = dsp_audio_subscribe_float(audio_cb, SAMPLE_RATE);
@@ -3070,6 +3088,8 @@ static void destruct_cb(void) {
     /* No audio callback after this returns (it takes dsp's lock), so the
      * receiver can go. */
     dsp_audio_set_active(audio_sub, false);
+    if (wf_timing) fclose(wf_timing);
+    wf_timing = NULL;
     if (gps_sub) lv_msg_unsubscribe(gps_sub);
     gps_sub = NULL;
     rx_stop();

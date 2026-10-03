@@ -13,6 +13,7 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <poll.h>
+#include <time.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -157,13 +158,18 @@ static uint32_t get_conn_property_id(const char *name) {
     return 0;
 }
 
+/* MEASUREMENT BUILD ONLY (branch measure-wf): when frames reach the panel. */
+void __attribute__((weak)) drm_timing_hook(char kind, unsigned long long us) {
+    (void)kind;
+    (void)us;
+}
+
 static void page_flip_handler(int fd, unsigned int sequence, unsigned int tv_sec, unsigned int tv_usec,
                               void *user_data) {
     (void)fd;
     (void)sequence;
-    (void)tv_sec;
-    (void)tv_usec;
     (void)user_data;
+    drm_timing_hook('F', (unsigned long long)tv_sec * 1000000ULL + tv_usec); /* vblank time, CLOCK_MONOTONIC */
     for (int i = 0; i < PLANE_LAST; i++)
         flip_pending[i] = 0;
 }
@@ -424,6 +430,11 @@ void drm_flip(void) {
 
     for (int p = 0; p < PLANE_LAST; p++)
         flip_pending[p] = 1;
+    {
+        struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        drm_timing_hook('C', (unsigned long long)ts.tv_sec * 1000000ULL + ts.tv_nsec / 1000);
+    }
 }
 
 static int find_plane_by_type(uint32_t fourcc, uint32_t type, uint32_t *plane_id, uint32_t crtc_id, uint32_t crtc_idx) {
