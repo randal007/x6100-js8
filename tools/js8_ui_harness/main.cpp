@@ -27,6 +27,7 @@ void ui_key(uint32_t key);
 int  ui_running(void);
 int  ui_focus_is_table(void);
 void ui_rotary(int32_t diff);
+int  ui_tx_offset(void);
 int  ui_list_has(const char *text);
 const char *ui_focused_text(void);
 const char *ui_focus_desc(void);
@@ -489,7 +490,7 @@ int main() {
         pump(300);
         printf("[drift] at start: %lld ms\n", (long long)js8_drift_ms());
         // Everyone 1.5 s later than our clock says they should be.
-        std::vector<Station> late = {{"W1ABC", "FN42", "", "@HB HEARTBEAT FN42", 900, 0.05f},
+        std::vector<Station> late = {{"W1ABC", "FN42", "", "CQ CQ CQ FN42", 900, 0.05f},
                                      {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1400, 0.05f},
                                      {"VE7ABC", "CN89", "", "CQ CQ CQ CN89", 1900, 0.05f},
                                      {"N0XYZ", "EN34", "", "@HB HEARTBEAT EN34", 2400, 0.05f}};
@@ -858,6 +859,61 @@ int main() {
         ui_press(3); // Show Stations
         pump(500);
         load_measure("waterfall rows, Stations view", secs * 1000, true);
+        return 0;
+    }
+    if (getenv("ONLY_KNOB")) {
+        // The main knob moves the TX offset. R1CBU 1.0 hands JS8 every click
+        // on its own (0.34 summed them per 30 ms read): a fast spin must
+        // still speed up, and must not redraw the whole waterfall per click.
+        pump(1000);
+        auto spin = [&](const char *label, int clicks, int gap_ms, int dir) {
+            int  f0 = ui_tx_offset();
+            long px0 = load_flush_px, fl0 = load_flushes;
+            double busy = 0;
+            auto t0 = std::chrono::steady_clock::now();
+            for (int i = 0; i < clicks; i++) {
+                double a = now_ms_f();
+                ui_rotary(dir);
+                observer_delayed_drain();
+                scheduler_work();
+                lv_timer_handler();
+                busy += now_ms_f() - a;
+                lv_tick_inc(gap_ms);
+                std::this_thread::sleep_for(std::chrono::milliseconds(gap_ms));
+            }
+            double s = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+            printf("[knob] %-28s %3d clicks: offset %d -> %d (%+d Hz), GUI busy %5.1f ms/s, %6.0f kpx/s, %4.1f flushes/s\n",
+                   label, clicks, f0, ui_tx_offset(), ui_tx_offset() - f0, busy / s, (load_flush_px - px0) / 1000.0 / s,
+                   (load_flushes - fl0) / s);
+        };
+        spin("slow (one click / 150 ms)", 10, 150, +1);
+        pump(500);
+        spin("medium (one click / 25 ms)", 40, 25, +1);
+        pump(500);
+        spin("fast (one click / 5 ms)", 120, 5, -1);
+        // No band left behind: what the partial redraws left on screen must
+        // be what a full redraw gives.
+        pump(300);
+        screenshot("c1_knob_partial.ppm");
+        lv_obj_invalidate(lv_scr_act());
+        pump(300);
+        screenshot("c2_knob_full.ppm");
+
+        // The MFK moves the selection, and with it the green cursor band.
+        feed_band({{"W1ABC", "FN42", "", "CQ CQ CQ FN42", 900, 0.05f},
+                   {"K9DEF", "EN52", "", "CQ CQ CQ EN52", 1800, 0.05f},
+                   {"VE7ABC", "CN89", "", "CQ CQ CQ CN89", 2500, 0.05f}});
+        const char *calls[] = {"W1ABC", "K9DEF", "VE7ABC", "K9DEF", "W1ABC"};
+        long px0 = load_flush_px;
+        for (const char *c : calls) {
+            ui_select_row_from(c);
+            pump(200);
+        }
+        printf("[knob] 5 selections: %ld kpx to the screen\n", (load_flush_px - px0) / 1000);
+        screenshot("c3_select_partial.ppm");
+        lv_obj_invalidate(lv_scr_act());
+        pump(300);
+        screenshot("c4_select_full.ppm");
         return 0;
     }
     if (getenv("ONLY_WFPERF")) {

@@ -66,6 +66,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `QSOFREQ` | Directed view shows what's on the selected station's frequency |
 | `RELAY` | relays passed on and received, ACK back along the path |
 | `QUERYCALL` | Query list: *Can anyone reach...?* with no station selected, *Can they reach...?* with one; the `?` added when left off, never twice |
+| `KNOB` | the main knob on the TX offset: clicks one at a time as R1CBU 1.0 sends them, a fast spin still speeds up (5/10 Hz per click), and only the finder's old and new band are redrawn (load per second; no band left behind after the knob or MFK selections) |
 | `REPLYQ` | automatic replies queue (see below) |
 | `RETUNE`, `TXSAFE` | transmitting safely (see below) |
 | `ROWS` | info rows survive rebuilds, a cut-off message stops growing, the Inbox lists all 200 |

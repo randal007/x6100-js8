@@ -150,6 +150,7 @@ static void construct_cb(lv_obj_t *parent);
 static void destruct_cb(void);
 static void audio_cb(size_t n, float *samples);
 static void gps_msg_cb(void *s, lv_msg_t *m);
+static void finder_invalidate_band(int32_t hz);
 
 /* R1CBU 1.0 hands text settings out as copies: the station's call and grid
  * for the GUI thread, valid until the next call. */
@@ -1412,11 +1413,20 @@ static void table_draw_end_cb(lv_event_t *e) {
 }
 
 /* Show the selected station's offset on the waterfall (the green line). */
+static int32_t cursor_shown = -1; /* the cursor band's offset on screen, -1 none */
+
 static void show_selection(void) {
     if (sel_call[0]) map_qrz_clear(sel_call); /* you've seen who called */
-    if (qso_freq >= 0) lv_finder_set_cursor(finder, (int16_t)(qso_freq + 0.5f));
+    int32_t cursor = qso_freq >= 0 ? (int32_t)(qso_freq + 0.5f) : -1;
+    if (cursor >= 0) lv_finder_set_cursor(finder, (int16_t)cursor);
     else lv_finder_clear_cursor(finder);
-    lv_obj_invalidate(finder);
+    /* Only the old and new band: the MFK steps through stations here, and
+     * a whole-finder redraw is a whole-waterfall one (finder_invalidate_band). */
+    if (cursor != cursor_shown) {
+        if (cursor_shown >= 0) finder_invalidate_band(cursor_shown);
+        if (cursor >= 0) finder_invalidate_band(cursor);
+        cursor_shown = cursor;
+    }
     lv_obj_invalidate(table);
     update_tx_bar();
     if (view_map) map_update(false);
@@ -2349,6 +2359,22 @@ static void apply_hold(float their_freq) {
 
 /* Main tuning knob: move the TX offset, as in the FT8 app. The dial
  * frequency stays locked. */
+/* Just the strip the finder's band covers at offset `hz` (as lv_finder
+ * draws it, its border included), not the whole finder: that is the
+ * waterfall's size, and on R1CBU 1.0's overlay every redrawn pixel is
+ * rotated too, so the knob made the waterfall lag. */
+static void finder_invalidate_band(int32_t hz) {
+    if (!finder || !lv_obj_is_visible(finder)) return;
+    lv_coord_t w    = lv_obj_get_width(finder);
+    int32_t    span = filter_high - filter_low;
+    if (span <= 0) return;
+    lv_area_t a = finder->coords;
+    a.x1 = finder->coords.x1 + (lv_coord_t)((int64_t)w * (hz - filter_low) / span) - 2;
+    a.x2 = finder->coords.x1 + (lv_coord_t)((int64_t)w * (hz + js8_speed_bandwidth_hz(cur_speed()) - filter_low) / span) + 2;
+    if (!_lv_area_intersect(&a, &a, &finder->coords)) return;
+    _lv_inv_area(lv_obj_get_disp(finder), &a);
+}
+
 static void rotary_cb(int32_t diff) {
     user_touch();
     if (cq_adjusting) {
@@ -2367,17 +2393,32 @@ static void rotary_cb(int32_t diff) {
         update_status();
         return;
     }
-    int32_t abs_diff = abs(diff);
-    if (abs_diff > 3) diff *= (abs_diff < 6) ? 5 : 10;
+    /* Faster turns move further: 4-5 clicks within 30 ms move 5 Hz each,
+     * 6 or more 10 Hz. R1CBU 0.34 read the knob every 30 ms and handed us
+     * the sum; 1.0 hands over every click on its own (its own dial speeds
+     * up by the time between clicks, which apps don't get), so count them
+     * per 30 ms here. */
+    static int64_t window_ms;
+    static int32_t window_clicks;
+    int64_t        now_ms = now_mono_ms();
+    if (now_ms - window_ms >= 30) {
+        window_ms     = now_ms;
+        window_clicks = 0;
+    }
+    window_clicks += abs(diff);
+    if (window_clicks > 3) diff *= (window_clicks < 6) ? 5 : 10;
 
-    int32_t f = (int32_t)param_i_get(cfg.js8.tx_freq()) + diff;
+    int32_t old = (int32_t)param_i_get(cfg.js8.tx_freq());
+    int32_t f   = old + diff;
     if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
     if (f > js8_speed_max_offset_hz(cur_speed())) f = js8_speed_max_offset_hz(cur_speed());
+    if (f == old) return;
     param_i_set(cfg.js8.tx_freq(), (uint16_t)f);
     js8_rx_set_qso_offset(rx, f);
 
     lv_finder_set_value(finder, (int16_t)f);
-    lv_obj_invalidate(finder);
+    finder_invalidate_band(old);
+    finder_invalidate_band(f);
     update_tx_bar();
 }
 
@@ -2823,6 +2864,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_finder_set_width(finder, js8_speed_bandwidth_hz(cur_speed()));
     lv_finder_set_value(finder, param_i_get(cfg.js8.tx_freq()));
     lv_finder_clear_cursor(finder);
+    cursor_shown   = -1;
     qso_freq       = -1;
     sel_call[0]    = '\0';
     sel_locked     = false;
