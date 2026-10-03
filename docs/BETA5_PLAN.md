@@ -66,7 +66,7 @@ heard paused them; [docs/review](review/)).
   (research in [feature-ideas.md](feature-ideas.md): MPAD is worldwide,
   WXBOT US only; answers come back through every relay station that
   heard you).
-- [ ] **Winlink: no ACK request.** Winlink works on the air, but the
+- [x] **Winlink: no ACK request.** **Done after beta 4.1** (WLNK-1 dropped from want_id; check on the air that WLNK-1 still answers). Winlink works on the air, but the
   WLNK-1 gateway answers with its own message anyway, so the `{nn}` we
   add to ask for a receipt brings a second ACK. Stop adding it for WLNK-1
   (`want_id` in `aprs_prepare()`, `src/dialog_js8.c`); SMS and email keep

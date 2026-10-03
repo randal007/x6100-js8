@@ -5746,7 +5746,10 @@ static bool aprs_prepare(const char *in, char *out, size_t size) {
         return false;
     }
 
-    bool want_id = !strcmp(to, "SMS") || !strcmp(to, "EMAIL-2") || !strcmp(to, "WLNK-1");
+    /* Not Winlink: WLNK-1 answers each message with its own reply, so an
+     * id (which asks for an ACK too) only brought a second acknowledgement
+     * (VE7NHW on the air, beta 4). Plain APRS messages may go without. */
+    bool want_id = !strcmp(to, "SMS") || !strcmp(to, "EMAIL-2");
     if (want_id && !strchr(body, '{')) {
         if (!aprs_msg_id) aprs_msg_id = (unsigned)(time(NULL) % 90);
         aprs_msg_id = aprs_msg_id % 99 + 1;

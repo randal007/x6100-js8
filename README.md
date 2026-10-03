@@ -551,7 +551,9 @@ them); they come back to the radio only if a JS8Call-improved station with
 `@APRSIS MSG TO:<your call> <text> DE <sender>` then lands in your Inbox,
 from *APRS*, and **Reply by APRS** answers it. Older desktop JS8Call never
 passes APRS messages back. APRS text is limited to 67 characters; an
-SMS, email or Winlink message's number (`{04}`) comes on top.
+SMS or email message's number (`{04}`) comes on top. Winlink messages go
+without one: WLNK-1 answers each with its own reply, and a number only
+brought a second acknowledgement.
 
 **Two-way SMS works** (confirmed on the air 2026-09-28 with the beta 4
 test build, through NR4U's gateway on 40 m): texts from a phone arrive in
@@ -834,7 +836,7 @@ Beta 5 is being planned; the full list with notes is in
   someone answers; hold for Auto like CQ; the TX bar shows the
   heartbeat's frequency
 - [ ] **APRS:** a commands menu (weather and more), a contact book for
-  SMS, no double ACKs on Winlink
+  SMS; no double ACKs on Winlink (done after 4.1: to be checked on the air)
 - [ ] **Saved messages and macros**, as desktop JS8Call has
 - [ ] **GPS** time and location from a USB GPS
 - [ ] The green receive bar as wide as the station's speed; ALC for

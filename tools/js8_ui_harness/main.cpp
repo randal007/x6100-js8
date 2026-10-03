@@ -2345,6 +2345,24 @@ int main() {
         printf("[sms] 68 characters: '%s' (want APRS allows 67...)\n", stub_last_msg);
         ui_compose_cancel();
         pump(300);
+
+        // Winlink: no id (WLNK-1 answers with its own reply; an id only
+        // brought a second ACK). SMS above still got one. First let the
+        // 9-frame SMS finish (quiet for a whole slot).
+        for (int quiet = 0, i = 0; quiet < 170 && i < 3000; i++) {
+            pump(100);
+            quiet = stub_tx_keyed ? 0 : quiet + 1;
+        }
+        ui_press(3); // Send...
+        pump(200);
+        ui_compose_append("@APRSIS CMD :WLNK-1   :SP TEST@EXAMPLE.COM HELLO");
+        ui_compose_enter();
+        for (int i = 0; i < 300 && !stub_tx_keyed; i++) pump(100);
+        for (int i = 0; i < 400 && stub_tx_keyed; i++) pump(100);
+        pump(3500);
+        printf("[sms] Winlink sent without an id: %d, with one: %d (want 1, 0)\n",
+               ui_list_has("WLNK-1   :SP TEST@EXAMPLE.COM HELLO") == 1 && ui_list_has("HELLO{") != 1,
+               ui_list_has("HELLO{") == 1);
         return 0;
     }
     if (getenv("ONLY_FREQMARK")) {
