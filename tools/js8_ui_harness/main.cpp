@@ -14,6 +14,7 @@ void scheduler_work();
 void observer_delayed_drain(void);
 void ui_gps_tick(void);
 uint32_t stub_audio_rate(void);
+int      stub_play_rate(void);
 void ui_init(void);
 void ui_open(void);
 void ui_press(int i);
@@ -32,6 +33,7 @@ int  ui_list_has(const char *text);
 const char *ui_focused_text(void);
 const char *ui_focus_desc(void);
 const char *ui_button_label(int i);
+int         ui_button_exists(int i);
 int         ui_button_marked(int i);
 void ui_compose_append(const char *text);
 const char *ui_compose_text(void);
@@ -751,20 +753,17 @@ int main() {
         pump(500);
         printf("[rows] after a band change: still growing %d, the text so far %d (want 0, 1)\n", ui_list_has(" ...") == 1,
                ui_list_has("VE7ABC: W1XYZ THIS") == 1);
-        ui_page(4);
-        ui_press(2); // HB on (and the knob)
-        ui_press(2); // done
-        pump(200);
         ui_page(1);
-        ui_press(2); // Heartbeat: "HB timer restarted" is an info row
+        ui_hold(2);  // auto HB: one now, and "Auto HB on" is an info row
+        ui_press(2); // done setting the minutes
         pump(300);
-        int before = ui_list_has("HB timer restarted");
+        int before = ui_list_has("Auto HB on");
         ui_page(2);
         ui_press(1); // Show: Directed (the list is rebuilt)
         ui_press(1); // All
         ui_press(1); // No HB
         pump(300);
-        printf("[rows] info row before %d, after three rebuilds %d (want 1, 1)\n", before, ui_list_has("HB timer restarted"));
+        printf("[rows] info row before %d, after three rebuilds %d (want 1, 1)\n", before, ui_list_has("Auto HB on"));
         ui_key(LV_KEY_ESC); // stop the heartbeat
         pump(500);
         ui_page(3);
@@ -1756,10 +1755,11 @@ int main() {
 
         // HB ACK: not while any message is still arriving (to anyone).
         ui_page(4);
-        ui_press(2); // HB on (and the knob)
-        ui_press(2); // done
         ui_press(3); // HB ACK on
-        pump(300);
+        ui_page(1);
+        ui_hold(2);  // auto HB: one now (let it go), the knob sets the minutes
+        ui_press(2); // done
+        wait_idle();
         frames = stub_tx_frames;
         feed_band({{"N0ABC", "EM12", "W7AAA", "W7AAA MSG THE NET MOVES TO 7.078 TONIGHT AT THE USUAL TIME", 1320,
                     0.05f},
@@ -1929,7 +1929,7 @@ int main() {
         ui_page(1);
         ui_press(1); // CQ
         wait_tx();
-        printf("[speed] Fast frame: %u samples (want %d)\n", stub_tx_samples, 79 * 4410);
+        printf("[speed] Fast frame: %u samples (want %d: 79 symbols of 0.1 s at %d Hz)\n", stub_tx_samples, 79 * stub_play_rate() / 10, stub_play_rate());
         printf("[speed] our row: %d (offset kept at Turbo's 2840 limit)\n", ui_list_has("TX 2840 F"));
         screenshot("37_speed_tx.ppm");
 
@@ -2539,59 +2539,68 @@ int main() {
         printf("[autocq] then press: '%s' (want CQ), info row %d\n", ui_button_label(1),
                ui_list_has("Auto CQ off: manual"));
 
-        // HB on, then a heartbeat by hand: the automatic ones count from it.
+        // Heartbeat works the same way: hold = auto (one now), press = off.
         for (int i = 0; i < 40; i++) pump(500);
-        ui_page(4);
-        ui_press(2); // HB on (and the knob)
-        ui_press(2); // done
-        pump(300);
         ui_page(1);
-        ui_press(2); // Heartbeat now
+        int hb0 = stub_tx_frames;
+        ui_hold(2);
+        printf("[hb] held Heartbeat: '%s' (want HB: knob), info row %d\n", ui_button_label(2), ui_list_has("Auto HB on"));
+        ui_press(2); // done setting
+        for (int i = 0; i < 300 && stub_tx_frames == hb0; i++) pump(100);
+        printf("[hb] one sent at once: %d (want 1), button '%s' (want HB auto: countdown)\n", stub_tx_frames - hb0,
+               ui_button_label(2));
+        for (int i = 0; i < 50; i++) pump(100);
+        ui_press(2); // auto off
         pump(300);
-        printf("[hb] manual heartbeat restarts the timer: %d\n", ui_list_has("HB timer restarted: next in 30 min"));
+        printf("[hb] then press: '%s' (want Heart-beat), info row %d\n", ui_button_label(2),
+               ui_list_has("Auto HB off: manual"));
         return 0;
     }
     if (getenv("ONLY_HBPAUSE")) {
-        // Heartbeats pause only for what you send by hand (not a heartbeat),
-        // stay switched on, and come back 10 min after your last message.
+        // Page 1's Heartbeat works as CQ: press = one now, hold = auto (one
+        // now, the knob sets the minutes), press while auto = off. Auto
+        // heartbeats pause for what you send by hand (not a heartbeat, not a
+        // CQ) and when someone calls you; they come back 10 min after.
         // Wait for a queued transmission to key (it waits for its slot), then end.
         auto tx_done = [](int before) {
             for (int i = 0; i < 300 && stub_tx_frames == before; i++) pump(100);
             for (int i = 0; i < 300 && stub_tx_keyed; i++) pump(100);
             pump(3500);
         };
-        auto tx_idle = [] { pump(3500); };
         pump(300);
         ui_page(4);
+        printf("[hbpause] page 4: '%s' | %s | '%s' | '%s' (want AUTO | (none) | HB ACK | Settings)\n", ui_button_label(1),
+               ui_button_exists(2) ? "a button" : "(none)", ui_button_label(3), ui_button_label(4));
         ui_press(1); // AUTO on
-        ui_press(2); // HB on (and the knob)
-        ui_press(2); // done
         ui_press(3); // HB ACK on
-        pump(300);
-        printf("[hbpause] start: '%s' / '%s'\n", ui_button_label(2), ui_button_label(3));
-        // Messages to us, and AUTO's answers, don't pause anything.
-        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
-        int before = stub_tx_frames;
-        feed_band({{"VE7ABC", "CN89", "K2XYZ", "K2XYZ SNR?", 1650, 0.05f}});
-        tx_done(before);
-        printf("[hbpause] after a message and an auto SNR reply: '%s' (want HB 30 min), info row %d (want 0)\n",
-               ui_button_label(2), ui_list_has("HB and HB ACK paused"));
-        // A heartbeat by hand doesn't either.
         ui_page(1);
+        printf("[hbpause] Heartbeat button: '%s' (want Heart-beat)\n", ui_button_label(2));
         int sent = stub_tx_frames;
-        ui_press(2); // Heartbeat
+        ui_hold(2); // auto HB: one now, and the knob sets the minutes
+        printf("[hbpause] held: '%s' (want HB: knob), info row %d (want 1)\n", ui_button_label(2),
+               ui_list_has("Auto HB on"));
+        ui_press(2); // done setting
         tx_done(sent);
-        ui_page(4);
-        printf("[hbpause] after a manual heartbeat: '%s' (want HB 30 min)\n", ui_button_label(2));
-        // HW CPY? by hand: paused, switches still on.
-        ui_select_row_from("N0XYZ");
-        ui_page(1);
-        ui_press(4); // HW CPY?
-        pump(300);
-        ui_page(4);
-        printf("[hbpause] after HW CPY?: '%s' / '%s' (want paused / paused), info row %d (want 1)\n",
-               ui_button_label(2), ui_button_label(3), ui_list_has("HB and HB ACK paused 10 min: you sent"));
+        printf("[hbpause] one sent at once: %d (want 1), button '%s' (want HB auto: a countdown)\n", stub_tx_frames - sent,
+               ui_button_label(2));
+        // A CQ by hand, then auto CQ: heartbeats carry on.
+        sent = stub_tx_frames;
+        ui_press(1); // CQ
+        tx_done(sent);
+        printf("[hbpause] after a CQ: '%s' (want a countdown, not paused)\n", ui_button_label(2));
+        ui_hold(1); // auto CQ
+        ui_press(1); // done setting its minutes
         tx_done(stub_tx_frames);
+        ui_press(1); // auto CQ off
+        printf("[hbpause] after auto CQ: '%s' (want a countdown), paused row %d (want 0)\n", ui_button_label(2),
+               ui_list_has("HB and HB ACK paused"));
+        // Someone calls us: paused, the switches stay on.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+        pump(300);
+        printf("[hbpause] N0XYZ called: '%s' (want HB auto: paused), row %d (want 1)\n", ui_button_label(2),
+               ui_list_has("paused 10 min: N0XYZ called"));
+        ui_page(4);
+        printf("[hbpause] HB ACK: '%s' (want paused)\n", ui_button_label(3));
         // Someone's heartbeat while paused: no HB ACK.
         int frames = stub_tx_frames;
         feed_band({{"W7XYZ", "DM43", "", "W7XYZ: HEARTBEAT DM43", 1800, 0.04f}});
@@ -2600,22 +2609,33 @@ int main() {
         // 11 min later (JS8 time; a whole number of slots): back by itself.
         js8_set_drift_ms(11 * 60 * 1000);
         pump(1500);
-        printf("[hbpause] 11 min later: '%s' / '%s' (want HB 30 min / HB ACK On)\n", ui_button_label(2),
-               ui_button_label(3));
-        js8_set_drift_ms(0);
-        // Paused again; pressing HB resumes at once, pressing again turns it off.
         ui_page(1);
+        printf("[hbpause] 11 min later: '%s' (want a countdown)\n", ui_button_label(2));
+        js8_set_drift_ms(0);
+        // HW CPY? by hand pauses them again.
+        ui_select_row_from("N0XYZ");
         ui_press(4); // HW CPY?
         pump(300);
-        ui_page(4);
-        printf("[hbpause] paused again: '%s'\n", ui_button_label(2));
+        printf("[hbpause] after HW CPY?: '%s' (want paused), row %d (want 1)\n", ui_button_label(2),
+               ui_list_has("paused 10 min: you sent"));
+        tx_done(stub_tx_frames);
+        // Hold while paused: carries on, the knob sets the minutes.
+        ui_hold(2);
+        ui_rotary(-1);
+        printf("[hbpause] held while paused: '%s' (want HB: knob < 29 min >)\n", ui_button_label(2));
+        ui_press(2);
+        printf("[hbpause] done: '%s' (want a countdown)\n", ui_button_label(2));
+        // Press while auto: off.
         ui_press(2);
         pump(200);
-        printf("[hbpause] HB pressed while paused: '%s' (want HB 30 min)\n", ui_button_label(2));
+        printf("[hbpause] pressed: '%s' (want Heart-beat), row %d (want 1)\n", ui_button_label(2),
+               ui_list_has("Auto HB off: manual"));
+        // Off, a press is one heartbeat, nothing after it.
+        sent = stub_tx_frames;
         ui_press(2);
-        pump(200);
-        printf("[hbpause] pressed again: '%s' (want HB Off)\n", ui_button_label(2));
-        tx_idle();
+        tx_done(sent);
+        printf("[hbpause] one by hand: %d sent (want 1), button '%s' (want Heart-beat)\n", stub_tx_frames - sent,
+               ui_button_label(2));
         return 0;
     }
     if (getenv("ONLY_MAP")) {
@@ -2962,17 +2982,21 @@ int main() {
         };
         pump(300);
 
-        // 1. CQ pauses heartbeats.
-        ui_page(4);
-        ui_press(2); // HB on (into the knob interval setting)
-        ui_press(2); // done setting
-        printf("[cq-hb] HB before CQ: '%s'\n", ui_button_label(2));
+        // 1. CQ doesn't pause auto heartbeats (it used to; the user's change).
         ui_page(1);
+        int hb0 = stub_tx_frames;
+        ui_hold(2);  // auto HB: one now
+        ui_press(2); // done setting
+        for (int i = 0; i < 300 && stub_tx_frames == hb0; i++) pump(100);
+        for (int i = 0; i < 300 && stub_tx_keyed; i++) pump(100);
+        pump(3500);
+        printf("[cq-hb] HB before CQ: '%s'\n", ui_button_label(2));
         ui_press(1); // CQ
         pump(200);
-        ui_page(4);
-        printf("[cq-hb] HB after CQ: '%s' (want HB:\npaused)\n", ui_button_label(2));
-        printf("[cq-hb] info row shown=%d (want 1)\n", ui_list_has("HB and HB ACK paused 10 min: CQ"));
+        printf("[cq-hb] HB after CQ: '%s' (want HB auto: a countdown, not paused)\n", ui_button_label(2));
+        printf("[cq-hb] paused row shown=%d (want 0)\n", ui_list_has("HB and HB ACK paused"));
+        ui_key(LV_KEY_ESC); // stop the CQ
+        pump(500);
 
         // 3. Holding the page button goes back a page.
         ui_page(2);
@@ -3312,12 +3336,14 @@ int main() {
     wait_done();
     screenshot("14_after_t3.ppm");
 
-    // ---- T4: AUTO, HB, HB ACK. We're on page 2; go to page 4.
+    // ---- T4: AUTO, HB ACK (page 4), auto heartbeats (page 1: hold Heartbeat).
     ui_page(4);
-    before = stub_tx_frames;
     ui_press(1); // AUTO on
-    ui_press(2); // HB on: first heartbeat at the next chance, and the knob sets the interval
-    printf("[t4] HB after press: '%s'\n", ui_button_label(2));
+    ui_press(3); // HB ACK on
+    ui_page(1);
+    before = stub_tx_frames;
+    ui_hold(2); // auto HB: one now, and the knob sets the interval
+    printf("[t4] HB after hold: '%s'\n", ui_button_label(2));
     ui_rotary(-1);
     ui_rotary(-1);
     ui_rotary(-1);
@@ -3325,12 +3351,12 @@ int main() {
     screenshot("15a_hb_interval.ppm");
     pump(9000); // setting the interval ends on its own
     printf("[t4] HB after 9 s: '%s'\n", ui_button_label(2));
-    ui_press(3); // HB ACK on
-    pump(300);
+    // As auto CQ does: one right away (the user's choice), then every 27 min.
+    wait_keyed(before);
+    printf("[t4] first heartbeat keyed at %d Hz (want 500-999), frames %d (was %d)\n", stub_tx_offset, stub_tx_frames,
+           before);
     screenshot("15_auto_on.ppm");
-    // As on desktop: no heartbeat right away, the first one is an interval out.
-    pump(20000);
-    printf("[t4] 20 s after HB on: frames %d (was %d, want no change)\n", stub_tx_frames, before);
+    wait_done();
 
     // Someone's heartbeat: expect an automatic ack in the HB sub-band.
     before = stub_tx_frames;
@@ -3340,8 +3366,8 @@ int main() {
     screenshot("16_hb_ack.ppm");
     wait_done();
 
-    // A query to us: expect an automatic SNR reply at our offset (HB and
-    // HB ACK stay on: only what you send by hand pauses them).
+    // A query to us: expect an automatic SNR reply at our offset (heartbeats
+    // pause now: someone called us).
     before = stub_tx_frames;
     feed_band({{"VE7ABC", "CN89", "K2XYZ", "K2XYZ SNR?", 1650, 0.04f}});
     wait_keyed(before);

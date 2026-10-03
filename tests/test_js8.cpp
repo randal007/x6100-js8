@@ -1347,6 +1347,15 @@ TEST_CASE("a QSO starts with any message to us except a heartbeat ack", "[js8][t
     CHECK_FALSE(starts_qso(incoming("K9ABC", "K2XYZ HEARTBEAT SNR -08", -5)));
     CHECK_FALSE(starts_qso(incoming("VE3KP", "CQ CQ CQ FN03", -5)));
     CHECK_FALSE(starts_qso(incoming("N0XYZ", "W1ABC HELLO", -5)));
+    // The usual answers to a CQ, all with our call (they pause heartbeats).
+    CHECK(starts_qso(incoming("N0XYZ", "K2XYZ HW CPY?", -5)));
+    CHECK(starts_qso(incoming("N0XYZ", "K2XYZ GRID?", -5)));
+    CHECK(starts_qso(incoming("N0XYZ", "K2XYZ SNR -12 GOOD MORNING", -5)));
+    CHECK(starts_qso(incoming("N0XYZ", "K2XYZ MSG HELLO FROM THE PARK", -5)));
+    CHECK_FALSE(starts_qso(incoming("N0XYZ", "K2XYZ/P HELLO", -5))); // /P is another call, as desktop
+    // Not to us: someone's answer to someone else, a group, @ALLCALL.
+    CHECK_FALSE(starts_qso(incoming("N0XYZ", "W1ABC HW CPY?", -5)));
+    CHECK_FALSE(starts_qso(incoming("N0XYZ", "@ALLCALL SNR?", -5)));
 }
 
 TEST_CASE("heartbeat timing follows desktop's TxLoop", "[js8][t4]") {

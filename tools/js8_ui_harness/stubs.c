@@ -45,6 +45,7 @@ void dsp_audio_set_active(uint32_t id, bool active) {
     printf("[dsp] audio %s\n", active ? "on" : "off");
 }
 uint32_t stub_audio_rate(void) { return audio_sub_rate; }
+int      stub_play_rate(void) { return AUDIO_PLAY_RATE; }
 void     dialog_audio_samples(unsigned int n, float *samples) {
     if (audio_sub_cb && audio_sub_on) audio_sub_cb(n, samples);
 }

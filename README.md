@@ -291,8 +291,8 @@ to go back a page. In JS8 a hold is half a second.
 
 | Page | Button | Does |
 |---|---|---|
-| 1 | **CQ** | `CQ CQ CQ <grid>`. Pauses heartbeats for 10 minutes, like anything you send (see [Transmitting](#transmitting)). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it; answers and heartbeats sent in between don't move it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
-| 1 | **Heartbeat** | One heartbeat now: on your own offset if that is 1000 Hz or below, else at a free spot in the 500–1000 Hz heartbeat sub-band (clear of anything heard in the last 30 s), as desktop. With HB on, the automatic ones count again from this one. |
+| 1 | **CQ** | `CQ CQ CQ <grid>`. Heartbeats carry on (a CQ doesn't pause them; see [Transmitting](#transmitting)). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it; answers and heartbeats sent in between don't move it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
+| 1 | **Heartbeat** | Works as CQ does. Press: one heartbeat now, on your own offset if that is 1000 Hz or below, else at a free spot in the 500–1000 Hz heartbeat sub-band (clear of anything heard in the last 30 s), as desktop; the red band shows where while it waits and goes. **Hold for auto heartbeats**: one now, and the main knob sets the minutes between them (5–30, remembered; press Heartbeat when done, or hold it later to change it). The button then counts down to the next one, or shows *paused* (see [Transmitting](#transmitting)); holding it then carries on at once. Press it while auto is on to switch auto off. None in Turbo. |
 | 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…?, Can anyone reach…? (with no station selected, only that one) |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. On [the map](#the-map): **All heard / Heard me**. |
@@ -304,8 +304,8 @@ to go back a page. In JS8 a hold is half a second.
 | 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off when it hasn't been heard for *Stations kept* ([Settings](#settings); an hour to start). |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
-| 4 | **HB: Off / N min** | Heartbeats every N minutes. When you switch it on, the main knob sets 5–30 min; press HB again to finish. Hold HB to change the interval. Shows *paused* for 10 minutes after you send something; press it then to resume at once. |
-| 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and HB on, as on desktop). |
+| 4 | *(empty)* | Heartbeats moved to page 1's **Heartbeat** (hold for auto). |
+| 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and auto heartbeats on, as on desktop). |
 | 4 | **Settings…** | Time Sync, INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay, your groups, how long stations and messages stay listed, km or miles, decode marks and an operator's call: see [Settings](#settings). |
 | 5 | **APRS >** | [APRS](#aprs) spots and messages. |
 | 5 | **Log QSO** | [Log](#logging) the QSO that just ended, or the selected station if you've selected someone else since. |
@@ -332,8 +332,9 @@ the thing. ESC closes lists too, and the VOL knob works in all of them.
 - **Power** is capped at 5 W while JS8 is open, as in the FT8 app. The
   level is learned and shared with FT8.
 - **Stop:** ESC or the top knob, at any moment.
-- **Nothing sends by itself** unless you switch it on. AUTO, HB and HB ACK
-  are off every time the app opens, and the status line shows what's on:
+- **Nothing sends by itself** unless you switch it on. AUTO, auto
+  heartbeats, auto CQ and HB ACK are off every time the app opens, and the
+  status line shows what's on:
   - **AUTO** answers SNR?, GRID?, INFO?, STATUS?, HEARING?, AGN?, message
     ACKs and message queries sent to your call, and passes
     [relays](#relays) on, as desktop JS8Call does. With AUTO off, each
@@ -350,17 +351,18 @@ the thing. ESC closes lists too, and the VOL knob works in all of them.
     answers while a message to you is still arriving** (you can't hear its
     next frames while you send); no HB ACK goes out while anyone's message
     is still arriving.
-  - **HB** sends heartbeats on desktop's fixed schedule: every N minutes on
-    the slot grid, the first N minutes after you switch it on; one that had
-    to wait doesn't move the ones after it. **HB ACK** acknowledges others'
-    heartbeats.
-  - Anything you send yourself except a heartbeat (Reply, Send…, a Query
-    item, CQ, HW CPY? …) **pauses** HB and HB ACK, so heartbeats don't cut
-    into a QSO. The buttons show *paused* and the status line when they
-    resume: 10 minutes after the last message you sent. They stay switched
-    on; press HB to resume sooner. Messages you receive and AUTO's answers
-    don't pause them. After an hour without touching the radio, automatic
-    sending pauses until you press something.
+  - **Auto heartbeats** (hold Heartbeat): one at once, then every N
+    minutes on desktop's fixed slot grid; one that had to wait doesn't
+    move the ones after it. **HB ACK** acknowledges others' heartbeats.
+  - Heartbeats and HB ACKs **pause** when a QSO starts, so they don't cut
+    into it: when someone calls you (an answer to your CQ or any message
+    to your call, not a heartbeat ACK), or when you send something
+    yourself (Reply, Send…, a Query item, HW CPY? …). A CQ, auto CQ
+    included, and a heartbeat don't pause them. The buttons show *paused*
+    and the status line when they resume: 10 minutes after the last of
+    those. They stay switched on; hold Heartbeat to carry on sooner. After
+    an hour without touching the radio, automatic sending pauses until you
+    press something.
 
 ## Speeds
 
@@ -785,7 +787,7 @@ Beta 5 is being planned; the full list with notes is in
 - [ ] **Station history:** QSOs, messages, INFO and STATUS for every
   station, opened by pressing it in the list or on the map; a Sort
   button; a QRZ light on the list and the map
-- [ ] **Heartbeats:** keep going while you call CQ, pause only when
+- [x] **Heartbeats:** keep going while you call CQ, pause only when
   someone answers; hold for Auto like CQ; the TX bar shows the
   heartbeat's frequency
 - [ ] **APRS:** a commands menu (weather and more), a contact book for

@@ -32,16 +32,23 @@ as they land.
 
 ## Heartbeat and CQ
 
-- [ ] The heartbeat timer no longer pauses during CQ.
-- [ ] Heartbeats pause only when someone actually answers the CQ.
-- [ ] The heartbeat timer works like CQ's (hold = Auto).
+- [x] The heartbeat timer no longer pauses during CQ.
+- [x] Heartbeats pause only when someone actually answers the CQ.
+- [x] The heartbeat timer works like CQ's (hold = Auto).
+  **Done (port-1.0.2), the user's choices:** no CQ pauses heartbeats
+  (single or auto); any call to you that starts a QSO pauses them (not a
+  heartbeat ACK, not a low-confidence decode), as does anything else you
+  send by hand; page 1's Heartbeat: press = one now, hold = auto (one now,
+  the knob sets 5-30 min), press while auto = off, hold while paused =
+  carry on; page 4's "HB: N min" button is gone, its slot left empty.
+  Harness ONLY_HBPAUSE rewritten for these rules.
 - [x] The TX bar (red rectangle) moves to the heartbeat's frequency when a
   heartbeat goes out. **Done (port-1.0.2):** from queued to finished, HB
   ACKs too (user's choices), finder_sync() in src/dialog_js8.c.
 
-These change decision D1 from the code review (heartbeats pause for
-10 minutes after anything you send by hand, CQ included;
-[docs/review](review/)).
+These change decision D1 from the code review (heartbeats paused for
+10 minutes after anything you sent by hand, CQ included, and nothing
+heard paused them; [docs/review](review/)).
 
 ## Stations and history
 

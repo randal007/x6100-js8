@@ -217,8 +217,10 @@ static void        query_close(void);
 static const char *auto_label_getter(void);
 static void        auto_cb(button_data_t *btn);
 static const char *hb_label_getter(void);
-static void        hb_cb(button_data_t *btn);
-static void        hb_hold_cb(button_data_t *btn);
+static void        heartbeat_hold_cb(button_data_t *btn);
+static void        hb_auto_stop(const char *why);
+static void        hb_adjust_start(button_data_t *btn);
+static void        hb_resume(void);
 static const char *hb_ack_label_getter(void);
 static void        hb_ack_cb(button_data_t *btn);
 static void        texts_cb(button_data_t *btn);
@@ -612,7 +614,7 @@ static button_data_t btn_hw_cpy  = {.type = BTN_TEXT, .label = "HW CPY?", .press
 
 static button_data_t btn_p2    = {.type = BTN_TEXT, .label = "(JS8 2:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_3, .prev = &page_1};
 static button_data_t btn_cq    = {.type = BTN_TEXT_FN, .label_fn = cq_label_getter, .press = cq_cb, .hold = cq_hold_cb};
-static button_data_t btn_hb    = {.type = BTN_TEXT, .label = "Heart-\nbeat", .press = heartbeat_cb};
+static button_data_t btn_hb    = {.type = BTN_TEXT_FN, .label_fn = hb_label_getter, .press = heartbeat_cb, .hold = heartbeat_hold_cb};
 static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press = query_cb};
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
@@ -628,10 +630,11 @@ static buttons_page_t page_3 = {{&btn_p3, &btn_map_view, &btn_hold, &btn_station
 
 static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_5, .prev = &page_3};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
-static button_data_t btn_hbauto = {.type = BTN_TEXT_FN, .label_fn = hb_label_getter, .press = hb_cb, .hold = hb_hold_cb};
 static button_data_t btn_hbackk = {.type = BTN_TEXT_FN, .label_fn = hb_ack_label_getter, .press = hb_ack_cb};
 static button_data_t btn_texts  = {.type = BTN_TEXT, .label = "Settings...", .press = texts_cb};
-static buttons_page_t page_4 = {{&btn_p4, &btn_auto, &btn_hbauto, &btn_hbackk, &btn_texts}};
+/* The empty button: where "HB: 10 min" was, before heartbeats moved to
+ * page 1's Heartbeat (hold = auto, as CQ). Free for a beta 5 feature. */
+static buttons_page_t page_4 = {{&btn_p4, &btn_auto, NULL, &btn_hbackk, &btn_texts}};
 
 static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_6, .prev = &page_4};
 static button_data_t  btn_aprs      = {.type = BTN_TEXT, .label = "APRS >", .press = aprs_cb};
@@ -2252,7 +2255,7 @@ static void update_tx_bar(void) {
         return;
     }
     if (hb_adjusting && tx_status.state == JS8_TX_IDLE) {
-        snprintf(line, sizeof(line), "HB every %u min: turn the knob (5-30), press HB when done",
+        snprintf(line, sizeof(line), "Auto HB every %u min: turn the knob (5-30), press Heartbeat when done",
                  param_i_get(cfg.js8.hb_interval()));
         tx_bar_set(0x5a4a00, false, line);
         return;
@@ -2348,11 +2351,12 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
     char call[JS8_RX_CALL_LEN];
     if (!automatic && starts_with_call(text, call, sizeof(call))) auto_cq_stop("replying");
     if (!automatic && starts_with_call(text, call, sizeof(call))) map_qrz_clear(call);
-    /* Anything you send by hand, except a heartbeat, pauses heartbeats. */
-    if (!automatic) {
+    /* Anything you send by hand pauses heartbeats, except a heartbeat or a
+     * CQ: they carry on while you call CQ, auto CQ too (the user's choice). */
+    if (!automatic && strncmp(text, "CQ ", 3) != 0) {
         char hb[48];
         js8_heartbeat_text(my_call(), my_grid(), hb, sizeof(hb));
-        if (strcmp(text, hb) != 0) hb_pause(strncmp(text, "CQ ", 3) == 0 ? "CQ" : "you sent");
+        if (strcmp(text, hb) != 0) hb_pause("you sent");
     }
     return true;
 }
@@ -2419,7 +2423,7 @@ static void rotary_cb(int32_t diff) {
         if (v > JS8_HB_MAX_INTERVAL) v = JS8_HB_MAX_INTERVAL;
         param_i_set(cfg.js8.hb_interval(), (uint16_t)v);
         hb_adjust_ms = now_wall_ms();
-        if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
+        if (btn_hb.disp_btn) buttons_refresh(&btn_hb);
         if (param_i_get(cfg.js8.hb()) && hb_next_ms) hb_next_ms = hb_first_ms();
         update_tx_bar();
         update_status();
@@ -4495,7 +4499,6 @@ static bool send_cq(bool automatic) {
     snprintf(text, sizeof(text), "CQ CQ CQ %.4s", my_grid());
     if (!tx_queue_at(text, param_i_get(cfg.js8.tx_freq()), automatic)) return false;
     tx_cq = true;
-    if (automatic) hb_pause("CQ"); /* by hand, tx_queue_at did it */
     return true;
 }
 
@@ -4526,7 +4529,7 @@ static void cq_adjust_start(void) {
     hb_adjusting = false;
     cq_adjusting = true;
     cq_adjust_ms = now_wall_ms();
-    if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
+    if (btn_hb.disp_btn) buttons_refresh(&btn_hb);
     if (btn_cq.disp_btn) buttons_refresh(&btn_cq);
     update_tx_bar();
 }
@@ -4656,15 +4659,49 @@ static int64_t hb_first_ms(void) {
     return js8_next_heartbeat_ms(now_wall_ms(), param_i_get(cfg.js8.hb_interval()), js8_speed_period_s(cur_speed()));
 }
 
-/* One now. With HB on, the automatic ones count again from this one, so
- * a manual heartbeat isn't followed by an automatic one straight after. */
+/* Page 1's Heartbeat works as CQ does (the user's design): press = one
+ * now; hold = auto heartbeats, one now and then every js8_hb_interval
+ * minutes on desktop's slot schedule, the knob setting the minutes; press
+ * while auto = back to manual (auto off); hold while auto = set the
+ * minutes again (and carry on if they were paused). */
 static void heartbeat_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
     (void)btn;
-    if (!send_heartbeat(false) || !param_i_get(cfg.js8.hb())) return;
-    hb_next_ms = hb_first_ms();
-    add_info_row("HB timer restarted: next in %u min", param_i_get(cfg.js8.hb_interval()));
+    if (hb_adjusting) {
+        hb_adjust_end();
+        return;
+    }
+    if (param_i_get(cfg.js8.hb())) {
+        hb_auto_stop("manual");
+        return;
+    }
+    send_heartbeat(false);
+}
+
+static void heartbeat_hold_cb(button_data_t *btn) {
+    user_touch();
+    if (popup_guard()) return;
+    if (param_i_get(cfg.js8.hb())) {
+        if (hb_paused()) hb_resume();
+        hb_adjust_start(btn);
+        return;
+    }
+    if (!js8_speed_heartbeats(cur_speed())) {
+        msg_update_text_fmt("No heartbeats in Turbo, as in desktop JS8Call");
+        return;
+    }
+    /* Busy sending: the first one comes an interval from now (as auto CQ).
+     * Otherwise one now; the next ones count from it. */
+    bool busy = tx_active;
+    if (!busy && !send_heartbeat(false)) return;
+    param_i_set(cfg.js8.hb(), true);
+    hb_paused_until = 0;
+    hb_next_ms      = hb_first_ms();
+    if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
+    add_info_row("Auto HB on");
+    hb_adjust_start(btn);
+    msg_update_text_fmt("Auto HB on: turn the knob to set the minutes, press Heartbeat when done");
     update_status();
 }
 
@@ -5125,7 +5162,7 @@ static void hb_pause(const char *why) {
     bool was = hb_paused();
     hb_paused_until = now_wall_ms() + HB_PAUSE_MS;
     if (hb_adjusting) hb_adjust_end();
-    if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
+    if (btn_hb.disp_btn) buttons_refresh(&btn_hb);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
     if (!was) add_info_row("HB and HB ACK paused %d min: %s", HB_PAUSE_MS / 60000, why);
     update_status();
@@ -5135,7 +5172,7 @@ static void hb_pause(const char *why) {
  * due meanwhile goes out at the next chance. */
 static void hb_resume(void) {
     hb_paused_until = 0;
-    if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
+    if (btn_hb.disp_btn) buttons_refresh(&btn_hb);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
     update_status();
 }
@@ -5145,6 +5182,12 @@ static void handle_incoming(const js8_rx_msg_t *m) {
         char why[JS8_RX_CALL_LEN + 12];
         snprintf(why, sizeof(why), "%s answered", m->from);
         auto_cq_stop(why);
+        /* Someone calling you (an answer to your CQ or not; not a heartbeat
+         * ACK, nor a doubtful decode) pauses heartbeats too. */
+        if (!m->low_confidence) {
+            snprintf(why, sizeof(why), "%s called", m->from);
+            hb_pause(why);
+        }
     }
 
     js8_heard_t heard[32];
@@ -5258,6 +5301,7 @@ static void hb_tick(void) {
         hb_next_ms = 0;
         return;
     }
+    if (btn_hb.disp_btn && !hb_adjusting) buttons_refresh(&btn_hb); /* its countdown */
     int64_t now = now_wall_ms();
     if (hb_paused()) return;
     if (js8_auto_idle(autop, now) || !js8_speed_heartbeats(cur_speed())) return;
@@ -5297,14 +5341,23 @@ static void auto_cb(button_data_t *btn) {
 
 static const char *hb_label_getter(void) {
     static char buf[24];
-    if (!param_i_get(cfg.js8.hb())) return "HB:\nOff";
-    if (hb_paused() && !hb_adjusting) return "HB:\npaused";
-    snprintf(buf, sizeof(buf), hb_adjusting ? "HB: knob\n< %u min >" : "HB:\n%u min", param_i_get(cfg.js8.hb_interval()));
+    if (hb_adjusting) {
+        snprintf(buf, sizeof(buf), "HB: knob\n< %u min >", param_i_get(cfg.js8.hb_interval()));
+        return buf;
+    }
+    if (!param_i_get(cfg.js8.hb())) return "Heart-\nbeat";
+    if (hb_paused()) return "HB auto:\npaused";
+    if (!js8_speed_heartbeats(cur_speed())) return "HB auto:\nnot Turbo";
+    if (!hb_next_ms) return "HB auto:\nsoon";
+    int secs = (int)((hb_next_ms - now_wall_ms() + 999) / 1000);
+    if (secs < 1) return "HB auto:\nnow";
+    if (secs < 60) snprintf(buf, sizeof(buf), "HB auto:\n%d s", secs);
+    else snprintf(buf, sizeof(buf), "HB auto:\n%d:%02d", secs / 60, secs % 60);
     return buf;
 }
 
-/* Off -> On, straight into setting the interval with the knob; press
- * again (or wait) to finish; press once more to turn heartbeats off. */
+/* Setting the interval with the main knob, as for auto CQ: press Heartbeat
+ * (or wait) to finish. */
 static void hb_adjust_start(button_data_t *btn) {
     if (cq_adjusting) cq_adjust_end();
     hb_adjusting    = true;
@@ -5316,40 +5369,23 @@ static void hb_adjust_start(button_data_t *btn) {
 static void hb_adjust_end(void) {
     if (!hb_adjusting) return;
     hb_adjusting = false;
-    if (btn_hbauto.disp_btn) buttons_refresh(&btn_hbauto);
+    if (btn_hb.disp_btn) buttons_refresh(&btn_hb);
     update_tx_bar();
-    if (param_i_get(cfg.js8.hb())) msg_update_text_fmt("HB every %u min", param_i_get(cfg.js8.hb_interval()));
+    if (param_i_get(cfg.js8.hb()))
+        msg_update_text_fmt("Auto HB every %u min (press Heartbeat to stop)", param_i_get(cfg.js8.hb_interval()));
 }
 
-static void hb_cb(button_data_t *btn) {
-    user_touch();
-    if (popup_guard()) return;
-    if (hb_adjusting) {
-        hb_adjust_end();
-        return;
-    }
-    if (param_i_get(cfg.js8.hb()) && hb_paused()) {
-        hb_resume();
-        msg_update_text_fmt("Heartbeats resumed");
-        return;
-    }
-    param_i_set(cfg.js8.hb(), !param_i_get(cfg.js8.hb()));
+static void hb_auto_stop(const char *why) {
+    if (!param_i_get(cfg.js8.hb())) return;
+    param_i_set(cfg.js8.hb(), false);
+    hb_adjusting    = false;
     hb_next_ms      = 0;
     hb_paused_until = 0;
-    buttons_refresh(btn);
+    if (btn_hb.disp_btn) buttons_refresh(&btn_hb);
     if (btn_hbackk.disp_btn) buttons_refresh(&btn_hbackk);
-    if (param_i_get(cfg.js8.hb())) {
-        hb_adjust_start(btn);
-    } else {
-        msg_update_text_fmt("HB off");
-    }
+    msg_update_text_fmt("Auto HB off: %s", why);
+    add_info_row("Auto HB off: %s", why);
     update_status();
-}
-
-static void hb_hold_cb(button_data_t *btn) {
-    user_touch();
-    if (popup_guard()) return;
-    hb_adjust_start(btn);
 }
 
 static const char *hb_ack_label_getter(void) {
@@ -5364,7 +5400,7 @@ static void hb_ack_cb(button_data_t *btn) {
     param_i_set(cfg.js8.hb_ack(), !param_i_get(cfg.js8.hb_ack()));
     buttons_refresh(btn);
     if (param_i_get(cfg.js8.hb_ack()) && !(param_i_get(cfg.js8.auto_mode()) && param_i_get(cfg.js8.hb()))) {
-        msg_update_text_fmt("HB ACK acts only while AUTO and HB are on");
+        msg_update_text_fmt("HB ACK acts only while AUTO and auto HB (hold Heartbeat) are on");
     }
     update_status();
 }
