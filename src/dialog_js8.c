@@ -6999,10 +6999,10 @@ static int             beep_count;
 static atomic_bool     beeping;
 
 /* Beep thread: audio_play() waits for room in the stream, so it can't run
- * on the LVGL thread, and it only ever gets small parts (like tx_player):
- * one call with the whole beep never finds room and hangs forever. */
-/* audio_play() in parts of at most 2048 samples: a bigger write never finds
- * room in the stream and hangs. Stops early if TX keys. */
+ * on the LVGL thread. */
+/* audio_play() in parts of at most 2048 samples, as tx_player does: R1CBU
+ * 0.34's hung on a bigger write (1.0's waits properly), and small parts let
+ * the beep stop as soon as TX keys. */
 static void beep_play(const int16_t *buf, size_t n) {
     for (size_t at = 0; at < n && !atomic_load(&keyed);) {
         size_t part = LV_MIN(2048, n - at);
