@@ -780,10 +780,10 @@ Beta 5 is being planned; the full list with notes is in
 - [ ] **Time sync overhaul:** automatic time sync like desktop JS8Call's
 - [ ] **High-SWR protection** for unattended stations: shut-down modes and
   a beep
-- [ ] **The latest firmware underneath:** gdyuldin's v1.0.2 first (a
-  cleaner screen with more room for the map;
-  [the study](docs/upgrade-1.0.2/README.md)), then the Murus team's WeFax,
-  NavTex and SSTV once their fork is on 1.0.2 too
+- [x] **The latest firmware underneath:** gdyuldin's v1.0.2 (a cleaner
+  screen with more room for the map; [the study](docs/upgrade-1.0.2/README.md));
+  being tested on the radio. The Murus team's WeFax, NavTex and SSTV come
+  back once their fork is on 1.0.2 too
 - [ ] **Station history:** QSOs, messages, INFO and STATUS for every
   station, opened by pressing it in the list or on the map; a Sort
   button; a QRZ light on the list and the map

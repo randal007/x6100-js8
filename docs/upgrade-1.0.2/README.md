@@ -1,11 +1,42 @@
 # Moving to gdyuldin v1.0.2: the study
 
-Written 2026-10-02, before any porting starts. The user's direction:
+Written 2026-10-02, before the port started (status below). The user's direction:
 **build on gdyuldin's x6100_gui v1.0.2 and drop the Murus team's fork
 (1KO125: WeFax, NavTex, the channel list) for now**; the Murus team is
 moving their fork to 1.0.2 themselves, so their apps come back after, once.
 Reference: [JS8Call-improved](https://github.com/JS8Call-improved/JS8Call-improved)
 for anything JS8 behaves like, as always.
+
+## Status (2026-10-03)
+
+**Ported, on branch `port-1.0.2`, in testing on the radio.** `main` stays
+beta 4 + the QUERY CALL fix until the user's test passes; the save point
+is the tag `js8-0.34-final`. Done as planned below, the user's decisions
+1–5 all taken (JS8's button keeps its place, WeFax/NavTex slots empty;
+the Murus fork stays out also because it breaks FT8's waterfall, cause
+unknown). Differences from the plan, found on the way:
+
+- **Receive audio at 12 kHz, not 48:** asked at 12 kHz, 1.0 divides its
+  48 kHz by 4 with the same Kaiser decimator (`firdecim_rrrf`, 4, 7, 60 dB)
+  that gave us 11025 Hz on 0.34, so that's the tested path; the receiver
+  skips our resampler at 12 kHz (48 kHz would have cost the waterfall ~5x).
+- **The power trap:** our own migration renumbering would have converted a
+  stock-1.0.x card twice (the `params` value column is `INTEGER`), so we
+  realign once with upstream's numbering instead (`src/cfg/js8_db.c`,
+  `tests/test_js8_db.cpp`); checked on a copy of the user's card before
+  flashing: `pwr` 3 → 0.3, `output_gain` 44 → 8.8, `dac_offset` ÷ 10.
+- **The main knob:** 1.0 hands apps every click on its own (0.34 summed
+  them per 30 ms), so JS8's fast-spin speed-up never triggered and each
+  click redrew the whole waterfall on the rotated overlay plane: slow
+  tuning, laggy waterfall on the radio. Fixed (30 ms click window, narrow
+  finder redraws); upstream's FT8 has the same redraw pattern.
+- **The harness** links 1.0's real `cfg` library with a fresh `params.db`
+  per run, gpsd's header, and the LVGL fork's gradient-cache fix.
+
+Beta 5 features done on the branch since: the red band on a heartbeat's
+offset, the green band as wide as the station's speed, Heartbeat working
+as CQ (hold = auto) with the new pause rules. First radio build: CI
+37080766587 (flashed 2026-10-02); the next: CI 37095080051.
 
 Detail files:
 
