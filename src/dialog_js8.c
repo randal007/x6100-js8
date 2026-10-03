@@ -63,8 +63,13 @@
  * with the Kaiser decimator 0.34 used to give us 11025 Hz: JS8's own rate,
  * nothing left to resample. */
 #define SAMPLE_RATE      12000
-#define WIDTH            771
-#define WF_HEIGHT        325
+/* R1CBU 1.0's dialog (DIALOG_WIDTH x DIALOG_HEIGHT, 796 x 345) has a 1 px
+ * border with 8 px corners (none in Black): everything sits INSET inside
+ * it, the closest a square corner gets without poking through the curve.
+ * 0.34's dialog image needed 13 px (771 x 325). */
+#define INSET            4
+#define WIDTH            (DIALOG_WIDTH - 2 * INSET)   /* 788 */
+#define WF_HEIGHT        (DIALOG_HEIGHT - 2 * INSET)  /* 337 */
 #define WF_VISIBLE       55     /* waterfall rows left uncovered by the list */
 #define TX_BAR_H         30     /* TX status line between waterfall and list */
 #define TX_BAR_IDLE      0x000000 /* its background when idle, half see-through */
@@ -2414,11 +2419,11 @@ static void compose_layout(bool typing) {
     lv_obj_get_coords(dialog.obj, &d);
     lv_coord_t kb_top = lv_obj_get_height(lv_scr_act()) / 2; /* lv_keyboard: the bottom half */
     if (kb_shown) {
-        lv_obj_set_pos(table, 13, 13);
-        lv_obj_set_size(table, WIDTH, kb_top - d.y1 - 13 - 2);
+        lv_obj_set_pos(table, INSET, INSET);
+        lv_obj_set_size(table, WIDTH, kb_top - d.y1 - INSET - 2);
         lv_obj_add_flag(tx_bar, LV_OBJ_FLAG_HIDDEN);
     } else {
-        lv_obj_set_pos(table, 13, 13 + WF_VISIBLE + TX_BAR_H);
+        lv_obj_set_pos(table, INSET, INSET + WF_VISIBLE + TX_BAR_H);
         lv_obj_set_size(table, WIDTH, WF_HEIGHT - WF_VISIBLE - TX_BAR_H);
         lv_obj_clear_flag(tx_bar, LV_OBJ_FLAG_HIDDEN);
     }
@@ -2791,7 +2796,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_bg_opa(wf_box, LV_OPA_COVER, 0);
     lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(wf_box, WIDTH, WF_HEIGHT);
-    lv_obj_set_pos(wf_box, 13, 13);
+    lv_obj_set_pos(wf_box, INSET, INSET);
 
     waterfall = lv_waterfall_create(wf_box);
     lv_obj_clear_flag(waterfall, LV_OBJ_FLAG_SCROLLABLE);
@@ -2845,7 +2850,7 @@ static void construct_cb(lv_obj_t *parent) {
 
     tx_bar = lv_label_create(dialog.obj);
     lv_obj_set_size(tx_bar, WIDTH, TX_BAR_H);
-    lv_obj_set_pos(tx_bar, 13, 13 + WF_VISIBLE);
+    lv_obj_set_pos(tx_bar, INSET, INSET + WF_VISIBLE);
     lv_obj_set_style_text_font(tx_bar, &sony_22, 0);
     lv_obj_set_style_pad_left(tx_bar, 6, 0);
     lv_obj_set_style_pad_top(tx_bar, 3, 0);
@@ -2864,7 +2869,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_add_event_cb(table, table_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
     lv_obj_add_event_cb(table, table_draw_end_cb, LV_EVENT_DRAW_PART_END, NULL);
     lv_obj_set_size(table, WIDTH, WF_HEIGHT - WF_VISIBLE - TX_BAR_H);
-    lv_obj_set_pos(table, 13, 13 + WF_VISIBLE + TX_BAR_H);
+    lv_obj_set_pos(table, INSET, INSET + WF_VISIBLE + TX_BAR_H);
     lv_table_set_col_cnt(table, 1);
     lv_table_set_col_width(table, 0, WIDTH - 2);
     lv_obj_set_style_border_width(table, 0, LV_PART_ITEMS);
@@ -3023,7 +3028,7 @@ static void destruct_cb(void) {
  * blue-grey band included, not just the waterfall's place (VE7NHW). Where
  * that border is depends on the theme's dialog image (map_geometry()); its
  * rounded or cut corners are put back over the map (map_corners_apply()). */
-static int map_x = 13, map_y = 13, map_w = WIDTH, map_h = WF_HEIGHT;
+static int map_x = INSET, map_y = INSET, map_w = WIDTH, map_h = WF_HEIGHT; /* map_geometry() */
 static int map_corner_r = 9; /* the TX bar's corners on the map, inside the border's */
 static int map_edge     = 4; /* the status line this far in, clear of the corners */
 #define MAP_X          map_x
@@ -3422,7 +3427,10 @@ static void map_corners_load(void) {
     if (!src || lv_img_decoder_open(&dsc, src, lv_color_white(), 0) != LV_RES_OK) return;
     if (dsc.header.cf == LV_IMG_CF_TRUE_COLOR_ALPHA && sizeof(lv_color_t) == sizeof(lv_color32_t) &&
         MAP_X + MAP_W < (int)dsc.header.w && MAP_Y + MAP_H < (int)dsc.header.h) {
-        lv_color32_t bg = {.full = lv_color_to32(lv_color_black())}; /* PORT: behind the overlay plane */
+        /* Behind the dialog: R1CBU 1.0's other display plane, whose spectrum
+         * and waterfall JS8 turns off (black). Blending the few corner
+         * pixels here keeps the map an opaque canvas (cheap to draw). */
+        lv_color32_t bg = {.full = lv_color_to32(lv_color_black())};
         for (int corner = 0; corner < 4; corner++) {
             bool right = corner & 1, bottom = corner & 2;
             int  x0    = right ? MAP_W - MAP_CORNER : 0;
@@ -3597,7 +3605,7 @@ static void map_show(bool on) {
         map_follow = false;
         if (map_box) lv_obj_add_flag(map_box, LV_OBJ_FLAG_HIDDEN);
         lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_pos(tx_bar, 13, 13 + WF_VISIBLE);
+        lv_obj_set_pos(tx_bar, INSET, INSET + WF_VISIBLE);
         lv_obj_set_width(tx_bar, WIDTH);
         lv_obj_set_style_radius(tx_bar, 0, 0);
     }

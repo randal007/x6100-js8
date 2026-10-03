@@ -57,23 +57,30 @@ cd buildroot
 
 ## Merging upstream: numbers the JS8 fork has taken
 
-Three things the JS8 fork added are numbered, and the numbers are stored on
+Some things the JS8 fork added are numbered, and the numbers are stored on
 the SD card's DATA partition, which survives reflashing. When merging
-upstream (gdyuldin/x6100_gui), keep ours and give upstream's new ones the
-next free numbers, or cards already in use get mixed up:
+upstream (gdyuldin/x6100_gui), keep these as they are:
 
-- **`params.db` migrations** (`src/params/migrations.c`): ours are 4
-  (`_4_add_js8_presets`) and 5 (`_5_add_ghostnet_presets`), after
-  upstream's 0–3. A card already at version 5 skips any migration 4 or 5
-  upstream adds, so put upstream's after ours (6, 7 …). Ours only
-  `INSERT OR IGNORE`, so running them again is harmless.
+- **`params.db` migrations:** since the move to R1CBU 1.0 (2026-10-02) we
+  follow **upstream's numbering exactly**: take `src/cfg/migrations.c` as
+  upstream has it, new ones included, with no renumbering. JS8's two
+  frequency lists are no longer migrations: `src/cfg/js8_db.c` inserts
+  them (`INSERT OR IGNORE`) after upstream's migrations at every start.
+  Betas 1–4 had used versions 4 and 5 for them, which upstream's own
+  migration 4 (scaled settings to real numbers: `pwr` 4 = 0.4 W) needs;
+  `js8_db_before_migrations()` puts such a card back to version 3 once
+  (the `js8_db` table records it), so the conversion runs exactly once.
+  `tests/test_js8_db.cpp` covers every kind of card; keep it passing.
 - **`qso_log.db` mode** (`src/qso_log.h`): `MODE_JS8` = 8, appended after
   upstream's `MODE_RTTY` = 7, is stored in every JS8 QSO (worked-before
   marks, ADIF export). A mode upstream adds gets 9 or later; renumbering
   JS8 would mean updating the QSO database on every card.
-- **Long-press actions** (`src/params/params.h`): `ACTION_APP_JS8` is
-  appended to `press_action_t` (after 1KO125's WeFax and NavTex) and its
-  value is saved in the settings: keep it where it is.
+- **Long-press actions** (`src/settings_types.h`): `ACTION_APP_JS8` = 111,
+  stored in the long-press settings. 109 and 110 stay free for the Murus
+  team's WeFax and NavTex (their fork, merged again once it's on 1.0);
+  their SSTV, also 111 in their build, takes 112 here.
+- **`digital_modes.type`** (`src/cfg/digital_modes.h`): `CFG_DIG_TYPE_JS8`
+  = 2 and `_GHOSTNET` = 3, after upstream's FT8 and FT4.
 
-(Decided 2026-09-30, review D10: write the rule down rather than renumber
-now, which would need database surgery on existing cards.)
+(First written 2026-09-30, review D10; the migrations part rewritten for
+R1CBU 1.0, see [upgrade-1.0.2](upgrade-1.0.2/README.md).)

@@ -2,7 +2,7 @@
 
 **JS8 on the Xiegu X6100, running on the radio itself.** No PC, phone or
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
-the radio's firmware, next to the FT8, RTTY, WeFax and NavTex apps.
+the radio's firmware, next to the FT8 and RTTY apps.
 
 > **Beta 4** is the current release. In daily use on the air since beta 1:
 > heartbeats acknowledged, queries answered, QSOs and messages with desktop
@@ -85,9 +85,12 @@ card, DATA included. Copy the DATA partition's files to your PC first
 (at least `params.db`, `qso_log.db`, the `.adi` logs and the `js8_*.txt`
 files), write the new image, start the radio once, then copy them back.
 
-**This is a complete firmware** (the R1CBU/1KO125 X6100 GUI with JS8
-added), so everything else on the radio works as before. To go back, write
-the image you used before.
+**This is a complete firmware** (R1CBU's X6100 GUI, gdyuldin v1.0.2,
+with JS8 added), so everything else on the radio works as before. To go
+back, write the image you used before **and put back the DATA files you
+copied off**: R1CBU 1.0 converts the settings in `params.db` at its first
+start (power, TX gain and the band offsets are stored differently), and an
+older firmware would misread them.
 
 ## First steps
 
@@ -822,8 +825,8 @@ This is a beta: reports from testing are very welcome.
 
 | Layer | Project |
 |---|---|
-| Firmware GUI | [gdyuldin/x6100_gui](https://github.com/gdyuldin/x6100_gui) v0.34.2: R1CBU firmware by Oleg Belousov R1CBU, maintained by Georgy Dyuldin R2RFE |
-| SWL additions | [TheMurusTeam/custom-r1cbu](https://github.com/TheMurusTeam/custom-r1cbu) 0.34.2 beta 6 by Hany El Imam 1KO125: WeFax, NavTex, channel list |
+| Firmware GUI | [gdyuldin/x6100_gui](https://github.com/gdyuldin/x6100_gui) v1.0.2: R1CBU firmware by Oleg Belousov R1CBU, maintained by Georgy Dyuldin R2RFE |
+| SWL additions | [TheMurusTeam/custom-r1cbu](https://github.com/TheMurusTeam/custom-r1cbu) by Hany El Imam 1KO125 (WeFax, NavTex, the channel list, SSTV): in betas 1–4 (their 0.34.2 beta 6); back once their fork is on 1.0.2 |
 | JS8 engine | `core/` of [JS8Call-improved/Android-port](https://github.com/JS8Call-improved/Android-port), a C++ port of [JS8Call](https://github.com/js8call/js8call) by Jordan Sherer KN4CRD and contributors |
 
 JS8 app by VE7NHW.
