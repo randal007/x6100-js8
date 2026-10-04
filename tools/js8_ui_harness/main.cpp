@@ -53,6 +53,7 @@ void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 int  dialog_js8_station_rows(char *out, unsigned len);
 void dialog_js8_time_auto(bool on);
+const char *dialog_js8_st_qrz(void);
 int  dialog_js8_finder_hz(void);
 void ui_main_redraw_watch(void);
 bool ui_main_redraw_due(void);
@@ -2566,6 +2567,63 @@ int main() {
         ui_press(3); // back to the messages
         pump(300);
         printf("[stsort] messages again: button 2 '%s' (want empty)\n", ui_button_label(1));
+        return 0;
+    }
+    if (getenv("ONLY_STQRZ")) {
+        // The map's QRZ line over the Stations view too: who sent you a
+        // message while the messages weren't showing (not heartbeat SNR
+        // replies), newest first; hidden on the map (it has its own) and
+        // over the messages; a selected station drops off; back to the
+        // messages (Show or Map > Messages) clears it.
+        auto qrz = [] { return dialog_js8_st_qrz(); };
+        int  map_qrz = 0;
+        pump(300);
+        ui_page(3);
+        ui_press(3); // Show Stations
+        pump(300);
+        printf("[stqrz] Stations view, nobody called: '%s' (want empty)\n", qrz());
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HOW ARE YOU", 1320, 0.05f},
+                   {"K9ABC", "EN52", "K2XYZ", "K2XYZ HEARTBEAT SNR -08", 1800, 0.04f}});
+        pump(500);
+        printf("[stqrz] N0XYZ called, K9ABC acked a heartbeat: '%s' (want QRZ  N0XYZ)\n", qrz());
+        feed_band({{"W1ABC", "FN42", "K2XYZ", "K2XYZ GM OM", 900, 0.05f}});
+        pump(500);
+        printf("[stqrz] W1ABC too: '%s' (want QRZ 2  W1ABC N0XYZ)\n", qrz());
+        screenshot("q0_stations_qrz.ppm");
+        ui_press(3); // Show Map
+        pump(500);
+        dialog_js8_map_state(nullptr, nullptr, nullptr, nullptr, &map_qrz);
+        printf("[stqrz] map: Stations' line '%s' (want empty), the map's QRZ %d (want 2)\n", qrz(), map_qrz);
+        ui_press(3); // Messages
+        pump(300);
+        dialog_js8_map_state(nullptr, nullptr, nullptr, nullptr, &map_qrz);
+        printf("[stqrz] messages: '%s', QRZ %d (want empty, 0)\n", qrz(), map_qrz);
+        ui_press(3); // Stations again
+        pump(300);
+        printf("[stqrz] Stations again: '%s' (want empty: the list showed them)\n", qrz());
+        feed_band({{"VE7ABC", "CN89", "K2XYZ", "K2XYZ TNX FER CALL", 1500, 0.05f}});
+        pump(500);
+        printf("[stqrz] VE7ABC called: '%s' (want QRZ  VE7ABC)\n", qrz());
+        ui_indevs_init(); // the real MFK, as on the radio (and ONLY_MAP)
+        char sel[16] = "";
+        // VE7ABC is on top, under the cursor: a station is selected when the
+        // cursor moves onto it, so one step down and back.
+        ui_mfk_turn(1);
+        pump(150);
+        ui_mfk_turn(-1);
+        pump(300);
+        dialog_js8_selected_call(sel, sizeof(sel));
+        printf("[stqrz] VE7ABC selected (%s): '%s' (want empty)\n", sel, qrz());
+        feed_band({{"G4ABC", "IO91", "K2XYZ", "K2XYZ HELLO", 1100, 0.05f}});
+        pump(500);
+        printf("[stqrz] G4ABC called: '%s' (want QRZ  G4ABC)\n", qrz());
+        ui_page(2);
+        ui_press(1); // Show: back to the messages
+        pump(300);
+        ui_page(3);
+        ui_press(3); // Stations
+        pump(300);
+        printf("[stqrz] Show to the messages and back: '%s' (want empty)\n", qrz());
         return 0;
     }
     if (getenv("ONLY_QUERYCALL")) {

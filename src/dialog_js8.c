@@ -203,6 +203,7 @@ static bool        map_top_place(void);
 static void        map_talk_note(const js8_rx_msg_t *m);
 static void        map_pulse_add(const char *call);
 static void        map_qrz_clear(const char *call);
+static void        map_qrz_show(void);
 static void        map_show(bool on);
 static void        map_free(void);
 static void        rotary_cb(int32_t diff);
@@ -390,9 +391,11 @@ static void cq_heard_add(const char *call);
 static bool cq_heard_on(const char *call, int64_t now);
 static int64_t now_mono_ms(void);
 /* QRZ: stations that sent something to your call (not heartbeat replies)
- * while the message list wasn't showing, newest last. On the map until you
- * select them, send to them, or go back to the message list. */
+ * while the message list wasn't showing, newest last. On the map and over
+ * the Stations view until you select them, send to them, or go back to the
+ * message list. */
 #define MAP_QRZ 8
+#define MAP_QRZ_COLOR  0xFFFF00 /* GridTracker's QRZ ("calling me") yellow */
 static char map_qrz[MAP_QRZ][JS8_RX_CALL_LEN];
 static int  map_qrz_n;
 static js8_station_t  st_rows[MAX_ROWS];
@@ -530,6 +533,7 @@ static const struct {
 static lv_obj_t *finder;
 static lv_obj_t *table;
 static lv_obj_t *status;
+static lv_obj_t *st_qrz_label; /* the Stations view's QRZ line, under the status line (the map's own is map_qrz_label) */
 
 static int32_t filter_low, filter_high;
 static int32_t saved_filter_low, saved_filter_high; /* the user's, restored on close */
@@ -3201,6 +3205,17 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_set_style_bg_opa(status, LV_OPA_50, 0);
     lv_obj_align(status, LV_ALIGN_TOP_RIGHT, -4, 4);
 
+    /* The map's QRZ line, the same over the Stations view (VE7NHW): who
+     * called while the messages weren't showing. */
+    st_qrz_label = lv_label_create(wf_box);
+    lv_obj_set_style_text_font(st_qrz_label, &sony_18, 0);
+    lv_obj_set_style_text_color(st_qrz_label, lv_color_hex(MAP_QRZ_COLOR), 0);
+    lv_obj_set_style_bg_color(st_qrz_label, lv_color_black(), 0);
+    lv_obj_set_style_bg_opa(st_qrz_label, LV_OPA_70, 0);
+    lv_obj_set_style_pad_hor(st_qrz_label, 4, 0);
+    lv_obj_add_flag(st_qrz_label, LV_OBJ_FLAG_HIDDEN);
+    map_qrz_show(); /* reopened in the Stations view with callers still listed */
+
     /* TX status line */
 
     tx_bar = lv_label_create(dialog.obj);
@@ -3371,7 +3386,7 @@ static void destruct_cb(void) {
 
     /* LVGL objects are children of dialog.obj, deleted by dialog_destruct()
      * right after this returns. */
-    finder = table = status = tx_bar = cursor_box = NULL;
+    finder = table = status = st_qrz_label = tx_bar = cursor_box = NULL;
     wf_box    = NULL;
     map_free();
 }
@@ -3415,7 +3430,6 @@ static int map_edge     = 4; /* the status line this far in, clear of the corner
                                    keeps flashing through a long message */
 #define MAP_SELECT     0xFF3030
 #define MAP_TX         0xFF1010 /* your outline while transmitting */
-#define MAP_QRZ_COLOR  0xFFFF00 /* GridTracker's QRZ ("calling me") yellow */
 #define MAP_NEW_BORDER 0xFFFFFF /* a grid or country you've never worked */
 #define MAP_CQ_BG      0x00E000 /* the "CQ" tag: black on the heard green */
 #define MAP_FADE_MIN   45       /* squares fade to 30 % over this many minutes unheard */
@@ -3467,14 +3481,10 @@ static bool        map_follow; /* the view frames you and the selected station (
 
 static const char *const map_mode_names[3] = {"Auto", "Close-in", "World"};
 
-/* The QRZ line under the status line: how many called, newest first. */
+/* The QRZ line under the status line, on the map and over the Stations
+ * view: how many called, newest first. */
 static void map_qrz_show(void) {
-    if (!map_qrz_label || !map_status) return;
-    if (!map_qrz_n) {
-        lv_obj_add_flag(map_qrz_label, LV_OBJ_FLAG_HIDDEN);
-        return;
-    }
-    char buf[96];
+    char buf[96] = "";
     int  len = map_qrz_n > 1 ? snprintf(buf, sizeof(buf), "QRZ %d ", map_qrz_n) : snprintf(buf, sizeof(buf), "QRZ ");
     for (int i = map_qrz_n - 1, shown = 0; i >= 0 && len < (int)sizeof(buf); i--, shown++) {
         if (shown == 3) {
@@ -3482,6 +3492,21 @@ static void map_qrz_show(void) {
             break;
         }
         len += snprintf(buf + len, sizeof(buf) - len, " %s", map_qrz[i]);
+    }
+    if (st_qrz_label && status) {
+        if (map_qrz_n && view_stations && !view_map) {
+            if (strcmp(lv_label_get_text(st_qrz_label), buf) != 0) lv_label_set_text(st_qrz_label, buf);
+            lv_obj_update_layout(status); /* its size, before lining up under it */
+            lv_obj_align_to(st_qrz_label, status, LV_ALIGN_OUT_BOTTOM_RIGHT, 0, 3);
+            lv_obj_clear_flag(st_qrz_label, LV_OBJ_FLAG_HIDDEN);
+        } else {
+            lv_obj_add_flag(st_qrz_label, LV_OBJ_FLAG_HIDDEN);
+        }
+    }
+    if (!map_qrz_label || !map_status) return;
+    if (!map_qrz_n) {
+        lv_obj_add_flag(map_qrz_label, LV_OBJ_FLAG_HIDDEN);
+        return;
     }
     lv_label_set_text(map_qrz_label, buf);
     lv_obj_clear_flag(map_qrz_label, LV_OBJ_FLAG_HIDDEN);
@@ -4642,6 +4667,8 @@ static void show_cb(button_data_t *btn) {
     if (view_stations) {
         view_stations = false;
         cursor_freq   = -1;
+        map_qrz_n     = 0; /* the list shows what they sent, as from the map */
+        map_qrz_show();
         if (btn_stations.disp_btn) buttons_refresh(&btn_stations);
         if (btn_map_view.disp_btn) buttons_refresh(&btn_map_view);
         rebuild_rows();
@@ -5138,6 +5165,7 @@ static void stations_cb(button_data_t *btn) {
     cursor_freq = -1;
     buttons_refresh(btn);
     if (btn_map_view.disp_btn) buttons_refresh(&btn_map_view); /* Sort, Map: or nothing */
+    map_qrz_show(); /* the QRZ line: over the Stations view or the map, not the messages */
     /* The Stations view ends a lock: the station stays selected, and the
      * knob selects again there. */
     if (view_stations && sel_locked) {
@@ -5577,6 +5605,11 @@ unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max) {
         n++;
     }
     return n;
+}
+
+/* For tools/js8_ui_harness: the Stations view's QRZ line if it shows, else "". */
+const char *dialog_js8_st_qrz(void) {
+    return st_qrz_label && !lv_obj_has_flag(st_qrz_label, LV_OBJ_FLAG_HIDDEN) ? lv_label_get_text(st_qrz_label) : "";
 }
 
 /* For tools/js8_ui_harness: Auto time sync on or off. Scenarios that move

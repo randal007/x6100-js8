@@ -213,7 +213,11 @@ button, while the Stations view shows) steps through *Heard you* (who
 heard you first, then the newest: the order to start), *SNR* (strongest
 first), *Time* (newest first) and *Distance* (farthest first; stations
 without a grid last). The choice is remembered, and the selected station
-stays selected.
+stays selected. **QRZ** in yellow under the status line: who sent you a
+message while you were in the Stations view (heartbeat replies don't
+count), newest first, as on [the map](#the-map); a station drops off when
+you select it or send to it, and the line clears when you go back to the
+messages, which show what they sent.
 
 **Grids** come from heartbeats, CQs and `GRID` replies (`GRID FN42AB`
 anywhere in a message counts too), as on desktop; another grid-shaped word
@@ -955,8 +959,9 @@ Beta 5 is being planned; the full list with notes is in
   being tested on the radio. The Murus team's WeFax, NavTex and SSTV come
   back once their fork is on 1.0.2 too
 - [ ] **Station history:** QSOs, messages, INFO and STATUS for every
-  station, opened by pressing it in the list or on the map; a QRZ light
-  on the list and the map
+  station, opened by pressing it in the list or on the map
+- [x] **QRZ** in the Stations view too, as on the map: who called you
+  while the messages weren't showing (done after 4.1)
 - [x] **Sort** in the Stations view: who heard you first, SNR, time or
   distance (done after 4.1)
 - [x] **Heartbeats:** keep going while you call CQ, pause only when

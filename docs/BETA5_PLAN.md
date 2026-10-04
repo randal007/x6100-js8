@@ -99,9 +99,15 @@ heard paused them; [docs/review](review/)).
   last); remembered (`js8_st_sort`); the selected station stays selected.
   `js8_stations_sort()` (`src/js8/js8_ops.cpp`, unit test), harness
   ONLY_STSORT. The distance column is wider so 5-digit km fit.
-- [ ] QRZ light on the Stations list and the map, to see at once who is
+- [x] QRZ light on the Stations list and the map, to see at once who is
   calling you. The map already has a QRZ line (calls that sent you a
-  message while the map or Stations view was open).
+  message while the map or Stations view was open). **Done (user,
+  2026-10-04: "the exact same QRZ indicator on the station list"):** the
+  map's line over the Stations view too (`st_qrz_label`, a child of
+  wf_box under the status line like it, same text and colours from
+  `map_qrz_show()`); hidden on the map and over the messages. Leaving
+  the Stations view with Show now clears the list as Map > Messages
+  does (it used to keep old callers). Harness ONLY_STQRZ.
 
 ## APRS and messaging
 
