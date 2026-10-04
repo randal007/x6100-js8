@@ -34,6 +34,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Installing](#installing)
 - [First steps](#first-steps)
 - [The screen](#the-screen)
+- [The waterfall](#the-waterfall)
 - [The map](#the-map)
 - [The buttons](#the-buttons)
 - [Transmitting](#transmitting)
@@ -149,10 +150,8 @@ transmit (turn the **main tuning knob** to move it; a fast turn moves 5 or
 shows where that one goes: they pick a free spot at 500–999 Hz, as desktop
 JS8Call does, and the band comes back to your offset after. The **green
 band** marks the selected station, as wide as the speed it was last heard
-at (Slow 25 Hz, Normal 50, Fast 80, Turbo 160). How smooth it looks is
-*Waterfall: Sharp / Light / Medium / Calm* in [Settings](#settings) (Calm,
-the default, averages each row with the ones before: least speckle and
-flicker).
+at (Slow 25 Hz, Normal 50, Fast 80, Turbo 160). How it's drawn and how
+calm it looks: [The waterfall](#the-waterfall).
 
 **Decode marks** (Settings, off to start), as desktop JS8Call's *Show
 decode attempts*: a bracket `|—|` as wide as the signal wherever the
@@ -243,6 +242,57 @@ anywhere in a message counts too), as on desktop; another grid-shaped word
 in a message (`MY DAUGHTER LIVES IN EM12`) doesn't. Longer grids are kept
 to 6 characters, the most precise one wins, and the `RR73` sign-off is
 never mistaken for a grid.
+
+## The waterfall
+
+**What it shows:** the 200–3000 Hz the decoder listens to, newest at the
+top, 15 rows a second, so a Normal JS8 frame (12.6 s) is a little under
+190 rows tall. Brighter is stronger; the colours are the radio's own
+waterfall palette. While you transmit it stands still (the receiver is
+off), and for under a second around each [alert](#alerts) beep it pauses
+(the radio loops the beep into its own receive audio, so JS8 hears
+silence instead). Decoding is never affected by any of this: it works on
+the audio, not the picture.
+
+**Waterfall: Sharp / Light / Medium / Calm** ([Settings](#settings);
+press to step through). Each new row is averaged with the ones before:
+
+| Level | Each step changes the picture | Looks |
+|---|---|---|
+| **Calm** (the default) | about 4 times less than Sharp | least speckle, a darker background so signals stand out, least flicker |
+| Medium | about 2.6 times less | in between |
+| Light | about 2 times less | a little smoothing |
+| Sharp | every row exactly as heard | most detail: short bursts and fading show best |
+
+Calm makes a signal's start and end a touch softer (a row or two); the
+decode marks and the bands aren't averaged.
+
+**Why it could flicker, and what was done.** Every new row moves the
+whole picture down a pixel, 15 times a second. The screen's pixels
+darken faster than they brighten, so with a speckled picture the whole
+waterfall dims for a moment at each step: a faint flicker that's there
+only while it scrolls (a slow-motion video of the radio measured it: about
+10 % darker, 15 times a second). Averaging the rows (Calm) means each
+step changes the picture far less, so the dips are far smaller. **Smooth
+scrolling** (moving the picture a fraction of a pixel at every screen
+refresh) was tried too and dropped: redrawing the whole waterfall 60
+times a second needed more than a whole CPU core on the radio and made a
+new, irregular flicker. Truly smooth scrolling would need the display
+hardware to scroll the picture itself, a change to the radio's shared
+display driver, not JS8's.
+
+**Light on the radio's processor.** The waterfall is drawn straight onto
+the display's lower layer, as the main screen's waterfall is, and the
+display hardware lays the message list and buttons over it. A new row
+only copies itself in: nothing else on the screen is redrawn. Before, each
+row redrew the see-through message list on top of it, which took about
+half of one CPU core (measured on the radio: the app's screen thread went
+from about 79 % of a core to about 29 %). Moving through the list with the
+MFK redraws only the two rows it moves between, so that doesn't make the
+waterfall stutter either.
+
+**[Decode marks](#the-screen)** (Settings) draw the decoder's attempts on
+the waterfall, as desktop's *Show decode attempts*.
 
 ## The map
 
@@ -604,7 +654,7 @@ Page 4 **Settings…**:
 | **Messages kept: …** | Press to change: messages leave the list this long after they arrived (15 min to 2 hours), or *all* (the default: the list keeps the newest 150 to 200 messages; it's trimmed back to 150 when it reaches 200). |
 | **Distance: km / miles** | Press to switch the Stations view's distances (km to start). |
 | **Decode marks: On / Off** | Press to switch the [decode marks](#the-screen) on the waterfall (off to start, as desktop). |
-| **Waterfall: Sharp / Light / Medium / Calm** | Press to step through how much each waterfall row is averaged with the ones before. *Calm* (the default) averages most: least speckle, a darker background so signals stand out, and about 4 times less flicker as the waterfall moves; *Medium* about 2.6 times less, *Light* about 2 times less; *Sharp* shows every row as heard, as before. |
+| **Waterfall: Sharp / Light / Medium / Calm** | Press to step through how much each waterfall row is averaged with the ones before. *Calm* (the default) averages most: least speckle, a darker background so signals stand out, and about 4 times less flicker as the waterfall moves; *Medium* about 2.6 times less, *Light* about 2 times less; *Sharp* shows every row as heard, as before. More in [The waterfall](#the-waterfall). |
 | **Operator: …** | Someone else operating your station (desktop's *Operator Callsign*): their call goes in the log as `OPERATOR`; your station call is still what's sent on the air and logged as `STATION_CALLSIGN`. Empty: the station call. |
 
 ## Logging
