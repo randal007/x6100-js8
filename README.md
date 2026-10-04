@@ -537,6 +537,7 @@ JS8Spotter do):
 
 | Item | Sends | You type |
 |---|---|---|
+| Echo test | `@APRSIS CMD :ECHO     :TEST` | just Enter: ECHO sends the text back, so an answer in your Inbox proves both directions work |
 | Spot my grid | `@APRSIS GRID CN89LH`, or with a message `@APRSIS CMD =4916.25N/12305.00WGMADE IT TO CAMP` | a message, or just Enter |
 | Spot GPS position | the same from your GPS fix: `@APRSIS GRID CN89KG12AB` or a position with the message | a message, or just Enter (needs a GPS on the radio) |
 | POTA spot | `@APRSIS CMD :APSPOT   :! POTA CA-1234 7.078 DATA JS8` | nothing: a [spot form](#pota-and-sota-spots) |
@@ -544,6 +545,31 @@ JS8Spotter do):
 | SMS text | `@APRSIS CMD :SMS      :@6045551234 message` | number and message ([NA7Q's gateway](https://na7q.com/sms-gateway/), opt-in needed) |
 | Email | `@APRSIS CMD :EMAIL-2  :address message` | address and message |
 | Winlink: start / text / send | `SP address subject`, a line of text, `/EX` | [APRSLink](https://winlink.org/APRSLink)'s three steps |
+| More services > | a second list, below | just Enter |
+
+**More services >** (just before Close) lists APRS information services,
+each message filled in, so Enter sends it; **< Back** returns to the APRS
+list. The answer comes to your Inbox from the service.
+
+| Item | Sends to | Message |
+|---|---|---|
+| Weather today / tomorrow | [MPAD](https://github.com/joergschultzelutter/mpad) (worldwide) | `grid CN89LH today` / `tomorrow` |
+| US forecast | WXBOT (US National Weather Service only) | `grid CN89LH brief` |
+| Nearest wx station | WXNOW | `N 1` |
+| Sunrise / sunset | MPAD | `riseset` |
+| Nearest repeater | MPAD | `repeater 2m` (or 70cm, c4fm, dmr ...) |
+| Next ISS pass | MPAD | `satpass iss` |
+| Nearest hospital / fuel / drinking water | MPAD | `osm hospital` / `osm fuel` / `osm drinking_water` |
+| Where am I | MPAD | `whereami` |
+| Email my position | MPAD | `posmsg ` and the address you type: a map link of your position |
+| Airport weather | MPAD | `metar` (the nearest airport) |
+| Callsign lookup | WHO-IS | the callsign you type |
+| Magic 8-ball | MPAD | `magic8ball` |
+| Joke | JOKE | `joke` |
+
+MPAD's commands other than weather use your last APRS position, so
+**Spot my grid** first. Some services answer with several messages, each
+its own JS8 transmission from the relay station.
 
 Nothing reaches APRS unless a gateway station hears you. Replies (an SMS
 answer, a gateway's confirmation) go to your call on APRS-IS (aprs.fi shows
@@ -831,8 +857,9 @@ Beta 5 is being planned; the full list with notes is in
 [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). The highlights:
 
 - [ ] **Time sync overhaul:** automatic time sync like desktop JS8Call's
-- [ ] **High-SWR protection** for unattended stations: shut-down modes and
-  a beep
+- [x] **High-SWR protection** for unattended stations: over 3:1 while
+  sending turns AUTO, heartbeats and auto CQ off, with three beeps (done
+  after 4.1, to be tried on the radio)
 - [x] **The latest firmware underneath:** gdyuldin's v1.0.2 (a cleaner
   screen with more room for the map; [the study](docs/upgrade-1.0.2/README.md));
   being tested on the radio. The Murus team's WeFax, NavTex and SSTV come
@@ -843,8 +870,12 @@ Beta 5 is being planned; the full list with notes is in
 - [x] **Heartbeats:** keep going while you call CQ, pause only when
   someone answers; hold for Auto like CQ; the TX bar shows the
   heartbeat's frequency
-- [ ] **APRS:** a commands menu (weather and more), a contact book for
-  SMS; no double ACKs on Winlink (done after 4.1: to be checked on the air)
+- [x] **APRS:** an *Echo test* and a *More services* list (weather,
+  sunrise, repeaters, ISS passes, nearest hospital / fuel / water, email
+  my position, callsign lookup ...), each message filled in; no double ACKs on Winlink (done
+  after 4.1: to be checked on the air)
+- [ ] **APRS badge:** `@` in the Stations list for stations that pass APRS
+  messages back over JS8
 - [ ] **Saved messages and macros**, as desktop JS8Call has
 - [ ] **GPS** time and location from a USB GPS
 - [x] The green receive bar as wide as the station's speed

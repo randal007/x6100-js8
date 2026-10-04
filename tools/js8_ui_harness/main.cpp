@@ -1165,7 +1165,8 @@ int main() {
         ui_page(5);
         ui_press(1); // APRS >
         pump(200);
-        ui_click_focused(); // Spot my grid (first item): a message box
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
+        ui_click_focused(); // Spot my grid (second item): a message box
         pump(300);
         printf("[aprs] beacon box: '%s' focus %s\n", ui_compose_text(), ui_focus_desc());
         ui_compose_enter(); // no message: just the grid
@@ -1175,6 +1176,7 @@ int main() {
         // With a message: a position report carrying it.
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_click_focused();
         pump(300);
         ui_compose_append("MADE IT TO CAMP");
@@ -1185,6 +1187,7 @@ int main() {
         // Spot GPS position (second item): no fix -> message only.
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         printf("[aprs] item 2: '%s'\n", ui_focused_text());
         ui_click_focused();
@@ -1192,6 +1195,7 @@ int main() {
         setenv("HARNESS_GPS", "49.2827,-123.1207", 1);
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
@@ -1200,6 +1204,7 @@ int main() {
         printf("[aprs] GPS spot sent: %d (want @APRSIS GRID CN89KG + 4)\n", ui_list_has("@APRSIS GRID CN89KG"));
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
@@ -1211,6 +1216,7 @@ int main() {
         int frames = stub_tx_frames;
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_click_focused();
         pump(300);
         ui_compose_cancel();
@@ -1232,6 +1238,7 @@ int main() {
 
         ui_press(1); // APRS >
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         printf("[aprs] list open, focused '%s'\n", ui_focused_text());
         for (int i = 0; i < 4; i++) ui_key(LV_KEY_RIGHT);
         printf("[aprs] after 4 steps: '%s' (want SMS text)\n", ui_focused_text());
@@ -1245,6 +1252,7 @@ int main() {
 
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // POTA spot: the form
@@ -1267,6 +1275,7 @@ int main() {
         // Again: the park is remembered, focus on Send. Your SSB run instead.
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         ui_key(LV_KEY_RIGHT);
         ui_click_focused();
@@ -1294,6 +1303,7 @@ int main() {
         // SOTA: its own summit, the same frequency and mode.
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // SOTA spot
         pump(300);
@@ -1324,6 +1334,7 @@ int main() {
         // A bad frequency keeps the keyboard open.
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
@@ -1344,6 +1355,7 @@ int main() {
 
         ui_press(1);
         pump(200);
+        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         for (int i = 0; i < 5; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // Email
         pump(300);
@@ -1363,6 +1375,77 @@ int main() {
         ui_click_focused();
         pump(300);
         printf("[aprs] after Close: %s\n", ui_focus_desc());
+        return 0;
+    }
+    if (getenv("ONLY_APRSMORE")) {
+        // Echo test first in APRS >; More services > (before Close) opens
+        // the services list, each message filled in; Back and Close.
+        pump(300);
+        ui_page(5);
+        ui_press(1); // APRS >
+        pump(200);
+        printf("[aprsmore] list open, focused '%s' (want Echo test)\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[aprsmore] echo prefill '%s' (want @APRSIS CMD :ECHO     :TEST)\n", ui_compose_text());
+        printf("[aprsmore] hint '%s'\n", stub_last_msg);
+        int frames = stub_tx_frames;
+        ui_compose_enter();
+        for (int i = 0; i < 200 && stub_tx_frames == frames; i++) pump(100);
+        for (int i = 0; i < 400; i++) pump(100);
+        printf("[aprsmore] echo sent: %d\n", ui_list_has("@APRSIS CMD :ECHO     :TEST"));
+
+        ui_press(1);
+        pump(200);
+        ui_key(LV_KEY_LEFT); // wraps to Close
+        ui_key(LV_KEY_LEFT);
+        printf("[aprsmore] before Close: '%s' (want More services >)\n", ui_focused_text());
+        screenshot("24c_aprs_more_item.ppm");
+        ui_click_focused();
+        pump(300);
+        printf("[aprsmore] services open, focused '%s' (want Weather today)\n", ui_focused_text());
+        screenshot("24d_aprs_services.ppm");
+        ui_click_focused();
+        pump(300);
+        printf("[aprsmore] weather prefill '%s' (want MPAD grid <grid> today)\n", ui_compose_text());
+        printf("[aprsmore] hint '%s'\n", stub_last_msg);
+        ui_compose_cancel();
+        pump(300);
+        printf("[aprsmore] cancelled, list focused: %s\n", ui_focus_is_table() ? "yes" : "no");
+
+        // Every service: its prefill, cancelled.
+        for (int n = 1; n < 16; n++) {
+            ui_press(1);
+            pump(200);
+            ui_key(LV_KEY_LEFT);
+            ui_key(LV_KEY_LEFT);
+            ui_click_focused(); // More services >
+            pump(300);
+            for (int i = 0; i < n; i++) ui_key(LV_KEY_RIGHT);
+            std::string label = ui_focused_text();
+            ui_click_focused();
+            pump(300);
+            printf("[aprsmore] %-20s '%s'\n", label.c_str(), ui_compose_text());
+            ui_compose_cancel();
+            pump(300);
+        }
+
+        ui_press(1);
+        pump(200);
+        ui_key(LV_KEY_LEFT);
+        ui_key(LV_KEY_LEFT);
+        ui_click_focused(); // More services >
+        pump(300);
+        ui_key(LV_KEY_LEFT); // wraps to Close
+        ui_key(LV_KEY_LEFT);
+        printf("[aprsmore] before Close: '%s' (want < Back)\n", ui_focused_text());
+        screenshot("24e_aprs_services_end.ppm");
+        ui_click_focused();
+        pump(300);
+        printf("[aprsmore] Back: focused '%s' (want Echo test)\n", ui_focused_text());
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        printf("[aprsmore] ESC closed it: %d\n", ui_focus_is_table());
         return 0;
     }
     if (getenv("ONLY_LOG")) {

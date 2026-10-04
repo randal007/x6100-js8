@@ -248,6 +248,8 @@ static void        tx_timer_cb(lv_timer_t *t);
 static void        compose_close(void);
 static void        hb_adjust_end(void);
 static void        aprs_cb(button_data_t *btn);
+static void        aprs_open(bool more);
+static void        aprs_item_done(void);
 static void        aprs_close(void);
 static bool        popup_guard(void);
 static void        js8_next_page_cb(button_data_t *btn);
@@ -5846,6 +5848,7 @@ static void texts_cb(button_data_t *btn) {
 #define APRS_TEXT_MAX 67
 
 typedef enum {
+    APRS_ECHO,
     APRS_GRID,
     APRS_GPS,
     APRS_POTA,
@@ -5855,13 +5858,43 @@ typedef enum {
     APRS_WL_START,
     APRS_WL_TEXT,
     APRS_WL_SEND,
+    APRS_MORE,
     APRS_COUNT
 } aprs_item_t;
 
 static const char *const aprs_labels[APRS_COUNT] = {
-    "Spot my grid", "Spot GPS position", "POTA spot", "SOTA spot", "SMS text", "Email",
-    "Winlink: start", "Winlink: text", "Winlink: send",
+    "Echo test",      "Spot my grid",  "Spot GPS position", "POTA spot",       "SOTA spot", "SMS text", "Email",
+    "Winlink: start", "Winlink: text", "Winlink: send",     "More services >",
 };
+
+/* More services >: APRS information services, each message filled in
+ * (docs/feature-ideas.md: the ones that answered on 2026-09-28). A "%s"
+ * in the text is your 6-character grid. MPAD's commands other than
+ * weather use your last APRS position (MPAD docs), so Spot my grid
+ * first. Answers come back over JS8 from an inbound relay station and
+ * land in the Inbox from the service. */
+#define APRS_POS_HINT "uses your last APRS position (Spot my grid first)"
+static const struct {
+    const char *label, *to, *text, *hint;
+} aprs_svcs[] = {
+    {"Weather today", "MPAD", "grid %s today", "MPAD weather for your grid, worldwide"},
+    {"Weather tomorrow", "MPAD", "grid %s tomorrow", "MPAD weather for your grid, worldwide"},
+    {"US forecast", "WXBOT", "grid %s brief", "WXBOT: US National Weather Service only"},
+    {"Nearest wx station", "WXNOW", "N 1", "WXNOW: the nearest weather station; " APRS_POS_HINT},
+    {"Sunrise / sunset", "MPAD", "riseset", "MPAD " APRS_POS_HINT},
+    {"Nearest repeater", "MPAD", "repeater 2m", "MPAD " APRS_POS_HINT "; 2m, 70cm, c4fm, dmr..."},
+    {"Next ISS pass", "MPAD", "satpass iss", "MPAD " APRS_POS_HINT},
+    {"Nearest hospital", "MPAD", "osm hospital", "MPAD " APRS_POS_HINT},
+    {"Nearest fuel", "MPAD", "osm fuel", "MPAD " APRS_POS_HINT},
+    {"Drinking water", "MPAD", "osm drinking_water", "MPAD " APRS_POS_HINT},
+    {"Where am I", "MPAD", "whereami", "MPAD " APRS_POS_HINT},
+    {"Email my position", "MPAD", "posmsg ", "MPAD emails a map link: type the address; " APRS_POS_HINT},
+    {"Airport weather", "MPAD", "metar", "MPAD: METAR of the nearest airport; " APRS_POS_HINT},
+    {"Callsign lookup", "WHO-IS", "", "WHO-IS: type a callsign"},
+    {"Magic 8-ball", "MPAD", "magic8ball", "MPAD's magic 8-ball"},
+    {"Joke", "JOKE", "joke", "A joke from JOKE"},
+};
+#define APRS_SVCS (int)(sizeof(aprs_svcs) / sizeof(aprs_svcs[0]))
 
 static unsigned aprs_msg_id;
 
@@ -6140,6 +6173,13 @@ static void aprs_item_cb(lv_event_t *e) {
     popup_leave(&aprs_list);
 
     switch (item) {
+    case APRS_ECHO:
+        aprs_compose(APRS_CMD "ECHO     :TEST", "");
+        msg_update_text_fmt("ECHO sends your text back: an answer in the Inbox proves both directions work");
+        break;
+    case APRS_MORE:
+        aprs_open(true);
+        return;
     case APRS_GRID:
     case APRS_GPS:
         /* A message to go with it, or just Enter. GPS: a fix first, so
@@ -6174,12 +6214,39 @@ static void aprs_item_cb(lv_event_t *e) {
     default:
         break;
     }
+    aprs_item_done();
+}
+
+/* After an item: the keyboard if it opened, else the knob back to the table. */
+static void aprs_item_done(void) {
     if (composing) lv_group_set_editing(keyboard_group, true);
     else if (table) {
         lv_group_add_obj(keyboard_group, table);
         lv_group_focus_obj(table);
         lv_group_set_editing(keyboard_group, true);
     }
+}
+
+/* A More services item: its message in the keyboard, Enter sends it. */
+static void aprs_svc_cb(lv_event_t *e) {
+    int i = (int)(intptr_t)lv_event_get_user_data(e);
+    popup_leave(&aprs_list);
+    char grid[8] = "", text[96], head[TX_TEXT_MAX + 1];
+    if (strstr(aprs_svcs[i].text, "%s") && !aprs_grid(grid, NULL, NULL)) {
+        aprs_item_done();
+        return;
+    }
+    snprintf(text, sizeof(text), aprs_svcs[i].text, grid);
+    snprintf(head, sizeof(head), APRS_CMD "%-9s:%s", aprs_svcs[i].to, text);
+    aprs_compose(head, "");
+    msg_update_text_fmt("%s; the answer comes to the Inbox", aprs_svcs[i].hint);
+    aprs_item_done();
+}
+
+static void aprs_back_cb(lv_event_t *e) {
+    (void)e;
+    popup_leave(&aprs_list);
+    aprs_open(false);
 }
 
 static void aprs_close_cb(lv_event_t *e) {
@@ -6204,6 +6271,11 @@ static void aprs_cb(button_data_t *btn) {
         msg_update_text_fmt("Set your callsign first: APP > Callsign");
         return;
     }
+    aprs_open(false);
+}
+
+/* The APRS list, or (`more`) the More services list in its place. */
+static void aprs_open(bool more) {
     lv_group_remove_obj(table);
     aprs_list = lv_list_create(dialog.obj);
     lv_obj_set_size(aprs_list, 300, WF_HEIGHT - 10);
@@ -6211,16 +6283,23 @@ static void aprs_cb(button_data_t *btn) {
     lv_obj_set_style_text_font(aprs_list, &sony_24, 0);
     lv_obj_set_style_bg_color(aprs_list, lv_color_hex(0x202020), 0);
     lv_obj_set_style_border_color(aprs_list, lv_color_white(), 0);
-    lv_obj_t *t = lv_list_add_text(aprs_list, "APRS via @APRSIS");
+    lv_obj_t *t = lv_list_add_text(aprs_list, more ? "More APRS services" : "APRS via @APRSIS");
     lv_obj_set_style_text_font(t, &sony_22, 0);
 
     lv_obj_t *first = NULL;
-    for (int i = 0; i < APRS_COUNT; i++) {
-        lv_obj_t *b = list_add_item(aprs_list, aprs_labels[i]);
-        lv_obj_add_event_cb(b, aprs_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+    for (int i = 0; i < (more ? APRS_SVCS : APRS_COUNT); i++) {
+        lv_obj_t *b = list_add_item(aprs_list, more ? aprs_svcs[i].label : aprs_labels[i]);
+        lv_obj_add_event_cb(b, more ? aprs_svc_cb : aprs_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
         lv_obj_add_event_cb(b, aprs_key_cb, LV_EVENT_KEY, NULL);
         lv_group_add_obj(keyboard_group, b);
         if (!first) first = b;
+    }
+    if (more) {
+        lv_obj_t *back = list_add_item(aprs_list, "< Back");
+        lv_obj_set_style_text_color(back, lv_color_hex(0xffc040), 0);
+        lv_obj_add_event_cb(back, aprs_back_cb, LV_EVENT_CLICKED, NULL);
+        lv_obj_add_event_cb(back, aprs_key_cb, LV_EVENT_KEY, NULL);
+        lv_group_add_obj(keyboard_group, back);
     }
     lv_obj_t *close = list_add_item(aprs_list, "Close");
     lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);

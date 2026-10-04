@@ -11,10 +11,14 @@ as they land.
 - [ ] **Time sync overhaul + automatic time sync**, behaving like desktop
   JS8Call's auto sync. Today Time Sync is a button (Settings) that sets a
   JS8-only drift from the stations heard (README "Time Sync").
-- [ ] **High-SWR auto-shutdown modes**, for unattended stations
+- [x] **High-SWR auto-shutdown modes**, for unattended stations
   (automatic replies, heartbeats, beacons). The radio already reports SWR
   during TX (`vswr` in `radio.c`).
-- [ ] **High-SWR beep.**
+- [x] **High-SWR beep.**
+  **Both done in 2e152e6:** over 3:1 for half a second while keyed turns
+  AUTO, heartbeats, HB ACK and auto CQ off (the message on the air carries
+  on), three beeps once TX is done. Harness ONLY_SWR. To be tried on the
+  radio (image CI 37182352184 = waterfall four levels + SWR guard).
 - [ ] **Update to the latest gdyuldin release**
   ([x6100_gui releases](https://github.com/gdyuldin/x6100_gui/releases)):
   the list said v1.0.1; **v1.0.2 came out 2026-10-02**. Cleaner UI with
@@ -62,16 +66,21 @@ heard paused them; [docs/review](review/)).
 
 ## APRS and messaging
 
-- [ ] An APRS commands submenu: weather and other simple services
+- [x] An APRS commands submenu: weather and other simple services
   (research in [feature-ideas.md](feature-ideas.md): MPAD is worldwide,
   WXBOT US only; answers come back through every relay station that
-  heard you).
+  heard you). **Done (user's layout):** Echo test first in APRS >, and
+  More services > just before Close opens a list of MPAD (incl. Email my
+  position, `posmsg`), WXBOT, WXNOW, WHO-IS and JOKE messages, each filled in (grid added where the service
+  takes one), with Back and Close. Harness ONLY_APRSMORE.
+- [ ] APRS badge on the Stations list: `@` in the star's place for a
+  station seen relaying APRS messages back over JS8 (two-way gateway).
 - [x] **Winlink: no ACK request.** **Done after beta 4.1** (WLNK-1 dropped from want_id; check on the air that WLNK-1 still answers). Winlink works on the air, but the
   WLNK-1 gateway answers with its own message anyway, so the `{nn}` we
   add to ask for a receipt brings a second ACK. Stop adding it for WLNK-1
   (`want_id` in `aprs_prepare()`, `src/dialog_js8.c`); SMS and email keep
   theirs.
-- [ ] Contact book for SMS (no typing phone numbers each time).
+- ~~Contact book for SMS~~: dropped (user, 2026-10-04: not worth the complexity).
 - [ ] Saved messages / macros, as desktop JS8Call has.
 
 ## Screen and radio
