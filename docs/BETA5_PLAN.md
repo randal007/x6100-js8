@@ -99,13 +99,52 @@ heard paused them; [docs/review](review/)).
   straight copies (a column-major ring), and LVGL redraws nothing: harness
   ONLY_LOAD rows with a full list 19.6 → 3.8 ms/s, ONLY_WFPERF 1.08 →
   0.05 ms a row. ONLY_WFRING checks the ring pixel by pixel and the plane
-  mapping against LVGL's own 90° rotation. To do: the same CPU log on the
-  radio. **Health lines** in the app log (stderr, UTC-stamped): `decode:`
+  mapping against LVGL's own 90° rotation. **On the radio** (CI
+  37158604891, flashed 2026-10-03; a short 2.3 min log on a quiet band,
+  `research/cpulog/2026-10-03-2343Z`): the GUI thread averaged 29 % (was
+  79 %), peak 61 %, never 70 % or more; all cores 107 % of 400 (was 171).
+  29 % is what it used before while no rows were drawn, so the
+  waterfall's drawing cost is all but gone. To do: a 20 min log on a busy
+  band. **Health lines** in the app log (stderr, UTC-stamped): `decode:`
   once a minute (passes, busy time, longest pass, decodes, windows that
   waited behind a running pass, js8core patch 13), `dropped ... of audio`,
   `gap`, `realign`, and `GUI: stalls over 200 ms / waterfall rows
   dropped` when they happen; JS8's threads are named (`js8-rx`,
-  `js8-decode`, `js8-tx`, `js8-beep`).
+  `js8-decode`, `js8-tx`, `js8-beep`). The first run raised three
+  questions for the next session: (1) `gap: 12-13 s of audio missing`
+  three times, seemingly at frequency changes (opening JS8 and two band
+  changes) or a transmission: `js8_rx_clear()` only clears messages, so
+  either the audio really paused (would the waterfall freeze for 12 s
+  after a band change?) or we were keyed; if it's our own TX, say so in
+  the line instead of "missing". (2) The first decode pass after opening
+  JS8 took 12.9 s (23 windows waited that minute): decoders built on
+  first use? (3) No decodes in 5 minutes (a quiet band, the user says;
+  confirm on a busy one). LVGL's own `[User]` lines go to stdout, which is
+  block-buffered, so they land late and out of order; the JS8 lines on
+  stderr are in real time.
+- [ ] **Smooth waterfall scrolling (flicker).** The user sees a slight
+  flicker in JS8's waterfall, there since the early betas (not from the
+  lower-plane change), and only while it scrolls: during a CQ, when it
+  stops, the screen is steady. A 240 fps slow-motion video (Samsung S24
+  Ultra, 2026-10-03, phone `DCIM/Camera/20261003_164702.mp4`; analysis in
+  `research/flicker-video/`) shows why: each new row (15 a second) makes
+  the waterfall area about 10 % darker for a moment. The dip sweeps right
+  to left in about one refresh (the panel is portrait and scans across
+  the landscape screen) and fades over 20-25 ms; 1.0's own S-meter,
+  frequency and buttons don't dip. Each row shifts the whole speckled
+  waterfall by a pixel, so every pixel changes at once, and the LCD's
+  pixels darken faster than they brighten: the average dips on every
+  step, and at 15 Hz the eye sees it. **Fix (user's choice): smooth
+  scrolling**, the waterfall moving a fraction of a pixel on every screen
+  refresh (sub-pixel blend of the two nearest row positions at the
+  display's ~60 Hz) instead of a whole pixel 15 times a second, so the
+  panel makes 60 small changes a second that the eye can't follow. With
+  the waterfall on the lower plane, that's a blend of 788 x 337 pixels
+  per refresh written with `drm_primary_begin_direct()`: do it with NEON
+  (as drm.c's `neon_blend_argb8888`), or on a worker thread on an idle
+  core, and measure the CPU with `x6100-cpulog`. Other options looked at:
+  less speckle (smoother rows), or 30 rows a second (rejected: a 12.6 s
+  JS8 frame would no longer fit on the waterfall).
 - [ ] A small ALC rework for low power (under 1 W) into an amplifier.
   The TX audio path (`tx_player.c`) is shared with the FT8 app.
 - [ ] GPS time and location (USB GPS dongle ordered; testing when it

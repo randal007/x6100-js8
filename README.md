@@ -797,6 +797,11 @@ are, and its new settings start at their defaults.
 - **A very faint stutter in JS8's waterfall** while the MFK steps through
   the list (each step redrew the whole list, with an animated scroll);
   fixed for beta 5. It doesn't affect decoding.
+- **A slight flicker in the waterfall while it scrolls** (not when it's
+  still, e.g. while you transmit). Each new row moves the whole waterfall
+  by a pixel and the screen's pixels darken faster than they brighten, so
+  the waterfall dims for a moment 15 times a second. Smooth scrolling is
+  planned to fix it. It doesn't affect decoding.
 - **Keep the radio's clock right:** it has no network time and gains a
   few seconds a week; at 2–3 s off, decodes go missing. Set it in the
   radio's Settings (General: *Hour, Min, Sec*) or use JS8's **Time Sync**
@@ -852,6 +857,8 @@ Beta 5 is being planned; the full list with notes is in
   the display puts the list on top: a new row redraws nothing else (in the
   PC tests the screen work for the waterfall fell by about 80 %). It
   looks the same (done after 4.1, to be measured on the radio)
+- [ ] **Smooth waterfall scrolling,** to end the slight flicker while it
+  scrolls (see Known issues)
 - [x] **Health lines in the app log:** once a minute how busy the decoder
   was (`JS8 ... decode: ...`), and a line whenever audio went missing or
   the screen stalled, so a bug report shows whether the radio kept up
