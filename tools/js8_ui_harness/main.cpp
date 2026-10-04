@@ -56,6 +56,7 @@ void ui_main_redraw_watch(void);
 bool ui_main_redraw_due(void);
 void ui_retune_by(int hz);
 bool dialog_js8_wf_area(lv_area_t *a, const lv_color_t **palette);
+void dialog_js8_wf_calm(bool on);
 bool dialog_js8_cursor_band(int *x, int *w);
 unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
 bool     dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_paths, int *qrz);
@@ -160,7 +161,18 @@ static uint32_t screen_px(int x, int y);
 // lower plane whose newest row changed).
 static bool                wftime_mode;
 static std::vector<double> wftime_stamps;
-static void                wftime_plane_cb(const lv_area_t *a) {
+// ONLY_WFCALM: each new row as it reaches the plane (its luma).
+static bool                            calm_mode;
+static std::vector<std::vector<float>> calm_rows;
+static void                            wftime_plane_cb(const lv_area_t *a) {
+    if (calm_mode) {
+        std::vector<float> r;
+        for (int y = a->y1; y <= a->y2; y++) {
+            uint32_t p = harness_plane[y * 480 + a->x1];
+            r.push_back(0.299f * ((p >> 16) & 255) + 0.587f * ((p >> 8) & 255) + 0.114f * (p & 255));
+        }
+        if (calm_rows.empty() || r != calm_rows.back()) calm_rows.push_back(r);
+    }
     if (!wftime_mode) return;
     static uint64_t last_sig;
     uint64_t        sig = 1469598103934665603ull;
@@ -385,7 +397,7 @@ struct Stat {
 // own path: js8_wf_add_row(), the put on the lower plane (js8_wf_tick()),
 // then whatever LVGL redraws for it, flushed as the radio does. (The radio
 // then copies the put into its frame buffers at the page flip, twice.)
-static void wf_bench(const char *name, int frames, bool smooth = false) {
+static void wf_bench(const char *name, int frames) {
     std::vector<float>                    row(788);
     std::mt19937                          rng(1);
     std::uniform_real_distribution<float> u(0, 30);
@@ -397,22 +409,12 @@ static void wf_bench(const char *name, int frames, bool smooth = false) {
         double t0 = now_ms_f();
         js8_wf_add_row(row.data(), (uint16_t)row.size());
         double t1 = now_ms_f();
-        // A put per screen refresh at most (js8_wf): wait between them, untimed.
-        double spent = 0;
-        for (double held : {0.75, 0.5, 0.25, 0.0}) {
-            if (smooth) js8_wf_hold_offset(held);
-            std::this_thread::sleep_for(std::chrono::milliseconds(9));
-            double a = now_ms_f();
-            js8_wf_tick();
-            spent += now_ms_f() - a;
-            if (!smooth) break; // whole rows: one put a row
-        }
-        double t2 = t1 + spent;
+        js8_wf_tick();
+        double t2 = now_ms_f();
         long   l0 = load_flush_px;
         perf_flush_ms = 0;
-        double r0 = now_ms_f();
         lv_refr_now(NULL);
-        double t3 = t2 + (now_ms_f() - r0);
+        double t3 = now_ms_f();
         add.add(t1 - t0);
         put.add(t2 - t1);
         render.add(t3 - t2 - perf_flush_ms);
@@ -633,14 +635,10 @@ int main() {
             printf("[wfring] FAIL: no JS8 waterfall\n");
             return 1;
         }
-        js8_wf_set_smooth(false); // whole rows: the model's pixels exactly
         const int WFW = lv_area_get_width(&wa), WFH = lv_area_get_height(&wa);
         std::vector<std::vector<uint32_t>> jmodel; // newest first, colours
         int                                jbad = 0, jchecks = 0, holes = 0;
         auto                               jcheck = [&](const char *what) {
-            // js8_wf puts at most once per screen refresh (~16.7 ms; 8 ms apart)
-            std::this_thread::sleep_for(std::chrono::milliseconds(9));
-            js8_wf_tick();
             lv_refr_now(NULL);
             holes = 0;
             for (int y = 0; y < WFH; y++)
@@ -697,54 +695,6 @@ int main() {
         jcheck("after a retune");
         printf("[wfring] js8 waterfall after the main screen's redraw: %d pixels checked, %d wrong\n", jchecks, jbad);
 
-        // Smooth scrolling: the picture held half a row and a whole row
-        // above its resting place. Screen row y is then a blend of ring rows
-        // y and y + 1 (js8_wf.c's blend_col, rounded alike), and at a whole
-        // row exactly the picture before the newest row came.
-        {
-            js8_wf_set_smooth(true);
-            std::vector<std::vector<uint32_t>> rows; // newest first, WFH + 2 kept as the ring
-            for (int r = 0; r < WFH + 5; r++) {
-                std::vector<float>    d(WFW);
-                std::vector<uint32_t> row(WFW);
-                for (int x = 0; x < WFW; x++) {
-                    int id = (r * 53 + x * 29 + 11) % 256;
-                    d[x]   = (id + 0.5f) * 30.0f / 255.0f;
-                    row[x] = lv_color_to32(wpal[id]);
-                }
-                js8_wf_add_row(d.data(), (uint16_t)WFW);
-                rows.insert(rows.begin(), row);
-                if ((int)rows.size() > WFH + 2) rows.pop_back();
-            }
-            auto blend = [](uint32_t a, uint32_t b, unsigned w) {
-                uint32_t out = 0;
-                for (int sh = 0; sh < 32; sh += 8) {
-                    unsigned x = ((a >> sh) & 255) * (255 - w) + ((b >> sh) & 255) * w;
-                    out |= ((x + (x >> 8) + 128) >> 8 & 255) << sh;
-                }
-                return out;
-            };
-            for (double held : {0.5, 1.0}) {
-                js8_wf_hold_offset(held);
-                std::this_thread::sleep_for(std::chrono::milliseconds(10)); // one put per screen refresh
-                js8_wf_tick();
-                lv_refr_now(NULL);
-                int sbad = 0, schecks = 0;
-                for (int y = 0; y < WFH; y++)
-                    for (int x = 0; x < WFW; x++) {
-                        if (fb[(wa.y1 + y) * W + wa.x1 + x] >> 24) continue;
-                        uint32_t want = held == 1.0 ? rows[y + 1][x] : blend(rows[y][x], rows[y + 1][x], 128);
-                        uint32_t got  = screen_px(wa.x1 + x, wa.y1 + y);
-                        schecks++;
-                        if ((got & 0xffffff) != (want & 0xffffff) && sbad++ < 5)
-                            printf("[wfring] smooth %.1f pixel %d,%d: %06x want %06x\n", held, x, y, got & 0xffffff,
-                                   want & 0xffffff);
-                    }
-                printf("[wfring] smooth, held %.1f row up: %d pixels checked, %d wrong\n", held, schecks, sbad);
-            }
-            js8_wf_hold_offset(-1);
-        }
-
         // The plane's mapping (js8_wf.c: screen (x, y) is plane
         // (y, hor_res-1-x)) against LVGL's own LV_DISP_ROT_90, which turns
         // the radio's app plane: a second display set up like the radio's,
@@ -800,11 +750,38 @@ int main() {
         }
         return 0;
     }
+    if (getenv("ONLY_WFCALM")) {
+        // Waterfall: Sharp vs Calm with live noise: how much the picture
+        // changes at each step (every pixel takes the value of the one above
+        // it), the change that makes the screen dim for a moment on every
+        // row. Mean |luma difference| between consecutive rows.
+        pump(300);
+        double change[2] = {0, 0};
+        for (int calm = 0; calm < 2; calm++) {
+            dialog_js8_wf_calm(calm);
+            load_measure(calm ? "noise, calm" : "noise, sharp", 2000, true); // the average settles
+            calm_rows.clear();
+            calm_mode = true;
+            load_measure(calm ? "noise, calm" : "noise, sharp", 8000, true);
+            calm_mode = false;
+            double sum = 0, lum = 0;
+            long   n   = 0;
+            for (size_t i = 1; i < calm_rows.size(); i++)
+                for (size_t x = 0; x < calm_rows[i].size(); x++) {
+                    sum += fabs(calm_rows[i][x] - calm_rows[i - 1][x]);
+                    lum += calm_rows[i][x];
+                    n++;
+                }
+            change[calm] = n ? sum / n : 0;
+            printf("[wfcalm] %s: %zu rows, mean luma %.1f, change per step %.2f\n", calm ? "calm " : "sharp",
+                   calm_rows.size(), n ? lum / n : 0, change[calm]);
+        }
+        printf("[wfcalm] calm changes the picture %.1fx less per step\n", change[1] > 0 ? change[0] / change[1] : 0);
+        return 0;
+    }
     if (getenv("ONLY_WFTIME")) {
         // Row presentation times with live audio: how even is the scroll?
-        // (Whole rows: smooth scrolling puts the picture there every refresh.)
         pump(300);
-        js8_wf_set_smooth(false);
         wftime_mode = true;
         feed_band({{"W1ABC", "FN42", "", "@POTA ACTIVATING CA-1234", 1300, 0.05f},
                    {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1800, 0.05f}});
@@ -1164,11 +1141,7 @@ int main() {
             wf_bench(getenv("WFPERF_PROFILE"), 4000);
             return 0;
         }
-        js8_wf_set_smooth(false);
         wf_bench("rows on the lower plane, full list", 300);
-        js8_wf_set_smooth(true);
-        wf_bench("smooth: 4 puts a row (60 Hz)", 300, true);
-        js8_wf_hold_offset(-1);
         screenshot("wfperf_after.ppm");
         return 0;
     }

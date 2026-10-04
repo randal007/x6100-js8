@@ -600,6 +600,16 @@ static int64_t    wf_due_us;   /* when the next row should be drawn (monotonic) 
 static float    wf_floor_db;   /* smoothed noise floor (receiver thread) */
 static bool     wf_floor_set;
 static unsigned wf_dropped;    /* rows the GUI fell too far behind to draw (wf_lock) */
+/* Calm (Settings): each row averaged with the ones before (exponentially,
+ * WF_CALM_A of the new row), as desktop waterfalls' averaging. Every new row
+ * moves the whole picture down a pixel, and the screen dims for a moment
+ * while that many pixels change (they darken faster than they brighten): a
+ * flicker at the row rate. A calmer picture changes less at each step. */
+#define WF_CALM_A 0.35f
+static atomic_bool wf_calm;         /* GUI thread sets, receiver thread reads */
+static atomic_bool wf_avg_restart;  /* retune / clear: start the average over */
+static float       wf_avg[WIDTH];   /* receiver thread */
+static bool        wf_avg_set;
 /* What makes the main screen's spectrum and waterfall redraw their part of
  * the lower plane, over ours (js8_wf_repaint_soon). */
 static Observer *wf_watch[4];
@@ -1848,6 +1858,7 @@ static void wf_queue_clear(void) {
     pthread_mutex_lock(&wf_lock);
     wf_q_count = 0;
     pthread_mutex_unlock(&wf_lock);
+    atomic_store(&wf_avg_restart, true); /* a new band or a cleared waterfall: no old rows in the average */
 }
 
 /* ---- Decode marks (Settings: Decode marks) -------------------------------
@@ -2045,6 +2056,15 @@ static void wf_emit_row(void) {
     wf_floor_set    = true;
     for (uint32_t i = 0; i < WIDTH; i++) wf_row[i] -= wf_floor_db;
 
+    if (atomic_exchange(&wf_avg_restart, false) || !atomic_load(&wf_calm)) wf_avg_set = false;
+    if (atomic_load(&wf_calm)) {
+        if (!wf_avg_set) memcpy(wf_avg, wf_row, sizeof(wf_avg));
+        else
+            for (uint32_t i = 0; i < WIDTH; i++) wf_avg[i] += WF_CALM_A * (wf_row[i] - wf_avg[i]);
+        wf_avg_set = true;
+        memcpy(wf_row, wf_avg, sizeof(wf_row));
+    }
+
     /* Into the ring for wf_timer_cb; far behind, the oldest goes. */
     pthread_mutex_lock(&wf_lock);
     if (wf_q_count == WF_QUEUE) {
@@ -2101,6 +2121,7 @@ static void rx_start(void) {
     unsigned step = nfft / 2 < WF_ROW_SAMPLES / 2 ? nfft / 2 : WF_ROW_SAMPLES / 2;
     sg           = spgramf_create(nfft, LIQUID_WINDOW_HANN, nfft, step);
     wf_floor_set = false;
+    wf_avg_set   = false;
     wf_row_fill  = 0;
     psd      = malloc(nfft * sizeof(float));
 
@@ -3002,8 +3023,8 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(wf_box, WIDTH, WF_HEIGHT);
     lv_obj_set_pos(wf_box, INSET, INSET);
-    if (!js8_wf_create(wf_box, (const lv_color_t *)style.wf_palette, WF_MIN_DB, WF_MAX_DB, 1000000 / WF_ROWS_PER_SEC,
-                       param_i_get(cfg.js8.wf_smooth())))
+    atomic_store(&wf_calm, param_i_get(cfg.js8.wf_calm()) != 0);
+    if (!js8_wf_create(wf_box, (const lv_color_t *)style.wf_palette, WF_MIN_DB, WF_MAX_DB))
         msg_schedule_text_fmt("JS8: no memory for the waterfall");
     wf_watch[0] = subject_subscribe((Subject *)cfg.cur.fg_freq(), wf_watch_cb, NULL);
     wf_watch[1] = subject_subscribe((Subject *)cfg.band.if_shift(), wf_watch_cb, NULL);
@@ -5102,6 +5123,12 @@ static void query_cb(button_data_t *btn) {
     speed_warn();
 }
 
+/* For tools/js8_ui_harness: Waterfall: Calm / Sharp, as the Settings line. */
+void dialog_js8_wf_calm(bool on) {
+    param_i_set(cfg.js8.wf_calm(), on);
+    atomic_store(&wf_calm, on);
+}
+
 /* For tools/js8_ui_harness: the waterfall's place on the screen, and its
  * palette (WF_MIN_DB..WF_MAX_DB over 256 colours). */
 bool dialog_js8_wf_area(lv_area_t *a, const lv_color_t **palette) {
@@ -5652,7 +5679,7 @@ static const char *settings_label(int which) {
         return buf;
     case SETTINGS_MILES: return param_i_get(cfg.js8.miles()) ? "Distance: miles" : "Distance: km";
     case SETTINGS_MARKS: return param_i_get(cfg.js8.decode_marks()) ? "Decode marks: On" : "Decode marks: Off";
-    case SETTINGS_WF: return param_i_get(cfg.js8.wf_smooth()) ? "Waterfall: Smooth" : "Waterfall: Steps";
+    case SETTINGS_WF: return param_i_get(cfg.js8.wf_calm()) ? "Waterfall: Calm" : "Waterfall: Sharp";
     case SETTINGS_TSYNC:
         if (js8_drift_ms()) snprintf(buf, sizeof(buf), "Time Sync now (drift %+.1f s)", js8_drift_ms() / 1000.0);
         else snprintf(buf, sizeof(buf), "Time Sync now");
@@ -5703,11 +5730,11 @@ static void texts_item_cb(lv_event_t *e) {
                                     : "Decode marks off");
             break;
         case SETTINGS_WF:
-            param_i_set(cfg.js8.wf_smooth(), !param_i_get(cfg.js8.wf_smooth()));
-            js8_wf_set_smooth(param_i_get(cfg.js8.wf_smooth()));
-            msg_update_text_fmt(param_i_get(cfg.js8.wf_smooth())
-                                    ? "Waterfall: smooth scrolling (no flicker as it moves)"
-                                    : "Waterfall: a row at a time, as before");
+            param_i_set(cfg.js8.wf_calm(), !param_i_get(cfg.js8.wf_calm()));
+            atomic_store(&wf_calm, param_i_get(cfg.js8.wf_calm()) != 0);
+            msg_update_text_fmt(param_i_get(cfg.js8.wf_calm())
+                                    ? "Waterfall: calm (rows averaged: less speckle, less flicker as it moves)"
+                                    : "Waterfall: sharp (every row as heard, as before)");
             break;
         case SETTINGS_TSYNC: time_sync_now(); break;
         case SETTINGS_TRESET:

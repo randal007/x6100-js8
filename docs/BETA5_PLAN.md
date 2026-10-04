@@ -144,8 +144,8 @@ heard paused them; [docs/review](review/)).
   (as drm.c's `neon_blend_argb8888`), or on a worker thread on an idle
   core, and measure the CPU with `x6100-cpulog`. Other options looked at:
   less speckle (smoother rows), or 30 rows a second (rejected: a 12.6 s
-  JS8 frame would no longer fit on the waterfall). **Done (after 4.1),
-  to be tried on the radio:** `js8_wf.c` keeps RING_EXTRA = 2 rows above
+  JS8 frame would no longer fit on the waterfall). **Tried and dropped
+  (dbc3a69, reverted):** `js8_wf.c` kept RING_EXTRA = 2 rows above
   the screen; each new row raises the picture a row (`off` += 1) and it
   glides down at a row per row period (1.5x while more than a row is
   waiting), so screen row y is ring row y + off: a blend of the two
@@ -158,9 +158,27 @@ heard paused them; [docs/review](review/)).
   in smooth, 4 puts of 0.29 ms; the PC has no NEON path). Cost on the
   radio still to measure: `research/wf-smooth-bench/bench_arm` (static,
   copy over the console and run: steps copy, smooth blend and drm.c's two
-  copies per update), then `x6100-cpulog` with Smooth vs Steps. My
-  estimate: 10-25 % of a core; if too much, put every other refresh
-  (30 Hz, half-pixel steps).
+  copies per update), then `x6100-cpulog` with Smooth vs Steps. **On the
+  radio it was far too costly:** the GUI thread averaged 83 % (peak 114 %)
+  in Smooth, against 29 % in Steps (`research/cpulog/2026-10-04-0405Z`),
+  and the user saw a new irregular flicker a couple of times a second (the
+  thread overloaded, the glide stalling). `bench_arm` on the radio, per
+  update of 788 x 337 px: the whole-row copy 5.9 ms, the blend 8.0 ms,
+  drm.c's two copies into the frame buffers 9.9 ms, so 60 updates a
+  second need ~1070 ms a second: more than a core, and the memory, not the
+  CPU, is the limit (so another core wouldn't help). Even Steps costs
+  ~16 ms a row (~24 % of a core) for the same reason. Real smooth
+  scrolling would need the display hardware to scroll (a plane of its own
+  and a source offset per refresh: zero copies), which means changing
+  1.0's shared display driver: an idea for upstream, not for us.
+  **Instead (user's choice): Waterfall: Calm** (`js8_wf_calm`, default
+  on; Settings *Waterfall: Calm / Sharp*): `wf_emit_row()` averages each
+  row with the ones before (exponentially, WF_CALM_A 0.35 of the new row;
+  restarted on retune / clear), so every step changes the picture less.
+  Harness ONLY_WFCALM with live noise: 3.9x less change per step (mean
+  |luma difference| between rows 27.2 -> 6.9), same CPU; the noise
+  background is darker (mean luma 26 -> 15.5), signals stand out more.
+  To do: the user's eye (and a slow-motion video) on the radio.
 - [ ] A small ALC rework for low power (under 1 W) into an amplifier.
   The TX audio path (`tx_player.c`) is shared with the FT8 app.
 - [ ] GPS time and location (USB GPS dongle ordered; testing when it

@@ -345,8 +345,8 @@ class SettingsManager {
         StorageType::GLOBAL, pending_writes_, &global_params_}; // Settings: distances in miles, not km
     Parameter<int32_t> p_js8_decode_marks{"js8_decode_marks", 0, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // Settings: decode attempts marked on the waterfall
-    Parameter<int32_t> p_js8_wf_smooth{"js8_wf_smooth", 1, 0, 1,
-        StorageType::GLOBAL, pending_writes_, &global_params_}; // Settings: waterfall scrolls smoothly (1) or a row at a time (0)
+    Parameter<int32_t> p_js8_wf_calm{"js8_wf_calm", 1, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // Settings: waterfall rows averaged over time (calmer, less flicker as it steps)
     Parameter<int32_t> p_js8_map_mode{"js8_map_mode", 0, 0, 2,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // Show Map: 0 Auto, 1 Close-in, 2 World
     Parameter<int32_t> p_js8_hb_interval{"js8_hb_interval", 30, {},

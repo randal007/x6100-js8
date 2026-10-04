@@ -176,10 +176,7 @@ Build without sanitizers for timings
   does (queue copy, 90° rotation, framebuffer copy). Prints the cost per
   row (add / plane put / LVGL render / flush, LVGL pixels): 0.05 ms and no
   LVGL pixels, where drawing the waterfall through LVGL took 1.08 ms, two
-  thirds of it the list's text; then smooth scrolling, four puts a row as
-  at 60 Hz (1.17 ms a row on the PC, which has no NEON path). The other
-  scenarios run with smooth scrolling on (the default); `ONLY_WFTIME`
-  switches it off, as it times whole rows. `WFPERF_PROFILE=name` runs it for 4000
+  thirds of it the list's text. `WFPERF_PROFILE=name` runs it for 4000
   rows, for a gprof build (`-pg`).
 - `ONLY_WFTIME=1`: live audio; records when each new row reaches the screen
   (a put on the lower plane whose newest row changed) and prints the spread
@@ -187,14 +184,15 @@ Build without sanitizers for timings
   `WFTIME_GAPS=1` also lists every gap over 200 ms. A ~1 s gap is the
   alert beep's waterfall pause (by design): it happens when `js8_texts.txt`
   in the build directory has `ALERTS=... @POTA` left by other scenarios.
+- `ONLY_WFCALM=1`: *Waterfall: Sharp* vs *Calm* with live noise: how much
+  the picture changes at each step (mean |luma difference| between
+  consecutive rows on the lower plane), the change that makes the LCD dim
+  for a moment on every row. Calm: about 4x less.
 - `ONLY_WFRING=1`: the `lv_waterfall` widget's ring buffer (the FT8 app's)
   against a plain model, pixel by pixel as drawn; then JS8's own waterfall
   (`js8_wf.c`) the same way where the screen shows it through the hole:
   rows past the ring's height, a decode mark scrolling down, a clear, and
   the main screen redrawing the plane after a retune (`js8_wf_repaint_soon()`
-  must put it back); smooth scrolling with the picture held half a row
-  and a whole row up (`js8_wf_hold_offset()`: a blend of the two nearest
-  rows, and at a whole row the picture before the newest row came); and
-  the plane mapping (screen x, y = plane y, 799 - x)
+  must put it back); and the plane mapping (screen x, y = plane y, 799 - x)
   against LVGL's own `LV_DISP_ROT_90` on a second display set up like the
   radio's (run it in the ASan build).
