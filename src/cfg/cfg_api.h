@@ -273,6 +273,7 @@ typedef struct {
     ParamInt *(*msg_keep)(void); /* p_js8_msg_keep */
     ParamInt *(*miles)(void); /* p_js8_miles */
     ParamInt *(*decode_marks)(void); /* p_js8_decode_marks */
+    ParamInt *(*wf_smooth)(void); /* p_js8_wf_smooth */
     ParamInt *(*map_mode)(void); /* p_js8_map_mode */
     ParamInt *(*hb_interval)(void); /* p_js8_hb_interval */
     ParamInt *(*cq_interval)(void); /* p_js8_cq_interval */

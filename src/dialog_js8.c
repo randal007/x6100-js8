@@ -3002,7 +3002,8 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(wf_box, WIDTH, WF_HEIGHT);
     lv_obj_set_pos(wf_box, INSET, INSET);
-    if (!js8_wf_create(wf_box, (const lv_color_t *)style.wf_palette, WF_MIN_DB, WF_MAX_DB))
+    if (!js8_wf_create(wf_box, (const lv_color_t *)style.wf_palette, WF_MIN_DB, WF_MAX_DB, 1000000 / WF_ROWS_PER_SEC,
+                       param_i_get(cfg.js8.wf_smooth())))
         msg_schedule_text_fmt("JS8: no memory for the waterfall");
     wf_watch[0] = subject_subscribe((Subject *)cfg.cur.fg_freq(), wf_watch_cb, NULL);
     wf_watch[1] = subject_subscribe((Subject *)cfg.band.if_shift(), wf_watch_cb, NULL);
@@ -5630,6 +5631,7 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_MARKS    104
 #define SETTINGS_TSYNC    105
 #define SETTINGS_TRESET   106
+#define SETTINGS_WF       107
 
 static const char *relay_label(void) {
     return param_i_get(cfg.js8.relay()) ? "Relay: On" : "Relay: Off";
@@ -5650,6 +5652,7 @@ static const char *settings_label(int which) {
         return buf;
     case SETTINGS_MILES: return param_i_get(cfg.js8.miles()) ? "Distance: miles" : "Distance: km";
     case SETTINGS_MARKS: return param_i_get(cfg.js8.decode_marks()) ? "Decode marks: On" : "Decode marks: Off";
+    case SETTINGS_WF: return param_i_get(cfg.js8.wf_smooth()) ? "Waterfall: Smooth" : "Waterfall: Steps";
     case SETTINGS_TSYNC:
         if (js8_drift_ms()) snprintf(buf, sizeof(buf), "Time Sync now (drift %+.1f s)", js8_drift_ms() / 1000.0);
         else snprintf(buf, sizeof(buf), "Time Sync now");
@@ -5698,6 +5701,13 @@ static void texts_item_cb(lv_event_t *e) {
             msg_update_text_fmt(param_i_get(cfg.js8.decode_marks())
                                     ? "Decode marks on: where the decoder is trying (cyan, white) and what it decoded (yellow)"
                                     : "Decode marks off");
+            break;
+        case SETTINGS_WF:
+            param_i_set(cfg.js8.wf_smooth(), !param_i_get(cfg.js8.wf_smooth()));
+            js8_wf_set_smooth(param_i_get(cfg.js8.wf_smooth()));
+            msg_update_text_fmt(param_i_get(cfg.js8.wf_smooth())
+                                    ? "Waterfall: smooth scrolling (no flicker as it moves)"
+                                    : "Waterfall: a row at a time, as before");
             break;
         case SETTINGS_TSYNC: time_sync_now(); break;
         case SETTINGS_TRESET:
@@ -5765,6 +5775,7 @@ static void texts_cb(button_data_t *btn) {
     settings_add(settings_label(SETTINGS_MSG_KEEP), SETTINGS_MSG_KEEP);
     settings_add(settings_label(SETTINGS_MILES), SETTINGS_MILES);
     settings_add(settings_label(SETTINGS_MARKS), SETTINGS_MARKS);
+    settings_add(settings_label(SETTINGS_WF), SETTINGS_WF);
     snprintf(label, sizeof(label), "Operator: %s", operator_call[0] ? operator_call : "(the station call)");
     settings_add(label, EDIT_OPERATOR);
 

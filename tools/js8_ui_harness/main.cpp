@@ -385,7 +385,7 @@ struct Stat {
 // own path: js8_wf_add_row(), the put on the lower plane (js8_wf_tick()),
 // then whatever LVGL redraws for it, flushed as the radio does. (The radio
 // then copies the put into its frame buffers at the page flip, twice.)
-static void wf_bench(const char *name, int frames) {
+static void wf_bench(const char *name, int frames, bool smooth = false) {
     std::vector<float>                    row(788);
     std::mt19937                          rng(1);
     std::uniform_real_distribution<float> u(0, 30);
@@ -397,12 +397,22 @@ static void wf_bench(const char *name, int frames) {
         double t0 = now_ms_f();
         js8_wf_add_row(row.data(), (uint16_t)row.size());
         double t1 = now_ms_f();
-        js8_wf_tick();
-        double t2 = now_ms_f();
+        // A put per screen refresh at most (js8_wf): wait between them, untimed.
+        double spent = 0;
+        for (double held : {0.75, 0.5, 0.25, 0.0}) {
+            if (smooth) js8_wf_hold_offset(held);
+            std::this_thread::sleep_for(std::chrono::milliseconds(9));
+            double a = now_ms_f();
+            js8_wf_tick();
+            spent += now_ms_f() - a;
+            if (!smooth) break; // whole rows: one put a row
+        }
+        double t2 = t1 + spent;
         long   l0 = load_flush_px;
         perf_flush_ms = 0;
+        double r0 = now_ms_f();
         lv_refr_now(NULL);
-        double t3 = now_ms_f();
+        double t3 = t2 + (now_ms_f() - r0);
         add.add(t1 - t0);
         put.add(t2 - t1);
         render.add(t3 - t2 - perf_flush_ms);
@@ -623,10 +633,14 @@ int main() {
             printf("[wfring] FAIL: no JS8 waterfall\n");
             return 1;
         }
+        js8_wf_set_smooth(false); // whole rows: the model's pixels exactly
         const int WFW = lv_area_get_width(&wa), WFH = lv_area_get_height(&wa);
         std::vector<std::vector<uint32_t>> jmodel; // newest first, colours
         int                                jbad = 0, jchecks = 0, holes = 0;
         auto                               jcheck = [&](const char *what) {
+            // js8_wf puts at most once per screen refresh (~16.7 ms; 8 ms apart)
+            std::this_thread::sleep_for(std::chrono::milliseconds(9));
+            js8_wf_tick();
             lv_refr_now(NULL);
             holes = 0;
             for (int y = 0; y < WFH; y++)
@@ -682,6 +696,54 @@ int main() {
         jmodel.clear(); // the retune clears it
         jcheck("after a retune");
         printf("[wfring] js8 waterfall after the main screen's redraw: %d pixels checked, %d wrong\n", jchecks, jbad);
+
+        // Smooth scrolling: the picture held half a row and a whole row
+        // above its resting place. Screen row y is then a blend of ring rows
+        // y and y + 1 (js8_wf.c's blend_col, rounded alike), and at a whole
+        // row exactly the picture before the newest row came.
+        {
+            js8_wf_set_smooth(true);
+            std::vector<std::vector<uint32_t>> rows; // newest first, WFH + 2 kept as the ring
+            for (int r = 0; r < WFH + 5; r++) {
+                std::vector<float>    d(WFW);
+                std::vector<uint32_t> row(WFW);
+                for (int x = 0; x < WFW; x++) {
+                    int id = (r * 53 + x * 29 + 11) % 256;
+                    d[x]   = (id + 0.5f) * 30.0f / 255.0f;
+                    row[x] = lv_color_to32(wpal[id]);
+                }
+                js8_wf_add_row(d.data(), (uint16_t)WFW);
+                rows.insert(rows.begin(), row);
+                if ((int)rows.size() > WFH + 2) rows.pop_back();
+            }
+            auto blend = [](uint32_t a, uint32_t b, unsigned w) {
+                uint32_t out = 0;
+                for (int sh = 0; sh < 32; sh += 8) {
+                    unsigned x = ((a >> sh) & 255) * (255 - w) + ((b >> sh) & 255) * w;
+                    out |= ((x + (x >> 8) + 128) >> 8 & 255) << sh;
+                }
+                return out;
+            };
+            for (double held : {0.5, 1.0}) {
+                js8_wf_hold_offset(held);
+                std::this_thread::sleep_for(std::chrono::milliseconds(10)); // one put per screen refresh
+                js8_wf_tick();
+                lv_refr_now(NULL);
+                int sbad = 0, schecks = 0;
+                for (int y = 0; y < WFH; y++)
+                    for (int x = 0; x < WFW; x++) {
+                        if (fb[(wa.y1 + y) * W + wa.x1 + x] >> 24) continue;
+                        uint32_t want = held == 1.0 ? rows[y + 1][x] : blend(rows[y][x], rows[y + 1][x], 128);
+                        uint32_t got  = screen_px(wa.x1 + x, wa.y1 + y);
+                        schecks++;
+                        if ((got & 0xffffff) != (want & 0xffffff) && sbad++ < 5)
+                            printf("[wfring] smooth %.1f pixel %d,%d: %06x want %06x\n", held, x, y, got & 0xffffff,
+                                   want & 0xffffff);
+                    }
+                printf("[wfring] smooth, held %.1f row up: %d pixels checked, %d wrong\n", held, schecks, sbad);
+            }
+            js8_wf_hold_offset(-1);
+        }
 
         // The plane's mapping (js8_wf.c: screen (x, y) is plane
         // (y, hor_res-1-x)) against LVGL's own LV_DISP_ROT_90, which turns
@@ -740,7 +802,9 @@ int main() {
     }
     if (getenv("ONLY_WFTIME")) {
         // Row presentation times with live audio: how even is the scroll?
+        // (Whole rows: smooth scrolling puts the picture there every refresh.)
         pump(300);
+        js8_wf_set_smooth(false);
         wftime_mode = true;
         feed_band({{"W1ABC", "FN42", "", "@POTA ACTIVATING CA-1234", 1300, 0.05f},
                    {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1800, 0.05f}});
@@ -1100,7 +1164,11 @@ int main() {
             wf_bench(getenv("WFPERF_PROFILE"), 4000);
             return 0;
         }
+        js8_wf_set_smooth(false);
         wf_bench("rows on the lower plane, full list", 300);
+        js8_wf_set_smooth(true);
+        wf_bench("smooth: 4 puts a row (60 Hz)", 300, true);
+        js8_wf_hold_offset(-1);
         screenshot("wfperf_after.ppm");
         return 0;
     }

@@ -200,6 +200,7 @@ static ParamInt *cfg_js8_st_keep(void) { return param_ref<ParamInt>(cfg_instance
 static ParamInt *cfg_js8_msg_keep(void) { return param_ref<ParamInt>(cfg_instance().p_js8_msg_keep); }
 static ParamInt *cfg_js8_miles(void) { return param_ref<ParamInt>(cfg_instance().p_js8_miles); }
 static ParamInt *cfg_js8_decode_marks(void) { return param_ref<ParamInt>(cfg_instance().p_js8_decode_marks); }
+static ParamInt *cfg_js8_wf_smooth(void) { return param_ref<ParamInt>(cfg_instance().p_js8_wf_smooth); }
 static ParamInt *cfg_js8_map_mode(void) { return param_ref<ParamInt>(cfg_instance().p_js8_map_mode); }
 static ParamInt *cfg_js8_hb_interval(void) { return param_ref<ParamInt>(cfg_instance().p_js8_hb_interval); }
 static ParamInt *cfg_js8_cq_interval(void) { return param_ref<ParamInt>(cfg_instance().p_js8_cq_interval); }
@@ -445,6 +446,7 @@ extern "C" const cfg_refs_t cfg = {
         .msg_keep = &cfg_js8_msg_keep,
         .miles = &cfg_js8_miles,
         .decode_marks = &cfg_js8_decode_marks,
+        .wf_smooth = &cfg_js8_wf_smooth,
         .map_mode = &cfg_js8_map_mode,
         .hb_interval = &cfg_js8_hb_interval,
         .cq_interval = &cfg_js8_cq_interval,

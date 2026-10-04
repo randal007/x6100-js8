@@ -122,7 +122,7 @@ heard paused them; [docs/review](review/)).
   confirm on a busy one). LVGL's own `[User]` lines go to stdout, which is
   block-buffered, so they land late and out of order; the JS8 lines on
   stderr are in real time.
-- [ ] **Smooth waterfall scrolling (flicker).** The user sees a slight
+- [x] **Smooth waterfall scrolling (flicker).** The user sees a slight
   flicker in JS8's waterfall, there since the early betas (not from the
   lower-plane change), and only while it scrolls: during a CQ, when it
   stops, the screen is steady. A 240 fps slow-motion video (Samsung S24
@@ -144,7 +144,23 @@ heard paused them; [docs/review](review/)).
   (as drm.c's `neon_blend_argb8888`), or on a worker thread on an idle
   core, and measure the CPU with `x6100-cpulog`. Other options looked at:
   less speckle (smoother rows), or 30 rows a second (rejected: a 12.6 s
-  JS8 frame would no longer fit on the waterfall).
+  JS8 frame would no longer fit on the waterfall). **Done (after 4.1),
+  to be tried on the radio:** `js8_wf.c` keeps RING_EXTRA = 2 rows above
+  the screen; each new row raises the picture a row (`off` += 1) and it
+  glides down at a row per row period (1.5x while more than a row is
+  waiting), so screen row y is ring row y + off: a blend of the two
+  nearest rows (`blend_col`, NEON on the radio, x/255 rounded), put on the
+  plane at most once a main-loop pass (MIN_PUT_US 8 ms) and only when the
+  offset (1/256 row) changed: nothing while transmitting. Settings line
+  *Waterfall: Smooth / Steps* (`js8_wf_smooth`, default on) for A/B.
+  Harness: ONLY_WFRING checks the picture held 0.5 and 1.0 row up pixel
+  by pixel; ONLY_WFPERF times both (PC: 0.08 ms a row in steps, 1.17 ms
+  in smooth, 4 puts of 0.29 ms; the PC has no NEON path). Cost on the
+  radio still to measure: `research/wf-smooth-bench/bench_arm` (static,
+  copy over the console and run: steps copy, smooth blend and drm.c's two
+  copies per update), then `x6100-cpulog` with Smooth vs Steps. My
+  estimate: 10-25 % of a core; if too much, put every other refresh
+  (30 Hz, half-pixel steps).
 - [ ] A small ALC rework for low power (under 1 W) into an amplifier.
   The TX audio path (`tx_player.c`) is shared with the FT8 app.
 - [ ] GPS time and location (USB GPS dongle ordered; testing when it

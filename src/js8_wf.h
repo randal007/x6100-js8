@@ -24,8 +24,8 @@ extern "C" {
  * whole see-through list over it.
  *
  * GUI thread only. Rows are as lv_waterfall's: values min..max map onto the
- * palette's 256 colours, the newest row on top. */
-bool     js8_wf_create(lv_obj_t *box, const lv_color_t *palette, int min, int max);
+ * palette's 256 colours, the newest row on top, one every row_period_us. */
+bool     js8_wf_create(lv_obj_t *box, const lv_color_t *palette, int min, int max, int row_period_us, bool smooth);
 /* Blacks out its area on the plane; the main screen's spectrum and waterfall
  * paint theirs again when they come back on. */
 void     js8_wf_destroy(void);
@@ -44,6 +44,12 @@ void     js8_wf_tick(void);
  * the plane, over this, in the frame their frequency, mode or zoom changes.
  * Any thread. */
 void     js8_wf_repaint_soon(void);
+/* Smooth scrolling (each row glides in over its period, a fraction of a
+ * pixel per screen refresh) or whole-row steps. */
+void     js8_wf_set_smooth(bool on);
+/* For tools/js8_ui_harness: hold the picture `rows` above its resting place
+ * (0 .. RING_EXTRA), or < 0 to let it glide again. */
+void     js8_wf_hold_offset(double rows);
 
 #ifdef __cplusplus
 }
