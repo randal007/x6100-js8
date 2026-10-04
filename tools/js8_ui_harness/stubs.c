@@ -175,6 +175,19 @@ bool tx_player_play(int16_t *samples, uint32_t n, int32_t offset, float gain, tx
     stub_tx_keyed = 0;
     return true;
 }
+
+/* ONLY_SWR: the SWR the radio reports while keyed (tx_info), a new reading
+ * at every look. */
+float          stub_tx_swr = 1.3f;
+static uint8_t stub_tx_info_id;
+bool tx_info_refresh(uint8_t *prev_msg_id, float *alc_p, float *pwr_p, float *vswr_p) {
+    if (!stub_tx_keyed) return false;
+    *prev_msg_id = ++stub_tx_info_id;
+    if (alc_p) *alc_p = 0.0f;
+    if (pwr_p) *pwr_p = 5.0f;
+    if (vswr_p) *vswr_p = stub_tx_swr;
+    return true;
+}
 /* GPS: gpsd's latest report, a 3D fix from HARNESS_GPS="lat,lon" (driver.c
  * announces it with MSG_GPS once a second), no fix otherwise. */
 void gps_get_snapshot(struct gps_data_t *out) {

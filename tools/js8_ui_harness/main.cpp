@@ -57,6 +57,8 @@ bool ui_main_redraw_due(void);
 void ui_retune_by(int hz);
 bool dialog_js8_wf_area(lv_area_t *a, const lv_color_t **palette);
 void dialog_js8_wf_avg(int level);
+void dialog_js8_autos(bool *auto_mode, bool *hb, bool *hb_ack, bool *cq);
+int  dialog_js8_beeps(int *last_count);
 bool dialog_js8_cursor_band(int *x, int *w);
 unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
 bool     dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_paths, int *qrz);
@@ -84,6 +86,7 @@ void    js8_set_drift_ms(int64_t ms);
 extern int16_t stub_tx_peak;
 extern volatile int stub_tx_keyed;
 extern int stub_tx_aborted;
+extern float stub_tx_swr;
 extern int stub_new_station_alerts;
 extern char stub_last_msg[512];
 extern int stub_vol_turns;
@@ -2752,6 +2755,78 @@ int main() {
         pump(300);
         printf("[hb] then press: '%s' (want Heart-beat), info row %d\n", ui_button_label(2),
                ui_list_has("Auto HB off: manual"));
+        return 0;
+    }
+    if (getenv("ONLY_SWR")) {
+        // High-SWR guard: over 3:1 for half a second while keyed turns AUTO,
+        // auto HB, HB ACK and auto CQ off; the message carries on; three
+        // beeps once TX is done. A short spike as it keys doesn't.
+        auto autos = [](const char *when) {
+            bool a, hb, ack, cq;
+            dialog_js8_autos(&a, &hb, &ack, &cq);
+            printf("[swr] %s: AUTO %d, HB %d, HB ACK %d, auto CQ %d\n", when, a, hb, ack, cq);
+        };
+        auto beeps = [](const char *when) {
+            int last  = 0;
+            int count = dialog_js8_beeps(&last);
+            printf("[swr] %s: beep sounds %d, last %d beep(s)\n", when, count, last);
+        };
+        auto wait_keyed = [] { for (int i = 0; i < 300 && !stub_tx_keyed; i++) pump(100); };
+        auto wait_done  = [] { // unkeyed for 3 s: the message's last frame is over
+            for (int i = 0, quiet = 0; i < 900 && quiet < 30; i++) {
+                pump(100);
+                quiet = stub_tx_keyed ? 0 : quiet + 1;
+            }
+        };
+        pump(300);
+        ui_page(4);
+        ui_press(1); // AUTO on
+        ui_press(3); // HB ACK on
+        ui_page(1);
+        ui_hold(1);  // auto CQ: one now
+        ui_press(1); // done setting its minutes
+        ui_hold(2);  // auto HB (busy: the first an interval from now)
+        ui_press(2);
+        autos("all on (want 1 1 1 1)");
+        int last   = 0;
+        int beeps0 = dialog_js8_beeps(&last);
+        wait_keyed();
+        printf("[swr] keyed: %d (want 1)\n", stub_tx_keyed);
+        stub_tx_swr = 4.5f; // a spike, under half a second
+        pump(300);
+        stub_tx_swr = 1.3f;
+        pump(400);
+        autos("after a 0.3 s spike (want 1 1 1 1)");
+        stub_tx_swr = 3.0f; // exactly 3:1 is not over it
+        pump(800);
+        autos("at 3.0:1 for 0.8 s (want 1 1 1 1)");
+        int frames = stub_tx_frames;
+        stub_tx_swr = 3.4f;
+        pump(800);
+        autos("at 3.4:1 for 0.8 s (want 0 0 0 0)");
+        printf("[swr] still keyed: %d (want 1), aborted %d (want 0), row %d (want 1), msg '%s'\n", stub_tx_keyed,
+               stub_tx_aborted, ui_list_has("High SWR 3.4:1"), stub_last_msg);
+        beeps("while keyed (want no new sound)");
+        stub_tx_swr = 1.3f;
+        wait_done();
+        printf("[swr] the message went out: frames from the trip on %d (want >= 1), aborted %d (want 0)\n",
+               stub_tx_frames - frames + 1, stub_tx_aborted);
+        int count = dialog_js8_beeps(&last);
+        printf("[swr] after TX: new beep sounds %d (want 1), %d beep(s) (want 3)\n", count - beeps0, last);
+        pump(5000);
+        autos("5 s later (want 0 0 0 0)");
+        frames = stub_tx_frames;
+        pump(20000);
+        printf("[swr] 20 s more: frames sent %d (want 0)\n", stub_tx_frames - frames);
+        // No autos on: high SWR on a CQ by hand changes nothing, no beep.
+        count = dialog_js8_beeps(&last);
+        ui_press(1); // CQ
+        wait_keyed();
+        stub_tx_swr = 4.0f;
+        pump(1000);
+        stub_tx_swr = 1.3f;
+        wait_done();
+        printf("[swr] high SWR, nothing automatic on: new beep sounds %d (want 0)\n", dialog_js8_beeps(&last) - count);
         return 0;
     }
     if (getenv("ONLY_HBPAUSE")) {

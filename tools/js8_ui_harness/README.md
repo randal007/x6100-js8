@@ -188,6 +188,10 @@ Build without sanitizers for timings
   noise: how much the picture changes at each step (mean |luma difference|
   between consecutive rows on the lower plane), the change that makes the
   LCD dim for a moment on every row: 1.9x, 2.6x and 3.8x less than Sharp.
+- `ONLY_SWR=1`: the high-SWR guard: over 3:1 for half a second while
+  keyed turns AUTO, auto HB, HB ACK and auto CQ off (a 0.3 s spike and
+  exactly 3:1 don't); the message on the air carries on; three beeps once
+  TX is done; with nothing automatic on, high SWR changes nothing.
 - `ONLY_WFRING=1`: the `lv_waterfall` widget's ring buffer (the FT8 app's)
   against a plain model, pixel by pixel as drawn; then JS8's own waterfall
   (`js8_wf.c`) the same way where the screen shows it through the hole:
