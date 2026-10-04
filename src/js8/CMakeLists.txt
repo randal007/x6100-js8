@@ -19,6 +19,7 @@ add_library(JS8 STATIC
     datafile.cpp
     alerts.cpp
     macros.cpp
+    timesync.cpp
     js8_ops.cpp
     js8_rx.cpp
     geo.cpp

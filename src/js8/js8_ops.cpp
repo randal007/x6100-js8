@@ -501,43 +501,6 @@ extern "C" int64_t js8_following_heartbeat_ms(int64_t scheduled_ms, int64_t now_
     return following_heartbeat_ms(scheduled_ms, now_ms, interval_min);
 }
 
-extern "C" bool js8_sync_drift(const js8_sync_sample_t *s, unsigned n, int64_t now_ms, int64_t window_ms,
-                               int64_t current_ms, int64_t *drift_ms, unsigned *decodes, unsigned *stations) {
-    struct Sample {
-        std::int64_t when, drift;
-    };
-    std::vector<Sample>                   recent;
-    std::map<std::string, Sample>         latest;
-    for (unsigned i = 0; s && i < n; i++) {
-        const js8_sync_sample_t &x = s[i];
-        if (!x.when_ms || now_ms - x.when_ms > window_ms || now_ms < x.when_ms) continue;
-        // The short way round the slot from where we are now: a drift is
-        // only known to its slot length (-14 s and +1 s are the same slot).
-        std::int64_t period = x.period_ms > 0 ? x.period_ms : 15000;
-        std::int64_t rel    = ((std::int64_t)x.drift_ms - current_ms) % period;
-        if (rel > period / 2) rel -= period;
-        else if (rel < -period / 2) rel += period;
-        Sample v{x.when_ms, current_ms + rel};
-        recent.push_back(v);
-        if (!x.call[0]) continue;
-        auto it = latest.find(x.call);
-        if (it == latest.end() || it->second.when < v.when) latest[x.call] = v;
-    }
-    if (decodes) *decodes = (unsigned)recent.size();
-    if (stations) *stations = (unsigned)latest.size();
-    if (recent.size() < JS8_SYNC_MIN_DECODES || !drift_ms) return false;
-
-    std::vector<std::int64_t> v;
-    if (latest.size() >= JS8_SYNC_MIN_STATIONS)
-        for (auto &kv : latest) v.push_back(kv.second.drift);
-    else
-        for (auto &x : recent) v.push_back(x.drift);
-    std::sort(v.begin(), v.end());
-    std::size_t m = v.size();
-    *drift_ms     = m % 2 ? v[m / 2] : (v[m / 2 - 1] + v[m / 2]) / 2;
-    return true;
-}
-
 extern "C" bool js8_latlon_to_grid(double lat, double lon, int chars, char *out, unsigned size) {
     if (!out || chars < 2 || chars > 10 || chars % 2 || size < (unsigned)chars + 1) return false;
     if (!(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180)) return false;

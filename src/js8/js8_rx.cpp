@@ -120,6 +120,22 @@ extern "C" js8_rx_t *js8_rx_create(int input_rate, int submodes, const char *my_
     if (rx->cb.on_report) {
         callbacks.on_report = [rx](const std::string &line) { rx->cb.on_report(line.c_str(), rx->cb.ctx); };
     }
+    if (rx->cb.on_auto_drift) {
+        callbacks.on_auto_drift = [rx](std::int64_t drift, unsigned frames) {
+            rx->cb.on_auto_drift(drift, frames, rx->cb.ctx);
+        };
+    }
+    if (rx->cb.on_search) {
+        callbacks.on_search = [rx](const TimeSearch::Result &r) {
+            js8_rx_search_t s{};
+            s.found    = r.found;
+            s.drift_ms = (int32_t)r.drift_ms;
+            s.snr      = (int16_t)r.snr;
+            s.freq_hz  = r.freq_hz;
+            copy_str(s.text, sizeof(s.text), r.text);
+            rx->cb.on_search(&s, rx->cb.ctx);
+        };
+    }
 
     try {
         rx->receiver = std::make_unique<Receiver>(config, std::move(callbacks));
@@ -240,6 +256,26 @@ extern "C" void js8_rx_set_qso_offset(js8_rx_t *rx, int offset_hz) {
 
 extern "C" void js8_rx_set_sync_marks(js8_rx_t *rx, bool on) {
     if (rx) rx->receiver->set_sync_marks(on);
+}
+
+extern "C" void js8_rx_set_auto_sync(js8_rx_t *rx, bool on) {
+    if (rx) rx->receiver->set_auto_sync(on);
+}
+
+extern "C" void js8_rx_auto_sync_restart(js8_rx_t *rx, int64_t drift_ms, bool keep) {
+    if (rx) rx->receiver->restart_auto_sync(drift_ms, keep);
+}
+
+extern "C" void js8_rx_search_start(js8_rx_t *rx, unsigned max_s) {
+    if (rx) rx->receiver->start_search((std::int64_t)max_s * 1000);
+}
+
+extern "C" void js8_rx_search_stop(js8_rx_t *rx) {
+    if (rx) rx->receiver->stop_search();
+}
+
+extern "C" bool js8_rx_searching(js8_rx_t *rx) {
+    return rx && rx->receiver->searching();
 }
 
 // Desktop mainwindow.cpp, the SyncState case of its decoder events.

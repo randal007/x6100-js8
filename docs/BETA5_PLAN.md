@@ -8,9 +8,40 @@ as they land.
 
 ## Core priorities
 
-- [ ] **Time sync overhaul + automatic time sync**, behaving like desktop
+- [x] **Time sync overhaul + automatic time sync**, behaving like desktop
   JS8Call's auto sync. Today Time Sync is a button (Settings) that sets a
   JS8-only drift from the stations heard (README "Time Sync").
+  **Why the old one failed (user, 2026-10-04):** it needed 3 decodes in
+  the last 2 minutes (heartbeats did count), which a normal band rarely
+  gives. **Researched:** desktop JS8Call-improved 44fa092
+  (processDecodeEvent.cpp, WideGraph.cpp: Automatic Time Drift = every
+  non-duplicate Normal/Slow frame's drift into a cumulative moving average
+  capped at 60, set at each DecodeFinished; while it starts, Normal decoded
+  every second, CPU-heavy, auto-stop after 1 decode by default); the
+  Android-port app 9996202f (Auto time sync = desktop's average, off by
+  default; "sync clock to next decode", "sync clock to this signal", +-1 s
+  / +-100 ms; no every-second search); js8core only gives each decode's
+  drift and set_time_drift_ms (we use both). **Done (user's choices: Auto
+  on to start, Normal + Slow as desktop, page 4's empty button, the
+  search too):** `src/js8/timesync.{hpp,cpp}`: AutoTimeSync (desktop's
+  average; frames after the DuplicateFilter, low-confidence ones left out;
+  a search's find counts as one frame, a reset starts afresh) and
+  TimeSearch (its own low-priority thread: the latest 15 s decoded every
+  4 s with js8core's legacy_decode, no js8core patch; a -18 dB signal
+  decodes from windows starting 2.5 s before to 2.25 s after it, unit
+  test, so 4 s leaves no gap; first decode = the drift; 5 min at most).
+  Receiver feeds both; js8_rx C API (set_auto_sync, auto_sync_restart,
+  search_start/stop, on_auto_drift, on_search). Dialog: page 4's Time
+  button (press Auto on/off, `js8_tsync_auto`; hold search / stop; label
+  "Time: Auto -1.2s" / "Time: Searching", marked while searching); Auto's
+  drift set only when it moved 50 ms or more (each change re-snaps the
+  decode windows) and never while sending; a find while sending waits for
+  TX to end; Settings keeps Reset time drift (first line); the old
+  3-decode median (js8_sync_drift) removed. CPU (ARM build under qemu,
+  ~1.5x faster than the radio): a search window 0.26 s on noise, 1.2 s
+  with three stations, so about a tenth of a core while it waits. To do:
+  cpulog on the radio during a search. Harness ONLY_DRIFT rewritten (it
+  had tested nothing since Time Sync left page 3).
 - [x] **High-SWR auto-shutdown modes**, for unattended stations
   (automatic replies, heartbeats, beacons). The radio already reports SWR
   during TX (`vswr` in `radio.c`).

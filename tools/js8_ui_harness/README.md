@@ -44,7 +44,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `BADFILES` | unreadable Inbox / settings files kept aside, not written over (see below) |
 | `BANDS` | each band keeps its own Stations list |
 | `COMPOSE` | typing a reply while their long message is still arriving |
-| `DRIFT` | Time Sync as a drift: JS8's timing moves, the clock doesn't; refused while sending; hold resets |
+| `DRIFT` | Time (page 4, button 2): Auto sets the drift from one band 1.2 s late and leaves it there when the band is on time; our CQ starts on JS8's slot; Auto off ignores a later band; Settings' first line resets; a band 6 s late doesn't decode until the search (hold Time) finds it, then it does; holding again stops a search. Scenarios that move JS8's time on by minutes (NEWSTN, HBPAUSE, MAP) switch Auto off around it (`dialog_js8_time_auto`) |
 | `FREQ` | page 6 Freq: JS8Call's presets, GhostNet's, a custom frequency |
 | `FREQMARK` | rows without a callsign marked by frequency |
 | `GEN=query\|aprs\|texts\|alerts` | GEN / APP closing the app with that list open |

@@ -31,6 +31,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [The buttons](#the-buttons)
 - [Transmitting](#transmitting)
 - [Saved messages](#saved-messages)
+- [Time](#time)
 - [Speeds](#speeds)
 - [Messages and the Inbox](#messages-and-the-inbox)
 - [Relays](#relays)
@@ -69,7 +70,9 @@ the radio's firmware, next to the FT8 and RTTY apps.
   optional message, e.g. `MADE IT TO CAMP`), POTA and SOTA spots on any
   frequency and mode, SMS, email and Winlink.
 - **JS8Call's, GhostNet's or your own frequencies** on the band keys.
-- **Time Sync** from the decodes, and a Stations view of who is on and who
+- **Automatic time sync** from every station decoded, heartbeats included
+  (desktop JS8Call's *Automatic Time Drift*), and a search for when the
+  radio's clock is too far off for anything to decode; a Stations view of who is on and who
   heard you.
 - **A map** of the stations heard, in GridTracker's style: paths to who
   heard you, new stations popping up, your continent or the world.
@@ -101,13 +104,11 @@ older firmware would misread them.
 
 1. **Callsign and grid:** APP → Callsign, and APP → QTH (4 or 6
    characters). JS8 won't send without a callsign.
-2. **Clock:** JS8 needs the radio's clock within about 2 seconds. WiFi sets
-   it automatically; otherwise set it in SETTINGS, then use **Time Sync
-   now** (page 4, **Settings…**, the first line) once some stations have
-   decoded. Like desktop JS8Call's time drift, it shifts only JS8's own
-   timing to match theirs (the top line shows `drift +1.2s`); the radio's
-   clock isn't touched. The drift lasts until the radio is switched off;
-   **Reset time drift** (the next line) undoes it.
+2. **Clock:** JS8's timing follows the stations it decodes by itself
+   (**Time: Auto**, page 4, on to start; see [Time](#time)), so a clock
+   a second or two out is fine. If it's further out than about 2.5 s,
+   nothing decodes: **hold Time** to search for the band's timing, or set
+   the clock in the radio's SETTINGS.
 3. **Open JS8:** APP → page 3 → **JS8**. The radio tunes the nearest JS8
    frequency; the **band keys** step through JS8Call's standard frequencies
    (160 m to 6 m), or GhostNet's, or you can type your own (**Freq**, page
@@ -315,9 +316,9 @@ to go back a page. In JS8 a hold is half a second.
 | 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off when it hasn't been heard for *Stations kept* ([Settings](#settings); an hour to start). |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
-| 4 | *(empty)* | Heartbeats moved to page 1's **Heartbeat** (hold for auto). |
+| 4 | **Time: Auto / Off** | Press: [automatic time sync](#time) on (the default) or off. **Hold: search** for the band's timing when the clock is too far off for anything to decode (*Searching* while it runs; hold again to stop). The second line shows the drift, e.g. `-1.2s`. |
 | 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and auto heartbeats on, as on desktop). |
-| 4 | **Settings…** | Time Sync, INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay, your groups, how long stations and messages stay listed, km or miles, decode marks and an operator's call: see [Settings](#settings). |
+| 4 | **Settings…** | Reset time drift, INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay, your groups, how long stations and messages stay listed, km or miles, decode marks and an operator's call: see [Settings](#settings). |
 | 5 | **APRS >** | [APRS](#aprs) spots and messages. |
 | 5 | **Log QSO** | [Log](#logging) the QSO that just ended, or the selected station if you've selected someone else since. |
 | 5 | **Activ.: Off / POTA / SOTA** | Activating a park or summit: added to every log entry. Hold to type it. |
@@ -417,6 +418,40 @@ send it with the call left out).
 As on desktop, macros also work in messages you type (Reply, Send…; one
 that doesn't apply is sent as typed) and in your INFO and STATUS answers
 (e.g. STATUS `IDLE <MYIDLE> VERSION <MYVERSION>`, desktop's own).
+
+## Time
+
+JS8 stations transmit in fixed slots (every 15 s at Normal speed), so the
+radio's clock has to agree with theirs: a station whose signal starts
+more than about 2.5 s from where JS8 expects it doesn't decode at all.
+The X6100 has no network time and its clock gains a few seconds a week.
+
+JS8 keeps its own time: the radio's clock plus a **drift**, as desktop
+JS8Call does. Receive windows and your transmissions go by it, the
+radio's clock itself is never changed, and the drift lasts until the
+radio is switched off. The top line shows it (`drift -1.2s`), and so does
+the Time button.
+
+**Time: Auto** (page 4, on to start) is desktop JS8Call's *Automatic Time
+Drift* (the JS8Call-improved Android app's *Auto time sync*): every
+station decoded at Normal or Slow speed, heartbeats and CQs included,
+tells JS8 how far off it is; JS8 averages them (the last 60, as desktop)
+and moves its timing after each decode cycle. One heartbeat is enough to
+start; after that a station with a badly set clock moves it only a
+sixtieth of the way. It never moves while you're sending, and small
+changes (under 0.05 s) are left for later. Press **Time** to switch it
+off (the drift then stays where it is).
+
+**Hold Time to search**, when the clock is so far off that nothing
+decodes (after the radio has been off for a week or two, say). For up to
+5 minutes JS8 also decodes the last 15 s of audio every 4 s, wherever the
+slots fall, so it finds a station even 7 s out. The first one sets the
+drift (*Time search: K9DEF ... drift -6.0 s* in the list), the search
+stops, and Auto carries on from there. Hold Time again to stop it. It
+runs at a low priority on a spare core: about a tenth of one core while
+it waits on a quiet band.
+
+**Reset time drift** (Settings) puts JS8 back on the radio's clock.
 
 ## Speeds
 
@@ -525,8 +560,7 @@ Page 4 **Settings…**:
 
 | Line | Does |
 |---|---|
-| **Time Sync now** | Shift JS8's timing to match the last 2 minutes of decodes (needs 3 or more; with 3 or more stations, each counts once), like desktop's time drift; the radio's clock isn't changed (the line shows the drift). Pressing it again right after is safe. Not while sending. It was page 3's button. |
-| **Reset time drift** | Back on the radio's clock. |
+| **Reset time drift** | Back on the radio's clock (the line shows the drift). With [Time: Auto](#time) on, the next decode sets it again. Time Sync itself is page 4's **Time** button now. |
 | **INFO: …** | What AUTO sends for INFO? ([macros](#saved-messages) work here) |
 | **STATUS: …** | What AUTO sends for STATUS? (macros too) |
 | **Relay: On / Off** | Press to switch. On (the default, as on desktop): relays are passed on and `MSG TO:` messages held for others. Off: both are ignored (desktop's *Disable message relay*). |
@@ -883,10 +917,12 @@ are, and its new settings start at their defaults.
   4.1 by *Waterfall: Calm* (Settings, the default; also *Medium* and
   *Light* in between): each step changes the picture about 4 times less.
   It doesn't affect decoding.
-- **Keep the radio's clock right:** it has no network time and gains a
-  few seconds a week; at 2–3 s off, decodes go missing. Set it in the
-  radio's Settings (General: *Hour, Min, Sec*) or use JS8's **Time Sync**
-  (JS8's Settings…).
+- **The radio's clock:** it has no network time and gains a few seconds a
+  week. Beta 4.1's Time Sync needed three decodes in two minutes, which a
+  quiet band rarely gives; from beta 5 [Time: Auto](#time) follows every
+  decode. At 2.5 s or more off nothing decodes: set it in the radio's
+  Settings (General: *Hour, Min, Sec*), or from beta 5 hold **Time** to
+  search.
 - **Relays, store and forward and messaging** work on the air with
   desktop JS8Call stations.
 - **APRS:** the grid spot, two-way SMS and Winlink work on the air.
@@ -908,7 +944,9 @@ are, and its new settings start at their defaults.
 Beta 5 is being planned; the full list with notes is in
 [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). The highlights:
 
-- [ ] **Time sync overhaul:** automatic time sync like desktop JS8Call's
+- [x] **[Time sync](#time) overhaul:** automatic time sync like desktop
+  JS8Call's, from every decode (one heartbeat is enough), on to start;
+  hold Time to search when the clock is too far off (done after 4.1)
 - [x] **High-SWR protection** for unattended stations: over 3:1 while
   sending turns AUTO, heartbeats and auto CQ off, with three beeps (done
   after 4.1, to be tried on the radio)

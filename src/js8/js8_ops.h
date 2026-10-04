@@ -240,31 +240,6 @@ bool js8_starts_qso(const js8_rx_msg_t *msg);
 int64_t js8_next_heartbeat_ms(int64_t now_ms, int interval_min, int period_s);
 int64_t js8_following_heartbeat_ms(int64_t scheduled_ms, int64_t now_ms, int interval_min);
 
-/* Time Sync from decodes, like desktop JS8Call's drift. One decode: its
- * station, when it was decoded, the drift it suggests (js8_rx_msg_t.drift_ms)
- * and its speed's slot length. */
-typedef struct {
-    char    call[JS8_RX_CALL_LEN];
-    int64_t when_ms;
-    int32_t drift_ms;
-    int32_t period_ms;
-} js8_sync_sample_t;
-
-#define JS8_SYNC_MIN_DECODES    3
-#define JS8_SYNC_MIN_STATIONS   3
-
-/* The drift Time Sync should set. Each decode's suggested drift is worked
- * out from the drift in effect when its audio was captured, so decodes
- * finishing after a change still count right; it's taken the short way
- * round its slot from `current_ms`. Each station counts once (its latest
- * decode), so one busy station can't outvote the band: the median across
- * stations when at least JS8_SYNC_MIN_STATIONS were heard, else across all
- * decodes. Decodes older than `window_ms` (or empty samples) are skipped.
- * False with fewer than JS8_SYNC_MIN_DECODES; `decodes` and `stations`
- * (either may be NULL) say how many were used. */
-bool js8_sync_drift(const js8_sync_sample_t *s, unsigned n, int64_t now_ms, int64_t window_ms, int64_t current_ms,
-                    int64_t *drift_ms, unsigned *decodes, unsigned *stations);
-
 /* Maidenhead locator for a position, `chars` long (4, 6, 8 or 10; 10 is
  * about 20 x 35 m). Letters upper case, as JS8 grids are. False for an
  * out-of-range position or length. */

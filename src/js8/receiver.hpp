@@ -9,6 +9,7 @@
 #include "assembler.hpp"
 #include "render.hpp"
 #include "resampler.hpp"
+#include "timesync.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -82,6 +83,12 @@ public:
         /// minute, a decode pass that ran very long, audio missing (gap) or
         /// thrown away (the worker fell behind), clock realigns.
         std::function<void(const std::string &)> on_report;
+        /// Automatic time sync (set_auto_sync): after a decode pass with
+        /// Normal or Slow frames, the drift desktop would set, and how many
+        /// frames came in it. The caller sets it (set_drift_ms) when it may.
+        std::function<void(std::int64_t, unsigned)> on_auto_drift;
+        /// The search (start_search) ended: found, or time ran out.
+        std::function<void(const TimeSearch::Result &)> on_search;
     };
 
     Receiver(const Config &config, Callbacks callbacks);
@@ -112,6 +119,17 @@ public:
 
     /// How often the ring has been re-snapped to the clock since start.
     unsigned realign_count() const { return realigns_.load(); }
+
+    /// Automatic time sync, as desktop's Automatic Time Drift: off to start.
+    void set_auto_sync(bool on) { auto_on_ = on; }
+    /// The drift was set another way (a search, a reset): see
+    /// AutoTimeSync::restart().
+    void restart_auto_sync(std::int64_t drift_ms, bool keep);
+    /// Search for the band's timing for up to `max_ms` (TimeSearch); the
+    /// result comes through Callbacks::on_search. Starting again restarts.
+    void start_search(std::int64_t max_ms);
+    void stop_search();
+    bool searching() const { return search_->active(); }
 
 private:
     void worker_loop();
@@ -147,6 +165,17 @@ private:
     std::chrono::steady_clock::time_point stats_start_, pass_start_;
     unsigned                              passes_ = 0, decodes_ = 0, merged_ = 0;
     double                                busy_s_ = 0, longest_s_ = 0;
+
+    // Automatic time sync: frames and passes on the decode thread, restarts
+    // from the caller's.
+    std::atomic<bool> auto_on_{false};
+    std::mutex        auto_mutex_;
+    AutoTimeSync      auto_sync_; ///< under auto_mutex_
+
+    // The search, fed by the worker; what it decodes, as the engine has it.
+    // Declared after the worker's state: destroyed after it's joined.
+    std::unique_ptr<TimeSearch> search_;
+    std::atomic<int>            low_hz_{200}, high_hz_{3000}, qso_hz_{1500};
 
     // Decode-thread state; assembler also touched by the worker's flush.
     FrameRenderer    renderer_;

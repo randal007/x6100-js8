@@ -52,6 +52,7 @@ int  ui_kb_select_ok(void);
 void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 int  dialog_js8_station_rows(char *out, unsigned len);
+void dialog_js8_time_auto(bool on);
 int  dialog_js8_finder_hz(void);
 void ui_main_redraw_watch(void);
 bool ui_main_redraw_due(void);
@@ -321,7 +322,8 @@ static void feed_band(const std::vector<Station> &band, std::size_t first = 0, s
     auto               now  = std::chrono::system_clock::now().time_since_epoch();
     long long          ms   = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
     std::size_t        lead = (std::size_t)((15000 - ms % 15000) * RATE / 1000);
-    std::vector<float> audio(lead + slots * 15 * RATE + (std::size_t)(tail_s * RATE), 0.0f);
+    // A late band runs that much past its slots (ONLY_DRIFT feeds one 6 s late).
+    std::vector<float> audio(lead + slots * 15 * RATE + (std::size_t)((late_s + tail_s) * RATE), 0.0f);
     for (std::size_t i = 0; i < band.size(); i++)
         for (std::size_t k = 0; k < tones[i].size(); k++) {
             std::size_t start = lead + k * 15 * RATE + RATE / 2 + (std::size_t)(late_s * RATE);
@@ -536,47 +538,91 @@ int main() {
         return 0;
     }
     if (getenv("ONLY_DRIFT")) {
-        // Time Sync as desktop's time drift: JS8's timing moves, the clock doesn't.
+        // Time (page 4, button 2): Auto follows the decodes as desktop's
+        // Automatic Time Drift (one band is enough); press = Auto off/on;
+        // hold = the search, for a clock too far off for anything to
+        // decode. JS8's timing moves, the PC's clock doesn't.
+        auto drift = [] { return (long long)js8_drift_ms(); };
+        auto label = [] {
+            static std::string l;
+            l = ui_button_label(2);
+            for (auto &c : l) c = c == '\n' ? ' ' : c;
+            return l.c_str();
+        };
+        auto rows = [] { return ui_list_count("CQ CQ CQ"); }; // the band's two CQs
         pump(300);
-        printf("[drift] at start: %lld ms\n", (long long)js8_drift_ms());
-        // Everyone 1.5 s later than our clock says they should be.
+        dialog_js8_time_auto(true); // as on the radio (a build dir may have it off)
+        ui_page(4);
+        printf("[drift] at start: %lld ms, button '%s' (want Time: Auto)\n", drift(), label());
+        // Everyone 1.2 s later than our clock says: within the decoder's reach.
         std::vector<Station> late = {{"W1ABC", "FN42", "", "CQ CQ CQ FN42", 900, 0.05f},
                                      {"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 1400, 0.05f},
                                      {"VE7ABC", "CN89", "", "CQ CQ CQ CN89", 1900, 0.05f},
                                      {"N0XYZ", "EN34", "", "@HB HEARTBEAT EN34", 2400, 0.05f}};
-        feed_band(late, 0, 99, 1.5);
-        ui_page(3);
-        ui_press(1); // Time Sync
-        pump(200);
-        long long d = js8_drift_ms();
-        printf("[drift] after Time Sync: %lld ms (want about -1500)\n", d);
-        ui_press(1); // straight away again: the same decodes now say "on time"
-        pump(200);
-        printf("[drift] pressed again at once: %lld ms (want unchanged)\n", (long long)js8_drift_ms());
-        // The same late band again: now on time by JS8's clock.
-        feed_band(late, 0, 99, 1.5);
-        ui_press(1); // Time Sync again: nothing (much) left to fix
-        pump(200);
-        printf("[drift] second Time Sync: %lld ms (want within 100 of the first)\n", (long long)js8_drift_ms());
+        feed_band(late, 0, 99, 1.2);
+        pump(1000);
+        printf("[drift] Auto after one band: %lld ms (want about -1200), button '%s'\n", drift(), label());
+        long long d1 = drift();
+        feed_band(late, 0, 99, 1.2); // the same band: on time now
+        pump(1000);
+        printf("[drift] same band again: moved %lld ms (want under 100)\n", drift() - d1);
         // Our own frame starts on JS8's slot (0.5 s after a 15 s boundary of
-        // drifted time), i.e. 1.5 s early by the PC's clock.
+        // drifted time), i.e. 1.2 s early by the PC's clock.
         int frames = stub_tx_frames;
         ui_page(1);
         ui_press(1); // CQ
         pump(300);
-        ui_page(3);
-        ui_press(1); // Time Sync while the CQ waits for its slot: refused
-        pump(200);
-        printf("[drift] Time Sync while sending: drift %lld ms (want unchanged)\n", (long long)js8_drift_ms());
         for (int i = 0; i < 400 && stub_tx_frames == frames; i++) pump(100);
         long long slot = (stub_tx_start_sys_ms + js8_drift_ms()) % 15000;
         printf("[drift] CQ frame started %lld ms into JS8's slot (want ~500), %lld ms by the PC clock\n", slot,
                (long long)(stub_tx_start_sys_ms % 15000));
         for (int i = 0; i < 200; i++) pump(100); // let it finish
-        ui_page(3);
-        ui_hold(1); // hold Time Sync: reset
+        // Auto off: a band a further second late leaves the drift alone.
+        ui_page(4);
+        ui_press(2);
         pump(200);
-        printf("[drift] after hold: %lld ms (want 0)\n", (long long)js8_drift_ms());
+        long long d2 = drift();
+        printf("[drift] pressed: button '%s' (want Time: Off), '%s'\n", label(), stub_last_msg);
+        feed_band(late, 0, 99, 2.2);
+        pump(1000);
+        printf("[drift] Auto off, a band 1 s later: moved %lld ms (want 0)\n", drift() - d2);
+        ui_press(2); // Auto again
+        pump(200);
+        // Settings > Reset time drift (first in the list): the radio's clock.
+        ui_press(4);
+        pump(300);
+        printf("[drift] Settings opens on '%s' (want Reset time drift)\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        printf("[drift] after Reset: %lld ms (want 0)\n", drift());
+        // 6 s late: out of the decoder's reach, nothing decodes...
+        int before = rows();
+        feed_band(late, 0, 99, 6.0, 12);
+        pump(1000);
+        printf("[drift] 6 s late: %d new decodes (want 0), drift %lld (want 0)\n", rows() - before, drift());
+        // ...until the search (hold Time) finds the band.
+        ui_page(4);
+        ui_hold(2);
+        pump(200);
+        printf("[drift] held: button '%s' marked %d (want Time: Searching, 1), '%s'\n", label(), ui_button_marked(2),
+               stub_last_msg);
+        feed_band(late, 0, 99, 6.0, 12);
+        for (int i = 0; i < 100 && strstr(ui_button_label(2), "Searching"); i++) pump(100);
+        printf("[drift] search: %lld ms (want about -6000), button '%s' marked %d\n", drift(), label(),
+               ui_button_marked(2));
+        printf("[drift] '%s'\n", stub_last_msg);
+        before = rows();
+        feed_band(late, 0, 99, 6.0);
+        pump(1000);
+        printf("[drift] the band decodes again: %d new decodes (want 2), drift %lld\n", rows() - before, drift());
+        // A search with nothing to find stops when held again.
+        ui_hold(2);
+        pump(200);
+        ui_hold(2);
+        pump(200);
+        printf("[drift] stopped: button '%s' (want Time: Auto ...), '%s'\n", label(), stub_last_msg);
         return 0;
     }
     if (getenv("ONLY_WFRING")) {
@@ -982,6 +1028,7 @@ int main() {
         ui_set_alerts(0x01 | 0x10); // beep, new station
         feed_band({{"VA7XYZ", "CN89", "", "@HB HEARTBEAT CN89", 900, 0.05f}});
         printf("[newstn] first heard: alerts %d (want 1)\n", stub_new_station_alerts);
+        dialog_js8_time_auto(false);      // Auto would put an hour's drift back within a slot
         js8_set_drift_ms(61 * 60 * 1000); // an hour on (whole slots): off the list
         pump(1500);
         feed_band({{"VA7XYZ", "CN89", "", "@HB HEARTBEAT CN89", 900, 0.05f},
@@ -993,6 +1040,7 @@ int main() {
         printf("[newstn] an hour later: VA7XYZ heard %d, W7NEW heard %d, alerts %d (want 1, 1, 2: only W7NEW new)\n",
                ui_list_count("VA7XYZ: @HB") == 2, ui_list_has("W7NEW: @HB") == 1, stub_new_station_alerts);
         js8_set_drift_ms(0);
+        dialog_js8_time_auto(true);
         return 0;
     }
     if (getenv("ONLY_STALL")) {
@@ -3204,11 +3252,13 @@ int main() {
         pump(3000);
         printf("[hbpause] heartbeat heard while paused: frames sent %d (want 0)\n", stub_tx_frames - frames);
         // 11 min later (JS8 time; a whole number of slots): back by itself.
+        dialog_js8_time_auto(false); // Auto would put the drift back within a slot
         js8_set_drift_ms(11 * 60 * 1000);
         pump(1500);
         ui_page(1);
         printf("[hbpause] 11 min later: '%s' (want a countdown)\n", ui_button_label(2));
         js8_set_drift_ms(0);
+        dialog_js8_time_auto(true);
         // HW CPY? by hand pauses them again.
         ui_select_row_from("N0XYZ");
         ui_press(4); // HW CPY?
@@ -3394,17 +3444,19 @@ int main() {
         printf("[map] pressed: '%s' (want Map: Auto)\n", ui_button_label(1));
         // Half an hour on: the others fade; a fresh one doesn't; K5LOW's CQ
         // tag is long gone.
+        dialog_js8_time_auto(false); // Auto would put the half hour back within a slot
         js8_set_drift_ms(30 * 60 * 1000);
         feed_band({{"W7XYZ", "DM43", "", "@HB HEARTBEAT DM43", 800, 0.05f}}, 0, 99, 0, 0);
         pump(1500);
         screenshot("9a_map_faded.ppm");
         js8_set_drift_ms(0);
+        dialog_js8_time_auto(true);
         pump(300);
-        // Time Sync lives in Settings now, first in the list.
+        // Time Sync is page 4's Time button; its reset is first in Settings.
         ui_page(4);
         ui_press(4); // Settings
         pump(300);
-        printf("[map] Settings opens on '%s' (want Time Sync now)\n", ui_focused_text());
+        printf("[map] Settings opens on '%s' (want Reset time drift)\n", ui_focused_text());
         ui_click_focused();
         pump(300);
         ui_key(LV_KEY_ESC);
@@ -3551,10 +3603,14 @@ int main() {
         printf("[query] Clear with the list open: list focused %s, messages kept %d\n",
                ui_focus_is_table() ? "yes" : "no", ui_list_has("GOOD COPY HERE"));
 
-        // Time Sync from the decodes (can't actually set the PC clock here).
-        ui_page(3);
-        ui_press(1);
+        // The time search started and stopped (page 4, hold Time twice).
+        ui_page(4);
+        ui_hold(2);
         pump(200);
+        printf("[query] Time held: '%s' (want Time: Searching)\n", ui_button_label(2));
+        ui_hold(2);
+        pump(200);
+        printf("[query] held again: '%s' (want Time: Auto), '%s'\n", ui_button_label(2), stub_last_msg);
         return 0;
     }
     if (getenv("ONLY_URGENT")) {

@@ -276,6 +276,7 @@ typedef struct {
     ParamInt *(*wf_avg)(void); /* p_js8_wf_avg */
     ParamInt *(*map_mode)(void); /* p_js8_map_mode */
     ParamInt *(*st_sort)(void); /* p_js8_st_sort */
+    ParamInt *(*tsync_auto)(void); /* p_js8_tsync_auto */
     ParamInt *(*hb_interval)(void); /* p_js8_hb_interval */
     ParamInt *(*cq_interval)(void); /* p_js8_cq_interval */
     ParamInt *(*log_prompt)(void); /* p_js8_log_prompt */

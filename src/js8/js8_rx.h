@@ -74,6 +74,15 @@ typedef struct {
  * (|dt|) and with sync 21 or less (stronger ones decode). -1: not marked. */
 int js8_mark_level(bool decoded, int sync, float dt);
 
+/* What a time search found (js8_rx_search_start). */
+typedef struct {
+    bool    found;    /* false: time ran out with nothing decoded */
+    int32_t drift_ms; /* the drift that puts it on time */
+    int16_t snr;
+    float   freq_hz;
+    char    text[JS8_RX_TEXT_LEN]; /* the frame, e.g. "W1ABC: @HB HEARTBEAT" */
+} js8_rx_search_t;
+
 typedef struct {
     void (*on_frame)(const js8_rx_msg_t *msg, void *ctx);   /* every decode */
     /* Assembled messages; also, with msg->partial set, the text so far of a
@@ -90,6 +99,13 @@ typedef struct {
      * load each minute, audio missing or thrown away, clock realigns. From
      * the receiver's and the decoder's threads. */
     void (*on_report)(const char *line, void *ctx);
+    /* Automatic time sync (js8_rx_set_auto_sync): after a decode pass with
+     * Normal or Slow frames, the drift desktop would set (its 60-frame
+     * average) and how many frames came in that pass. Setting it
+     * (js8_set_drift_ms) is the caller's: not while sending. */
+    void (*on_auto_drift)(int64_t drift_ms, unsigned frames, void *ctx);
+    /* A time search ended (js8_rx_search_start), from its own thread. */
+    void (*on_search)(const js8_rx_search_t *result, void *ctx);
     void *ctx;
 } js8_rx_cb_t;
 
@@ -111,6 +127,23 @@ void js8_rx_set_decode_range(js8_rx_t *rx, int low_hz, int high_hz);
 void js8_rx_set_qso_offset(js8_rx_t *rx, int offset_hz);
 /* Report decode attempts through on_mark, from the next decode pass. */
 void js8_rx_set_sync_marks(js8_rx_t *rx, bool on);
+
+/* Automatic time sync, as desktop JS8Call's Automatic Time Drift (and the
+ * Android app's Auto time sync): every decoded Normal or Slow frame,
+ * heartbeats included, feeds a 60-frame average reported through
+ * on_auto_drift after each pass. Off until switched on. */
+void js8_rx_set_auto_sync(js8_rx_t *rx, bool on);
+/* The drift was set another way: the average goes on from `drift_ms`,
+ * counted as one frame (`keep`: a search's find), or starts afresh (a
+ * reset: the next frame sets it outright). */
+void js8_rx_auto_sync_restart(js8_rx_t *rx, int64_t drift_ms, bool keep);
+/* For when the clock is too far off for anything to decode (more than
+ * about 2.5 s): decode the latest 15 s of audio every 4 s, wherever the
+ * slots fall, for up to `max_s` seconds; the first Normal decode gives the
+ * drift (on_search). Starting again restarts it. */
+void js8_rx_search_start(js8_rx_t *rx, unsigned max_s);
+void js8_rx_search_stop(js8_rx_t *rx);
+bool js8_rx_searching(js8_rx_t *rx);
 
 /* Test mode: play a 16-bit PCM WAV (any rate; resampled as needed) into the
  * decoder in real time, starting at the next 30 s boundary (a slot start for

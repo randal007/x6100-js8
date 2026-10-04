@@ -107,6 +107,10 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
             f.timestamp_ms   = wall_ms();
 
             if (cb_.on_frame) cb_.on_frame(f);
+            if (auto_on_ && !f.low_confidence) {
+                std::lock_guard<std::mutex> lock(auto_mutex_);
+                auto_sync_.frame(f.mode, f.capture_drift_ms - std::lround(f.dt * 1000.0f), drift_ms());
+            }
             std::lock_guard<std::mutex> lock(assembler_mutex_);
             assembler_.add(f);
         } else if (auto s = std::get_if<js8core::events::SyncState>(&ev)) {
@@ -119,6 +123,15 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
             m.sync    = m.decoded ? 0 : s->sync.candidate;
             cb_.on_sync(m);
         } else if (auto fin = std::get_if<js8core::events::DecodeFinished>(&ev)) {
+            if (auto_on_) { // desktop sets its drift here, at the end of the pass
+                std::optional<std::int64_t> drift;
+                unsigned                    frames = 0;
+                {
+                    std::lock_guard<std::mutex> lock(auto_mutex_);
+                    drift = auto_sync_.pass_done(drift_ms(), &frames);
+                }
+                if (drift && cb_.on_auto_drift) cb_.on_auto_drift(*drift, frames);
+            }
             if (cb_.on_cycle_done) cb_.on_cycle_done(fin->decoded);
         }
     };
@@ -130,6 +143,11 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
         ecb.on_error = [this](std::string_view m) { cb_.on_log("error: " + std::string(m)); };
     }
 
+    // Made before the worker starts, which feeds it; its thread starts with
+    // the first search, and it's destroyed (joined) after the worker.
+    search_ = std::make_unique<TimeSearch>([this](const TimeSearch::Result &r) {
+        if (cb_.on_search) cb_.on_search(r);
+    });
     engine_ = js8core::make_engine(ec, std::move(ecb), {});
     engine_->set_submodes(config_.submodes);
     applied_drift_ms_ = drift_ms(); // a Time Sync drift from before JS8 reopened
@@ -158,11 +176,27 @@ void Receiver::set_submodes(int submodes) {
 }
 
 void Receiver::set_decode_range(int low_hz, int high_hz) {
+    low_hz_  = low_hz;
+    high_hz_ = high_hz;
     engine_->set_decode_range(low_hz, high_hz);
 }
 
 void Receiver::set_qso_offset(int offset_hz) {
+    qso_hz_ = offset_hz;
     engine_->set_qso_offset(offset_hz);
+}
+
+void Receiver::restart_auto_sync(std::int64_t drift_ms, bool keep) {
+    std::lock_guard<std::mutex> lock(auto_mutex_);
+    auto_sync_.restart(drift_ms, keep);
+}
+
+void Receiver::start_search(std::int64_t max_ms) {
+    search_->start(max_ms, low_hz_, high_hz_, qso_hz_);
+}
+
+void Receiver::stop_search() {
+    search_->stop();
 }
 
 void Receiver::set_sync_marks(bool on) {
@@ -277,6 +311,8 @@ void Receiver::submit(const std::vector<float> &audio_12k) {
         float v = std::clamp(audio_12k[i], -1.0f, 1.0f);
         pcm[i]  = (std::int16_t)std::lrintf(v * 32767.0f);
     }
+    if (search_->active()) // stamped with the system clock: the search works out the drift itself
+        search_->feed(pcm.data(), pcm.size(), wall_ms() - drift_ms());
     push_pcm(pcm.data(), pcm.size());
 }
 

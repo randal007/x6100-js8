@@ -17,6 +17,8 @@
 #include "inbox.hpp"
 #include "alerts.hpp"
 #include "macros.hpp"
+#include "timesync.hpp"
+#include "testsignal.hpp"
 #include "speeds.hpp"
 
 #include <unistd.h>
@@ -545,73 +547,140 @@ TEST_CASE("lat/lon to Maidenhead grid", "[js8][ops][aprs]") {
     CHECK_FALSE(js8_latlon_to_grid(0.0, 0.0, 10, g, 8));
 }
 
-namespace {
-js8_sync_sample_t sync_sample(const char *call, int64_t when, int32_t drift, int32_t period = 15000) {
-    js8_sync_sample_t x{};
-    std::snprintf(x.call, sizeof(x.call), "%s", call);
-    x.when_ms   = when;
-    x.drift_ms  = drift;
-    x.period_ms = period;
-    return x;
+
+TEST_CASE("auto time sync: desktop's average, one heartbeat to start", "[js8][timesync]") {
+    AutoTimeSync a;
+    CHECK_FALSE(a.pass_done(0));
+    a.frame(0, -1200, 0); // Normal: counts
+    a.frame(2, 5000, 0);  // Turbo: desktop leaves it out
+    unsigned frames = 0;
+    auto     d      = a.pass_done(0, &frames);
+    REQUIRE(d);
+    CHECK(*d == -1200); // the first frame sets it outright
+    CHECK(frames == 1);
+    a.frame(4, -1000, -1200); // Slow counts too
+    d = a.pass_done(-1200);
+    REQUIRE(d);
+    CHECK(*d == -1100); // (1 x -1200 + -1000) / 2
+    CHECK_FALSE(a.pass_done(-1100)); // a pass without frames sets nothing
+    // A station 1.5 s off among many on time moves it a 60th, no more.
+    for (int i = 0; i < 300; i++) {
+        a.frame(0, 0, *d);
+        d = a.pass_done(*d);
+    }
+    CHECK(std::llabs(*d) < 25);
+    CHECK(a.count() == AutoTimeSync::MAX_N - 1);
+    std::int64_t before = *d;
+    a.frame(0, 1500, before);
+    d = a.pass_done(before);
+    CHECK(*d - before == (1500 - before) / AutoTimeSync::MAX_N);
+    // A search's find counts as one frame; a reset starts afresh.
+    a.restart(3000, true);
+    a.frame(0, 2000, 3000);
+    CHECK(*a.pass_done(3000) == 2500);
+    a.restart(0, false);
+    a.frame(0, -700, 0);
+    CHECK(*a.pass_done(0) == -700);
 }
+
+TEST_CASE("auto time sync: the short way round each speed's slot", "[js8][timesync]") {
+    // A frame 14 s late in a 15 s slot is 1 s early.
+    CHECK(drift_short_way(14000, -500, 15000) == -1000);
+    CHECK(drift_short_way(-14500, 0, 15000) == 500);
+    CHECK(drift_short_way(29000, 0, 30000) == -1000); // Slow: 30 s
+    CHECK(drift_short_way(800, 600, 15000) == 800);
+    AutoTimeSync a;
+    a.frame(0, 14000, -500);
+    CHECK(*a.pass_done(-500) == -1000);
+}
+
+TEST_CASE("time search: the drift from where a signal starts", "[js8][timesync]") {
+    const std::int64_t T = 1'791'000'000'000LL - 1'791'000'000'000LL % 15000; // a slot boundary
+    // Our clock 5 s fast: a slot that really starts at T starts at T+5 s
+    // by it, so JS8 time must be 5 s behind it.
+    CHECK(TimeSearch::drift_for(T + 5000, 0.0f) == -5000);
+    CHECK(TimeSearch::drift_for(T + 3000, 2.0f) == -5000); // window 2 s earlier, signal 2 s into it
+    CHECK(TimeSearch::drift_for(T - 1200, 0.0f) == 1200);   // clock slow
+    CHECK(TimeSearch::drift_for(T + 8000, 0.0f) == 7000);   // the short way: 8 s fast = 7 s slow
+}
+
+namespace {
+
+// A CQ whose slot starts `lead_s` into the audio, as int16 (noise before it).
+std::vector<std::int16_t> search_test_audio(double lead_s) {
+    std::vector<TestStation> band = {{"W1ABC", "FN42", "CQ CQ CQ FN42", 1500, -18}};
+    auto                     sig  = make_test_band(band, 12000, 0.02f, 7);
+    auto                     pre  = make_test_band({}, 12000, 0.02f, 8);
+    std::vector<float>       f(pre.begin(), pre.begin() + (std::ptrdiff_t)(lead_s * 12000));
+    f.insert(f.end(), sig.begin(), sig.end());
+    std::vector<std::int16_t> pcm(f.size());
+    for (std::size_t i = 0; i < f.size(); i++) pcm[i] = (std::int16_t)std::lrintf(std::clamp(f[i], -1.0f, 1.0f) * 32767);
+    return pcm;
+}
+
 } // namespace
 
-TEST_CASE("Time Sync: median across stations, each counted once", "[js8][ops][drift]") {
-    const int64_t now = 1'000'000'000;
-    int64_t       d   = 0;
-    unsigned      decodes = 0, stations = 0;
+TEST_CASE("time search: finds a signal 5 s out and gives up when nothing comes", "[js8][timesync]") {
+    const std::int64_t T    = 1'791'000'000'000LL - 1'791'000'000'000LL % 15000;
+    const double       lead = 20.0; // the slot starts 20 s into the audio
+    auto               pcm  = search_test_audio(lead);
+    // Our clock 5 s fast: audio sample i is at T + 5 s + (i - lead) by it.
+    auto sys_at = [&](std::size_t i) { return T + 5000 + (std::int64_t)((double)i / 12 - lead * 1000); };
 
-    // Too few decodes.
-    js8_sync_sample_t two[] = {sync_sample("W1ABC", now - 1000, -1500), sync_sample("K9DEF", now - 2000, -1400)};
-    CHECK_FALSE(js8_sync_drift(two, 2, now, 120000, 0, &d, &decodes, &stations));
-    CHECK(decodes == 2);
+    std::mutex              m;
+    std::condition_variable cv;
+    std::optional<TimeSearch::Result> got;
+    TimeSearch s([&](const TimeSearch::Result &r) {
+        std::lock_guard<std::mutex> lock(m);
+        got = r;
+        cv.notify_all();
+    });
+    s.start(60000, 200, 3000, 1500);
+    CHECK(s.active());
+    // Up to a window that starts just before the signal: one decode of it.
+    std::size_t end = (std::size_t)((lead - 0.5) * 12000) + 15 * 12000;
+    for (std::size_t i = 0; i < end; i += 1200) s.feed(&pcm[i], std::min<std::size_t>(1200, end - i), sys_at(std::min(end, i + 1200)));
+    {
+        std::unique_lock<std::mutex> lock(m);
+        cv.wait_for(lock, std::chrono::seconds(60), [&] { return got.has_value(); });
+    }
+    REQUIRE(got);
+    CHECK(got->found);
+    CHECK(std::llabs(got->drift_ms + 5000) < 150);
+    CHECK(got->text.find("W1ABC") != std::string::npos);
+    CHECK_FALSE(s.active()); // stops at the first find
 
-    // Three stations near -1.5 s; one chatty station 3 s out sends five
-    // messages: it counts once and can't pull the answer.
-    std::vector<js8_sync_sample_t> v = {sync_sample("W1ABC", now - 1000, -1500), sync_sample("K9DEF", now - 2000, -1400),
-                                        sync_sample("N0XYZ", now - 3000, -1600)};
-    for (int i = 0; i < 5; i++) v.push_back(sync_sample("BADCLK", now - 500 - i, -4500));
-    REQUIRE(js8_sync_drift(v.data(), (unsigned)v.size(), now, 120000, 0, &d, &decodes, &stations));
-    CHECK(decodes == 8);
-    CHECK(stations == 4);
-    CHECK(d == -1550); // -4500 -1600 -1500 -1400 (each once): the mean of the middle two
-
-    // Fewer than 3 stations: the median of all decodes.
-    js8_sync_sample_t few[] = {sync_sample("W1ABC", now - 1000, -1500), sync_sample("W1ABC", now - 20000, -1300),
-                               sync_sample("K9DEF", now - 2000, -1400)};
-    REQUIRE(js8_sync_drift(few, 3, now, 120000, 0, &d, &decodes, &stations));
-    CHECK(stations == 2);
-    CHECK(d == -1400);
+    got.reset();
+    s.start(1500, 200, 3000, 1500); // nothing fed: time runs out
+    {
+        std::unique_lock<std::mutex> lock(m);
+        cv.wait_for(lock, std::chrono::seconds(10), [&] { return got.has_value(); });
+    }
+    REQUIRE(got);
+    CHECK_FALSE(got->found);
+    CHECK_FALSE(s.active());
 }
 
-TEST_CASE("Time Sync: decodes finishing after a change still count right", "[js8][ops][drift]") {
-    // Each decode's suggestion is absolute (worked out from the drift at
-    // capture): after syncing to -1500, the same band's decodes, old or new,
-    // all suggest -1500, so pressing again changes nothing.
-    const int64_t     now = 2'000'000'000;
-    js8_sync_sample_t v[] = {sync_sample("W1ABC", now - 30000, -1500), sync_sample("K9DEF", now - 29000, -1510),
-                             sync_sample("N0XYZ", now - 1000, -1490), sync_sample("VE7ABC", now - 500, -1500)};
-    int64_t d = 0;
-    REQUIRE(js8_sync_drift(v, 4, now, 120000, -1500, &d, nullptr, nullptr));
-    CHECK(d == -1500);
-}
-
-TEST_CASE("Time Sync: the short way round each speed's slot, and old decodes skipped", "[js8][ops][drift]") {
-    const int64_t now = 3'000'000'000;
-    int64_t       d   = 0;
-    // A Turbo decode (6 s slots) suggesting +4500 is the same as -1500;
-    // a Normal one suggesting +13500 too (15 s slots).
-    js8_sync_sample_t v[] = {sync_sample("W1ABC", now - 1000, -1500), sync_sample("K9DEF", now - 1000, 4500, 6000),
-                             sync_sample("N0XYZ", now - 1000, 13500, 15000),
-                             sync_sample("OLD1", now - 200000, 9000), // beyond the window: skipped
-                             js8_sync_sample_t{}};                       // empty: skipped
-    unsigned decodes = 0;
-    REQUIRE(js8_sync_drift(v, 5, now, 120000, 0, &d, &decodes, nullptr));
-    CHECK(decodes == 3);
-    CHECK(d == -1500);
-    // Near a large current drift the same values come out near it.
-    REQUIRE(js8_sync_drift(v, 5, now, 120000, -14000, &d, nullptr, nullptr));
-    CHECK(d == -16500);
+// Which window starts (relative to the signal's slot) still decode it: the
+// search's step must be no wider, or a signal could fall between windows.
+TEST_CASE("time search: windows a step apart leave no gap", "[js8][timesync][slow]") {
+    const std::int64_t T    = 1'791'000'000'000LL - 1'791'000'000'000LL % 15000;
+    const double       lead = 20.0;
+    auto               pcm  = search_test_audio(lead);
+    int                lo = 99999, hi = -99999;
+    std::string        seen;
+    for (int x = -4000; x <= 4000; x += 250) { // window start - slot start, ms
+        std::size_t at = (std::size_t)((lead * 1000 + x) * 12);
+        auto        r  = TimeSearch::decode_window(&pcm[at], T + 5000 + x, 200, 3000, 1500);
+        seen += r.found ? "#" : ".";
+        if (!r.found) continue;
+        CHECK(std::llabs(r.drift_ms + 5000) < 150);
+        lo = std::min(lo, x);
+        hi = std::max(hi, x);
+    }
+    INFO("window start - slot start, -4..+4 s by 0.25 s: " << seen);
+    WARN("decodes from window starts " << lo << " to " << hi << " ms: " << seen);
+    CHECK(hi - lo + 250 >= TimeSearch::STEP_MS);
 }
 
 TEST_CASE("JS8 time is the system clock plus the Time Sync drift", "[js8][drift]") {

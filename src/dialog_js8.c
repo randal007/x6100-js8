@@ -107,8 +107,6 @@
 #ifndef JS8_QSO_DB_PATH
 #define JS8_QSO_DB_PATH  "/mnt/qso_log.db" /* the radio's QSO log, read-only: new grids and countries */
 #endif
-#define SYNC_WINDOW_MS   120000 /* Time Sync uses decodes from the last 2 min */
-#define SYNC_SAMPLES     64     /* decodes kept for Time Sync (a busy band's 2 min) */
 #define WF_ROWS_PER_SEC  15     /* waterfall rows per second of audio, as the main screen's */
 #define WF_ROW_SAMPLES   (SAMPLE_RATE / WF_ROWS_PER_SEC)
 #define WF_QUEUE         16     /* rows waiting to be drawn (jitter buffer) */
@@ -188,8 +186,11 @@ static void key_cb(lv_event_t *e);
 static const char *show_label_getter(void);
 static void        show_cb(button_data_t *btn);
 static void        clear_cb(button_data_t *btn);
-static void        time_sync_now(void);
 static void        time_sync_reset(void);
+static const char *time_label_getter(void);
+static void        time_cb(button_data_t *btn);
+static void        time_hold_cb(button_data_t *btn);
+static void        time_apply_found(void);
 static const char *map_view_label_getter(void);
 static void        map_view_cb(button_data_t *btn);
 static void        map_follow_cb(button_data_t *btn);
@@ -326,8 +327,6 @@ static lv_timer_t *tx_timer;           /* refreshes the TX bar countdown */
 static js8_tx_status_t tx_status;      /* UI-thread copy of the last status */
 static char        tx_preview[JS8_RX_TEXT_LEN]; /* what we're sending, as others see it */
 static float       base_gain_offset;
-static js8_sync_sample_t sync_samples[SYNC_SAMPLES]; /* recent decodes for Time Sync */
-static unsigned          sync_head;
 static float       qso_freq = -1;     /* the selected station's offset (the green line), -1 none */
 /* The selected station: set by MFK or a tap on its row, never by new rows
  * arriving, so Reply still answers it after the list moves on. */
@@ -681,9 +680,10 @@ static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:6)", .pres
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
 static button_data_t btn_hbackk = {.type = BTN_TEXT_FN, .label_fn = hb_ack_label_getter, .press = hb_ack_cb};
 static button_data_t btn_texts  = {.type = BTN_TEXT, .label = "Settings...", .press = texts_cb};
-/* The empty button: where "HB: 10 min" was, before heartbeats moved to
- * page 1's Heartbeat (hold = auto, as CQ). Free for a beta 5 feature. */
-static buttons_page_t page_4 = {{&btn_p4, &btn_auto, NULL, &btn_hbackk, &btn_texts}};
+/* Time: press = Auto on/off, hold = search (where "HB: 10 min" was, before
+ * heartbeats moved to page 1's Heartbeat). */
+static button_data_t btn_time   = {.type = BTN_TEXT_FN, .label_fn = time_label_getter, .press = time_cb, .hold = time_hold_cb};
+static buttons_page_t page_4 = {{&btn_p4, &btn_auto, &btn_time, &btn_hbackk, &btn_texts}};
 
 static button_data_t  btn_p5        = {.type = BTN_TEXT, .label = "(JS8 5:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_6, .prev = &page_4};
 static button_data_t  btn_aprs      = {.type = BTN_TEXT, .label = "APRS >", .press = aprs_cb};
@@ -991,14 +991,6 @@ static void process_message(js8_rx_msg_t *m) {
         show_selection();
     }
     alert_check(m, new_station);
-    if (!m->low_confidence && m->from[0]) {
-        js8_sync_sample_t *x = &sync_samples[sync_head];
-        snprintf(x->call, sizeof(x->call), "%s", m->from);
-        x->when_ms   = now_wall_ms();
-        x->drift_ms  = m->drift_ms;
-        x->period_ms = js8_speed_period_s(js8_speed_from_submode(m->submode)) * 1000;
-        sync_head    = (sync_head + 1) % SYNC_SAMPLES;
-    }
     handle_incoming(m);
     char ended[JS8_RX_CALL_LEN];
     if (js8_qsos_received(qsos, m, my_call(), now_wall_ms(), ended, sizeof(ended))) log_offer(ended);
@@ -1758,7 +1750,7 @@ static void health_tick(void) {
  * arriving replaces its older text still waiting, so only the newest
  * counts. */
 
-typedef enum { EV_MESSAGE, EV_CYCLE_DONE, EV_TX_STATUS, EV_TX_DONE } ev_kind_t;
+typedef enum { EV_MESSAGE, EV_CYCLE_DONE, EV_TX_STATUS, EV_TX_DONE, EV_AUTO_DRIFT, EV_SEARCH } ev_kind_t;
 
 typedef struct {
     ev_kind_t kind;
@@ -1767,6 +1759,11 @@ typedef struct {
         unsigned        decodes;
         js8_tx_status_t tx_status;
         tx_done_t       tx_done;
+        struct {
+            int64_t  drift_ms;
+            unsigned frames;
+        } auto_drift;
+        js8_rx_search_t search;
     };
 } ui_event_t;
 
@@ -1781,6 +1778,8 @@ static void ui_add_message(void *arg);
 static void ui_cycle_done(void *arg);
 static void ui_tx_status(void *arg);
 static void ui_tx_done(void *arg);
+static void ui_auto_drift(int64_t drift_ms, unsigned frames);
+static void ui_search_done(const js8_rx_search_t *r);
 
 static void ev_push(const ui_event_t *e) {
     pthread_mutex_lock(&ev_lock);
@@ -1835,6 +1834,8 @@ static void ev_tick(void) {
         case EV_CYCLE_DONE: ui_cycle_done(&e->decodes); break;
         case EV_TX_STATUS: ui_tx_status(&e->tx_status); break;
         case EV_TX_DONE: ui_tx_done(&e->tx_done); break;
+        case EV_AUTO_DRIFT: ui_auto_drift(e->auto_drift.drift_ms, e->auto_drift.frames); break;
+        case EV_SEARCH: ui_search_done(&e->search); break;
         }
     }
 }
@@ -1911,6 +1912,20 @@ static void ui_cycle_done(void *arg) {
     cycle_decodes = *(unsigned *)arg;
     update_status();
     auto_try_send(); /* the cycle's replies, now that all of it is in */
+}
+
+/* Automatic time sync's drift after a decode pass (decode thread). */
+static void on_auto_drift(int64_t drift_ms, unsigned frames, void *ctx) {
+    (void)ctx;
+    ui_event_t e = {.kind = EV_AUTO_DRIFT, .auto_drift = {drift_ms, frames}};
+    ev_push(&e);
+}
+
+/* The time search ended (its own thread). */
+static void on_search(const js8_rx_search_t *r, void *ctx) {
+    (void)ctx;
+    ui_event_t e = {.kind = EV_SEARCH, .search = *r};
+    ev_push(&e);
 }
 
 static void on_cycle_done(unsigned decodes, void *ctx) {
@@ -2198,6 +2213,8 @@ static void rx_start(void) {
         .on_audio      = on_audio,
         .on_mark       = on_mark,
         .on_report     = on_report,
+        .on_auto_drift = on_auto_drift,
+        .on_search     = on_search,
     };
     marks_reset();
     rx = js8_rx_create(SAMPLE_RATE, rx_speed_mask(), my_call(), &cb);
@@ -2205,6 +2222,7 @@ static void rx_start(void) {
     js8_rx_set_decode_range(rx, filter_low, filter_high);
     js8_rx_set_qso_offset(rx, param_i_get(cfg.js8.tx_freq()));
     js8_rx_set_sync_marks(rx, param_i_get(cfg.js8.decode_marks()));
+    js8_rx_set_auto_sync(rx, param_i_get(cfg.js8.tsync_auto()));
 }
 
 static void rx_stop(void) {
@@ -2378,6 +2396,7 @@ static void ui_tx_done(void *arg) {
     }
     if (tx_cq && completed) my_cq_until_ms = now_mono_ms() + CQ_HEARD_MS; /* as others' CQs on the map */
     tx_cq = false;
+    time_apply_found(); /* a time search's find, held while we sent */
 
     /* Replies that arrived while we were sending. */
     auto_try_send();
@@ -4651,61 +4670,156 @@ static void clear_cb(button_data_t *btn) {
     update_status();
 }
 
-/* Time Sync, as desktop JS8Call's time drift: JS8's time (receive windows,
- * transmit slots, everything the app times) moves to where the band's
- * decodes say it should be; the radio's clock is never changed. Each decode
- * suggests a drift worked out from the one in effect when its audio was
- * captured (js8core, desktop's auto-sync maths), so decodes finishing just
- * after a change can't make the next press overshoot, and every recent
- * decode stays usable: nothing is thrown away after a press. Each station
- * counts once. The drift lasts until the radio restarts; hold Time Sync to
- * go back to the radio's clock. Needs JS8's time within a couple of seconds
- * already, or nothing decodes: set the radio's clock roughly in SETTINGS
- * first. Not while sending: it would move the frames still to go. */
-/* Settings > Time Sync now (it was page 3's button). */
-static void time_sync_now(void) {
+/* ---- Time: automatic time sync and the search ------------------------- */
+
+/* JS8's time is the radio's clock plus a drift (js8_set_drift_ms): receive
+ * windows, transmit slots and everything the app times go by it. The
+ * radio's clock is never changed; the drift lasts until power-off.
+ *
+ * Auto (press Time, page 4; on to start): desktop JS8Call's Automatic Time
+ * Drift, which the JS8Call-improved Android app has as Auto time sync:
+ * every decoded Normal or Slow frame, heartbeats and CQs included, feeds a
+ * 60-frame average (src/js8/timesync.hpp), the drift after each decode
+ * pass. One heartbeat is enough to start. Set only when it moved
+ * TIME_AUTO_MIN_MS or more (each change re-snaps the decoder's windows),
+ * and never while sending (the frames still to go would move).
+ *
+ * Hold Time: the search, for a clock too far off for anything to decode
+ * (more than about 2.5 s): the latest 15 s decoded every 4 s for up to
+ * TIME_SEARCH_S, wherever the slots fall; the first decode sets the drift.
+ * Desktop decodes every second for this while its automatic drift starts. */
+#define TIME_AUTO_MIN_MS 50
+#define TIME_SEARCH_S    300
+
+static bool             time_found_pending; /* a search's find, waiting for TX to end */
+static js8_rx_search_t  time_found;
+
+static bool time_searching(void) {
+    return rx && js8_rx_searching(rx);
+}
+
+static const char *time_label_getter(void) {
+    static char buf[32];
+    if (time_searching()) return "Time:\nSearching";
+    const char *mode = param_i_get(cfg.js8.tsync_auto()) ? "Auto" : "Off";
+    int64_t     d    = js8_drift_ms();
+    if (d) snprintf(buf, sizeof(buf), "Time: %s\n%+.1fs", mode, d / 1000.0);
+    else snprintf(buf, sizeof(buf), "Time:\n%s", mode);
+    return buf;
+}
+
+/* The Time button (marked while searching) and the status line's drift. */
+static void time_refresh(void) {
+    buttons_mark(&btn_time, time_searching());
+    update_status();
+}
+
+/* After a decode pass: Auto's new drift. */
+static void ui_auto_drift(int64_t drift_ms, unsigned frames) {
+    if (!dialog.run || !param_i_get(cfg.js8.tsync_auto())) return;
+    if (tx_active || js8_tx_busy(tx)) return; /* the next pass tries again */
+    if (time_searching()) { /* decoding again: no need to search */
+        js8_rx_search_stop(rx);
+        msg_update_text_fmt("Time: stations decode again, search stopped");
+    }
+    int64_t change = drift_ms - js8_drift_ms();
+    if (llabs(change) < TIME_AUTO_MIN_MS) {
+        time_refresh();
+        return;
+    }
+    js8_set_drift_ms(drift_ms);
+    js8_log("auto time: drift %+lld ms (moved %+lld ms, %u frames)", (long long)drift_ms, (long long)change, frames);
+    if (llabs(change) >= 500)
+        add_info_row("Time: JS8 time %+.1f s to match the decodes (drift %+.1f s)", change / 1000.0, drift_ms / 1000.0);
+    time_refresh();
+}
+
+/* A search's find goes in when nothing is being sent. */
+static void time_apply_found(void) {
+    if (!time_found_pending || js8_tx_busy(tx)) return;
+    time_found_pending = false;
+    int64_t change     = time_found.drift_ms - js8_drift_ms();
+    js8_set_drift_ms(time_found.drift_ms);
+    js8_rx_auto_sync_restart(rx, time_found.drift_ms, true); /* Auto goes on from it */
+    msg_update_text_fmt("Time: found %s - JS8 time %+.1f s (drift %+.1f s)", time_found.text, change / 1000.0,
+                        time_found.drift_ms / 1000.0);
+    add_info_row("Time search: %s (%+d dB, %.0f Hz): JS8 time %+.1f s, drift %+.1f s", time_found.text,
+                 time_found.snr, time_found.freq_hz, change / 1000.0, time_found.drift_ms / 1000.0);
+    js8_log("time search: drift %+d ms (moved %+lld ms) from \"%s\"", (int)time_found.drift_ms, (long long)change,
+            time_found.text);
+    time_refresh();
+}
+
+static void ui_search_done(const js8_rx_search_t *r) {
+    if (!dialog.run) return;
+    if (!r->found) {
+        msg_update_text_fmt("Time: nothing decoded in %d min - is the band open? Far off: set the clock in SETTINGS",
+                            TIME_SEARCH_S / 60);
+        add_info_row("Time search: nothing decoded in %d minutes", TIME_SEARCH_S / 60);
+        time_refresh();
+        return;
+    }
+    time_found         = *r;
+    time_found_pending = true;
+    if (js8_tx_busy(tx)) msg_update_text_fmt("Time: found %s - set when sending ends", r->text);
+    time_apply_found();
+}
+
+/* Press: Auto on or off. */
+static void time_cb(button_data_t *btn) {
+    (void)btn;
     user_touch();
+    if (popup_guard()) return;
+    bool on = !param_i_get(cfg.js8.tsync_auto());
+    param_i_set(cfg.js8.tsync_auto(), on);
+    js8_rx_set_auto_sync(rx, on);
+    if (on) msg_update_text_fmt("Time: Auto - JS8's timing follows the stations decoded (hold: search)");
+    else msg_update_text_fmt("Time: Auto off - JS8's timing stays at drift %+.1f s", js8_drift_ms() / 1000.0);
+    buttons_refresh(&btn_time);
+}
+
+/* Hold: search for the band's timing (again: stop it). */
+static void time_hold_cb(button_data_t *btn) {
+    (void)btn;
+    user_touch();
+    if (popup_guard() || !rx) return;
+    if (time_searching()) {
+        js8_rx_search_stop(rx);
+        msg_update_text_fmt("Time: search stopped");
+        time_refresh();
+        return;
+    }
     if (js8_tx_busy(tx)) {
         msg_update_text_fmt("Not while sending - Stop TX first");
         return;
     }
-    int64_t  current = js8_drift_ms(), drift;
-    unsigned decodes = 0, heard = 0;
-    if (!js8_sync_drift(sync_samples, SYNC_SAMPLES, now_wall_ms(), SYNC_WINDOW_MS, current, &drift, &decodes, &heard)) {
-        msg_update_text_fmt("Time Sync needs %d decodes in the last 2 min (have %u). "
-                            "Clock far off? Set it in SETTINGS first",
-                            JS8_SYNC_MIN_DECODES, decodes);
-        return;
-    }
-    const char *from = heard >= JS8_SYNC_MIN_STATIONS ? "stations" : "decodes";
-    unsigned    n    = heard >= JS8_SYNC_MIN_STATIONS ? heard : decodes;
-    if (llabs(drift - current) < 50) {
-        msg_update_text_fmt("JS8 time is on (within 0.05 s of %u %s)", n, from);
-        return;
-    }
-    js8_set_drift_ms(drift);
-    msg_update_text_fmt("JS8 time moved %+.2f s (median of %u %s); drift now %+.2f s", (drift - current) / 1000.0, n,
-                        from, drift / 1000.0);
-    add_info_row("Time Sync: JS8 time %+.2f s, drift %+.2f s", (drift - current) / 1000.0, drift / 1000.0);
-    update_status();
+    js8_rx_search_start(rx, TIME_SEARCH_S);
+    msg_update_text_fmt("Time: searching for the band's timing (up to %d min): the first station heard sets it",
+                        TIME_SEARCH_S / 60);
+    time_refresh();
 }
 
-/* Hold: no drift, JS8 back on the radio's clock (desktop's Reset). */
-/* Settings > Reset time drift (was holding Time Sync). */
+/* Settings > Reset time drift: JS8 back on the radio's clock (desktop's
+ * Reset). With Auto on, the next decode sets the drift again. */
 static void time_sync_reset(void) {
     user_touch();
     if (js8_tx_busy(tx)) {
         msg_update_text_fmt("Not while sending - Stop TX first");
         return;
     }
+    if (time_searching()) js8_rx_search_stop(rx);
+    time_found_pending = false;
+    js8_rx_auto_sync_restart(rx, 0, false);
     if (!js8_drift_ms()) {
         msg_update_text_fmt("No drift: JS8 is on the radio's clock");
+        time_refresh();
         return;
     }
     js8_set_drift_ms(0);
-    msg_update_text_fmt("Drift reset: JS8 back on the radio's clock");
+    msg_update_text_fmt(param_i_get(cfg.js8.tsync_auto()) ? "Drift reset: Auto starts again from the next decode"
+                                                          : "Drift reset: JS8 back on the radio's clock");
     add_info_row("Time Sync: drift reset");
-    update_status();
+    time_refresh();
 }
 
 static void reply_cb(button_data_t *btn) {
@@ -5465,6 +5579,14 @@ unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max) {
     return n;
 }
 
+/* For tools/js8_ui_harness: Auto time sync on or off. Scenarios that move
+ * JS8's time on by minutes with a drift switch it off: Auto would put the
+ * drift back within a slot, as desktop's does. */
+void dialog_js8_time_auto(bool on) {
+    param_i_set(cfg.js8.tsync_auto(), on);
+    js8_rx_set_auto_sync(rx, on);
+}
+
 /* For tools/js8_ui_harness: the Stations view's calls in row order, the
  * cursor's with a '>'; how many stations are listed. */
 int dialog_js8_station_rows(char *out, unsigned len) {
@@ -5969,8 +6091,7 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_MSG_KEEP 102
 #define SETTINGS_MILES    103
 #define SETTINGS_MARKS    104
-#define SETTINGS_TSYNC    105
-#define SETTINGS_TRESET   106
+#define SETTINGS_TRESET   106 /* 105 was Time Sync now: the Time button (page 4) now */
 #define SETTINGS_WF       107
 
 static const char *relay_label(void) {
@@ -5995,11 +6116,10 @@ static const char *settings_label(int which) {
     case SETTINGS_WF:
         snprintf(buf, sizeof(buf), "Waterfall: %s", wf_avg_name[param_i_get(cfg.js8.wf_avg()) % WF_AVG_LEVELS]);
         return buf;
-    case SETTINGS_TSYNC:
-        if (js8_drift_ms()) snprintf(buf, sizeof(buf), "Time Sync now (drift %+.1f s)", js8_drift_ms() / 1000.0);
-        else snprintf(buf, sizeof(buf), "Time Sync now");
+    case SETTINGS_TRESET:
+        if (js8_drift_ms()) snprintf(buf, sizeof(buf), "Reset time drift (%+.1f s)", js8_drift_ms() / 1000.0);
+        else snprintf(buf, sizeof(buf), "Reset time drift");
         return buf;
-    case SETTINGS_TRESET: return "Reset time drift";
     }
     return "";
 }
@@ -6058,7 +6178,6 @@ static void texts_item_cb(lv_event_t *e) {
             msg_update_text_fmt("Waterfall: %s (%s)", wf_avg_name[level], what[level]);
         }
             break;
-        case SETTINGS_TSYNC: time_sync_now(); break;
         case SETTINGS_TRESET:
             time_sync_reset();
             break;
@@ -6107,10 +6226,8 @@ static void texts_cb(button_data_t *btn) {
     lv_obj_t *title = lv_list_add_text(texts_list, "Settings");
     lv_obj_set_style_text_font(title, &sony_22, 0);
 
-    /* Time Sync first: it's what you want at the start of a session (it
-     * was page 3's button until that slot went to the map). */
-    lv_obj_t *first = settings_add(settings_label(SETTINGS_TSYNC), SETTINGS_TSYNC);
-    settings_add(settings_label(SETTINGS_TRESET), SETTINGS_TRESET);
+    /* Time Sync is the Time button now (page 4); its reset stays here. */
+    lv_obj_t *first = settings_add(settings_label(SETTINGS_TRESET), SETTINGS_TRESET);
 
     char label[TEXT_MAX + 16];
     snprintf(label, sizeof(label), "INFO: %s", info_text[0] ? info_text : "(not set)");
