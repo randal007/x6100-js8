@@ -833,11 +833,13 @@ All on the **DATA** partition, readable on a PC:
 | `js8_held.txt` | messages held for other stations |
 | `js8_texts.txt` | INFO, STATUS, last POTA/SOTA references, spot frequency/mode/comment, alert words, groups, operator's call |
 | `js8_saved.txt` | your [saved messages](#saved-messages), one a line (an empty line = an empty one) |
+| `js8_history.db` | the station history: every station you've exchanged messages with, per band, their INFO and STATUS, and each QSO's text with times (SQLite: any SQLite viewer opens it on a PC) |
 | `params.db`, `qso_log.db` | the radio's settings and QSO database |
 | `incoming_log.adi` | put an ADIF log here to import it (worked-before marks) at the next start |
 
-JS8 writes its files through a temporary `<name>.tmp` and renames it, so a
-power cut leaves the old version or the new one; a `.tmp` left behind is
+JS8 writes its files through a temporary `<name>.tmp` and renames it (the
+history is a database, safe the same way), so a power cut leaves the old
+version or the new one; a `.tmp` left behind is
 picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
@@ -1107,8 +1109,13 @@ The full list with notes is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md);
 what's done is in [New in beta 5 so far](#new-in-beta-5-so-far). Still to
 do for beta 5:
 
-- [ ] **Station history:** QSOs, messages, INFO and STATUS for every
-  station, opened by pressing it in the list or on the map
+- [ ] **Station history:** every station you've exchanged messages with,
+  heartbeats included, kept per band for good: their latest INFO and
+  STATUS and the text of each QSO, opened by pressing the MFK on a station
+  in the list or on the map; page 3's free button switches the Stations
+  view and the map between *Recent* and *All time*. Recording comes first
+  (in test builds now, measured on the radio before the screens are
+  built)
 - [ ] **GPS** time and location from a USB GPS
 - [ ] ALC for under 1 W into an amplifier
 - [ ] The Murus team's WeFax, NavTex and SSTV, once their fork is on

@@ -20,6 +20,8 @@
 #include "timesync.hpp"
 #include "testsignal.hpp"
 #include "speeds.hpp"
+#include "history.hpp"
+#include "js8_history.h"
 
 #include <unistd.h>
 #include <glob.h>
@@ -3894,4 +3896,222 @@ TEST_CASE("map: new grid and new DXCC from the QSO log", "[map]") {
     CHECK(js8_map_new_kind("G4XYZ", "IO91", what, sizeof(what)) == JS8_MAP_NEW_NONE);
     CHECK(js8_map_bearing_deg(0, 0, 10, 0) == Catch::Approx(0).margin(1e-6));
     std::remove(path.c_str());
+}
+
+// ---- Station history ------------------------------------------------------
+
+TEST_CASE("history: what a message means", "[js8][history]") {
+    using x6100::js8::history_note_rx;
+    using x6100::js8::history_note_tx;
+    auto a = history_note_rx("W1ABC", "W1ABC: K2XYZ HW CPY?", true, "K2XYZ");
+    REQUIRE(a);
+    CHECK(a->call == "W1ABC");
+    CHECK(a->exchange);
+    CHECK_FALSE(a->heartbeat);
+
+    auto hb = history_note_rx("W1ABC", "W1ABC: K2XYZ HEARTBEAT SNR -12", true, "K2XYZ");
+    REQUIRE(hb);
+    CHECK(hb->exchange);
+    CHECK(hb->heartbeat); // kept, but not a QSO
+    REQUIRE(hb->reported_snr);
+    CHECK(*hb->reported_snr == -12);
+
+    auto snr = history_note_rx("W1ABC", "W1ABC: K2XYZ SNR -08", true, "K2XYZ");
+    REQUIRE(snr);
+    CHECK_FALSE(snr->heartbeat); // an answer to SNR?
+    CHECK(snr->reported_snr == -8);
+
+    // Their heartbeat to everyone: not an exchange, but the grid's theirs.
+    auto theirs = history_note_rx("W1ABC", "W1ABC: @HB HEARTBEAT FN42", false, "K2XYZ");
+    REQUIRE(theirs);
+    CHECK_FALSE(theirs->exchange);
+    CHECK(theirs->grid == "FN42");
+
+    // Their INFO and STATUS, to anyone.
+    auto info = history_note_rx("W1ABC", "W1ABC: N0XYZ INFO IC-705 5W EFHW", false, "K2XYZ");
+    REQUIRE(info);
+    CHECK_FALSE(info->exchange);
+    CHECK(info->info_kind == 0);
+    CHECK(info->info_text == "IC-705 5W EFHW");
+    CHECK(info->info_to == "N0XYZ");
+    auto status = history_note_rx("W1ABC/P", "W1ABC/P: K2XYZ STATUS AT CAMP", true, "K2XYZ");
+    REQUIRE(status);
+    CHECK(status->call == "W1ABC"); // one station, portable or not
+    CHECK(status->as_sent == "W1ABC/P");
+    CHECK(status->exchange);
+    CHECK(status->info_kind == 1);
+    CHECK(status->info_text == "AT CAMP");
+    // A question isn't an answer.
+    auto ask = history_note_rx("W1ABC", "W1ABC: N0XYZ INFO?", false, "K2XYZ");
+    REQUIRE(ask);
+    CHECK(ask->info_kind == -1);
+
+    CHECK_FALSE(history_note_rx("K2XYZ", "K2XYZ: W1ABC HW CPY?", false, "K2XYZ")); // our own echo
+
+    auto tx = history_note_tx("K2XYZ: W1ABC HEARTBEAT SNR -10", "K2XYZ");
+    REQUIRE(tx);
+    CHECK(tx->call == "W1ABC");
+    CHECK(tx->exchange);
+    CHECK(tx->heartbeat);
+    CHECK(history_note_tx("K2XYZ: N0XYZ HW CPY?", "K2XYZ"));
+    CHECK_FALSE(history_note_tx("K2XYZ: @HB HEARTBEAT FN42", "K2XYZ"));
+    CHECK_FALSE(history_note_tx("K2XYZ: @ALLCALL CQ CQ FN42", "K2XYZ"));
+    CHECK_FALSE(history_note_tx("K2XYZ: @APRSIS GRID FN42AB", "K2XYZ"));
+}
+
+TEST_CASE("history: QSOs, INFO and STATUS kept in the file, per band", "[js8][history]") {
+    using namespace x6100::js8;
+    TempDir            dir;
+    const std::string  path = dir.path + "/js8_history.db";
+    const std::int64_t t0   = 1'790'000'000'000;
+    const std::string  me   = "K2XYZ";
+    auto rx = [&](History &h, const char *from, const char *text, bool to_me, const char *band, std::int64_t ms,
+                  int snr = -10) {
+        auto n = history_note_rx(from, text, to_me, me);
+        REQUIRE(n);
+        h.received(*n, text, band, 14078000 + 1200, snr, 0, ms);
+    };
+    auto tx = [&](History &h, const char *text, const char *band, std::int64_t ms, bool automatic = false) {
+        auto n = history_note_tx(text, me);
+        REQUIRE(n);
+        h.sent(*n, text, band, 14078000 + 1500, 0, automatic, ms);
+    };
+    {
+        History h;
+        REQUIRE(h.open(path));
+        // A QSO on 20 m.
+        rx(h, "W1ABC", "W1ABC: K2XYZ HW CPY?", true, "20m", t0);
+        tx(h, "K2XYZ: W1ABC FB COPY -10 HERE", "20m", t0 + 15'000);
+        rx(h, "W1ABC", "W1ABC: K2XYZ TNX 73", true, "20m", t0 + 30'000, -8);
+        h.logged("W1ABC", "20m", t0 + 31'000);
+        // Their INFO to someone else, later their newer one.
+        rx(h, "W1ABC", "W1ABC: N0XYZ INFO IC-705 5W", false, "20m", t0 + 60'000);
+        rx(h, "W1ABC", "W1ABC: N0XYZ INFO IC-7300 100W", false, "20m", t0 + 90'000);
+        // 40 minutes on: a new QSO. Then on 40 m: another, on its own band.
+        rx(h, "W1ABC", "W1ABC: K2XYZ ARE YOU STILL THERE?", true, "20m", t0 + 40 * 60'000);
+        tx(h, "K2XYZ: W1ABC SNR -12", "40m", t0 + 41 * 60'000, true);
+        // Two hours on: only heartbeat ACKs, both ways.
+        tx(h, "K2XYZ: W1ABC HEARTBEAT SNR -14", "20m", t0 + 120 * 60'000, true);
+        rx(h, "W1ABC", "W1ABC: K2XYZ HEARTBEAT SNR -15", true, "20m", t0 + 125 * 60'000);
+        // A stranger's heartbeat and CQ: not kept.
+        rx(h, "VE3KP", "VE3KP: @HB HEARTBEAT FN03", false, "20m", t0 + 130 * 60'000);
+        h.heard("VE3KP", "20m", -5, "FN03", t0 + 130 * 60'000);
+        // W1ABC's heartbeat later: when we heard them, their grid.
+        rx(h, "W1ABC", "W1ABC: @HB HEARTBEAT FN42", false, "20m", t0 + 140 * 60'000, -3);
+
+        auto c20 = h.contacts("20m");
+        REQUIRE(c20.size() == 1);
+        CHECK(c20[0].call == "W1ABC");
+        CHECK(c20[0].grid == "FN42");
+        CHECK(c20[0].first_ms == t0);
+        CHECK(c20[0].last_ms == t0 + 125 * 60'000);
+        CHECK(c20[0].heard_ms == t0 + 140 * 60'000);
+        CHECK(c20[0].snr == -3);
+        REQUIRE(c20[0].reported_snr);
+        CHECK(*c20[0].reported_snr == -15);
+        CHECK(h.contacts("40m").size() == 1);
+        CHECK(h.contacts("80m").empty());
+        CHECK_FALSE(h.known("VE3KP"));
+
+        auto qsos = h.qsos("W1ABC");
+        REQUIRE(qsos.size() == 3); // the heartbeat-only one left out
+        CHECK(qsos[0].band == "40m");
+        CHECK(qsos[1].start_ms == t0 + 40 * 60'000);
+        CHECK(qsos[2].start_ms == t0);
+        CHECK(qsos[2].lines == 3);
+        CHECK(qsos[2].logged);
+        CHECK_FALSE(qsos[1].logged);
+        CHECK(h.qsos("W1ABC", true).size() == 4);
+
+        auto lines = h.lines(qsos[2].id);
+        REQUIRE(lines.size() == 3);
+        CHECK_FALSE(lines[0].tx);
+        CHECK(lines[0].text == "W1ABC: K2XYZ HW CPY?");
+        CHECK(lines[1].tx);
+        CHECK(lines[1].text == "K2XYZ: W1ABC FB COPY -10 HERE");
+        CHECK(lines[2].snr == -8);
+
+        auto info = h.latest_info("W1ABC", 0);
+        REQUIRE(info);
+        CHECK(info->text == "IC-7300 100W");
+        CHECK(info->to == "N0XYZ");
+        CHECK_FALSE(h.latest_info("W1ABC", 1));
+
+        auto st = h.take_stats();
+        CHECK(st.rows > 0);
+        CHECK(st.failed == 0);
+    }
+    // Kept for good: the next start reads it back, and a message within
+    // 30 min of the last one still joins its QSO.
+    History h;
+    REQUIRE(h.open(path));
+    CHECK(h.known("W1ABC"));
+    rx(h, "W1ABC", "W1ABC: K2XYZ ONE MORE THING", true, "20m", t0 + 140 * 60'000);
+    auto all = h.qsos("W1ABC", true);
+    REQUIRE(all.size() == 4);
+    CHECK(all[0].lines == 3);      // the heartbeat exchange, now with a real message
+    CHECK(all[0].real_lines == 1);
+    CHECK(h.qsos("W1ABC").size() == 4);
+}
+
+TEST_CASE("history C API, and a damaged file kept aside", "[js8][history]") {
+    TempDir     dir;
+    std::string path = dir.path + "/js8_history.db";
+    {
+        std::ofstream bad(path);
+        bad << "this is not a database, an SD card error";
+    }
+    js8_history_t *h = js8_history_open(path.c_str());
+    REQUIRE(h);
+    bool aside = false;
+    for (auto &e : std::filesystem::directory_iterator(dir.path))
+        aside |= e.path().filename().string().rfind("js8_history.db.unreadable-", 0) == 0;
+    CHECK(aside);
+
+    js8_rx_msg_t m{};
+    std::snprintf(m.from, sizeof(m.from), "W1ABC");
+    std::snprintf(m.to, sizeof(m.to), "K2XYZ");
+    std::snprintf(m.text, sizeof(m.text), "W1ABC: K2XYZ STATUS QRV ALL WEEK");
+    m.to_me   = true;
+    m.snr     = -11;
+    m.freq_hz = 1200;
+    js8_history_rx(h, &m, "K2XYZ", 7078000, nullptr, 1'790'000'000'000);
+    m.partial = true; // the text so far of one still arriving: not kept
+    std::snprintf(m.text, sizeof(m.text), "W1ABC: K2XYZ PARTIAL");
+    js8_history_rx(h, &m, "K2XYZ", 7078000, nullptr, 1'790'000'010'000);
+    js8_history_tx(h, "K2XYZ: W1ABC RR TNX", "K2XYZ", 7078000, 1500, 0, false, nullptr, 1'790'000'020'000);
+
+    // N0XYZ's heartbeat (grid EN34) was heard before we answered it.
+    js8_stations_t *st = js8_stations_create();
+    js8_rx_msg_t    hb{};
+    std::snprintf(hb.from, sizeof(hb.from), "N0XYZ");
+    std::snprintf(hb.to, sizeof(hb.to), "@HB");
+    std::snprintf(hb.text, sizeof(hb.text), "N0XYZ: @HB HEARTBEAT EN34");
+    hb.heartbeat = true;
+    js8_stations_add(st, &hb, "K2XYZ", 1'790'000'030'000);
+    js8_history_tx(h, "K2XYZ: N0XYZ HEARTBEAT SNR -09", "K2XYZ", 7078000, 800, 0, true, st, 1'790'000'031'000);
+    js8_stations_destroy(st);
+
+    js8_hist_contact_t c[4];
+    REQUIRE(js8_history_contacts(h, "40m", c, 4) == 2);
+    CHECK(std::string(c[0].call) == "N0XYZ");
+    CHECK(std::string(c[0].grid) == "EN34");
+    c[0] = c[1];
+    CHECK(std::string(c[0].call) == "W1ABC");
+    CHECK(c[0].snr == -11);
+    js8_hist_info_t info;
+    REQUIRE(js8_history_info(h, "W1ABC", 1, &info));
+    CHECK(std::string(info.text) == "QRV ALL WEEK");
+    js8_hist_qso_t q[4];
+    REQUIRE(js8_history_qsos(h, "W1ABC", q, 4) == 1);
+    CHECK(q[0].lines == 2);
+    js8_hist_line_t l[4];
+    REQUIRE(js8_history_lines(h, q[0].id, l, 4) == 2);
+    CHECK(l[1].tx);
+    unsigned rows = 0, commits = 0, failed = 0;
+    int64_t  busy = 0;
+    CHECK(js8_history_stats(h, &rows, &commits, &failed, &busy));
+    CHECK(rows == 3);
+    CHECK(failed == 0);
+    js8_history_close(h);
 }

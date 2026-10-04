@@ -20,6 +20,7 @@
 #include "js8/js8_ops.h"
 #include "js8/js8_speed.h"
 #include "js8/js8_map.h"
+#include "js8/js8_history.h"
 #include "qth/qth.h"
 #include "qso_log.h"
 
@@ -103,6 +104,9 @@
 #endif
 #ifndef JS8_CTY_PATH
 #define JS8_CTY_PATH     "/usr/share/x6100/js8/cty.dat" /* third-party/cty */
+#endif
+#ifndef JS8_HISTORY_PATH
+#define JS8_HISTORY_PATH "/mnt/js8_history.db" /* every station exchanged with: INFO, STATUS, QSO texts */
 #endif
 #ifndef JS8_QSO_DB_PATH
 #define JS8_QSO_DB_PATH  "/mnt/qso_log.db" /* the radio's QSO log, read-only: new grids and countries */
@@ -411,6 +415,7 @@ static char           groups_text[160]; /* "@NET @GROUP2": groups we're in (10 a
 static char           operator_call[JS8_RX_CALL_LEN]; /* logged as OPERATOR ("": the station call), OPERATOR= */
 static bool           st_alert[MAX_ROWS]; /* st_rows matching an alert word */
 static js8_inbox_t   *inbox;           /* MSGs to us, JS8_INBOX_PATH */
+static js8_history_t *history_db;      /* the station history, JS8_HISTORY_PATH (NULL: not recorded) */
 static js8_held_t    *held;            /* MSG TO: messages held for others, JS8_HELD_PATH */
 static struct {
     int  id;                           /* offered on Reply: queued as offered, it's on its way */
@@ -982,6 +987,7 @@ static void process_message(js8_rx_msg_t *m) {
     if (new_station) map_popup_add(m->from); /* pops up on the map for a few seconds */
     js8_stations_add(stations, m, my_call(), now_wall_ms());
     if (m->tx) return;
+    js8_history_rx(history_db, m, my_call(), (uint64_t)cparam_i_get(cfg.cur.fg_freq()), stations, now_wall_ms());
     if (param_i_get(cfg.js8.relay())) { /* stations a relay to us came through, as desktop lists them */
         char via_calls[4][JS8_RX_CALL_LEN], via[JS8_RX_CALL_LEN];
         int  n = js8_relay_stations(m, my_call(), via_calls, 4, via, sizeof(via));
@@ -1737,6 +1743,11 @@ static void health_tick(void) {
     if (gui_stalls || dropped)
         js8_log("GUI: %u stalls over %d ms (longest %.1f s), %u waterfall rows dropped", gui_stalls,
                 GUI_STALL_US / 1000, gui_stall_max_us / 1e6, dropped);
+    unsigned h_rows, h_commits, h_failed;
+    int64_t  h_busy_us;
+    if (js8_history_stats(history_db, &h_rows, &h_commits, &h_failed, &h_busy_us))
+        js8_log("history: %u rows in %u writes, %.1f ms in the database%s", h_rows, h_commits, h_busy_us / 1000.0,
+                h_failed ? ", some NOT written" : "");
     gui_stalls       = 0;
     gui_stall_max_us = 0;
     health_start_us  = now;
@@ -2359,6 +2370,9 @@ static void ui_tx_status(void *arg) {
         /* AGN? repeats what went out, as desktop: not a message stopped
          * before it keyed. */
         snprintf(last_tx_text, sizeof(last_tx_text), "%s", st->text);
+        /* The history keeps automatic ones too: an HB ACK is an exchange. */
+        js8_history_tx(history_db, m.text, my_call(), (uint64_t)cparam_i_get(cfg.cur.fg_freq()), st->offset_hz,
+                       m.submode, tx_auto, stations, now_wall_ms());
         /* Only what you send is your side of a QSO: an unattended station
          * answering SNR? and hearing "TNX 73" hasn't had one. */
         char ended[JS8_RX_CALL_LEN];
@@ -3307,6 +3321,14 @@ static void construct_cb(lv_obj_t *parent) {
         held = js8_held_open(JS8_HELD_PATH);
         data_file_notice(js8_held_notice(held));
     }
+    /* The station history: open while the radio is on, as the Inbox; its
+     * own thread writes it a few seconds' worth at a time. */
+    static bool history_tried;
+    if (!history_db && !history_tried) {
+        history_tried = true;
+        history_db    = js8_history_open(JS8_HISTORY_PATH);
+        if (!history_db) js8_log("history: %s can't be opened; not recorded", JS8_HISTORY_PATH);
+    }
     if (!autop) autop = js8_auto_create();
     memset(deliveries, 0, sizeof(deliveries));
     tx_active = tx_auto = tx_cq = false;
@@ -3362,6 +3384,7 @@ static void destruct_cb(void) {
         wf_watch[i] = NULL;
     }
     js8_wf_destroy(); /* its part of the lower plane black for the main screen */
+    js8_history_flush(history_db); /* what's waiting into the file, before the radio might be switched off */
     partials_end(); /* shown as ended when JS8 opens again */
 
     waterfall_set_enabled(true);
@@ -5687,6 +5710,11 @@ int dialog_js8_station_rows(char *out, unsigned len) {
     return st_count;
 }
 
+/* For tools/js8_ui_harness: the station history (NULL if not open). */
+js8_history_t *dialog_js8_history(void) {
+    return history_db;
+}
+
 /* For tools/js8_ui_harness: the Stations view's star column for `call`
  * ('@', '*' or ' '), or 0 if it isn't listed. */
 char dialog_js8_station_star(const char *call) {
@@ -7160,6 +7188,7 @@ static void log_save(void) {
     js8_map_worked_add(log_entry.call, log_entry.grid); /* no more NEW outline on the map */
 
     js8_qsos_logged(qsos, log_entry.call);
+    js8_history_logged(history_db, log_entry.call, log_entry.freq_hz, now_wall_ms());
     if (strcmp(log_pending, log_entry.call) == 0) log_pending[0] = '\0';
     const char *band = js8_log_band(log_entry.freq_hz);
     msg_update_text_fmt("Logged %s%s%s", log_entry.call, band[0] ? " on " : "", band);

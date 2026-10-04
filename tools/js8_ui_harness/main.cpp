@@ -7,6 +7,7 @@
 #include <sqlite3.h>
 #include "widgets/lv_waterfall.h"
 #include "js8_wf.h"
+#include "js8_history.h"
 #include "widgets/lv_finder.h"
 extern "C" {
 void dialog_destruct(void);
@@ -53,6 +54,7 @@ void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 int  dialog_js8_station_rows(char *out, unsigned len);
 char dialog_js8_station_star(const char *call);
+js8_history_t *dialog_js8_history(void);
 int  dialog_js8_map_stacks(const char **text);
 void dialog_js8_time_auto(bool on);
 const char *dialog_js8_st_qrz(void);
@@ -491,6 +493,10 @@ int main() {
     }
     // Saved messages start as desktop's ("TNX 73 GL") when there's no file.
     if (getenv("ONLY_SAVED")) unlink(JS8_SAVED_PATH);
+    if (getenv("ONLY_HISTORY")) { // a new history file
+        unlink(JS8_HISTORY_PATH);
+        unlink(JS8_HISTORY_PATH "-journal");
+    }
     ui_open();
     if (stub_audio_rate() != RATE) printf("[harness] FAIL: JS8 asked for %u Hz audio, the harness feeds %d\n", stub_audio_rate(), RATE);
     if (getenv("ONLY_GEN")) {
@@ -1500,6 +1506,66 @@ int main() {
         ui_key(LV_KEY_ESC);
         pump(300);
         printf("[aprsmore] ESC closed it: %d\n", ui_focus_is_table());
+        return 0;
+    }
+    if (getenv("ONLY_HISTORY")) {
+        // The station history (step 1: recording only): a QSO with N0XYZ,
+        // W1ABC's heartbeat ACK to us (kept, not a QSO) and its INFO to
+        // someone else, a stranger's heartbeat (not kept).
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        js8_history_t *h = dialog_js8_history();
+        printf("[history] open: %s\n", h ? "yes" : "NO");
+        if (!h) return 1;
+        pump(300);
+        // W1ABC's heartbeat first: its grid, before any exchange.
+        feed_band({{"W1ABC", "FN42", "@HB", "@HB HEARTBEAT FN42", 700, 0.05f}});
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO FROM THE PARK", 1320, 0.05f},
+                   {"W1ABC", "FN42", "K2XYZ", "K2XYZ HEARTBEAT SNR -12", 700, 0.05f},
+                   {"VE3KP", "FN03", "@HB", "@HB HEARTBEAT FN03", 2400, 0.05f}});
+        ui_page(2);
+        ui_press(3); // Send...
+        pump(200);
+        ui_compose_append("N0XYZ SNR -10");
+        ui_compose_enter();
+        wait_tx();
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ SNR -08 TNX 73", 1320, 0.05f},
+                   {"W1ABC", "FN42", "N0XYZ", "N0XYZ INFO IC-705 5W EFHW", 700, 0.05f}});
+        pump(500);
+        js8_history_flush(h);
+
+        static js8_hist_contact_t c[16];
+        int nc = js8_history_contacts(h, "20m", c, 16);
+        printf("[history] 20m contacts: %d (want 2: N0XYZ, W1ABC with FN42 from its heartbeat; not VE3KP)\n", nc);
+        for (int i = 0; i < nc; i++)
+            printf("[history]   %-6s grid %-6s snr %+d heard us %s reported %s%+d\n", c[i].call, c[i].grid, c[i].snr,
+                   c[i].heard_us_ms ? "yes" : "no", c[i].has_reported_snr ? "" : "(none) ",
+                   c[i].has_reported_snr ? c[i].reported_snr : 0);
+        static js8_hist_qso_t q[8];
+        int nq = js8_history_qsos(h, "N0XYZ", q, 8);
+        printf("[history] N0XYZ QSOs: %d (want 1)\n", nq);
+        for (int i = 0; i < nq; i++) {
+            printf("[history]   %s, %d lines, logged %d\n", q[i].band, q[i].lines, q[i].logged);
+            static js8_hist_line_t l[16];
+            int nl = js8_history_lines(h, q[i].id, l, 16);
+            for (int k = 0; k < nl; k++) printf("[history]     %s %s\n", l[k].tx ? "TX" : "RX", l[k].text);
+        }
+        printf("[history] W1ABC QSOs: %d (want 0: a heartbeat ACK only)\n", js8_history_qsos(h, "W1ABC", q, 8));
+        js8_hist_info_t info;
+        bool have = js8_history_info(h, "W1ABC", 0, &info);
+        printf("[history] W1ABC INFO: %s%s%s\n", have ? info.text : "(none)", have ? " to " : "", have ? info.to : "");
+        unsigned rows = 0, commits = 0, failed = 0;
+        int64_t  busy = 0;
+        js8_history_stats(h, &rows, &commits, &failed, &busy);
+        printf("[history] written: %u rows in %u transactions, %u failed\n", rows, commits, failed);
         return 0;
     }
     if (getenv("ONLY_LOG")) {

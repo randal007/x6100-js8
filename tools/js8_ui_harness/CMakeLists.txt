@@ -13,6 +13,7 @@ add_compile_definitions(LV_DRAW_NEON=0 JS8_TEXTS_PATH="${CMAKE_BINARY_DIR}/js8_t
                         JS8_INBOX_PATH="${CMAKE_BINARY_DIR}/js8_inbox.txt"
                         JS8_HELD_PATH="${CMAKE_BINARY_DIR}/js8_held.txt"
                         JS8_SAVED_PATH="${CMAKE_BINARY_DIR}/js8_saved.txt"
+                        JS8_HISTORY_PATH="${CMAKE_BINARY_DIR}/js8_history.db"
                         JS8_MAP_DATA_PATH="${X}/tools/map_data/js8_map.bin"
                         JS8_CTY_PATH="${X}/third-party/cty/cty.dat"
                         JS8_QSO_DB_PATH="${CMAKE_BINARY_DIR}/js8_qso_log.db"

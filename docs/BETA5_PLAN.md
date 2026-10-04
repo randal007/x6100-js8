@@ -88,9 +88,32 @@ heard paused them; [docs/review](review/)).
 
 ## Stations and history
 
-- [ ] Full history for every station: QSOs, chat, INFO and STATUS.
-- [ ] Pressing a station (list or map) opens a menu with its past QSOs
-  and history.
+- [ ] **Station history** (user's design, 2026-10-04; named *History*).
+  - **What's kept:** every station you've exchanged messages with, either
+    way, heartbeat ACKs included, **per band**, for good (all-time list
+    and map show where you've reached on that band). Their INFO and
+    STATUS answers, to you or to anyone, with times; the latest is shown.
+    The text of every message between you and them, time-stamped, in
+    QSOs (a new QSO after 30 min quiet or on another band, the log
+    prompt's rule). Heartbeat-only exchanges are kept but **not listed**
+    as QSOs (user's choice C). Their messages to others aren't kept.
+  - **Where:** one SQLite file, `/mnt/js8_history.db` (desktop keeps its
+    inbox in SQLite; per-station files break on `/` calls and crowd the
+    FAT partition). Written by its own thread (`js8-hist`, nice 10), a
+    few seconds' worth per transaction; health line once a minute.
+  - **Screens (to come):** page 3's free slot = *Heard: Recent / All
+    time* for the Stations view and the map (over the messages it opens
+    the Stations view in All time); an MFK press on a station (list or
+    map) opens its History page: grid, distance, first/last heard, latest
+    INFO and STATUS with their age, then QSOs newest first (date, band,
+    messages, logged), each opening to its text. No "Ask INFO?" line
+    (user: not wanted). Mock-ups first.
+  - **Steps:** 1 recording only, measured on the radio with x6100-cpulog
+    (user: scrap the feature if it's CPU heavy); 2 the All time switch;
+    3 the History page; 4 the existing QSO log and Inbox brought in.
+  - [x] Step 1 code: `src/js8/history.{hpp,cpp}` + `js8_history.h`,
+    unit tests `[history]`, harness ONLY_HISTORY. Grid taken from the
+    Stations list when the exchange itself has none.
 - [x] A Sort button on the Stations list (SNR, last heard ...). **Done
   (user's choices):** page 3's second button in the Stations view (blank
   over the messages, the map's view button on the map): *Sort: Heard you*

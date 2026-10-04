@@ -20,6 +20,7 @@ add_library(JS8 STATIC
     alerts.cpp
     macros.cpp
     timesync.cpp
+    history.cpp
     js8_ops.cpp
     js8_rx.cpp
     geo.cpp
@@ -30,7 +31,7 @@ add_library(JS8 STATIC
 
 # js8core needs C++20. Link it PRIVATE so the requirement stops here: the
 # app only sees the C header js8_rx.h and keeps its own C++ standard.
-target_link_libraries(JS8 PRIVATE js8core sqlite3 PUBLIC Threads::Threads) # sqlite3: the QSO log, read-only (the map's "worked before")
+target_link_libraries(JS8 PRIVATE js8core sqlite3 PUBLIC Threads::Threads) # sqlite3: the QSO log, read-only (the map's "worked before"), and the station history
 target_include_directories(JS8 PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 
 # Test-signal generator for tests and tools/js8_wavgen; not linked into the app.
