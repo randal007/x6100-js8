@@ -178,7 +178,15 @@ heard paused them; [docs/review](review/)).
   Harness ONLY_WFCALM with live noise: 3.9x less change per step (mean
   |luma difference| between rows 27.2 -> 6.9), same CPU; the noise
   background is darker (mean luma 26 -> 15.5), signals stand out more.
-  To do: the user's eye (and a slow-motion video) on the radio.
+  On the radio (74727e6) the user asked for something in between, so the
+  setting became four levels (`js8_wf_avg` 0-3, default 3; Settings
+  cycles *Sharp > Light > Medium > Calm*; new-row share 1.0 / 0.65 / 0.5 /
+  0.35): ONLY_WFCALM change per step 27.2 / 14.2 / 10.5 / 7.1 (1.9x,
+  2.6x, 3.8x less than Sharp). CPU on the radio with Calm (74727e6,
+  `research/cpulog/2026-10-04-0531Z`, 5.3 min): GUI thread 26 % average,
+  peak 56 %, never 70 % or more (this morning 79 %; Smooth 83 %); all
+  cores 103 % of 400; decoder 24-26 % a minute, passes under 2.5 s. To
+  do: the user's pick by eye.
 - [ ] A small ALC rework for low power (under 1 W) into an amplifier.
   The TX audio path (`tx_player.c`) is shared with the FT8 app.
 - [ ] GPS time and location (USB GPS dongle ordered; testing when it

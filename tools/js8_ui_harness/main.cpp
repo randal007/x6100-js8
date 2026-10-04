@@ -56,7 +56,7 @@ void ui_main_redraw_watch(void);
 bool ui_main_redraw_due(void);
 void ui_retune_by(int hz);
 bool dialog_js8_wf_area(lv_area_t *a, const lv_color_t **palette);
-void dialog_js8_wf_calm(bool on);
+void dialog_js8_wf_avg(int level);
 bool dialog_js8_cursor_band(int *x, int *w);
 unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max);
 bool     dialog_js8_map_state(bool *world, int *popups, bool *tx_outline, int *qso_paths, int *qrz);
@@ -751,18 +751,19 @@ int main() {
         return 0;
     }
     if (getenv("ONLY_WFCALM")) {
-        // Waterfall: Sharp vs Calm with live noise: how much the picture
-        // changes at each step (every pixel takes the value of the one above
-        // it), the change that makes the screen dim for a moment on every
-        // row. Mean |luma difference| between consecutive rows.
+        // Waterfall: Sharp / Light / Medium / Calm with live noise: how much
+        // the picture changes at each step (every pixel takes the value of
+        // the one above it), the change that makes the screen dim for a
+        // moment on every row. Mean |luma difference| between consecutive rows.
+        static const char *names[] = {"sharp ", "light ", "medium", "calm  "};
         pump(300);
-        double change[2] = {0, 0};
-        for (int calm = 0; calm < 2; calm++) {
-            dialog_js8_wf_calm(calm);
-            load_measure(calm ? "noise, calm" : "noise, sharp", 2000, true); // the average settles
+        double change[4] = {0, 0, 0, 0};
+        for (int level = 0; level < 4; level++) {
+            dialog_js8_wf_avg(level);
+            load_measure(names[level], 2000, true); // the average settles
             calm_rows.clear();
             calm_mode = true;
-            load_measure(calm ? "noise, calm" : "noise, sharp", 8000, true);
+            load_measure(names[level], 8000, true);
             calm_mode = false;
             double sum = 0, lum = 0;
             long   n   = 0;
@@ -772,11 +773,11 @@ int main() {
                     lum += calm_rows[i][x];
                     n++;
                 }
-            change[calm] = n ? sum / n : 0;
-            printf("[wfcalm] %s: %zu rows, mean luma %.1f, change per step %.2f\n", calm ? "calm " : "sharp",
-                   calm_rows.size(), n ? lum / n : 0, change[calm]);
+            change[level] = n ? sum / n : 0;
+            printf("[wfcalm] %s: %zu rows, mean luma %.1f, change per step %.2f (%.1fx less than sharp)\n", names[level],
+                   calm_rows.size(), n ? lum / n : 0, change[level], change[level] > 0 ? change[0] / change[level] : 0);
         }
-        printf("[wfcalm] calm changes the picture %.1fx less per step\n", change[1] > 0 ? change[0] / change[1] : 0);
+        dialog_js8_wf_avg(3);
         return 0;
     }
     if (getenv("ONLY_WFTIME")) {

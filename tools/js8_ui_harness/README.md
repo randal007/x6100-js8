@@ -184,10 +184,10 @@ Build without sanitizers for timings
   `WFTIME_GAPS=1` also lists every gap over 200 ms. A ~1 s gap is the
   alert beep's waterfall pause (by design): it happens when `js8_texts.txt`
   in the build directory has `ALERTS=... @POTA` left by other scenarios.
-- `ONLY_WFCALM=1`: *Waterfall: Sharp* vs *Calm* with live noise: how much
-  the picture changes at each step (mean |luma difference| between
-  consecutive rows on the lower plane), the change that makes the LCD dim
-  for a moment on every row. Calm: about 4x less.
+- `ONLY_WFCALM=1`: *Waterfall: Sharp / Light / Medium / Calm* with live
+  noise: how much the picture changes at each step (mean |luma difference|
+  between consecutive rows on the lower plane), the change that makes the
+  LCD dim for a moment on every row: 1.9x, 2.6x and 3.8x less than Sharp.
 - `ONLY_WFRING=1`: the `lv_waterfall` widget's ring buffer (the FT8 app's)
   against a plain model, pixel by pixel as drawn; then JS8's own waterfall
   (`js8_wf.c`) the same way where the screen shows it through the hole:

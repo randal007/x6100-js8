@@ -484,7 +484,7 @@ Page 4 **Settings…**:
 | **Messages kept: …** | Press to change: messages leave the list this long after they arrived (15 min to 2 hours), or *all* (the default: the list keeps the newest 150 to 200 messages; it's trimmed back to 150 when it reaches 200). |
 | **Distance: km / miles** | Press to switch the Stations view's distances (km to start). |
 | **Decode marks: On / Off** | Press to switch the [decode marks](#the-screen) on the waterfall (off to start, as desktop). |
-| **Waterfall: Calm / Sharp** | *Calm* (the default) averages each waterfall row with the ones before: less speckle and a darker background, so signals stand out, and much less flicker as the waterfall moves. *Sharp* shows every row as heard, as before. |
+| **Waterfall: Sharp / Light / Medium / Calm** | Press to step through how much each waterfall row is averaged with the ones before. *Calm* (the default) averages most: least speckle, a darker background so signals stand out, and about 4 times less flicker as the waterfall moves; *Medium* about 2.6 times less, *Light* about 2 times less; *Sharp* shows every row as heard, as before. |
 | **Operator: …** | Someone else operating your station (desktop's *Operator Callsign*): their call goes in the log as `OPERATOR`; your station call is still what's sent on the air and logged as `STATION_CALLSIGN`. Empty: the station call. |
 
 ## Logging
@@ -802,8 +802,9 @@ are, and its new settings start at their defaults.
   still, e.g. while you transmit). Each new row moves the whole waterfall
   by a pixel and the screen's pixels darken faster than they brighten, so
   the waterfall dims for a moment 15 times a second. Much reduced after
-  4.1 by *Waterfall: Calm* (Settings, the default): each step changes the
-  picture about 4 times less. It doesn't affect decoding.
+  4.1 by *Waterfall: Calm* (Settings, the default; also *Medium* and
+  *Light* in between): each step changes the picture about 4 times less.
+  It doesn't affect decoding.
 - **Keep the radio's clock right:** it has no network time and gains a
   few seconds a week; at 2–3 s off, decodes go missing. Set it in the
   radio's Settings (General: *Hour, Min, Sec*) or use JS8's **Time Sync**
@@ -859,9 +860,9 @@ Beta 5 is being planned; the full list with notes is in
   the display puts the list on top: a new row redraws nothing else (in the
   PC tests the screen work for the waterfall fell by about 80 %). It
   looks the same (done after 4.1, to be measured on the radio)
-- [x] **Less waterfall flicker:** *Waterfall: Calm* (Settings) averages
-  the rows, so each step changes the picture about 4 times less (done after
-  4.1, to be tried on the radio). True smooth scrolling was tried and
+- [x] **Less waterfall flicker:** *Waterfall: Calm* (Settings; *Medium*
+  and *Light* in between, *Sharp* as before) averages the rows, so each
+  step changes the picture up to about 4 times less (done after 4.1). True smooth scrolling was tried and
   dropped: redrawing the whole waterfall at every screen refresh needs more
   than one of the radio's cores
 - [x] **Health lines in the app log:** once a minute how busy the decoder

@@ -600,13 +600,16 @@ static int64_t    wf_due_us;   /* when the next row should be drawn (monotonic) 
 static float    wf_floor_db;   /* smoothed noise floor (receiver thread) */
 static bool     wf_floor_set;
 static unsigned wf_dropped;    /* rows the GUI fell too far behind to draw (wf_lock) */
-/* Calm (Settings): each row averaged with the ones before (exponentially,
- * WF_CALM_A of the new row), as desktop waterfalls' averaging. Every new row
- * moves the whole picture down a pixel, and the screen dims for a moment
- * while that many pixels change (they darken faster than they brighten): a
- * flicker at the row rate. A calmer picture changes less at each step. */
-#define WF_CALM_A 0.35f
-static atomic_bool wf_calm;         /* GUI thread sets, receiver thread reads */
+/* Waterfall: Sharp / Light / Medium / Calm (Settings): each row averaged
+ * with the ones before (exponentially, wf_avg_new[level] of the new row), as
+ * desktop waterfalls' averaging. Every new row moves the whole picture down
+ * a pixel, and the screen dims for a moment while that many pixels change
+ * (they darken faster than they brighten): a flicker at the row rate. A
+ * calmer picture changes less at each step. */
+#define WF_AVG_LEVELS 4
+static const float       wf_avg_new[WF_AVG_LEVELS]  = {1.0f, 0.65f, 0.5f, 0.35f};
+static const char *const wf_avg_name[WF_AVG_LEVELS] = {"Sharp", "Light", "Medium", "Calm"};
+static atomic_int        wf_avg_level;  /* GUI thread sets, receiver thread reads */
 static atomic_bool wf_avg_restart;  /* retune / clear: start the average over */
 static float       wf_avg[WIDTH];   /* receiver thread */
 static bool        wf_avg_set;
@@ -2056,11 +2059,13 @@ static void wf_emit_row(void) {
     wf_floor_set    = true;
     for (uint32_t i = 0; i < WIDTH; i++) wf_row[i] -= wf_floor_db;
 
-    if (atomic_exchange(&wf_avg_restart, false) || !atomic_load(&wf_calm)) wf_avg_set = false;
-    if (atomic_load(&wf_calm)) {
+    int level = atomic_load(&wf_avg_level);
+    if (atomic_exchange(&wf_avg_restart, false) || level <= 0) wf_avg_set = false;
+    if (level > 0 && level < WF_AVG_LEVELS) {
+        float a = wf_avg_new[level];
         if (!wf_avg_set) memcpy(wf_avg, wf_row, sizeof(wf_avg));
         else
-            for (uint32_t i = 0; i < WIDTH; i++) wf_avg[i] += WF_CALM_A * (wf_row[i] - wf_avg[i]);
+            for (uint32_t i = 0; i < WIDTH; i++) wf_avg[i] += a * (wf_row[i] - wf_avg[i]);
         wf_avg_set = true;
         memcpy(wf_row, wf_avg, sizeof(wf_row));
     }
@@ -3023,7 +3028,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_clear_flag(wf_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
     lv_obj_set_size(wf_box, WIDTH, WF_HEIGHT);
     lv_obj_set_pos(wf_box, INSET, INSET);
-    atomic_store(&wf_calm, param_i_get(cfg.js8.wf_calm()) != 0);
+    atomic_store(&wf_avg_level, param_i_get(cfg.js8.wf_avg()) % WF_AVG_LEVELS);
     if (!js8_wf_create(wf_box, (const lv_color_t *)style.wf_palette, WF_MIN_DB, WF_MAX_DB))
         msg_schedule_text_fmt("JS8: no memory for the waterfall");
     wf_watch[0] = subject_subscribe((Subject *)cfg.cur.fg_freq(), wf_watch_cb, NULL);
@@ -5123,10 +5128,10 @@ static void query_cb(button_data_t *btn) {
     speed_warn();
 }
 
-/* For tools/js8_ui_harness: Waterfall: Calm / Sharp, as the Settings line. */
-void dialog_js8_wf_calm(bool on) {
-    param_i_set(cfg.js8.wf_calm(), on);
-    atomic_store(&wf_calm, on);
+/* For tools/js8_ui_harness: Waterfall: Sharp (0) .. Calm (3), as Settings. */
+void dialog_js8_wf_avg(int level) {
+    param_i_set(cfg.js8.wf_avg(), level);
+    atomic_store(&wf_avg_level, level % WF_AVG_LEVELS);
 }
 
 /* For tools/js8_ui_harness: the waterfall's place on the screen, and its
@@ -5679,7 +5684,9 @@ static const char *settings_label(int which) {
         return buf;
     case SETTINGS_MILES: return param_i_get(cfg.js8.miles()) ? "Distance: miles" : "Distance: km";
     case SETTINGS_MARKS: return param_i_get(cfg.js8.decode_marks()) ? "Decode marks: On" : "Decode marks: Off";
-    case SETTINGS_WF: return param_i_get(cfg.js8.wf_calm()) ? "Waterfall: Calm" : "Waterfall: Sharp";
+    case SETTINGS_WF:
+        snprintf(buf, sizeof(buf), "Waterfall: %s", wf_avg_name[param_i_get(cfg.js8.wf_avg()) % WF_AVG_LEVELS]);
+        return buf;
     case SETTINGS_TSYNC:
         if (js8_drift_ms()) snprintf(buf, sizeof(buf), "Time Sync now (drift %+.1f s)", js8_drift_ms() / 1000.0);
         else snprintf(buf, sizeof(buf), "Time Sync now");
@@ -5730,11 +5737,18 @@ static void texts_item_cb(lv_event_t *e) {
                                     : "Decode marks off");
             break;
         case SETTINGS_WF:
-            param_i_set(cfg.js8.wf_calm(), !param_i_get(cfg.js8.wf_calm()));
-            atomic_store(&wf_calm, param_i_get(cfg.js8.wf_calm()) != 0);
-            msg_update_text_fmt(param_i_get(cfg.js8.wf_calm())
-                                    ? "Waterfall: calm (rows averaged: less speckle, less flicker as it moves)"
-                                    : "Waterfall: sharp (every row as heard, as before)");
+        {
+            static const char *const what[WF_AVG_LEVELS] = {
+                "every row as heard, as before",
+                "rows lightly averaged",
+                "rows averaged",
+                "rows averaged most: least speckle and flicker",
+            };
+            int level = (param_i_get(cfg.js8.wf_avg()) + 1) % WF_AVG_LEVELS; /* Sharp > Light > Medium > Calm > Sharp */
+            param_i_set(cfg.js8.wf_avg(), level);
+            atomic_store(&wf_avg_level, level);
+            msg_update_text_fmt("Waterfall: %s (%s)", wf_avg_name[level], what[level]);
+        }
             break;
         case SETTINGS_TSYNC: time_sync_now(); break;
         case SETTINGS_TRESET:
