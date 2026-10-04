@@ -17,8 +17,9 @@ as they land.
 - [x] **High-SWR beep.**
   **Both done in 2e152e6:** over 3:1 for half a second while keyed turns
   AUTO, heartbeats, HB ACK and auto CQ off (the message on the air carries
-  on), three beeps once TX is done. Harness ONLY_SWR. To be tried on the
-  radio (image CI 37182352184 = waterfall four levels + SWR guard).
+  on), three beeps once TX is done. Harness ONLY_SWR. On the user's card
+  since 2026-10-04 (image CI 37183047679 = fe42a8d: waterfall four levels +
+  SWR guard + APRS Echo test / More services); to be tried on the air.
 - [ ] **Update to the latest gdyuldin release**
   ([x6100_gui releases](https://github.com/gdyuldin/x6100_gui/releases)):
   the list said v1.0.1; **v1.0.2 came out 2026-10-02**. Cleaner UI with
