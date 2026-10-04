@@ -15,6 +15,13 @@ the radio's firmware, next to the FT8 and RTTY apps.
 > map, decode marks and the code review's fixes ([New in beta 4](#new-in-beta-4)).
 > Nothing transmits by itself when the app opens; automatic replies and
 > heartbeats are switches you turn on.
+>
+> **This manual describes the latest code** (beta 5 in progress). New since
+> 4.1: automatic time sync from every decode, saved messages with desktop's
+> macros, Sort and QRZ in the Stations view, high-SWR protection, an APRS
+> Echo test and services list, and a lighter, calmer waterfall
+> ([New in beta 5 so far](#new-in-beta-5-so-far)). They're in test builds
+> now and in the next release.
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
@@ -40,6 +47,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
+- [New in beta 5 so far](#new-in-beta-5-so-far)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
 - [Known issues in beta 4.1](#known-issues-in-beta-41)
@@ -68,14 +76,21 @@ the radio's firmware, next to the FT8 and RTTY apps.
   (calls or words you choose) highlighted in purple.
 - **APRS through JS8 gateways:** grid and GPS position beacons (with an
   optional message, e.g. `MADE IT TO CAMP`), POTA and SOTA spots on any
-  frequency and mode, SMS, email and Winlink.
+  frequency and mode, SMS, email, Winlink, an echo test and information
+  services (weather, repeaters, ISS passes ...).
 - **JS8Call's, GhostNet's or your own frequencies** on the band keys.
 - **Automatic time sync** from every station decoded, heartbeats included
   (desktop JS8Call's *Automatic Time Drift*), and a search for when the
-  radio's clock is too far off for anything to decode; a Stations view of who is on and who
-  heard you.
+  radio's clock is too far off for anything to decode.
+- **A Stations view** of who is on and who heard you, sorted as you like
+  (heard you, SNR, time, distance), with a **QRZ** line naming who called
+  you while you weren't reading the messages.
+- **High-SWR protection** for an unattended station: over 3:1 while
+  sending switches every automatic sender off, with three beeps.
 - **A map** of the stations heard, in GridTracker's style: paths to who
   heard you, new stations popping up, your continent or the world.
+- **A calm waterfall:** four levels of averaging (Settings), drawn straight
+  onto the display's lower layer so it costs the radio very little.
 - **Decode marks** on the waterfall (optional), as desktop's *Show decode
   attempts*: where the decoder is trying, even signals too weak to see.
 
@@ -134,7 +149,10 @@ transmit (turn the **main tuning knob** to move it; a fast turn moves 5 or
 shows where that one goes: they pick a free spot at 500–999 Hz, as desktop
 JS8Call does, and the band comes back to your offset after. The **green
 band** marks the selected station, as wide as the speed it was last heard
-at (Slow 25 Hz, Normal 50, Fast 80, Turbo 160).
+at (Slow 25 Hz, Normal 50, Fast 80, Turbo 160). How smooth it looks is
+*Waterfall: Sharp / Light / Medium / Calm* in [Settings](#settings) (Calm,
+the default, averages each row with the ones before: least speckle and
+flicker).
 
 **Decode marks** (Settings, off to start), as desktop JS8Call's *Show
 decode attempts*: a bracket `|—|` as wide as the signal wherever the
@@ -169,8 +187,9 @@ to select it (that ends the lock), hold the locked one again, or open the
 Stations view (the station stays selected there, unlocked).
 
 **Status line** (top right): what's switched on (`AUTO`, `HB 10m next
-00:14`, `ACK`, `MSG 1 NEW`), the band, UTC time and how many messages
-have been decoded.
+00:14`, `ACK`, `MSG 1 NEW`), the band, UTC time, JS8's time drift if any
+(`drift -1.2s`, see [Time](#time)) and how many messages have been
+decoded.
 
 **TX bar:** your offset and speed, then how far the message has got
 ("1/3 starts in 9 s", "sending 2/3") and its text; a long message is cut
@@ -245,7 +264,8 @@ white border.
   also gets the flashing ring, "calling you", unless it's only a
   heartbeat reply), and to the station you're sending to (Reply, a query,
   HW CPY? ...), even if it hasn't heard you yet.
-- **QRZ** (yellow, under the status line and the stats, GridTracker's "calling me"):
+- **QRZ** (yellow, under the status line and the stats, GridTracker's "calling me";
+  the same line shows over the Stations view):
   who sent something to your call — a message, a command, free text, not
   heartbeat replies — while the map or the Stations view was showing, e.g.
   `QRZ 2  K9DEF W7XYZ`, newest first. For when you've walked away: a
@@ -288,7 +308,8 @@ white border.
 
   ![A new DXCC pops up in the World view; CQ tags and the stats](docs/screenshots/13_map_new.png)
 
-- **Map: Auto** (page 3, second button) shows your continent close-in and
+- **Map: Auto** (page 3, second button; in the Stations view the same
+  button is Sort) shows your continent close-in and
   switches to the world by itself when someone on another continent is
   heard, back again when they age off the Stations list. **Close-in** stays
   on your continent; **World** shows the whole world (it repeats at the
@@ -322,7 +343,7 @@ to go back a page. In JS8 a hold is half a second.
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
 | 4 | **Time: Auto / Off** | Press: [automatic time sync](#time) on (the default) or off. **Hold: search** for the band's timing when the clock is too far off for anything to decode (*Searching* while it runs; hold again to stop). The second line shows the drift, e.g. `-1.2s`. |
 | 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and auto heartbeats on, as on desktop). |
-| 4 | **Settings…** | Reset time drift, INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay, your groups, how long stations and messages stay listed, km or miles, decode marks and an operator's call: see [Settings](#settings). |
+| 4 | **Settings…** | Reset time drift, INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay, your groups, how long stations and messages stay listed, km or miles, decode marks, the waterfall's look and an operator's call: see [Settings](#settings). |
 | 5 | **APRS >** | [APRS](#aprs) spots and messages. |
 | 5 | **Log QSO** | [Log](#logging) the QSO that just ended, or the selected station if you've selected someone else since. |
 | 5 | **Activ.: Off / POTA / SOTA** | Activating a park or summit: added to every log entry. Hold to type it. |
@@ -379,6 +400,16 @@ the thing. ESC closes lists too, and the VOL knob works in all of them.
     those. They stay switched on; hold Heartbeat to carry on sooner. After
     an hour without touching the radio, automatic sending pauses until you
     press something.
+- **High SWR** (for an unattended station): if the SWR stays over 3:1 for
+  half a second while you transmit, AUTO, auto heartbeats, HB ACK and auto
+  CQ switch off, the message line and the list say so, and three beeps
+  sound once the transmission ends (whatever the Alerts list says). The
+  message already on the air finishes; nothing else goes out until you
+  switch them back on. With nothing automatic on, high SWR changes
+  nothing. With an amplifier in line, the radio sees the amplifier's input
+  SWR, not the antenna's.
+- **Time: Auto** (page 4) never transmits: it only moves JS8's own timing
+  to match the stations heard ([Time](#time)).
 
 ## Saved messages
 
@@ -693,10 +724,11 @@ frames, about 20 letters 5. The line above the keyboard shows the frame
 count as you type. (JS8's `GRID` command can't carry a message, so this
 one goes as a raw APRS packet through `CMD`.) ESC sends nothing.
 
-Confirmed on the air so far: the plain **Spot my grid** and **SMS** (both
-ways). The other items follow desktop JS8Call's, JS8Spotter's and the
-gateways' own formats (and survive JS8 encoding in our tests) but still
-need testing through the gateways.
+Confirmed on the air so far: the plain **Spot my grid**, **SMS** (both
+ways) and **Winlink**. The other items, the Echo test and More services
+included, follow desktop JS8Call's, JS8Spotter's and the gateways' own
+formats (and survive JS8 encoding in our tests) but still need testing
+through the gateways.
 
 ### POTA and SOTA spots
 
@@ -749,6 +781,61 @@ power cut leaves the old version or the new one; a `.tmp` left behind is
 picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
+
+## New in beta 5 so far
+
+In test builds now; not yet in a release. To be tried on the air unless
+it says otherwise.
+
+New:
+
+- **[Time: Auto](#time)** (page 4's Time button, on to start): JS8's
+  timing follows every station decoded, heartbeats included, as desktop
+  JS8Call's *Automatic Time Drift* does; one heartbeat is enough. **Hold
+  Time** to search when the clock is more than about 2.5 s off and nothing
+  decodes. Beta 4.1's Time Sync, which needed three decodes in two minutes,
+  is gone; *Reset time drift* is the first line in Settings.
+- **[Saved messages](#saved-messages)** (Query > Saved messages >): ten of
+  your own, sent with one press, edited by holding the MFK, with desktop
+  JS8Call's macros (`<CALL>`, `<SNR>`, `<MYGRID4>` ...). Macros work in
+  typed messages and in your INFO and STATUS too.
+- **Sort** in the Stations view (page 3, second button): heard you, SNR,
+  time or distance ([The screen](#the-screen)).
+- **QRZ** in the Stations view too, as on the map: who called you while the
+  messages weren't showing.
+- **[High-SWR protection](#transmitting)**: over 3:1 while sending turns
+  AUTO, heartbeats, HB ACK and auto CQ off, with three beeps.
+- **APRS:** an **Echo test** first in the list (an answer in your Inbox
+  proves both directions work) and a **More services >** list: weather,
+  sunrise, repeaters, ISS passes, nearest hospital / fuel / water, email
+  your position, callsign lookup and more, each message filled in
+  ([APRS](#aprs)).
+- **Waterfall: Sharp / Light / Medium / Calm** (Settings): rows averaged
+  over time; *Calm*, the default, changes the picture about 4 times less
+  at each step, so the slight flicker as it scrolls is much reduced.
+- **A lighter waterfall:** JS8's waterfall is drawn straight onto the
+  display's lower layer, as the main screen's is, and the display puts the
+  list on top. Measured on the radio, the app's screen thread fell from
+  about 79 % of one CPU core to about 29 %; it looks the same.
+- **Health lines in the app log** (`app_logs` on the SD card): once a
+  minute how busy the decoder was, and a line when audio went missing, the
+  screen stalled or JS8's time moved, so a bug report shows whether the
+  radio kept up.
+
+Fixes:
+
+- The waterfall's faint stutter while the MFK steps through the list: each
+  step now redraws only the rows it moves between.
+- Winlink messages no longer get a second ACK (they went with an APRS
+  message number, and WLNK-1 answers anyway).
+- Distances of 10,000 km or more no longer wrap onto the next row in the
+  Stations view.
+
+**Updating from beta 4.1:** copy your DATA files off first as usual
+([Installing](#installing)) and put them back: beta 5 reads them as they
+are. The new settings start at their defaults (Time: Auto on, Waterfall:
+Calm, Sort: Heard you), and the saved messages start as desktop's
+(`TNX 73 GL`, nine empty).
 
 ## New in beta 4.1
 
@@ -930,9 +1017,9 @@ are, and its new settings start at their defaults.
 - **Relays, store and forward and messaging** work on the air with
   desktop JS8Call stations.
 - **APRS:** the grid spot, two-way SMS and Winlink work on the air.
-  Winlink messages get two ACKs (the gateway's and Winlink's own reply); a
-  later beta drops the extra one. POTA and SOTA spots, position messages
-  and email are untested through the gateways.
+  Winlink messages get two ACKs (the gateway's and Winlink's own reply);
+  fixed for beta 5. POTA and SOTA spots, position messages and email are
+  untested through the gateways.
 - **The map:** your own square is orange for now; a Setting to pick its
   colour is to come.
 - Long messages have been seen arriving live, but not yet watched all the
@@ -945,60 +1032,18 @@ are, and its new settings start at their defaults.
 
 ## Coming next
 
-Beta 5 is being planned; the full list with notes is in
-[docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). The highlights:
+The full list with notes is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md);
+what's done is in [New in beta 5 so far](#new-in-beta-5-so-far). Still to
+do for beta 5:
 
-- [x] **[Time sync](#time) overhaul:** automatic time sync like desktop
-  JS8Call's, from every decode (one heartbeat is enough), on to start;
-  hold Time to search when the clock is too far off (done after 4.1)
-- [x] **High-SWR protection** for unattended stations: over 3:1 while
-  sending turns AUTO, heartbeats and auto CQ off, with three beeps (done
-  after 4.1, to be tried on the radio)
-- [x] **The latest firmware underneath:** gdyuldin's v1.0.2 (a cleaner
-  screen with more room for the map; [the study](docs/upgrade-1.0.2/README.md));
-  being tested on the radio. The Murus team's WeFax, NavTex and SSTV come
-  back once their fork is on 1.0.2 too
 - [ ] **Station history:** QSOs, messages, INFO and STATUS for every
   station, opened by pressing it in the list or on the map
-- [x] **QRZ** in the Stations view too, as on the map: who called you
-  while the messages weren't showing (done after 4.1)
-- [x] **Sort** in the Stations view: who heard you first, SNR, time or
-  distance (done after 4.1)
-- [x] **Heartbeats:** keep going while you call CQ, pause only when
-  someone answers; hold for Auto like CQ; the TX bar shows the
-  heartbeat's frequency
-- [x] **APRS:** an *Echo test* and a *More services* list (weather,
-  sunrise, repeaters, ISS passes, nearest hospital / fuel / water, email
-  my position, callsign lookup ...), each message filled in; no double ACKs on Winlink (done
-  after 4.1: to be checked on the air)
 - [ ] **APRS badge:** `@` in the Stations list for stations that pass APRS
   messages back over JS8
-- [x] **[Saved messages](#saved-messages) and macros**, as desktop
-  JS8Call has: ten in the Query list, press to send, hold to edit (done
-  after 4.1)
 - [ ] **GPS** time and location from a USB GPS
-- [x] The green receive bar as wide as the station's speed
 - [ ] ALC for under 1 W into an amplifier
-- [x] Fixes: Can they reach...? adds the `?` for you, and an @ALLCALL
-  version (*Can anyone reach...?*)
-- [x] The waterfall's stutter while the MFK steps through the list: each
-  step now redraws only the rows it moves between (done after 4.1)
-- [x] **A lighter waterfall:** measured on the radio, drawing JS8's
-  waterfall took about half of one CPU core, because each new row redrew
-  the see-through message list over it. The waterfall is now drawn
-  straight onto the display's lower layer, as the main screen's is, and
-  the display puts the list on top: a new row redraws nothing else (in the
-  PC tests the screen work for the waterfall fell by about 80 %). It
-  looks the same (done after 4.1, to be measured on the radio)
-- [x] **Less waterfall flicker:** *Waterfall: Calm* (Settings; *Medium*
-  and *Light* in between, *Sharp* as before) averages the rows, so each
-  step changes the picture up to about 4 times less (done after 4.1). True smooth scrolling was tried and
-  dropped: redrawing the whole waterfall at every screen refresh needs more
-  than one of the radio's cores
-- [x] **Health lines in the app log:** once a minute how busy the decoder
-  was (`JS8 ... decode: ...`), and a line whenever audio went missing or
-  the screen stalled, so a bug report shows whether the radio kept up
-  (done after 4.1)
+- [ ] The Murus team's WeFax, NavTex and SSTV, once their fork is on
+  R1CBU 1.0.2
 - [ ] Still from beta 4: the map's home colour Setting; POTA and SOTA
   spots tried on the air
 - [ ] Later, after the features: performance (spreading the work over the
@@ -1020,7 +1065,8 @@ This is a beta: reports from testing are very welcome.
   did, what you expected and what happened. A photo or screenshot of the
   radio's screen helps, and so does the `app_logs` folder from the SD card's
   DATA partition if the app closed or froze (from beta 5 on it also has a
-  line a minute about how busy the decoder was, and notes screen stalls).
+  line a minute about how busy the decoder was, and notes screen stalls
+  and time changes).
 - **Radio problems on Windows** (no power out, settings you can't find):
   [tools/windows](tools/windows) has a read-only script that collects
   the firmware and BASE versions, the transmit settings and the logs over
@@ -1052,7 +1098,7 @@ JS8 app by VE7NHW.
   found in the js8core engine, reported upstream, in
   [docs/js8core-bug-reports.md](docs/js8core-bug-reports.md).
 - **Code:** `src/js8/` (no LVGL, host-testable: receive, transmit, auto-reply,
-  inbox, log, alerts), `src/dialog_js8.c` (the app), `src/js8_wf.c` (its
+  inbox, log, alerts, macros, time sync), `src/dialog_js8.c` (the app), `src/js8_wf.c` (its
   waterfall, drawn on the display's lower plane), vendored engine in
   `third-party/js8core` with local patches listed in
   [UPSTREAM.md](third-party/js8core/UPSTREAM.md).
