@@ -23,6 +23,7 @@ struct Station {
     float        freq_hz  = 0;   ///< their last audio offset
     int          mode     = 0;   ///< speed last heard at (varicode submode 0/1/2/4)
     bool         heard_me = false;       ///< they have sent us something
+    bool         aprs_gate = false;      ///< passed an APRS message back over JS8 ("@APRSIS MSG TO:"): a two-way gateway
     std::int64_t heard_me_ms = 0;
     std::optional<int> reported_snr;     ///< how they hear us, if they said
     std::string  via;            ///< only heard through this relay station (desktop's "through")

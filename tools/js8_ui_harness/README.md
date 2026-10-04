@@ -67,6 +67,8 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `RELAY` | relays passed on and received, ACK back along the path |
 | `SAVED` | Query > Saved messages > (just before Close): desktop's `TNX 73 GL` first, a press of the real MFK sends it at once, holding it edits one (the knob's release doesn't press Enter), Enter saves and returns to the list, ESC leaves it, empty clears; `<CALL>` refused with nothing selected, filled in with a station (`<SNR>`, `<MYGRID4>` too); kept in `js8_saved.txt` across a reopen; macros in a typed message and in the INFO answer (`s0_saved_list.ppm` ... `s2_saved_selected.ppm`) |
 | `STQRZ` | the map's QRZ line over the Stations view too: a message to you (not a heartbeat SNR reply) adds the caller, newest first; hidden on the map (its own shows) and over the messages; the selected station drops off; back to the messages (Map > Messages, or Show) clears it (`q0_stations_qrz.ppm`) |
+| `MAPSTACK` | the map's count tag: 12 stations, 4 spots shared (EN52 3 with a CQ tag too, DM43 2, CN89 2, two gridless 6-area calls 2), one white tag each on the bottom right; unchanged with a stacked station selected; none with *Heard me* (`w0_map_stack.ppm`, `w1_map_stack_selected.ppm`) |
+| `ATGATE` | the Stations list's `@` badge: a station that passed an APRS message back over JS8 (`@APRSIS MSG TO:`, e.g. an Echo test's answer) shows `@` instead of `*`, even after calling you; heard-you `*`, others blank; page 3's second slot empty (`u0_aprs_gate.ppm`) |
 | `STSORT` | the Stations view's Sort button (page 3, button 2): Heard you, SNR, Time, Distance from four stations, the selected one kept; blank over the messages, the map's button on the map (`t0_sort_heard.ppm` ... `t3_sort.ppm`) |
 | `QUERYCALL` | Query list: *Can anyone reach...?* with no station selected, *Can they reach...?* with one; the `?` added when left off, never twice |
 | `KNOB` | the main knob on the TX offset: clicks one at a time as R1CBU 1.0 sends them, a fast spin still speeds up (5/10 Hz per click), and only the finder's old and new band are redrawn (load per second; no band left behind after the knob or MFK selections); MFK steps through the list redraw only the rows they move between |
@@ -75,7 +77,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `RETUNE`, `TXSAFE` | transmitting safely (see below) |
 | `ROWS` | info rows survive rebuilds, a cut-off message stops growing, the Inbox lists all 200 |
 | `SMS` | a phone text via an APRS gateway; Reply by SMS fills in the number; the gateway's receipt shown as delivered, not an Inbox message; 67 characters plus the `{nn}` |
-| `SPEED` | all four speeds decoded together; the Speed button |
+| `SPEED` | all four speeds decoded together; the Speed button; Decode: All speeds / My speed in Settings |
 | `STALL` | the GUI stuck for ~50 s while a band's messages arrive: none lost (see below) |
 | `TEXTS` | Settings: INFO/STATUS keyboard gets the focus |
 | `TXBAR` | frame progress in the TX bar during a long message |

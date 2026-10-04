@@ -309,8 +309,7 @@ static void        beep_log_level(void);
 static const char *speed_label_getter(void);
 static void        speed_cb(button_data_t *btn);
 static void        speed_hold_cb(button_data_t *btn);
-static const char *decode_label_getter(void);
-static void        decode_cb(button_data_t *btn);
+static void        decode_toggle(void);
 static void        speed_warn(void);
 static const char *act_label_getter(void);
 static void        act_cb(button_data_t *btn);
@@ -672,13 +671,13 @@ static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = c
 static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_4, .prev = &page_2};
 /* Sort in the Stations view, the map's view on the map. */
 static button_data_t btn_map_view = {.type = BTN_TEXT_FN, .label_fn = map_view_label_getter, .press = map_view_cb, .hold = map_follow_cb};
-static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
 static button_data_t btn_inbox     = {.type = BTN_TEXT_FN, .label_fn = inbox_label_getter, .press = inbox_cb};
 
 static buttons_page_t page_1 = {{&btn_p1, &btn_cq, &btn_hb, &btn_query, &btn_hw_cpy}};
 static buttons_page_t page_2 = {{&btn_p2, &btn_show, &btn_reply, &btn_send, &btn_clear}};
-static buttons_page_t page_3 = {{&btn_p3, &btn_map_view, &btn_hold, &btn_stations, &btn_inbox}};
+/* Slot 2 is free: Hold moved to page 6 (where Decode was; Decode is in Settings). */
+static buttons_page_t page_3 = {{&btn_p3, &btn_map_view, NULL, &btn_stations, &btn_inbox}};
 
 static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_5, .prev = &page_3};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
@@ -699,9 +698,9 @@ static buttons_page_t page_5        = {{&btn_p5, &btn_aprs, &btn_log, &btn_act, 
 static button_data_t  btn_p6        = {.type = BTN_TEXT, .label = "(JS8 6:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_1, .prev = &page_5};
 static button_data_t  btn_alerts    = {.type = BTN_TEXT, .label = "Alerts >", .press = alerts_cb};
 static button_data_t  btn_speed     = {.type = BTN_TEXT_FN, .label_fn = speed_label_getter, .press = speed_cb, .hold = speed_hold_cb};
-static button_data_t  btn_decode    = {.type = BTN_TEXT_FN, .label_fn = decode_label_getter, .press = decode_cb};
+static button_data_t  btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t  btn_freq      = {.type = BTN_TEXT_FN, .label_fn = freq_label_getter, .press = freq_cb};
-static buttons_page_t page_6        = {{&btn_p6, &btn_alerts, &btn_speed, &btn_decode, &btn_freq}};
+static buttons_page_t page_6        = {{&btn_p6, &btn_alerts, &btn_speed, &btn_hold, &btn_freq}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -1146,7 +1145,7 @@ static double bearing_deg(double lat1, double lon1, double lat2, double lon2) {
 
 static void station_fields(const js8_station_t *st, int64_t now, station_fields_t *f) {
     memset(f, 0, sizeof(*f));
-    f->star[0] = st->heard_me ? '*' : ' ';
+    f->star[0] = st->aprs_gate ? '@' : st->heard_me ? '*' : ' '; /* @: an APRS gateway both ways */
     snprintf(f->call, sizeof(f->call), "%s", st->call);
     js8_speed_t sp = js8_speed_from_submode(st->submode);
     if (sp != JS8_SPEED_NORMAL) f->speed[0] = js8_speed_letter(sp); /* F, T, S */
@@ -1547,7 +1546,7 @@ static void table_draw_end_cb(lv_event_t *e) {
         lv_coord_t x;
         size_t     field;
     } cols[] = {
-        {0, offsetof(station_fields_t, star)},    {18, offsetof(station_fields_t, call)},
+        {0, offsetof(station_fields_t, star)},    {22, offsetof(station_fields_t, call)},
         {140, offsetof(station_fields_t, speed)}, {162, offsetof(station_fields_t, age)},
         {218, offsetof(station_fields_t, snr)},   {276, offsetof(station_fields_t, heard)},
         {505, offsetof(station_fields_t, grid)},  {588, offsetof(station_fields_t, dist)},
@@ -3432,6 +3431,8 @@ static int map_edge     = 4; /* the status line this far in, clear of the corner
 #define MAP_TX         0xFF1010 /* your outline while transmitting */
 #define MAP_NEW_BORDER 0xFFFFFF /* a grid or country you've never worked */
 #define MAP_CQ_BG      0x00E000 /* the "CQ" tag: black on the heard green */
+#define MAP_STACK_PX   2        /* marks this close are on the same spot: one count tag for them */
+#define MAP_STACK_BG   0xFFFFFF /* the count tag: black on white, the CQ tag's shape (VE7NHW's pick) */
 #define MAP_FADE_MIN   45       /* squares fade to 30 % over this many minutes unheard */
 #define MAP_SQUARE_OPA 136      /* GridTracker's grid alpha */
 #define MAP_TAKEN      32       /* label boxes placed per redraw */
@@ -4179,26 +4180,37 @@ static void map_legend(bool have_home) {
  * (x, y its centre, `side` its size): map_badge_box() reserves the place
  * before the labels are placed, map_badge() draws it last, over rings and
  * outlines. False where the legend, the status line or the stats are. */
-static bool map_badge_box(int x, int y, int side, const char *text, lv_area_t *box) {
+static bool map_badge_box_at(int x, int y, int side, const char *text, bool below, lv_area_t *box) {
     lv_point_t sz;
     lv_txt_get_size(&sz, text, &sony_14, 0, 0, LV_COORD_MAX, LV_TEXT_FLAG_NONE);
     int h  = LV_MAX(side / 2, 6);
     int bx = LV_CLAMP(2, x + h - 3, MAP_W - sz.x - 8);
-    int by = LV_CLAMP(2, y - h + 3 - sz.y - 2, MAP_LABEL_BOTTOM - sz.y - 4);
+    int by = LV_CLAMP(2, below ? y + h - 3 : y - h + 3 - sz.y - 2, MAP_LABEL_BOTTOM - sz.y - 4);
     *box   = (lv_area_t){bx, by, bx + sz.x + 6, by + sz.y + 2};
     if (map_overlaps(box)) return false;
     map_take(box->x1, box->y1, box->x2, box->y2);
     return true;
 }
 
-static void map_badge(const lv_area_t *box, const char *text) {
-    map_rect(box->x1, box->y1, box->x2 - box->x1, box->y2 - box->y1, MAP_CQ_BG, 235, 0x000000, 1, 3);
+static bool map_badge_box(int x, int y, int side, const char *text, lv_area_t *box) {
+    return map_badge_box_at(x, y, side, text, false, box);
+}
+
+static void map_badge_ex(const lv_area_t *box, const char *text, uint32_t bg, uint32_t fg) {
+    map_rect(box->x1, box->y1, box->x2 - box->x1, box->y2 - box->y1, bg, 235, 0x000000, 1, 3);
     lv_draw_label_dsc_t ld;
     lv_draw_label_dsc_init(&ld);
-    ld.color = lv_color_black();
+    ld.color = lv_color_hex(fg);
     ld.font  = &sony_14;
     lv_canvas_draw_text(map_canvas, box->x1 + 3, box->y1 + 1, box->x2 - box->x1, &ld, text);
 }
+
+static void map_badge(const lv_area_t *box, const char *text) {
+    map_badge_ex(box, text, MAP_CQ_BG, 0x000000);
+}
+
+static int  map_stacks_drawn; /* for the harness: count tags on the map */
+static char map_stacks_text[96];
 
 /* Top right, lined up under the status line: the stats, then the QRZ line
  * (VE7NHW: the stats on the status line's side). True if either moved. */
@@ -4483,6 +4495,35 @@ static void map_update(bool force) {
     for (int i = 0; i < st_count; i++)
         badge[i] = shown[i] && cq[i] && map_badge_box(cx[i], cy[i], i == sel_i ? 19 : side[i], "CQ", &badge_box[i]);
 
+    /* Stations on the same spot (the same grid square, or the same call
+     * area for those placed by callsign) hide each other: a count tag on
+     * the mark's bottom right corner, as the CQ tag on the top right,
+     * says how many are there (VE7NHW). On the first of them; reserved
+     * now, before the labels, drawn last. */
+    static bool      stack_tag[MAX_ROWS];
+    static lv_area_t stack_box[MAX_ROWS];
+    static char      stack_text[MAX_ROWS][8];
+    map_stacks_drawn   = 0;
+    map_stacks_text[0] = '\0';
+    for (int i = 0; i < st_count; i++) {
+        stack_tag[i] = false;
+        if (!shown[i]) continue;
+        bool first = true;
+        int  n = 0, gside = 0;
+        for (int j = 0; j < st_count && first; j++) {
+            if (!shown[j] || abs(cx[j] - cx[i]) > MAP_STACK_PX || abs(cy[j] - cy[i]) > MAP_STACK_PX) continue;
+            if (j < i) first = false;
+            n++;
+            gside = LV_MAX(gside, j == sel_i ? 19 : side[j]);
+        }
+        if (!first || n < 2) continue;
+        snprintf(stack_text[i], sizeof(stack_text[i]), "%d", n);
+        stack_tag[i] = map_badge_box_at(cx[i], cy[i], gside, stack_text[i], true, &stack_box[i]);
+        size_t len = strlen(map_stacks_text);
+        snprintf(map_stacks_text + len, sizeof(map_stacks_text) - len, "%s%s:%d", len ? " " : "",
+                 st_rows[i].grid[0] && !pl[i].approx ? st_rows[i].grid : pl[i].where, n);
+    }
+
     /* The selected station, red, with its label. */
     char dist[24] = "";
     if (sel_i >= 0) {
@@ -4532,9 +4573,21 @@ static void map_update(bool force) {
 
     for (int i = 0; i < st_count; i++)
         if (badge[i]) map_badge(&badge_box[i], "CQ");
+    for (int i = 0; i < st_count; i++)
+        if (stack_tag[i]) {
+            map_badge_ex(&stack_box[i], stack_text[i], MAP_STACK_BG, 0x000000);
+            map_stacks_drawn++;
+        }
     if (my_badge) map_badge(&my_badge_box, "CQ");
     map_corners_apply();
     lv_obj_invalidate(map_canvas);
+}
+
+/* For tools/js8_ui_harness: the count tags on the map ("CN89:3 DM43:2",
+ * a spot by its first station's grid or place), how many drawn. */
+int dialog_js8_map_stacks(const char **text) {
+    if (text) *text = map_stacks_text;
+    return map_stacks_drawn;
 }
 
 /* For tools/js8_ui_harness: is the map showing, is it a world view, how
@@ -5634,6 +5687,18 @@ int dialog_js8_station_rows(char *out, unsigned len) {
     return st_count;
 }
 
+/* For tools/js8_ui_harness: the Stations view's star column for `call`
+ * ('@', '*' or ' '), or 0 if it isn't listed. */
+char dialog_js8_station_star(const char *call) {
+    for (int i = 0; i < st_count; i++)
+        if (strcasecmp(st_rows[i].call, call) == 0) {
+            station_fields_t f;
+            station_fields(&st_rows[i], now_wall_ms(), &f);
+            return f.star[0];
+        }
+    return 0;
+}
+
 /* For tools/js8_ui_harness: does message-list row `row` have the green bar? */
 bool dialog_js8_row_marked(unsigned row) {
     return table && row < rows && row_is_selected_station(row_hist[row]);
@@ -6126,6 +6191,7 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_MARKS    104
 #define SETTINGS_TRESET   106 /* 105 was Time Sync now: the Time button (page 4) now */
 #define SETTINGS_WF       107
+#define SETTINGS_DECODE   108
 
 static const char *relay_label(void) {
     return param_i_get(cfg.js8.relay()) ? "Relay: On" : "Relay: Off";
@@ -6146,6 +6212,7 @@ static const char *settings_label(int which) {
         return buf;
     case SETTINGS_MILES: return param_i_get(cfg.js8.miles()) ? "Distance: miles" : "Distance: km";
     case SETTINGS_MARKS: return param_i_get(cfg.js8.decode_marks()) ? "Decode marks: On" : "Decode marks: Off";
+    case SETTINGS_DECODE: return param_i_get(cfg.js8.rx_all()) ? "Decode: All speeds" : "Decode: My speed";
     case SETTINGS_WF:
         snprintf(buf, sizeof(buf), "Waterfall: %s", wf_avg_name[param_i_get(cfg.js8.wf_avg()) % WF_AVG_LEVELS]);
         return buf;
@@ -6214,6 +6281,9 @@ static void texts_item_cb(lv_event_t *e) {
         case SETTINGS_TRESET:
             time_sync_reset();
             break;
+        case SETTINGS_DECODE:
+            decode_toggle();
+            break;
         }
         lv_label_set_text(lv_obj_get_child(lv_event_get_target(e), 0), settings_label(which));
         return;
@@ -6273,6 +6343,7 @@ static void texts_cb(button_data_t *btn) {
     settings_add(settings_label(SETTINGS_ST_KEEP), SETTINGS_ST_KEEP);
     settings_add(settings_label(SETTINGS_MSG_KEEP), SETTINGS_MSG_KEEP);
     settings_add(settings_label(SETTINGS_MILES), SETTINGS_MILES);
+    settings_add(settings_label(SETTINGS_DECODE), SETTINGS_DECODE);
     settings_add(settings_label(SETTINGS_MARKS), SETTINGS_MARKS);
     settings_add(settings_label(SETTINGS_WF), SETTINGS_WF);
     snprintf(label, sizeof(label), "Operator: %s", operator_call[0] ? operator_call : "(the station call)");
@@ -8258,16 +8329,11 @@ static void speed_hold_cb(button_data_t *btn) {
     set_speed(their);
 }
 
-static const char *decode_label_getter(void) {
-    return param_i_get(cfg.js8.rx_all()) ? "Decode:\nAll speeds" : "Decode:\nMy speed";
-}
-
-static void decode_cb(button_data_t *btn) {
-    user_touch();
-    if (popup_guard()) return;
+/* Decode: all speeds or only the one we send at (a Settings line; it was
+ * page 6's button before Hold took its place). */
+static void decode_toggle(void) {
     param_i_set(cfg.js8.rx_all(), !param_i_get(cfg.js8.rx_all()));
     js8_rx_set_submodes(rx, rx_speed_mask());
-    buttons_refresh(btn);
     if (param_i_get(cfg.js8.rx_all())) msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Slow)");
     else msg_update_text_fmt("Decoding %s only", js8_speed_name(cur_speed()));
 }

@@ -120,6 +120,7 @@ void to_c(const Station &st, js8_station_t &o) {
     o.freq_hz          = st.freq_hz;
     o.submode          = (uint8_t)st.mode;
     o.heard_me         = st.heard_me;
+    o.aprs_gate        = st.aprs_gate;
     o.heard_me_ms      = st.heard_me_ms;
     o.has_reported_snr = st.reported_snr.has_value();
     o.reported_snr     = (int16_t)st.reported_snr.value_or(0);

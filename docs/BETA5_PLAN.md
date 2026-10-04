@@ -118,8 +118,12 @@ heard paused them; [docs/review](review/)).
   More services > just before Close opens a list of MPAD (incl. Email my
   position, `posmsg`), WXBOT, WXNOW, WHO-IS and JOKE messages, each filled in (grid added where the service
   takes one), with Back and Close. Harness ONLY_APRSMORE.
-- [ ] APRS badge on the Stations list: `@` in the star's place for a
+- [x] APRS badge on the Stations list: `@` in the star's place for a
   station seen relaying APRS messages back over JS8 (two-way gateway).
+  **Done 2026-10-04:** a station heard sending `@APRSIS MSG TO:<anyone>`
+  (an Echo test's answer to us, an SMS to anyone) gets `@`; it stays
+  (the row is still gold if they heard us). `Station::aprs_gate`
+  (src/js8/stations.cpp), unit test, harness ONLY_ATGATE.
 - [x] **Winlink: no ACK request.** **Done after beta 4.1** (WLNK-1 dropped from want_id; check on the air that WLNK-1 still answers). Winlink works on the air, but the
   WLNK-1 gateway answers with its own message anyway, so the `{nn}` we
   add to ask for a receipt brings a second ACK. Stop adding it for WLNK-1
@@ -144,6 +148,20 @@ heard paused them; [docs/review](review/)).
   saved); the user's list is edited in place instead.
 
 ## Screen and radio
+
+- [x] **Map: a count on stacked stations (user, 2026-10-04):** on a busy
+  band many stations share one spot (every station of a grid square sits
+  at its centre; gridless ones at their call area's), so a white tag in
+  the CQ tag's shape on the bottom right corner says how many (user
+  picked white from green / white / dark mock-ups). Marks within 2 px
+  are one spot; counts what the map shows. Harness ONLY_MAPSTACK.
+
+- [x] **Buttons moved (user, 2026-10-04), to free a slot for the next
+  feature:** *Decode: All speeds / My speed* left page 6 for a Settings
+  line; **Hold** moved from page 3 into Decode's place on page 6; page 3's
+  middle slot is empty. **Waterfall default is Light** (was Calm): the
+  user found it the best on the air. A card that already saved a level
+  keeps it.
 
 - [x] The green receive bar is as wide as the speed the station was last
   heard at (today it is always Normal's width). **Done (port-1.0.2):** the

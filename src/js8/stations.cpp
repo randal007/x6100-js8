@@ -53,6 +53,12 @@ void StationList::add(const StationEvent &ev, const std::string &my_call) {
     if (auto colon = body.find(':'); colon != std::string::npos) body = body.substr(colon + 1);
     auto w = words(body);
 
+    // "@APRSIS MSG TO:CALL text DE SENDER" is what a JS8Call-improved
+    // station relaying inbound APRS sends (an Echo test's answer, an SMS):
+    // a gateway both ways. Only these show up on JS8; one-way gateways
+    // are silent here.
+    if (w.size() >= 3 && w[0] == "@APRSIS" && w[1] == "MSG" && w[2].rfind("TO:", 0) == 0) st.aprs_gate = true;
+
     // Grid: only from a heartbeat, a CQ or a GRID command, as desktop.
     st.grid = better_grid(st.grid, announced_grid(body));
 

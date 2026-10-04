@@ -52,6 +52,8 @@ int  ui_kb_select_ok(void);
 void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 int  dialog_js8_station_rows(char *out, unsigned len);
+char dialog_js8_station_star(const char *call);
+int  dialog_js8_map_stacks(const char **text);
 void dialog_js8_time_auto(bool on);
 const char *dialog_js8_st_qrz(void);
 int  dialog_js8_finder_hz(void);
@@ -2251,10 +2253,25 @@ int main() {
         printf("[speed] our row: %d (offset kept at Turbo's 2840 limit)\n", ui_list_has("TX 2840 F"));
         screenshot("37_speed_tx.ppm");
 
+        // Decode: All speeds / My speed is a Settings line (page 6's
+        // button 3 is Hold now).
         ui_page(6);
-        ui_press(3); // Decode: My speed
-        printf("[speed] decode: '%s'\n", ui_button_label(3));
-        ui_press(3);
+        printf("[speed] page 6 button 3: '%s' (want Hold)\n", ui_button_label(3));
+        ui_page(4);
+        ui_press(4); // Settings
+        pump(200);
+        for (int i = 0; i < 16 && strncmp(ui_focused_text(), "Decode:", 7) != 0; i++) ui_key(LV_KEY_RIGHT);
+        printf("[speed] settings: '%s' (want Decode: All speeds)\n", ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        printf("[speed] decode: '%s' / '%s' (want Decode: My speed)\n", ui_focused_text(), stub_last_msg);
+        screenshot("37b_decode_setting.ppm");
+        ui_click_focused();
+        pump(200);
+        printf("[speed] decode: '%s' (want Decode: All speeds)\n", ui_focused_text());
+        ui_key(LV_KEY_ESC);
+        pump(200);
+        ui_page(6);
         ui_press(2); // Fast -> Turbo
         ui_press(2); // -> Slow
         ui_press(2); // -> Normal
@@ -2515,6 +2532,30 @@ int main() {
             fwrite(texts_before.data(), 1, texts_before.size(), f);
             fclose(f);
         }
+        return 0;
+    }
+    if (getenv("ONLY_ATGATE")) {
+        // The Stations list's star column: '@' for a station that passed an
+        // APRS message back over JS8 (here our Echo test's answer), '*' for
+        // one that heard us, blank otherwise; '@' wins over '*'.
+        pump(300);
+        feed_band({{"NR4U", "EM95", "@APRSIS", "@APRSIS MSG TO:K2XYZ TEST DE ECHO", 700, 0.05f},
+                   {"K1AAA", "FN42", "K2XYZ", "K2XYZ HELLO", 1500, 0.04f}});
+        feed_band({{"VE7BBB", "CN89", "@HB", "@HB HEARTBEAT CN89", 1900, 0.06f},
+                   {"W1GW", "FN31", "@APRSIS", "@APRSIS MSG TO:VE7ABC HI DE SMS", 1100, 0.05f}});
+        pump(1000);
+        ui_page(3);
+        printf("[atgate] page 3 button 2: '%s' (want empty: Hold moved to page 6)\n", ui_button_label(2));
+        ui_press(3); // Show Stations
+        pump(300);
+        for (const char *c : {"NR4U", "W1GW", "K1AAA", "VE7BBB"})
+            printf("[atgate] %-6s star '%c'\n", c, dialog_js8_station_star(c) ? dialog_js8_station_star(c) : '?');
+        printf("[atgate] want NR4U '@', W1GW '@', K1AAA '*', VE7BBB ' '\n");
+        screenshot("u0_aprs_gate.ppm");
+        // NR4U calls us too: still '@'.
+        feed_band({{"NR4U", "EM95", "K2XYZ", "K2XYZ GM", 700, 0.05f}});
+        pump(1000);
+        printf("[atgate] NR4U after calling us: '%c' (want '@')\n", dialog_js8_station_star("NR4U"));
         return 0;
     }
     if (getenv("ONLY_STSORT")) {
@@ -3343,6 +3384,57 @@ int main() {
                ui_button_label(2));
         return 0;
     }
+    if (getenv("ONLY_MAPSTACK")) {
+        // A busy band where stations share a spot (the same grid square,
+        // or the same call area for those without a grid): one count tag
+        // on the mark's bottom right corner, the CQ tag still on the top
+        // right.
+        ui_indevs_init(); // the MFK
+        pump(300);
+        feed_band({{"K9DEF", "EN52", "", "@HB HEARTBEAT EN52", 600, 0.05f},
+                   {"K9GHI", "EN52", "", "@HB HEARTBEAT EN52", 1000, 0.05f},
+                   {"W9JKL", "EN52", "", "@ALLCALL CQ CQ EN52", 1400, 0.05f},
+                   {"W7XYZ", "DM43", "", "@HB HEARTBEAT DM43", 1800, 0.05f},
+                   {"N7ABC", "DM43", "", "@HB HEARTBEAT DM43", 2200, 0.05f},
+                   {"VE3KP", "FN03", "", "@HB HEARTBEAT FN03", 2600, 0.05f}});
+        feed_band({{"W6AAA", "", "W7XYZ", "W7XYZ HW CPY?", 600, 0.05f},
+                   {"K6BBB", "", "N7ABC", "N7ABC SNR?", 1000, 0.05f},
+                   {"VE7AAA", "CN89", "", "@HB HEARTBEAT CN89", 1400, 0.05f},
+                   {"VA7BBB", "CN89", "", "@HB HEARTBEAT CN89", 1800, 0.05f},
+                   {"K5LOW", "EM12", "", "@ALLCALL CQ CQ EM12", 2200, 0.05f},
+                   {"N0XYZ", "", "K2XYZ", "K2XYZ HEARTBEAT SNR -12", 2600, 0.05f}});
+        pump(1000);
+        ui_page(3);
+        ui_press(3); // Show Stations
+        pump(300);
+        ui_press(3); // Show Map
+        pump(800);
+        const char *tags = "";
+        int         n    = dialog_js8_map_stacks(&tags);
+        printf("[mapstack] %d count tag(s): %s (want EN52:3 DM43:2 CN89:2, US call area 6:2)\n", n, tags);
+        screenshot("w0_map_stack.ppm");
+        // Select one of a stack: still one tag, the count unchanged.
+        for (int i = 0; i < 12; i++) {
+            char sel[16] = "";
+            dialog_js8_selected_call(sel, sizeof(sel));
+            if (strcmp(sel, "K9GHI") == 0) break;
+            ui_mfk_turn(1);
+            pump(300);
+        }
+        pump(600);
+        char sel[16] = "";
+        dialog_js8_selected_call(sel, sizeof(sel));
+        n = dialog_js8_map_stacks(&tags);
+        printf("[mapstack] selected %s: %d count tag(s): %s\n", sel, n, tags);
+        screenshot("w1_map_stack_selected.ppm");
+        // Heard me only: N0XYZ alone, no tags.
+        ui_page(2);
+        ui_press(1); // Show: Heard me
+        pump(600);
+        n = dialog_js8_map_stacks(&tags);
+        printf("[mapstack] heard me only: %d count tag(s) '%s' (want 0)\n", n, tags);
+        return 0;
+    }
     if (getenv("ONLY_MAP")) {
         // Show Map (docs/MAP_PLAN.md): the third view, stations placed by
         // grid or callsign, the view button, the Show filter, DX switching
@@ -3880,10 +3972,10 @@ int main() {
     screenshot("01_open.ppm");
 
     // Hold starts Off (the default); the scenarios below were written for
-    // On, so switch it (page 3, button 2) and back to page 2.
-    ui_page(3);
-    printf("[hold] default: '%s'\n", ui_button_label(2));
-    ui_press(2);
+    // On, so switch it (page 6, button 3) and back to page 2.
+    ui_page(6);
+    printf("[hold] default: '%s'\n", ui_button_label(3));
+    ui_press(3);
     ui_page(2);
 
     // Stations sharing the band; multi-frame ones overlap in time.
@@ -4033,8 +4125,8 @@ int main() {
     printf("[t3] heartbeat keyed at %d Hz (want 500-999, clear of stations)\n", stub_tx_offset);
     wait_done();
 
-    ui_page(3);
-    ui_press(2); // Hold: On -> Off
+    ui_page(6);
+    ui_press(3); // Hold: On -> Off
     ui_select_row_from("N0XYZ");
     ui_page(2);
     ui_press(2); // Reply

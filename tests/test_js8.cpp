@@ -1715,6 +1715,28 @@ TEST_CASE("grids: 4 to 10 characters read, 6 kept, not RR73, most precise kept",
     CHECK(better_grid("DN17AB", "") == "DN17AB");
 }
 
+TEST_CASE("a station passing APRS messages back over JS8 gets the @ badge", "[js8][stations]") {
+    StationList list;
+    const std::int64_t t0 = 10'000'000;
+
+    // NR4U relays an Echo test's answer to us: a gateway both ways.
+    list.add(heard("NR4U", "EM95", "@APRSIS MSG TO:K2XYZ TEST DE ECHO", -12, t0), "K2XYZ");
+    // W1GW relays an SMS to someone else: a gateway all the same.
+    list.add(heard("W1GW", "FN42", "@APRSIS MSG TO:VE7ABC HELLO DE SMS", -15, t0 + 1000), "K2XYZ");
+    // Sending to a gateway, or a grid spot, isn't one.
+    list.add(heard("VE3KP", "FN03", "@APRSIS CMD :SMS      :@6045551234 HI", -7, t0 + 2000), "K2XYZ");
+    list.add(heard("DL1XX", "JO62", "@APRSIS GRID JO62AB", -20, t0 + 3000), "K2XYZ");
+
+    for (auto &st : list.sorted(t0 + 4000)) {
+        INFO(st.call);
+        CHECK(st.aprs_gate == (st.call == "NR4U" || st.call == "W1GW"));
+    }
+    // It stays when they're heard again with something else.
+    list.add(heard("NR4U", "EM95", "NR4U: HEARTBEAT EM95", -10, t0 + 5000), "K2XYZ");
+    for (auto &st : list.sorted(t0 + 6000))
+        if (st.call == "NR4U") CHECK(st.aprs_gate);
+}
+
 TEST_CASE("the QSO and the station keep the grid they announced, not any grid-shaped word", "[js8][log]") {
     QsoTracker        t;
     const std::string me = "VE7NHW";

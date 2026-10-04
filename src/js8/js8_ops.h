@@ -58,6 +58,7 @@ typedef struct {
     float   freq_hz;
     uint8_t submode;      /* speed last heard at: 0 Normal, 1 Fast, 2 Turbo, 4 Slow */
     bool    heard_me;     /* ★: they've sent us something */
+    bool    aprs_gate;    /* @: passed an APRS message back over JS8 (a two-way gateway) */
     int64_t heard_me_ms;
     bool    has_reported_snr;
     int16_t reported_snr; /* how they hear us */

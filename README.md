@@ -222,7 +222,11 @@ keyboard works too; lowercase is typed as capitals.
 **Stations view** (page 3, *Show Stations*; press again for [the map](#the-map)): one row per station, like
 desktop's Call Activity. `*` and gold: they heard you (they replied or
 acknowledged your heartbeat), with the report they gave you ("heard you
-−13"). Then time since heard, their SNR here, speed, grid, distance and
+−13"). `@`: an **APRS gateway both ways**: they were heard passing an APRS
+message back over JS8 (`@APRSIS MSG TO:...`, e.g. the answer to your
+[Echo test](#aprs) or an SMS), so APRS can reach you through them; `@`
+takes the place of `*` (the row stays gold if they heard you). Gateways
+that only send to APRS are silent on JS8, so they can't be marked. Then time since heard, their SNR here, speed, grid, distance and
 bearing (degrees from north). Calls you've logged are green. Stations
 named in a relay that reached you show *via* the station that passed it
 on, as on desktop. Stations drop off an hour after they were last heard
@@ -259,9 +263,9 @@ press to step through). Each new row is averaged with the ones before:
 
 | Level | Each step changes the picture | Looks |
 |---|---|---|
-| **Calm** (the default) | about 4 times less than Sharp | least speckle, a darker background so signals stand out, least flicker |
+| Calm | about 4 times less than Sharp | least speckle, a darker background so signals stand out, least flicker |
 | Medium | about 2.6 times less | in between |
-| Light | about 2 times less | a little smoothing |
+| **Light** (the default) | about 2 times less | a little smoothing: the best balance on the air |
 | Sharp | every row exactly as heard | most detail: short bursts and fading show best |
 
 Calm makes a signal's start and end a touch softer (a row or two); the
@@ -272,8 +276,8 @@ whole picture down a pixel, 15 times a second. The screen's pixels
 darken faster than they brighten, so with a speckled picture the whole
 waterfall dims for a moment at each step: a faint flicker that's there
 only while it scrolls (a slow-motion video of the radio measured it: about
-10 % darker, 15 times a second). Averaging the rows (Calm) means each
-step changes the picture far less, so the dips are far smaller. **Smooth
+10 % darker, 15 times a second). Averaging the rows (Light, Medium,
+Calm) means each step changes the picture far less, so the dips are far smaller. **Smooth
 scrolling** (moving the picture a fraction of a pixel at every screen
 refresh) was tried too and dropped: redrawing the whole waterfall 60
 times a second needed more than a whole CPU core on the radio and made a
@@ -339,6 +343,11 @@ white border.
   its row in the Stations view is green for those 5 minutes, the green of
   CQ rows in the message list). Yours too: on your square while your CQ
   goes out and for 5 minutes after it.
+- **Count** tag (white, bottom right): how many stations share that spot.
+  Every station in a grid square sits at the square's centre, and those
+  without a grid at their call area's, so on a busy band several hide
+  under one square; `3` says there are three. It counts what the map
+  shows (with *Heard me*, only those).
 - **Grey lines:** other stations talking to each other (`W7XYZ: K9DEF
   HW CPY?`), a relay's hops too, fading out over 10 minutes; drawn when
   both ends are on the map.
@@ -387,20 +396,20 @@ to go back a page. In JS8 a hold is half a second.
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
 | 3 | **Sort: Heard you / SNR / Time / Distance** | In the Stations view: the order of the stations ([The screen](#the-screen)). |
 | 3 | **Map: Auto / Close-in / World** | The same button while [the map](#the-map) shows: which part of the world it shows. **Hold: Follow** the selected station (you and them framed, the long path too); press to stop. Over the messages it's blank. |
-| 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
+| 3 | *(empty)* | Kept free for a feature to come (Hold moved to page 6). |
 | 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off when it hasn't been heard for *Stations kept* ([Settings](#settings); an hour to start). |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
 | 4 | **Time: Auto / Off** | Press: [automatic time sync](#time) on (the default) or off. **Hold: search** for the band's timing when the clock is too far off for anything to decode (*Searching* while it runs; hold again to stop). The second line shows the drift, e.g. `-1.2s`. |
 | 4 | **HB ACK** | Acknowledge others' heartbeats (needs AUTO and auto heartbeats on, as on desktop). |
-| 4 | **Settings…** | Reset time drift, INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay, your groups, how long stations and messages stay listed, km or miles, decode marks, the waterfall's look and an operator's call: see [Settings](#settings). |
+| 4 | **Settings…** | Reset time drift, INFO and STATUS (what AUTO sends for INFO? and STATUS?), Relay, your groups, how long stations and messages stay listed, km or miles, which speeds to decode, decode marks, the waterfall's look and an operator's call: see [Settings](#settings). |
 | 5 | **APRS >** | [APRS](#aprs) spots and messages. |
 | 5 | **Log QSO** | [Log](#logging) the QSO that just ended, or the selected station if you've selected someone else since. |
 | 5 | **Activ.: Off / POTA / SOTA** | Activating a park or summit: added to every log entry. Hold to type it. |
 | 5 | **Log prompt: On / Off** | Offer to log when a QSO ends with 73 or SK. |
 | 6 | **Alerts >** | [Alerts](#alerts): beeps and alert words. |
 | 6 | **Speed** | The [speed](#speeds) you send at. Press to cycle; hold to match the selected station. |
-| 6 | **Decode: All speeds / My speed** | Decode every speed (default), or only yours. |
+| 6 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
 | 6 | **Freq: JS8 / GhostNet / kHz** | Which frequencies the band keys step through: **JS8Call's** (7.078, 14.078 …) or **GhostNet's** (3.575, 7.107, 14.107 MHz), tuning the closest one. Or **Custom kHz…**: type a dial frequency (e.g. `7107.5`; the last one is filled in). The band keys go from a custom frequency back to the list. |
 
 While a list is open (Query, Settings…, APRS, the POTA/SOTA spot form, Log,
@@ -550,7 +559,7 @@ JS8 has four speeds (desktop JS8Call's figures):
 | Slow | 30 s | 25 Hz | −28 dB | `S` |
 
 - **Receiving:** all four at once, as desktop's multi-decoder does; the
-  list and Stations view mark `F`, `T` and `S`. *Decode: My speed* (page 6)
+  list and Stations view mark `F`, `T` and `S`. *Decode: My speed* ([Settings](#settings))
   decodes only your speed.
 - **Sending:** everything goes at the speed on page 6, automatic replies
   included. Replying to someone heard at another speed warns you; **hold
@@ -653,8 +662,9 @@ Page 4 **Settings…**:
 | **Stations kept: …** | Press to change: how long a station stays in the Stations view after it was last heard (15 min to 6 hours, or always; 1 hour to start). |
 | **Messages kept: …** | Press to change: messages leave the list this long after they arrived (15 min to 2 hours), or *all* (the default: the list keeps the newest 150 to 200 messages; it's trimmed back to 150 when it reaches 200). |
 | **Distance: km / miles** | Press to switch the Stations view's distances (km to start). |
+| **Decode: All speeds / My speed** | Press to switch: decode every speed (the default), or only the one you send at. |
 | **Decode marks: On / Off** | Press to switch the [decode marks](#the-screen) on the waterfall (off to start, as desktop). |
-| **Waterfall: Sharp / Light / Medium / Calm** | Press to step through how much each waterfall row is averaged with the ones before. *Calm* (the default) averages most: least speckle, a darker background so signals stand out, and about 4 times less flicker as the waterfall moves; *Medium* about 2.6 times less, *Light* about 2 times less; *Sharp* shows every row as heard, as before. More in [The waterfall](#the-waterfall). |
+| **Waterfall: Sharp / Light / Medium / Calm** | Press to step through how much each waterfall row is averaged with the ones before. *Light* (the default) about 2 times less flicker as the waterfall moves; *Medium* about 2.6 times less; *Calm* averages most: least speckle, a darker background so signals stand out, about 4 times less flicker; *Sharp* shows every row as heard, as before. More in [The waterfall](#the-waterfall). |
 | **Operator: …** | Someone else operating your station (desktop's *Operator Callsign*): their call goes in the log as `OPERATOR`; your station call is still what's sent on the air and logged as `STATION_CALLSIGN`. Empty: the station call. |
 
 ## Logging
@@ -707,7 +717,7 @@ JS8Spotter do):
 
 | Item | Sends | You type |
 |---|---|---|
-| Echo test | `@APRSIS CMD :ECHO     :TEST` | just Enter: ECHO sends the text back, so an answer in your Inbox proves both directions work |
+| Echo test | `@APRSIS CMD :ECHO     :TEST` | just Enter: ECHO sends the text back, so an answer in your Inbox proves both directions work; the station that brought it gets `@` in the Stations view |
 | Spot my grid | `@APRSIS GRID CN89LH`, or with a message `@APRSIS CMD =4916.25N/12305.00WGMADE IT TO CAMP` | a message, or just Enter |
 | Spot GPS position | the same from your GPS fix: `@APRSIS GRID CN89KG12AB` or a position with the message | a message, or just Enter (needs a GPS on the radio) |
 | POTA spot | `@APRSIS CMD :APSPOT   :! POTA CA-1234 7.078 DATA JS8` | nothing: a [spot form](#pota-and-sota-spots) |
@@ -861,8 +871,19 @@ New:
   your position, callsign lookup and more, each message filled in
   ([APRS](#aprs)).
 - **Waterfall: Sharp / Light / Medium / Calm** (Settings): rows averaged
-  over time; *Calm*, the default, changes the picture about 4 times less
-  at each step, so the slight flicker as it scrolls is much reduced.
+  over time, so the slight flicker as it scrolls is much reduced. *Light*,
+  the default (the best balance on the air), changes the picture about 2
+  times less at each step; *Calm* about 4 times less.
+- **Count tag on the map:** a white number on a square's corner when
+  several stations share that spot (the same grid square, or the same
+  call area for those without a grid), in the CQ tag's shape
+  ([The map](#the-map)).
+- **`@` in the Stations view:** a station heard passing an APRS message
+  back over JS8 (the answer to your Echo test, an SMS) is an APRS gateway
+  both ways, and shows `@` in place of `*` ([The screen](#the-screen)).
+- **Buttons moved:** *Decode: All speeds / My speed* is a
+  [Settings](#settings) line now, and **Hold** took its place on page 6;
+  page 3's middle slot is free for a feature to come.
 - **A lighter waterfall:** JS8's waterfall is drawn straight onto the
   display's lower layer, as the main screen's is, and the display puts the
   list on top. Measured on the radio, the app's screen thread fell from
@@ -884,7 +905,7 @@ Fixes:
 **Updating from beta 4.1:** copy your DATA files off first as usual
 ([Installing](#installing)) and put them back: beta 5 reads them as they
 are. The new settings start at their defaults (Time: Auto on, Waterfall:
-Calm, Sort: Heard you), and the saved messages start as desktop's
+Light, Sort: Heard you), and the saved messages start as desktop's
 (`TNX 73 GL`, nine empty).
 
 ## New in beta 4.1
@@ -1055,8 +1076,8 @@ are, and its new settings start at their defaults.
   still, e.g. while you transmit). Each new row moves the whole waterfall
   by a pixel and the screen's pixels darken faster than they brighten, so
   the waterfall dims for a moment 15 times a second. Much reduced after
-  4.1 by *Waterfall: Calm* (Settings, the default; also *Medium* and
-  *Light* in between): each step changes the picture about 4 times less.
+  4.1 by the *Waterfall* levels in Settings (*Light*, the default, about 2
+  times less change at each step; *Calm* about 4 times less).
   It doesn't affect decoding.
 - **The radio's clock:** it has no network time and gains a few seconds a
   week. Beta 4.1's Time Sync needed three decodes in two minutes, which a
@@ -1088,8 +1109,6 @@ do for beta 5:
 
 - [ ] **Station history:** QSOs, messages, INFO and STATUS for every
   station, opened by pressing it in the list or on the map
-- [ ] **APRS badge:** `@` in the Stations list for stations that pass APRS
-  messages back over JS8
 - [ ] **GPS** time and location from a USB GPS
 - [ ] ALC for under 1 W into an amplifier
 - [ ] The Murus team's WeFax, NavTex and SSTV, once their fork is on
