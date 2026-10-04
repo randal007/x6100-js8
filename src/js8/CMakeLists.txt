@@ -18,6 +18,7 @@ add_library(JS8 STATIC
     inbox.cpp
     datafile.cpp
     alerts.cpp
+    macros.cpp
     js8_ops.cpp
     js8_rx.cpp
     geo.cpp

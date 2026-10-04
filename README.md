@@ -30,6 +30,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [The map](#the-map)
 - [The buttons](#the-buttons)
 - [Transmitting](#transmitting)
+- [Saved messages](#saved-messages)
 - [Speeds](#speeds)
 - [Messages and the Inbox](#messages-and-the-inbox)
 - [Relays](#relays)
@@ -54,7 +55,8 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - **All four speeds** (Normal, Fast, Turbo, Slow) decoded at once; send at
   any of them.
 - **One-press messages:** CQ, heartbeat, HW CPY?, SNR?, GRID?, INFO?,
-  STATUS?, HEARING?, AGN?, RR, 73.
+  STATUS?, HEARING?, AGN?, RR, 73, and ten **saved messages** of your own
+  with desktop JS8Call's macros (`<CALL>`, `<SNR>`, `<MYGRID4>` ...).
 - **Automatic replies, heartbeats and heartbeat acks**, each an opt-in
   switch, as on desktop.
 - **Inbox** for `MSG` messages, sending messages, and **holding messages
@@ -205,7 +207,12 @@ acknowledged your heartbeat), with the report they gave you ("heard you
 bearing (degrees from north). Calls you've logged are green. Stations
 named in a relay that reached you show *via* the station that passed it
 on, as on desktop. Stations drop off an hour after they were last heard
-(*Stations kept* in [Settings](#settings)).
+(*Stations kept* in [Settings](#settings)). **Sort** (page 3, the second
+button, while the Stations view shows) steps through *Heard you* (who
+heard you first, then the newest: the order to start), *SNR* (strongest
+first), *Time* (newest first) and *Distance* (farthest first; stations
+without a grid last). The choice is remembered, and the selected station
+stays selected.
 
 **Grids** come from heartbeats, CQs and `GRID` replies (`GRID FN42AB`
 anywhere in a message counts too), as on desktop; another grid-shaped word
@@ -296,13 +303,14 @@ to go back a page. In JS8 a hold is half a second.
 |---|---|---|
 | 1 | **CQ** | `CQ CQ CQ <grid>`. Heartbeats carry on (a CQ doesn't pause them; see [Transmitting](#transmitting)). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it; answers and heartbeats sent in between don't move it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
 | 1 | **Heartbeat** | Works as CQ does. Press: one heartbeat now, on your own offset if that is 1000 Hz or below, else at a free spot in the 500–1000 Hz heartbeat sub-band (clear of anything heard in the last 30 s), as desktop; the red band shows where while it waits and goes. **Hold for auto heartbeats**: one now, and the main knob sets the minutes between them (5–30, remembered; press Heartbeat when done, or hold it later to change it). The button then counts down to the next one, or shows *paused* (see [Transmitting](#transmitting)); holding it then carries on at once. Press it while auto is on to switch auto off. None in Turbo. |
-| 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…?, Can anyone reach…? (with no station selected, only that one) |
+| 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…?, Can anyone reach…? (with no station selected, only that one), and **Saved messages >** just before Close ([Saved messages](#saved-messages)) |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. On [the map](#the-map): **All heard / Heard me**. |
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead (each station its own, for 5 minutes). |
 | 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
-| 3 | **Map: Auto / Close-in / World** | Only while [the map](#the-map) shows (blank otherwise): which part of the world it shows. **Hold: Follow** the selected station (you and them framed, the long path too); press to stop. *Time Sync* moved to Settings to make room. |
+| 3 | **Sort: Heard you / SNR / Time / Distance** | In the Stations view: the order of the stations ([The screen](#the-screen)). |
+| 3 | **Map: Auto / Close-in / World** | The same button while [the map](#the-map) shows: which part of the world it shows. **Hold: Follow** the selected station (you and them framed, the long path too); press to stop. Over the messages it's blank. |
 | 3 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
 | 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off when it hasn't been heard for *Stations kept* ([Settings](#settings); an hour to start). |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
@@ -366,6 +374,49 @@ the thing. ESC closes lists too, and the VOL knob works in all of them.
     those. They stay switched on; hold Heartbeat to carry on sooner. After
     an hour without touching the radio, automatic sending pauses until you
     press something.
+
+## Saved messages
+
+Messages you send often, as desktop JS8Call's *Saved Messages*:
+**Query >** (page 1), then **Saved messages >**, just before Close.
+
+![Saved messages](docs/screenshots/14_saved.png)
+
+- **Press** one (the MFK) and it goes out at once, its macros filled in,
+  as desktop sends them from its menu. The message line shows what will be
+  sent as you move through the list. ESC or the top knob stops it.
+- **Hold the MFK** on one to change it: the keyboard opens with the
+  message as you saved it. Enter saves it (empty clears it), ESC leaves it
+  as it was; either way you're back in the list. Press an empty one to
+  write it.
+- There are ten. The first starts as desktop's, `TNX 73 GL`; the rest are
+  empty. They're kept in `js8_saved.txt` on the SD card (one a line), so
+  you can also write them on a PC.
+
+**Macros**, desktop JS8Call's, are filled in when the message goes:
+
+| Macro | Becomes |
+|---|---|
+| `<CALL>` | the selected station's call |
+| `<SNR>` | how you hear the selected station, e.g. `-05` |
+| `<TDELTA>` | the selected station's time offset, e.g. `150 MS` |
+| `<MYCALL>` | your callsign |
+| `<MYGRID4>`, `<MYGRID12>` | your grid, 4 characters or all of it |
+| `<MYINFO>`, `<MYSTATUS>` | your INFO and STATUS ([Settings](#settings)) |
+| `<MYIDLE>` | how long since you last touched the radio, e.g. `5M`, `2H` |
+| `<MYVERSION>` | this program's version |
+| `<MYCQ>`, `<MYHB>`, `<MYREPLY>` | desktop's CQ, heartbeat and reply texts: `CQ CQ CQ <grid>`, `HB <grid>`, `HW CPY?` |
+
+For example, with W1ABC selected and heard at −5, `<CALL> UR <SNR> QTH
+<MYGRID4>` goes out as `W1ABC UR -05 QTH CN89`. Desktop doesn't add the
+selected station's call by itself, and neither does this: put `<CALL>`
+where it belongs. A message with `<CALL>`, `<SNR>` or `<TDELTA>` needs a
+station selected; one with nothing selected is refused (desktop would
+send it with the call left out).
+
+As on desktop, macros also work in messages you type (Reply, Send…; one
+that doesn't apply is sent as typed) and in your INFO and STATUS answers
+(e.g. STATUS `IDLE <MYIDLE> VERSION <MYVERSION>`, desktop's own).
 
 ## Speeds
 
@@ -476,8 +527,8 @@ Page 4 **Settings…**:
 |---|---|
 | **Time Sync now** | Shift JS8's timing to match the last 2 minutes of decodes (needs 3 or more; with 3 or more stations, each counts once), like desktop's time drift; the radio's clock isn't changed (the line shows the drift). Pressing it again right after is safe. Not while sending. It was page 3's button. |
 | **Reset time drift** | Back on the radio's clock. |
-| **INFO: …** | What AUTO sends for INFO? |
-| **STATUS: …** | What AUTO sends for STATUS? |
+| **INFO: …** | What AUTO sends for INFO? ([macros](#saved-messages) work here) |
+| **STATUS: …** | What AUTO sends for STATUS? (macros too) |
 | **Relay: On / Off** | Press to switch. On (the default, as on desktop): relays are passed on and `MSG TO:` messages held for others. Off: both are ignored (desktop's *Disable message relay*). |
 | **Groups: …** | The groups you're in, e.g. `@NET @CANADA` (desktop's *My groups*): messages and questions to them are answered as if to you, and `MSG TO:@NET` messages are held for their members. |
 | **Stations kept: …** | Press to change: how long a station stays in the Stations view after it was last heard (15 min to 6 hours, or always; 1 hour to start). |
@@ -651,6 +702,7 @@ All on the **DATA** partition, readable on a PC:
 | `js8_inbox.txt` | Inbox messages, one per line |
 | `js8_held.txt` | messages held for other stations |
 | `js8_texts.txt` | INFO, STATUS, last POTA/SOTA references, spot frequency/mode/comment, alert words, groups, operator's call |
+| `js8_saved.txt` | your [saved messages](#saved-messages), one a line (an empty line = an empty one) |
 | `params.db`, `qso_log.db` | the radio's settings and QSO database |
 | `incoming_log.adi` | put an ADIF log here to import it (worked-before marks) at the next start |
 
@@ -865,8 +917,10 @@ Beta 5 is being planned; the full list with notes is in
   being tested on the radio. The Murus team's WeFax, NavTex and SSTV come
   back once their fork is on 1.0.2 too
 - [ ] **Station history:** QSOs, messages, INFO and STATUS for every
-  station, opened by pressing it in the list or on the map; a Sort
-  button; a QRZ light on the list and the map
+  station, opened by pressing it in the list or on the map; a QRZ light
+  on the list and the map
+- [x] **Sort** in the Stations view: who heard you first, SNR, time or
+  distance (done after 4.1)
 - [x] **Heartbeats:** keep going while you call CQ, pause only when
   someone answers; hold for Auto like CQ; the TX bar shows the
   heartbeat's frequency
@@ -876,7 +930,9 @@ Beta 5 is being planned; the full list with notes is in
   after 4.1: to be checked on the air)
 - [ ] **APRS badge:** `@` in the Stations list for stations that pass APRS
   messages back over JS8
-- [ ] **Saved messages and macros**, as desktop JS8Call has
+- [x] **[Saved messages](#saved-messages) and macros**, as desktop
+  JS8Call has: ten in the Query list, press to send, hold to edit (done
+  after 4.1)
 - [ ] **GPS** time and location from a USB GPS
 - [x] The green receive bar as wide as the station's speed
 - [ ] ALC for under 1 W into an amplifier

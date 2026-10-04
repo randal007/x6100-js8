@@ -125,6 +125,7 @@ public:
     /// IDLE_MS without one.
     void user_activity(std::int64_t now_ms) { last_user_ms_ = now_ms; }
     bool idle(std::int64_t now_ms) const { return now_ms - last_user_ms_ >= IDLE_MS; }
+    std::int64_t last_user_ms() const { return last_user_ms_; }
 
 private:
     std::map<std::string, std::int64_t> last_sent_; // "@ALLCALL|CALL" -> when; pruned in sent()

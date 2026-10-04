@@ -16,6 +16,7 @@
 #include "qsolog.hpp"
 #include "inbox.hpp"
 #include "alerts.hpp"
+#include "macros.hpp"
 #include "speeds.hpp"
 
 #include <unistd.h>
@@ -3236,6 +3237,99 @@ TEST_CASE("stations C API: the list forgets expired stations as it goes", "[js8]
     js8_stations_reset(s);
     CHECK_FALSE(js8_stations_heard_before(s, "N0XYZ"));
     js8_stations_destroy(s);
+}
+
+TEST_CASE("stations: the Sort button's orders", "[js8][stations]") {
+    auto st = [](const char *call, const char *grid, int snr, std::int64_t heard_ms, bool heard_me) {
+        js8_station_t s{};
+        std::strcpy(s.call, call);
+        std::strcpy(s.grid, grid);
+        s.snr      = (int16_t)snr;
+        s.heard_ms = heard_ms;
+        s.heard_me = heard_me;
+        return s;
+    };
+    // As js8_stations_list() gives them: who heard us first, then newest.
+    const std::vector<js8_station_t> list = {
+        st("K1AAA", "FN42", -15, 5000, true),  // Boston, ~4000 km from CN89
+        st("VE7BBB", "CN89", 2, 9000, false),  // next door
+        st("JA1CCC", "PM95", -20, 7000, false), // Tokyo, ~7600 km
+        st("W7DDD", "", 2, 8000, false),        // no grid
+        st("VK2EEE", "QF56", -8, 6000, false),  // Sydney, ~12500 km
+    };
+    auto order = [&](js8_st_sort_t o, const char *my_grid) {
+        auto v = list;
+        js8_stations_sort(v.data(), (int)v.size(), o, my_grid);
+        std::string calls;
+        for (auto &s : v) calls += std::string(calls.empty() ? "" : " ") + s.call;
+        return calls;
+    };
+    CHECK(order(JS8_ST_SORT_HEARD_ME, "CN89") == "K1AAA VE7BBB JA1CCC W7DDD VK2EEE");
+    // Strongest first; VE7BBB and W7DDD tie at +02 and keep their places.
+    CHECK(order(JS8_ST_SORT_SNR, "CN89") == "VE7BBB W7DDD VK2EEE K1AAA JA1CCC");
+    CHECK(order(JS8_ST_SORT_TIME, "CN89") == "VE7BBB W7DDD JA1CCC VK2EEE K1AAA");
+    // Farthest first, no grid last.
+    CHECK(order(JS8_ST_SORT_DISTANCE, "CN89") == "VK2EEE JA1CCC K1AAA VE7BBB W7DDD");
+    // Without our own grid there's no distance: the list as it came.
+    CHECK(order(JS8_ST_SORT_DISTANCE, "") == "K1AAA VE7BBB JA1CCC W7DDD VK2EEE");
+    js8_station_t one = list[0];
+    js8_stations_sort(&one, 1, JS8_ST_SORT_SNR, "CN89");
+    js8_stations_sort(nullptr, 0, JS8_ST_SORT_SNR, "CN89");
+    CHECK(std::string(one.call) == "K1AAA");
+}
+
+TEST_CASE("macros: desktop JS8Call's, filled in as desktop does", "[js8][macros]") {
+    MacroInput in;
+    in.my_call   = "VE7NHW";
+    in.my_grid   = "cn89kg";
+    in.my_info   = "X6100 5W <MYGRID4>";
+    in.my_status = "IDLE <MYIDLE> VERSION <MYVERSION>"; // desktop's default STATUS
+    in.version   = "X6100 JS8 beta 5";
+    in.idle_ms   = 5 * 60000 + 59000;
+    auto v       = macro_values(in);
+    CHECK(replace_macros("<MYCALL> <MYGRID4> <MYGRID12>", v, false) == "VE7NHW CN89 CN89KG");
+    CHECK(replace_macros("RIG <MYINFO>", v, false) == "RIG X6100 5W CN89");
+    CHECK(replace_macros("<MYSTATUS>", v, false) == "IDLE 5M VERSION X6100 JS8 BETA 5");
+    CHECK(replace_macros("<MYCQ> / <MYHB> / <MYREPLY>", v, false) == "CQ CQ CQ CN89 / HB CN89 / HW CPY?");
+    // Nothing selected: <CALL> and <SNR> stay as typed, or go (prune).
+    CHECK(replace_macros("<CALL> UR <SNR> TNX", v, false) == "<CALL> UR <SNR> TNX");
+    CHECK(replace_macros("<CALL> UR <SNR> TNX", v, true) == " UR  TNX");
+    CHECK(replace_macros("<FOO> <> A<B", v, true) == " <> A<B"); // desktop's regex: <, one or more not >, >
+    CHECK(macros_need_station("<CALL> TNX"));
+    CHECK(macros_need_station("UR <SNR>"));
+    CHECK(macros_need_station("DT <TDELTA>"));
+    CHECK_FALSE(macros_need_station("TNX 73 GL <MYCALL>"));
+
+    in.call      = "w1abc";
+    in.snr       = -5;
+    in.tdelta_ms = 150;
+    v            = macro_values(in);
+    CHECK(replace_macros("<CALL> UR <SNR> DT <TDELTA>", v, true) == "W1ABC UR -05 DT 150 MS");
+    in.snr = 7;
+    CHECK(replace_macros("<SNR>", macro_values(in), true) == "+07");
+    in.snr = -31; // desktop leaves <SNR> out from -31 down
+    CHECK(replace_macros("UR <SNR>", macro_values(in), true) == "UR ");
+
+    CHECK(idle_text(0) == "0M");
+    CHECK(idle_text(59999) == "0M");
+    CHECK(idle_text(60000) == "1M");
+    CHECK(idle_text(2 * 3600000 + 1) == "2H");
+    CHECK(idle_text(3LL * 86400000) == "3D");
+
+    // The C API, as the dialog uses it.
+    js8_macro_values_t c{};
+    c.my_call = "VE7NHW";
+    c.my_grid = "CN89";
+    c.call    = "K2XYZ";
+    c.has_snr = true;
+    c.snr     = -3;
+    char out[64];
+    js8_macros_expand("<CALL> UR <SNR> QTH <MYGRID4>", &c, true, out, sizeof(out));
+    CHECK(std::string(out) == "K2XYZ UR -03 QTH CN89");
+    js8_macros_expand("<MYCALL> <MYCALL> <MYCALL> <MYCALL>", &c, true, out, 12);
+    CHECK(std::string(out) == "VE7NHW VE7N"); // cut to fit
+    CHECK(js8_macros_need_station("<CALL> 73"));
+    CHECK_FALSE(js8_macros_need_station(nullptr));
 }
 
 TEST_CASE("relay stations and command spans for the message list", "[js8][relay]") {

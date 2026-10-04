@@ -202,6 +202,7 @@ static ParamInt *cfg_js8_miles(void) { return param_ref<ParamInt>(cfg_instance()
 static ParamInt *cfg_js8_decode_marks(void) { return param_ref<ParamInt>(cfg_instance().p_js8_decode_marks); }
 static ParamInt *cfg_js8_wf_avg(void) { return param_ref<ParamInt>(cfg_instance().p_js8_wf_avg); }
 static ParamInt *cfg_js8_map_mode(void) { return param_ref<ParamInt>(cfg_instance().p_js8_map_mode); }
+static ParamInt *cfg_js8_st_sort(void) { return param_ref<ParamInt>(cfg_instance().p_js8_st_sort); }
 static ParamInt *cfg_js8_hb_interval(void) { return param_ref<ParamInt>(cfg_instance().p_js8_hb_interval); }
 static ParamInt *cfg_js8_cq_interval(void) { return param_ref<ParamInt>(cfg_instance().p_js8_cq_interval); }
 static ParamInt *cfg_js8_log_prompt(void) { return param_ref<ParamInt>(cfg_instance().p_js8_log_prompt); }
@@ -448,6 +449,7 @@ extern "C" const cfg_refs_t cfg = {
         .decode_marks = &cfg_js8_decode_marks,
         .wf_avg = &cfg_js8_wf_avg,
         .map_mode = &cfg_js8_map_mode,
+        .st_sort = &cfg_js8_st_sort,
         .hb_interval = &cfg_js8_hb_interval,
         .cq_interval = &cfg_js8_cq_interval,
         .log_prompt = &cfg_js8_log_prompt,

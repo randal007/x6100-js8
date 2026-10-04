@@ -96,6 +96,43 @@ int             js8_relay_stations(const js8_rx_msg_t *msg, const char *my_call,
  * its offset and length in text; false if it has none. */
 bool            js8_command_span(const char *text, unsigned *start, unsigned *len);
 
+/* The Stations view's Sort button. */
+typedef enum {
+    JS8_ST_SORT_HEARD_ME, /* js8_stations_list()'s own: who heard you first, then the newest */
+    JS8_ST_SORT_SNR,      /* strongest first */
+    JS8_ST_SORT_TIME,     /* newest first */
+    JS8_ST_SORT_DISTANCE, /* farthest from my_grid first; no grid (theirs or ours) last */
+    JS8_ST_SORT_COUNT,
+} js8_st_sort_t;
+
+/* Put a js8_stations_list() in `order`; stations that tie keep their
+ * place. */
+void            js8_stations_sort(js8_station_t *st, int n, js8_st_sort_t order, const char *my_grid);
+
+/* ---- Macros ----------------------------------------------------------- */
+
+/* Desktop JS8Call's message macros (macros.hpp): <MYCALL> <MYGRID4>
+ * <MYGRID12> <MYINFO> <MYSTATUS> <MYCQ> <MYHB> <MYREPLY> <MYVERSION>
+ * <MYIDLE>, and for the selected station <CALL> <SNR> <TDELTA>. */
+typedef struct {
+    const char *my_call, *my_grid, *my_info, *my_status, *version;
+    int64_t     idle_ms;   /* since the operator last touched the radio */
+    const char *call;      /* the selected station; NULL or "" if none */
+    bool        has_snr;   /* how we hear it */
+    int         snr;
+    bool        has_tdelta; /* its time offset (DT), ms */
+    int         tdelta_ms;
+} js8_macro_values_t;
+
+/* `text` with the macros filled in (in capitals). prune: what's left in
+ * <...> (a macro that doesn't apply, e.g. <CALL> with nothing selected) is
+ * dropped, as desktop does when a saved message is used; else it stays as
+ * typed (desktop's menu labels and the messages it sends). */
+void            js8_macros_expand(const char *text, const js8_macro_values_t *v, bool prune, char *out,
+                                  unsigned out_len);
+/* The text uses <CALL>, <SNR> or <TDELTA>: it needs a selected station. */
+bool            js8_macros_need_station(const char *text);
+
 /* ---- Auto-reply, heartbeat acks, heartbeat timing (T4) --------------- */
 
 typedef struct js8_held js8_held_t;
@@ -190,6 +227,8 @@ void js8_auto_sent(js8_auto_t *a, const js8_auto_result_t *r, int64_t now_ms);
 /* Any key, button or knob; automatic TX stops after an hour without one. */
 void js8_auto_user_activity(js8_auto_t *a, int64_t now_ms);
 bool js8_auto_idle(js8_auto_t *a, int64_t now_ms);
+/* When the last one was (0: none yet), for <MYIDLE>. */
+int64_t js8_auto_last_activity(js8_auto_t *a);
 
 /* Does this message start a QSO with us? */
 bool js8_starts_qso(const js8_rx_msg_t *msg);

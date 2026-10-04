@@ -13,7 +13,9 @@
 #include "commands.hpp"
 #include "datafile.hpp"
 #include "directed.hpp"
+#include "geo.hpp"
 #include "inbox.hpp"
+#include "macros.hpp"
 #include "qsolog.hpp"
 #include "stations.hpp"
 
@@ -176,6 +178,58 @@ extern "C" int js8_relay_stations(const js8_rx_msg_t *msg, const char *my_call, 
         copy_str(out[n++], JS8_RX_CALL_LEN, calls[i]);
     }
     return n;
+}
+
+extern "C" void js8_stations_sort(js8_station_t *st, int n, js8_st_sort_t order, const char *my_grid) {
+    if (!st || n < 2) return;
+    switch (order) {
+    case JS8_ST_SORT_SNR:
+        std::stable_sort(st, st + n, [](const js8_station_t &a, const js8_station_t &b) { return a.snr > b.snr; });
+        break;
+    case JS8_ST_SORT_TIME:
+        std::stable_sort(st, st + n,
+                         [](const js8_station_t &a, const js8_station_t &b) { return a.heard_ms > b.heard_ms; });
+        break;
+    case JS8_ST_SORT_DISTANCE: {
+        auto home = geo::grid_center(my_grid ? my_grid : "");
+        std::vector<std::pair<double, int>> key((std::size_t)n); // km (-1: unknown), place in the list
+        for (int i = 0; i < n; i++) {
+            auto there = home ? geo::grid_center(st[i].grid) : std::nullopt;
+            key[(std::size_t)i] = {there ? geo::distance_km(*home, *there) : -1.0, i};
+        }
+        std::stable_sort(key.begin(), key.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+        std::vector<js8_station_t> sorted((std::size_t)n);
+        for (int i = 0; i < n; i++) sorted[(std::size_t)i] = st[key[(std::size_t)i].second];
+        std::copy(sorted.begin(), sorted.end(), st);
+        break;
+    }
+    default: // JS8_ST_SORT_HEARD_ME: as the list comes
+        break;
+    }
+}
+
+extern "C" void js8_macros_expand(const char *text, const js8_macro_values_t *v, bool prune, char *out,
+                                  unsigned out_len) {
+    if (!out || out_len == 0) return;
+    out[0] = '\0';
+    if (!text) return;
+    MacroInput in;
+    if (v) {
+        in.my_call   = v->my_call ? v->my_call : "";
+        in.my_grid   = v->my_grid ? v->my_grid : "";
+        in.my_info   = v->my_info ? v->my_info : "";
+        in.my_status = v->my_status ? v->my_status : "";
+        in.version   = v->version ? v->version : "";
+        in.idle_ms   = v->idle_ms;
+        in.call      = v->call ? v->call : "";
+        if (v->has_snr) in.snr = v->snr;
+        if (v->has_tdelta) in.tdelta_ms = v->tdelta_ms;
+    }
+    copy_str(out, out_len, replace_macros(text, macro_values(in), prune));
+}
+
+extern "C" bool js8_macros_need_station(const char *text) {
+    return text && macros_need_station(text);
 }
 
 extern "C" bool js8_command_span(const char *text, unsigned *start, unsigned *len) {
@@ -429,6 +483,10 @@ extern "C" void js8_auto_user_activity(js8_auto_t *a, int64_t now_ms) {
 
 extern "C" bool js8_auto_idle(js8_auto_t *a, int64_t now_ms) {
     return a && a->policy.idle(now_ms);
+}
+
+extern "C" int64_t js8_auto_last_activity(js8_auto_t *a) {
+    return a ? a->policy.last_user_ms() : 0;
 }
 
 extern "C" bool js8_starts_qso(const js8_rx_msg_t *msg) {

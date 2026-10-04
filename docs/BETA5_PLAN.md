@@ -60,7 +60,14 @@ heard paused them; [docs/review](review/)).
 - [ ] Full history for every station: QSOs, chat, INFO and STATUS.
 - [ ] Pressing a station (list or map) opens a menu with its past QSOs
   and history.
-- [ ] A Sort button on the Stations list (SNR, last heard ...).
+- [x] A Sort button on the Stations list (SNR, last heard ...). **Done
+  (user's choices):** page 3's second button in the Stations view (blank
+  over the messages, the map's view button on the map): *Sort: Heard you*
+  (as before: who heard you first, then the newest), *SNR* (strongest
+  first), *Time* (newest first), *Distance* (farthest first, no grid
+  last); remembered (`js8_st_sort`); the selected station stays selected.
+  `js8_stations_sort()` (`src/js8/js8_ops.cpp`, unit test), harness
+  ONLY_STSORT. The distance column is wider so 5-digit km fit.
 - [ ] QRZ light on the Stations list and the map, to see at once who is
   calling you. The map already has a QRZ line (calls that sent you a
   message while the map or Stations view was open).
@@ -82,7 +89,22 @@ heard paused them; [docs/review](review/)).
   (`want_id` in `aprs_prepare()`, `src/dialog_js8.c`); SMS and email keep
   theirs.
 - ~~Contact book for SMS~~: dropped (user, 2026-10-04: not worth the complexity).
-- [ ] Saved messages / macros, as desktop JS8Call has.
+- [x] Saved messages / macros, as desktop JS8Call has. **Done (user's
+  choices):** Query > *Saved messages >* just before Close: ten messages
+  (desktop's `TNX 73 GL` to start, as its Settings > Saved Messages);
+  press = send at once (desktop's default, *Immediately transmit ...
+  Saved ... messages*), hold the MFK = edit (Enter saves, empty clears,
+  ESC leaves it), an empty one opens the keyboard; `js8_saved.txt` on
+  DATA. Desktop's macros (JS8Call-improved 44fa092 `buildMacroValues()`
+  / `replaceMacros()`): `<MYCALL> <MYGRID4> <MYGRID12> <MYINFO>
+  <MYSTATUS> <MYCQ> <MYHB> <MYREPLY> <MYVERSION> <MYIDLE>`, and for the
+  selected station `<CALL> <SNR> <TDELTA>`; filled in in saved messages
+  (unknown ones dropped), typed messages (left as typed) and the INFO and
+  STATUS answers, as desktop. One difference: a saved message with
+  `<CALL>` and nothing selected is refused (desktop would send it with
+  the call left out). `src/js8/macros.{hpp,cpp}` (unit tests), harness
+  ONLY_SAVED. Not done: desktop's *Save Current Message* (keyboard ->
+  saved); the user's list is edited in place instead.
 
 ## Screen and radio
 

@@ -90,6 +90,11 @@
 #ifndef JS8_HELD_PATH
 #define JS8_HELD_PATH    "/mnt/js8_held.txt"    /* MSG TO: messages held for others */
 #endif
+#ifndef JS8_SAVED_PATH
+#define JS8_SAVED_PATH   "/mnt/js8_saved.txt"   /* saved messages, one a line (empty: none) */
+#endif
+#define SAVED_N          10     /* saved messages (Query > Saved messages >) */
+#define JS8_APP_VERSION  "X6100 JS8 beta 5" /* <MYVERSION>; desktop's is its version number */
 #ifndef JS8_LOG_PATH
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
@@ -238,6 +243,10 @@ static int         offer_find(const char *call);
 static void        hb_tick(void);
 static int64_t     hb_first_ms(void);
 static void        load_texts(void);
+static void        load_saved(void);
+static void        save_saved(void);
+static void        macros_fill(const char *text, bool prune, char *out, size_t out_len);
+static void        saved_open(int focus);
 static void        data_file_notice(const char *notice);
 static void        save_texts(void);
 static void        compose_open(const char *prefill);
@@ -442,6 +451,11 @@ static int64_t     hb_adjust_ms;     /* last knob turn while adjusting */
 static bool        cq_adjusting;     /* main knob sets the auto CQ interval */
 static int64_t     cq_adjust_ms;
 static char        info_text[TEXT_MAX + 1], status_text[TEXT_MAX + 1];
+/* Saved messages as typed, macros and all (desktop JS8Call's Saved
+ * Messages), JS8_SAVED_PATH. */
+static char        saved_msgs[SAVED_N][TX_TEXT_MAX + 1];
+static bool        saved_writable = true; /* the file couldn't be read or moved: never write over it */
+static int         saved_edit;            /* the one in the keyboard (EDIT_SAVED) */
 static char        last_pota[16], last_sota[24]; /* last park / summit spotted via APRS */
 /* The spot form (APRS > POTA/SOTA spot), remembered in JS8_TEXTS_PATH. */
 static char        spot_mode[8] = "DATA";
@@ -529,6 +543,7 @@ typedef enum {
     EDIT_STATUS,
     EDIT_GROUPS,   /* Settings: the groups we're in */
     EDIT_OPERATOR, /* Settings: the operator, if not the station call */
+    EDIT_SAVED,    /* a saved message (saved_edit), then back to their list */
     EDIT_LOG_GRID, /* the Log popup's fields, then back to it */
     EDIT_LOG_NAME,
     EDIT_LOG_NOTE,
@@ -652,6 +667,7 @@ static button_data_t btn_query = {.type = BTN_TEXT, .label = "Query >", .press =
 static button_data_t btn_clear = {.type = BTN_TEXT, .label = "Clear", .press = clear_cb};
 
 static button_data_t btn_p3        = {.type = BTN_TEXT, .label = "(JS8 3:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_4, .prev = &page_2};
+/* Sort in the Stations view, the map's view on the map. */
 static button_data_t btn_map_view = {.type = BTN_TEXT_FN, .label_fn = map_view_label_getter, .press = map_view_cb, .hold = map_follow_cb};
 static button_data_t btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
 static button_data_t btn_stations  = {.type = BTN_TEXT_FN, .label_fn = stations_label_getter, .press = stations_cb};
@@ -1194,6 +1210,44 @@ static bool selected_station(char *call, size_t call_len, float *freq, int *snr)
     return true;
 }
 
+/* The time offset (DT) of the latest message decoded from `call`. */
+static bool station_dt(const char *call, float *dt) {
+    for (int age = 0; age < hist_count; age++) {
+        int slot = (hist_head - 1 - age + HISTORY) % HISTORY;
+        if (!history[slot].tx && strcasecmp(history[slot].from, call) == 0) {
+            *dt = history[slot].dt;
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Desktop JS8Call's macros (<CALL>, <SNR>, <MYGRID4> ...; js8_ops.h)
+ * filled in: our station, and the selected one. prune: drop the ones that
+ * don't apply (a saved message as it's sent), else leave them as typed. */
+static void macros_fill(const char *text, bool prune, char *out, size_t out_len) {
+    js8_macro_values_t v = {
+        .my_call   = my_call(),
+        .my_grid   = my_grid(),
+        .my_info   = info_text,
+        .my_status = status_text,
+        .version   = JS8_APP_VERSION,
+    };
+    int64_t last = js8_auto_last_activity(autop);
+    v.idle_ms    = last ? now_wall_ms() - last : 0;
+    if (sel_call[0]) {
+        float dt;
+        v.call    = sel_call;
+        v.has_snr = true;
+        v.snr     = sel_snr;
+        if (station_dt(sel_call, &dt)) {
+            v.has_tdelta = true;
+            v.tdelta_ms  = (int)(dt * 1000);
+        }
+    }
+    js8_macros_expand(text, &v, prune, out, (unsigned)out_len);
+}
+
 /* Worked before (the radio's QSO database), per call and band. The
  * Stations view asked the database for every listed station every 5 s and
  * after each decode (bug hunt 17). Forgotten when a QSO is logged here and
@@ -1252,6 +1306,8 @@ static void rebuild_station_rows(void) {
 
     int64_t now = now_wall_ms();
     st_count    = js8_stations_list(stations, now, st_rows, MAX_ROWS);
+    js8_stations_sort(st_rows, st_count, (js8_st_sort_t)(param_i_get(cfg.js8.st_sort()) % JS8_ST_SORT_COUNT),
+                      my_grid());
 
     lv_table_set_row_cnt(table, 1);
     lv_table_set_cell_value(table, 0, 0, "");
@@ -1499,7 +1555,7 @@ static void table_draw_end_cb(lv_event_t *e) {
         {140, offsetof(station_fields_t, speed)}, {162, offsetof(station_fields_t, age)},
         {218, offsetof(station_fields_t, snr)},   {276, offsetof(station_fields_t, heard)},
         {505, offsetof(station_fields_t, grid)},  {588, offsetof(station_fields_t, dist)},
-        {692, offsetof(station_fields_t, az)},
+        {712, offsetof(station_fields_t, az)}, /* "10833 km" needs the room */
     };
 
     lv_area_t area = *dsc->draw_area;
@@ -2628,7 +2684,8 @@ static void rotary_cb(int32_t diff) {
 static void compose_changed_cb(lv_event_t *e) {
     (void)e;
     js8_tx_preview_t pv;
-    const char *typed = textarea_window_get();
+    char        typed[TX_TEXT_MAX * 2];
+    macros_fill(textarea_window_get(), false, typed, sizeof(typed)); /* counted as it goes out */
     js8_tx_preview(my_call(), my_grid(), typed, cur_speed(), &pv);
     if (pv.ok) msg_update_text_fmt("%d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
     /* Why it can't go ("too long: 21 frames (max 20)"), as you type, not
@@ -2719,6 +2776,21 @@ static bool compose_ok_cb(void) {
         compose_close();
         return true;
     }
+    if (edit_target == EDIT_SAVED) {
+        const char *typed = textarea_window_get();
+        typed += strspn(typed, " ");
+        snprintf(saved_msgs[saved_edit], sizeof(saved_msgs[saved_edit]), "%s", typed);
+        for (char *end = saved_msgs[saved_edit] + strlen(saved_msgs[saved_edit]);
+             end > saved_msgs[saved_edit] && end[-1] == ' ';)
+            *--end = '\0';
+        save_saved();
+        edit_target = 0;
+        compose_close();
+        saved_open(saved_edit); /* back to the list, on that one */
+        msg_update_text_fmt(saved_msgs[saved_edit][0] ? "Saved message %d saved" : "Saved message %d cleared",
+                            saved_edit + 1);
+        return true;
+    }
     if (edit_target == EDIT_GROUPS) {
         js8_groups_normalise(textarea_window_get(), groups_text, sizeof(groups_text));
         save_texts();
@@ -2737,8 +2809,11 @@ static bool compose_ok_cb(void) {
         compose_close();
         return true;
     }
-    char text[TX_TEXT_MAX + 8];
-    if (!aprs_prepare(textarea_window_get(), text, sizeof(text))) return false;
+    /* Macros typed in a message are filled in as it goes, as desktop
+     * does; one that doesn't apply (<CALL> with nothing selected) stays. */
+    char typed[TX_TEXT_MAX * 2], text[TX_TEXT_MAX + 8];
+    macros_fill(textarea_window_get(), false, typed, sizeof(typed));
+    if (!aprs_prepare(typed, text, sizeof(text))) return false;
     if (!tx_queue(text)) return false; /* keep the window open */
     aprs_sent_commit(); /* an APRS message with an id: its receipt is expected */
     /* The held message offered on Reply went as offered: it's on its way. */
@@ -2753,6 +2828,12 @@ static bool compose_cancel_cb(void) {
     deliver_pending.id = 0;
     if (edit_target >= EDIT_LOG_GRID) {
         log_edit_done(NULL);
+        return true;
+    }
+    if (edit_target == EDIT_SAVED) { /* unchanged, back to the list */
+        edit_target = 0;
+        compose_close();
+        saved_open(saved_edit);
         return true;
     }
     edit_target = 0;
@@ -2815,6 +2896,7 @@ static void compose_open(const char *prefill) {
                                          : edit_target == EDIT_ALERT_WORDS ? sizeof(alert_words) - 1
                                          : edit_target == EDIT_GROUPS ? sizeof(groups_text) - 1
                                          : edit_target == EDIT_OPERATOR ? sizeof(operator_call) - 1
+                                         : edit_target == EDIT_SAVED ? TX_TEXT_MAX
                                          : edit_target == EDIT_FREQ ? 9
                                          : edit_target == EDIT_SPOT_REF ? (spot_sota ? sizeof(last_sota) : sizeof(last_pota)) - 1
                                          : edit_target == EDIT_SPOT_FREQ ? 10
@@ -2823,7 +2905,7 @@ static void compose_open(const char *prefill) {
                                                                         : TEXT_MAX);
         if (edit_target == EDIT_FREQ || edit_target == EDIT_SPOT_FREQ)
             lv_textarea_set_accepted_chars(text, "0123456789.");
-        lv_obj_remove_event_cb(text, compose_changed_cb);
+        if (edit_target != EDIT_SAVED) lv_obj_remove_event_cb(text, compose_changed_cb); /* frames: a message's only */
         if (edit_target >= EDIT_BEACON_GRID) lv_obj_add_event_cb(text, beacon_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
     }
     if (prefill && prefill[0]) {
@@ -2835,6 +2917,7 @@ static void compose_open(const char *prefill) {
             [EDIT_STATUS]   = " STATUS, e.g. PORTABLE QRV",
             [EDIT_GROUPS]   = " Your groups, e.g. @NET @CANADA",
             [EDIT_OPERATOR] = " Operator's call - empty: the station's",
+            [EDIT_SAVED]    = " Message, e.g. <CALL> TNX FER QSO 73 GL",
             [EDIT_LOG_GRID] = " Their grid, e.g. DN17",
             [EDIT_LOG_NAME] = " Their name",
             [EDIT_LOG_NOTE] = " Comment for the log",
@@ -3197,6 +3280,7 @@ static void construct_cb(lv_obj_t *parent) {
     inbox_refresh_button();
     user_touch();
     load_texts();
+    load_saved();
     hb_next_ms         = 0;
     hb_paused_until    = 0;
     push_next_ms       = 0;
@@ -4444,18 +4528,48 @@ const char *dialog_js8_map_stats(void) {
     return map_stats_label ? lv_label_get_text(map_stats_label) : "";
 }
 
+/* Page 3's second button: Sort in the Stations view, the map's view on
+ * the map, nothing over the messages. */
+static const char *const st_sort_names[JS8_ST_SORT_COUNT] = {"Heard you", "SNR", "Time", "Distance"};
+
+static js8_st_sort_t st_sort(void) {
+    return (js8_st_sort_t)(param_i_get(cfg.js8.st_sort()) % JS8_ST_SORT_COUNT);
+}
+
 static const char *map_view_label_getter(void) {
     static char buf[24];
+    if (!view_map && view_stations) {
+        snprintf(buf, sizeof(buf), "Sort:\n%s", st_sort_names[st_sort()]);
+        return buf;
+    }
     if (!view_map) return ""; /* only while the map shows */
     snprintf(buf, sizeof(buf), "Map:\n%s",
              map_follow ? "Follow" : map_mode_names[param_i_get(cfg.js8.map_mode()) < 3 ? param_i_get(cfg.js8.map_mode()) : 0]);
     return buf;
 }
 
-/* Auto -> Close-in -> World. */
+/* The Stations view: Heard you -> SNR -> Time -> Distance. The station
+ * selected stays selected (rebuild_station_rows keeps the cursor on it). */
+static void st_sort_next(button_data_t *btn) {
+    js8_st_sort_t next = (js8_st_sort_t)((st_sort() + 1) % JS8_ST_SORT_COUNT);
+    param_i_set(cfg.js8.st_sort(), next);
+    buttons_refresh(btn);
+    rebuild_rows();
+    static const char *const what[JS8_ST_SORT_COUNT] = {
+        "Stations: who heard you first, then the newest", "Stations: strongest first",
+        "Stations: newest first", "Stations: farthest first (no grid: last)"};
+    if (next == JS8_ST_SORT_DISTANCE && !my_grid()[0]) msg_update_text_fmt("Distance needs your grid: APP > QTH");
+    else msg_update_text_fmt("%s", what[next]);
+}
+
+/* The map: Auto -> Close-in -> World. */
 static void map_view_cb(button_data_t *btn) {
     user_touch();
     if (popup_guard()) return;
+    if (!view_map && view_stations) {
+        st_sort_next(btn);
+        return;
+    }
     if (!view_map) return;
     if (map_follow) { /* a press leaves Follow, back to the view it was on */
         map_follow = false;
@@ -4510,6 +4624,7 @@ static void show_cb(button_data_t *btn) {
         view_stations = false;
         cursor_freq   = -1;
         if (btn_stations.disp_btn) buttons_refresh(&btn_stations);
+        if (btn_map_view.disp_btn) buttons_refresh(&btn_map_view);
         rebuild_rows();
         msg_update_text_fmt("Messages (%s)", show == SHOW_ALL ? "all" : show == SHOW_DIRECTED ? "directed" : "no HB");
         return;
@@ -4908,6 +5023,7 @@ static void stations_cb(button_data_t *btn) {
     }
     cursor_freq = -1;
     buttons_refresh(btn);
+    if (btn_map_view.disp_btn) buttons_refresh(&btn_map_view); /* Sort, Map: or nothing */
     /* The Stations view ends a lock: the station stays selected, and the
      * knob selects again there. */
     if (view_stations && sel_locked) {
@@ -5079,34 +5195,46 @@ static void query_close_cb(lv_event_t *e) {
     query_close();
 }
 
-static void query_cb(button_data_t *btn) {
-    user_touch();
-    (void)btn;
-    if (query_list) { /* Query > again closes it */
-        query_close();
-        return;
-    }
-    if (popup_guard()) return;
-    if (composing || aprs_list || texts_list) return;
+/* The Query list's and the saved messages' frame, top right over the list. */
+static lv_obj_t *query_list_create(lv_coord_t width, const char *title) {
+    lv_group_remove_obj(table);
+    lv_obj_t *list = lv_list_create(dialog.obj);
+    lv_obj_set_size(list, width, WF_HEIGHT - 10);
+    lv_obj_align(list, LV_ALIGN_TOP_RIGHT, -20, 18);
+    lv_obj_set_style_text_font(list, &sony_24, 0);
+    lv_obj_set_style_bg_color(list, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_border_color(list, lv_color_white(), 0);
+    lv_obj_t *t = lv_list_add_text(list, title);
+    lv_obj_set_style_text_font(t, &sony_22, 0);
+    return list;
+}
+
+/* A gold item at the end: Close, or < Back. */
+static void query_list_end_item(const char *label, lv_event_cb_t cb) {
+    lv_obj_t *b = list_add_item(query_list, label);
+    lv_obj_set_style_text_color(b, lv_color_hex(0xffc040), 0);
+    lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(b, query_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, b);
+}
+
+static void query_saved_cb(lv_event_t *e) {
+    (void)e;
+    popup_leave(&query_list);
+    saved_open(0);
+}
+
+static void query_open(void) {
     char  call[JS8_RX_CALL_LEN];
     float freq;
     int   snr;
     /* No station selected: only what goes to everyone (@ALLCALL). */
     bool have = selected_station(call, sizeof(call), &freq, &snr);
 
-    lv_group_remove_obj(table);
-    query_list = lv_list_create(dialog.obj);
-    lv_obj_set_size(query_list, 300, WF_HEIGHT - 10);
-    lv_obj_align(query_list, LV_ALIGN_TOP_RIGHT, -20, 18);
-    lv_obj_set_style_text_font(query_list, &sony_24, 0);
-    lv_obj_set_style_bg_color(query_list, lv_color_hex(0x202020), 0);
-    lv_obj_set_style_border_color(query_list, lv_color_white(), 0);
-
     char title[40];
     if (have) snprintf(title, sizeof(title), "To %s (%+d dB)", call, snr);
     else snprintf(title, sizeof(title), "To @ALLCALL"); /* no station selected */
-    lv_obj_t *t = lv_list_add_text(query_list, title);
-    lv_obj_set_style_text_font(t, &sony_22, 0);
+    query_list = query_list_create(300, title);
 
     lv_obj_t *first = NULL;
     for (int q = 0; have && q < JS8_Q_COUNT; q++) {
@@ -5125,15 +5253,169 @@ static void query_cb(button_data_t *btn) {
         lv_group_add_obj(keyboard_group, b);
         if (!first) first = b;
     }
+    /* Just before Close, with or without a station selected. */
+    lv_obj_t *saved = list_add_item(query_list, "Saved messages >");
+    lv_obj_add_event_cb(saved, query_saved_cb, LV_EVENT_CLICKED, NULL);
+    lv_obj_add_event_cb(saved, query_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, saved);
     /* Last, so one step back from the first item (the group wraps). */
-    lv_obj_t *close = list_add_item(query_list, "Close");
-    lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
-    lv_obj_add_event_cb(close, query_close_cb, LV_EVENT_CLICKED, NULL);
-    lv_obj_add_event_cb(close, query_key_cb, LV_EVENT_KEY, NULL);
-    lv_group_add_obj(keyboard_group, close);
+    query_list_end_item("Close", query_close_cb);
     lv_group_set_editing(keyboard_group, false);
     lv_group_focus_obj(first);
     speed_warn();
+}
+
+static void query_cb(button_data_t *btn) {
+    user_touch();
+    (void)btn;
+    if (query_list) { /* Query > again closes it */
+        query_close();
+        return;
+    }
+    if (popup_guard()) return;
+    if (composing || aprs_list || texts_list) return;
+    query_open();
+}
+
+/* ---- Saved messages --------------------------------------------------- */
+
+/* Desktop JS8Call's Saved Messages: texts you send often, with macros
+ * (<CALL>, <SNR>, <MYGRID4> ...) filled in as they go. Query > Saved
+ * messages >: press one to send it at once (desktop's default), hold the
+ * MFK on it to edit it. Desktop starts with "TNX 73 GL". */
+
+static void load_saved(void) {
+    memset(saved_msgs, 0, sizeof(saved_msgs));
+    char buf[SAVED_N * (TX_TEXT_MAX + 2) + 64], notice[160];
+    saved_writable = js8_file_read(JS8_SAVED_PATH, buf, sizeof(buf), notice, sizeof(notice));
+    data_file_notice(notice);
+    if (saved_writable && access(JS8_SAVED_PATH, F_OK) != 0) { /* none saved yet */
+        snprintf(saved_msgs[0], sizeof(saved_msgs[0]), "TNX 73 GL");
+        return;
+    }
+    /* One a line, empty lines for empty slots; capitals, as typed here. */
+    char *p = buf;
+    for (int i = 0; i < SAVED_N && *p; i++) {
+        char *nl = strchr(p, '\n');
+        if (nl) *nl = '\0';
+        p[strcspn(p, "\r")] = '\0';
+        snprintf(saved_msgs[i], sizeof(saved_msgs[i]), "%s", p);
+        for (char *c = saved_msgs[i]; *c; c++)
+            if (*c >= 'a' && *c <= 'z') *c = (char)(*c - 'a' + 'A');
+        if (!nl) break;
+        p = nl + 1;
+    }
+}
+
+static void save_saved(void) {
+    if (!saved_writable) {
+        msg_update_text_fmt("Not saved: %s can't be read or moved (check the SD card)", JS8_SAVED_PATH);
+        return;
+    }
+    char   buf[SAVED_N * (TX_TEXT_MAX + 2) + 64];
+    size_t n = 0;
+    buf[0]   = '\0';
+    for (int i = 0; i < SAVED_N; i++) n += snprintf(buf + n, sizeof(buf) - n, "%s\n", saved_msgs[i]);
+    if (!js8_file_write(JS8_SAVED_PATH, buf)) msg_update_text_fmt("Can't write %s", JS8_SAVED_PATH);
+}
+
+/* Into the keyboard with saved message i; Enter saves it, ESC leaves it. */
+static void saved_edit_open(int i) {
+    saved_edit = i;
+    if (popup_to_keyboard(&query_list, EDIT_SAVED, saved_msgs[i]))
+        msg_update_text_fmt("Message %d: Enter saves, empty clears. Macros: <CALL> <SNR> <TDELTA> <MYCALL> "
+                            "<MYGRID4> <MYGRID12> <MYINFO> <MYSTATUS> <MYIDLE> <MYVERSION>",
+                            i + 1);
+}
+
+/* Press: send it now, macros filled in. An empty one: write it. */
+static void saved_item_cb(lv_event_t *e) {
+    int i = (int)(intptr_t)lv_event_get_user_data(e);
+    user_touch();
+    if (!saved_msgs[i][0]) {
+        saved_edit_open(i);
+        return;
+    }
+    char  call[JS8_RX_CALL_LEN];
+    float freq;
+    int   snr;
+    bool  have = selected_station(call, sizeof(call), &freq, &snr);
+    /* Desktop would send it with <CALL> left out: not to nobody here. */
+    if (!have && js8_macros_need_station(saved_msgs[i])) {
+        msg_update_text_fmt("Select a station first: message %d has <CALL>, <SNR> or <TDELTA>", i + 1);
+        return;
+    }
+    char text[TX_TEXT_MAX * 2];
+    macros_fill(saved_msgs[i], true, text, sizeof(text));
+    char *t = text + strspn(text, " ");
+    for (char *end = t + strlen(t); end > t && end[-1] == ' ';) *--end = '\0';
+    if (!*t) {
+        msg_update_text_fmt("Nothing to send: message %d has only macros that are empty now", i + 1);
+        return;
+    }
+    query_close();
+    if (have) apply_hold(freq);
+    tx_queue(t);
+}
+
+/* Hold the MFK: edit it. */
+static void saved_hold_cb(lv_event_t *e) {
+    int i = (int)(intptr_t)lv_event_get_user_data(e);
+    user_touch();
+    /* The MFK's release would otherwise land in the keyboard as Enter. */
+    lv_indev_t *indev = lv_indev_get_act();
+    if (indev) lv_indev_wait_release(indev);
+    saved_edit_open(i);
+}
+
+/* The message line says what a press would send. */
+static void saved_focus_cb(lv_event_t *e) {
+    int i = (int)(intptr_t)lv_event_get_user_data(e);
+    if (!saved_msgs[i][0]) {
+        msg_update_text_fmt("Message %d is empty: press or hold to write one", i + 1);
+        return;
+    }
+    if (!sel_call[0] && js8_macros_need_station(saved_msgs[i])) {
+        msg_update_text_fmt("%d: %s (select a station first)", i + 1, saved_msgs[i]);
+        return;
+    }
+    char text[TX_TEXT_MAX * 2];
+    macros_fill(saved_msgs[i], true, text, sizeof(text));
+    msg_update_text_fmt("%d: %s", i + 1, text);
+}
+
+static void saved_back_cb(lv_event_t *e) {
+    (void)e;
+    popup_leave(&query_list);
+    query_open();
+}
+
+/* The ten in the Query list's place (wider: messages are long), focus on
+ * `focus`; < Back to the Query list. */
+static void saved_open(int focus) {
+    query_list = query_list_create(560, "Saved messages: press sends, hold edits");
+    lv_obj_t *items[SAVED_N];
+    for (int i = 0; i < SAVED_N; i++) {
+        char label[TX_TEXT_MAX * 2 + 8], text[TX_TEXT_MAX * 2];
+        if (saved_msgs[i][0]) {
+            macros_fill(saved_msgs[i], false, text, sizeof(text)); /* as desktop's menu shows them */
+            snprintf(label, sizeof(label), "%d  %s", i + 1, text);
+        } else {
+            snprintf(label, sizeof(label), "%d  (empty)", i + 1);
+        }
+        lv_obj_t *b = items[i] = list_add_item(query_list, label);
+        lv_label_set_long_mode(lv_obj_get_child(b, -1), LV_LABEL_LONG_DOT); /* one line, never scrolling */
+        if (!saved_msgs[i][0]) lv_obj_set_style_text_color(b, lv_color_hex(0x909090), 0);
+        lv_obj_add_event_cb(b, saved_item_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(b, saved_hold_cb, LV_EVENT_LONG_PRESSED, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(b, saved_focus_cb, LV_EVENT_FOCUSED, (void *)(intptr_t)i);
+        lv_obj_add_event_cb(b, query_key_cb, LV_EVENT_KEY, NULL);
+        lv_group_add_obj(keyboard_group, b);
+    }
+    query_list_end_item("< Back", saved_back_cb);
+    query_list_end_item("Close", query_close_cb);
+    lv_group_set_editing(keyboard_group, false);
+    lv_group_focus_obj(items[focus >= 0 && focus < SAVED_N ? focus : 0]);
 }
 
 /* For tools/js8_ui_harness: Waterfall: Sharp (0) .. Calm (3), as Settings. */
@@ -5183,6 +5465,20 @@ unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max) {
     return n;
 }
 
+/* For tools/js8_ui_harness: the Stations view's calls in row order, the
+ * cursor's with a '>'; how many stations are listed. */
+int dialog_js8_station_rows(char *out, unsigned len) {
+    out[0] = '\0';
+    if (!table || !view_stations) return 0;
+    uint16_t cur = 0, col = 0;
+    lv_table_get_selected_cell(table, &cur, &col);
+    size_t n = 0;
+    for (uint16_t r = 0; r < rows && n < len; r++)
+        if (row_hist[r] >= 0)
+            n += snprintf(out + n, len - n, "%s%s%s", n ? " " : "", r == cur ? ">" : "", st_rows[row_hist[r]].call);
+    return st_count;
+}
+
 /* For tools/js8_ui_harness: does message-list row `row` have the green bar? */
 bool dialog_js8_row_marked(unsigned row) {
     return table && row < rows && row_is_selected_station(row_hist[row]);
@@ -5211,6 +5507,10 @@ static unsigned heard_stations(js8_heard_t *out, unsigned max) {
 
 /* The switches as they are now, for deciding again at send time. */
 static js8_auto_settings_t auto_settings(void) {
+    /* Their macros filled in, as desktop answers INFO? and STATUS?. */
+    static char info_now[TX_TEXT_MAX + 1], status_now[TX_TEXT_MAX + 1];
+    macros_fill(info_text, true, info_now, sizeof(info_now));
+    macros_fill(status_text, true, status_now, sizeof(status_now));
     js8_auto_settings_t st = {
         .autoreply = param_i_get(cfg.js8.auto_mode()),
         .heartbeat = param_i_get(cfg.js8.hb()) && !hb_paused(),
@@ -5218,8 +5518,8 @@ static js8_auto_settings_t auto_settings(void) {
         .relay     = param_i_get(cfg.js8.relay()),
         .my_call   = my_call(),
         .my_grid   = my_grid(),
-        .info      = info_text,
-        .status    = status_text,
+        .info      = info_now,
+        .status    = status_now,
         .groups    = groups_text,
         .held      = held,
     };

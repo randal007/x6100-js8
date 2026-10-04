@@ -51,6 +51,7 @@ void ui_indevs_init(void);
 int  ui_kb_select_ok(void);
 void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
+int  dialog_js8_station_rows(char *out, unsigned len);
 int  dialog_js8_finder_hz(void);
 void ui_main_redraw_watch(void);
 bool ui_main_redraw_due(void);
@@ -483,6 +484,8 @@ int main() {
         fclose(f);
         chmod(JS8_TEXTS_PATH, 0);
     }
+    // Saved messages start as desktop's ("TNX 73 GL") when there's no file.
+    if (getenv("ONLY_SAVED")) unlink(JS8_SAVED_PATH);
     ui_open();
     if (stub_audio_rate() != RATE) printf("[harness] FAIL: JS8 asked for %u Hz audio, the harness feeds %d\n", stub_audio_rate(), RATE);
     if (getenv("ONLY_GEN")) {
@@ -2277,6 +2280,244 @@ int main() {
         ui_press(4);
         wait_tx();
         printf("[held] HW CPY? sent: %d\n", ui_list_has("W1ABC HW CPY?"));
+        return 0;
+    }
+    if (getenv("ONLY_SAVED")) {
+        // Query > Saved messages > (just before Close): ten messages, the
+        // first desktop's TNX 73 GL. A press of the MFK sends one at once
+        // with its macros filled in; holding the MFK edits it (Enter saves,
+        // empty clears, ESC leaves it); an empty one opens the keyboard.
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        auto focus_on = [&](const char *text) {
+            for (int i = 0; i < 40 && !strstr(ui_focused_text(), text); i++) ui_key(LV_KEY_RIGHT);
+            return strstr(ui_focused_text(), text) != nullptr;
+        };
+        auto mfk = [&](int ms) { // the real knob: a press, or a hold
+            ui_mfk_set(true);
+            pump(ms);
+            ui_mfk_set(false);
+            pump(300);
+        };
+        auto open_saved = [&]() {
+            ui_page(1);
+            ui_press(3); // Query >
+            pump(200);
+            focus_on("Saved messages");
+            ui_click_focused();
+            pump(300);
+        };
+        auto file_lines = [&]() {
+            std::string all;
+            FILE       *f = fopen(JS8_SAVED_PATH, "r");
+            if (!f) return std::string("(no file)");
+            char line[256];
+            while (fgets(line, sizeof(line), f)) all += std::string(line, strcspn(line, "\n")) + "|";
+            fclose(f);
+            return all;
+        };
+        std::string texts_before; // INFO is changed below: put the file back at the end
+        if (FILE *f = fopen(JS8_TEXTS_PATH, "r")) {
+            char buf[4096];
+            texts_before.assign(buf, fread(buf, 1, sizeof(buf), f));
+            fclose(f);
+        }
+        pump(300);
+        ui_indevs_init();
+
+        ui_page(1);
+        ui_press(3); // Query >, nothing selected
+        pump(200);
+        ui_key(LV_KEY_LEFT); // wraps to Close
+        ui_key(LV_KEY_LEFT);
+        printf("[saved] before Close: '%s' (want Saved messages >)\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[saved] list: focused '%s' (want 1  TNX 73 GL), 9 empty: %d, title: %d\n", ui_focused_text(),
+               ui_popup_has("10  (empty)"), ui_popup_has("press sends, hold edits"));
+        printf("[saved] message line '%s' (want 1: TNX 73 GL)\n", stub_last_msg);
+        screenshot("s0_saved_list.ppm");
+        ui_key(LV_KEY_LEFT);
+        printf("[saved] before the first: '%s' (want Close), then '", ui_focused_text());
+        ui_key(LV_KEY_LEFT);
+        printf("%s' (want < Back)\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[saved] Back: the Query list, on '%s' (want Can anyone reach...?)\n", ui_focused_text());
+        ui_key(LV_KEY_ESC);
+        pump(200);
+
+        // A press of the MFK sends it at once.
+        open_saved();
+        mfk(100);
+        printf("[saved] pressed: list closed %d (want 1), '%s'\n", ui_focus_is_table(), stub_last_msg);
+        wait_tx();
+        printf("[saved] sent TNX 73 GL: %d (want 1)\n", ui_list_has("TNX 73 GL"));
+
+        // Hold the MFK on the empty second one: the keyboard, empty; the
+        // knob's release doesn't press Enter in it.
+        open_saved();
+        ui_key(LV_KEY_RIGHT);
+        printf("[saved] on '%s' (want 2  (empty))\n", ui_focused_text());
+        mfk(900);
+        printf("[saved] hold: focus %s, text '%s' (want empty), placeholder '%s'\n", ui_focus_desc(), ui_compose_text(),
+               ui_compose_placeholder());
+        printf("[saved] hint '%s'\n", stub_last_msg);
+        ui_compose_append("<CALL> UR <SNR> QTH <MYGRID4>");
+        printf("[saved] while typing: '%s' (frames, macros counted filled in)\n", stub_last_msg);
+        screenshot("s1_saved_edit.ppm");
+        ui_compose_enter();
+        pump(300);
+        printf("[saved] Enter: back in the list on '%s' (want 2  <CALL> UR <SNR> QTH FN42), '%s'\n", ui_focused_text(),
+               stub_last_msg);
+
+        // Nothing selected: refused, the list stays.
+        ui_click_focused();
+        pump(200);
+        printf("[saved] no station: '%s', list still open: %d (want 1)\n", stub_last_msg, !ui_focus_is_table());
+        ui_key(LV_KEY_ESC);
+        pump(200);
+
+        // A station selected: <CALL> and <SNR> filled in, sent at once.
+        feed_band({{"N0XYZ", "EN34", "@ALLCALL", "@ALLCALL CQ CQ CQ EN34", 1320, 0.05f}});
+        ui_select_row_from("N0XYZ");
+        open_saved();
+        ui_key(LV_KEY_RIGHT);
+        printf("[saved] selected N0XYZ: '%s'\n", ui_focused_text());
+        printf("[saved] message line '%s'\n", stub_last_msg);
+        screenshot("s2_saved_selected.ppm");
+        mfk(100);
+        wait_tx();
+        printf("[saved] sent with macros: %d (want 1)\n", ui_list_has("N0XYZ UR ") == 1 && ui_list_has("QTH FN42") == 1);
+
+        // Hold then ESC: unchanged. Hold, clear, Enter: emptied.
+        open_saved();
+        mfk(900);
+        printf("[saved] editing '%s' (want TNX 73 GL)\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(300);
+        printf("[saved] ESC: on '%s' (want 1  TNX 73 GL)\n", ui_focused_text());
+        mfk(900);
+        ui_compose_clear();
+        ui_compose_enter();
+        pump(300);
+        printf("[saved] cleared: on '%s' (want 1  (empty)), '%s'\n", ui_focused_text(), stub_last_msg);
+        // An empty one: a press writes it.
+        ui_click_focused();
+        pump(300);
+        printf("[saved] press on empty: focus %s, placeholder '%s'\n", ui_focus_desc(), ui_compose_placeholder());
+        ui_compose_append("73 DE <MYCALL>");
+        ui_compose_enter();
+        pump(300);
+        printf("[saved] written: '%s' (want 1  73 DE K2XYZ)\n", ui_focused_text());
+        ui_key(LV_KEY_ESC);
+        pump(200);
+        printf("[saved] file: %s\n", file_lines().c_str());
+
+        // Kept when JS8 opens again.
+        dialog_destruct();
+        pump(300);
+        ui_open();
+        pump(300);
+        open_saved();
+        printf("[saved] reopened: '%s' (want 1  73 DE K2XYZ), second kept: %d\n", ui_focused_text(),
+               ui_popup_has("UR ") == 1);
+        ui_key(LV_KEY_ESC);
+        pump(200);
+
+        // Macros typed in a message (Send...), as desktop fills them in.
+        ui_page(2);
+        ui_press(3); // Send...
+        pump(300);
+        ui_compose_append("@ALLCALL <MYGRID4> <NOSUCH> TEST");
+        ui_compose_enter();
+        wait_tx();
+        printf("[saved] typed macros: %d (want 1)\n", ui_list_has("@ALLCALL FN42 <NOSUCH> TEST"));
+
+        // INFO with a macro: answered (offered on Reply, AUTO off) filled in.
+        ui_page(4);
+        ui_press(4); // Settings...
+        pump(200);
+        for (int i = 0; i < 14 && strncmp(ui_focused_text(), "INFO", 4) != 0; i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        pump(300);
+        ui_compose_clear();
+        ui_compose_append("X6100 QTH <MYGRID4>");
+        ui_compose_enter();
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ INFO?", 1320, 0.05f}});
+        pump(6000);
+        ui_select_row_from("N0XYZ");
+        ui_page(2);
+        ui_press(2); // Reply: the answer offered
+        pump(300);
+        printf("[saved] INFO answer offered: '%s' (want N0XYZ INFO X6100 QTH FN42)\n", ui_compose_text());
+        ui_compose_cancel();
+        pump(300);
+        if (FILE *f = fopen(JS8_TEXTS_PATH, "w")) {
+            fwrite(texts_before.data(), 1, texts_before.size(), f);
+            fclose(f);
+        }
+        return 0;
+    }
+    if (getenv("ONLY_STSORT")) {
+        // Page 3's second button in the Stations view: Sort, Heard you ->
+        // SNR -> Time -> Distance (from FN42AB). The selected station stays
+        // selected. Over the messages it's blank; on the map, the map's.
+        auto rows_now = [&]() {
+            static char buf[256];
+            dialog_js8_station_rows(buf, sizeof(buf));
+            return (const char *)buf;
+        };
+        pump(300);
+        // Older: VK2EEE's heartbeat, K1AAA calling us (no grid heard).
+        feed_band({{"VK2EEE", "QF56", "@HB", "@HB HEARTBEAT QF56", 700, 0.03f},
+                   {"K1AAA", "FN42", "K2XYZ", "K2XYZ HELLO", 1500, 0.012f}});
+        // Newer, a slot later: JA1CCC's CQ (strong), VE7BBB's heartbeat.
+        feed_band({{"JA1CCC", "PM95", "@ALLCALL", "@ALLCALL CQ CQ CQ PM95", 1100, 0.2f},
+                   {"VE7BBB", "CN89", "@HB", "@HB HEARTBEAT CN89", 1900, 0.06f}});
+        pump(1000);
+        ui_select_row_from("JA1CCC");
+        ui_page(3);
+        printf("[stsort] messages: button 2 '%s' (want empty)\n", ui_button_label(1));
+        ui_press(3); // Show Stations
+        pump(300);
+        for (int i = 0; i < 4 && !strstr(ui_button_label(1), "Heard you"); i++) {
+            ui_press(1);
+            pump(300);
+        }
+        printf("[stsort] %-24s %s\n", "Sort: Heard you", rows_now());
+        screenshot("t0_sort_heard.ppm");
+        for (int k = 0; k < 3; k++) {
+            ui_press(1);
+            pump(300);
+            std::string label = ui_button_label(1);
+            for (auto &c : label) c = c == '\n' ? ' ' : c;
+            printf("[stsort] %-24s %s   '%s'\n", label.c_str(), rows_now(), stub_last_msg);
+            char shot[32];
+            snprintf(shot, sizeof(shot), "t%d_sort.ppm", k + 1);
+            screenshot(shot);
+        }
+        char sel[16] = "";
+        dialog_js8_selected_call(sel, sizeof(sel));
+        printf("[stsort] still selected: %s (want JA1CCC)\n", sel);
+        ui_press(1); // round to Heard you
+        pump(300);
+        printf("[stsort] round again: '%s'\n", ui_button_label(1));
+        ui_press(3); // Show Map
+        pump(500);
+        printf("[stsort] map: button 2 '%s' (want Map:)\n", ui_button_label(1));
+        ui_press(3); // back to the messages
+        pump(300);
+        printf("[stsort] messages again: button 2 '%s' (want empty)\n", ui_button_label(1));
         return 0;
     }
     if (getenv("ONLY_QUERYCALL")) {
