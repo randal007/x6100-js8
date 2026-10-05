@@ -17,9 +17,12 @@ the radio's firmware, next to the FT8 and RTTY apps.
 > heartbeats are switches you turn on.
 >
 > **This manual describes the latest code** (beta 5 in progress). New since
-> 4.1: automatic time sync from every decode, saved messages with desktop's
-> macros, Sort and QRZ in the Stations view, high-SWR protection, an APRS
-> Echo test and services list, and a lighter, calmer waterfall
+> 4.1: a **station History** (every station you've exchanged messages with,
+> their INFO, STATUS and QSO texts, an all-time list and map per band),
+> automatic time sync from every decode, saved messages with desktop's
+> macros, Sort, QRZ and an `@` for two-way APRS gateways in the Stations
+> view, a count on stacked map squares, high-SWR protection, an APRS Echo
+> test and services list, and a lighter, calmer waterfall
 > ([New in beta 5 so far](#new-in-beta-5-so-far)). They're in test builds
 > now and in the next release.
 
@@ -86,11 +89,17 @@ the radio's firmware, next to the FT8 and RTTY apps.
   radio's clock is too far off for anything to decode.
 - **A Stations view** of who is on and who heard you, sorted as you like
   (heard you, SNR, time, distance), with a **QRZ** line naming who called
-  you while you weren't reading the messages.
+  you while you weren't reading the messages, and `@` on stations that
+  pass APRS messages back over JS8.
+- **A station history:** everyone you've exchanged messages with, per band,
+  kept for good, with their latest INFO and STATUS and the text of every
+  QSO; an all-time list and map per band, and a History page for each
+  station at a press of the MFK.
 - **High-SWR protection** for an unattended station: over 3:1 while
   sending switches every automatic sender off, with three beeps.
 - **A map** of the stations heard, in GridTracker's style: paths to who
-  heard you, new stations popping up, your continent or the world.
+  heard you, new stations popping up, a count where several share a
+  square, your continent or the world.
 - **A calm waterfall:** four levels of averaging (Settings), drawn straight
   onto the display's lower layer so it costs the radio very little.
 - **Decode marks** on the waterfall (optional), as desktop's *Show decode
@@ -955,8 +964,10 @@ Fixes:
 **Updating from beta 4.1:** copy your DATA files off first as usual
 ([Installing](#installing)) and put them back: beta 5 reads them as they
 are. The new settings start at their defaults (Time: Auto on, Waterfall:
-Light, Sort: Heard you), and the saved messages start as desktop's
-(`TNX 73 GL`, nine empty).
+Light, Sort: Heard you), the saved messages start as desktop's
+(`TNX 73 GL`, nine empty), and the [History](#history) starts empty: it
+fills from your first exchange with this build (a new file,
+`js8_history.db`; copy it off with the rest when you update).
 
 ## New in beta 4.1
 
