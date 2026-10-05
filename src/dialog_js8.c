@@ -1332,6 +1332,12 @@ static const char *dial_band(void) {
     return js8_log_band((uint64_t)cparam_i_get(cfg.cur.fg_freq()));
 }
 
+/* The band as the screens name it: "40m", or "Custom" off the amateur
+ * bands (a CB frequency has none). */
+static const char *band_name(const char *band) {
+    return band && band[0] ? band : "Custom";
+}
+
 static void ever_from_live(js8_station_t *row, const js8_station_t *live) {
     row->heard_ms = live->heard_ms;
     row->snr      = live->snr;
@@ -3107,14 +3113,12 @@ static void format_khz(int32_t hz, char *buf, size_t size) {
     if (*end == '.') *end = '\0';
 }
 
-/* What the top bar and the info rows call where we are. */
+/* What the top bar, the message line and the info rows call where we are:
+ * the preset ("JS8 20m"), or just "JS8 Custom" on your own frequency (a CB
+ * frequency said "JS8 10m", the nearest preset's band: VE7NHW). */
 static const char *where_label(void) {
-    static char buf[32];
     if (!param_i_get(cfg.js8.custom_on())) return cfg_digital_label_get();
-    char khz[16];
-    format_khz(param_i_get(cfg.js8.custom_hz()), khz, sizeof(khz));
-    snprintf(buf, sizeof(buf), "JS8 %s kHz", khz);
-    return buf;
+    return "JS8 Custom";
 }
 
 /* JS8 always runs in USB-D (the mode keys are locked while it's open).
@@ -3245,10 +3249,12 @@ static void construct_cb(lv_obj_t *parent) {
     mem_save(MEM_BACKUP_ID);
     load_band(0); /* also sets the mode */
     if (param_i_get(cfg.js8.custom_on())) {
-        if (param_i_get(cfg.js8.custom_hz()) >= CUSTOM_MIN_HZ && param_i_get(cfg.js8.custom_hz()) <= CUSTOM_MAX_HZ)
+        if (param_i_get(cfg.js8.custom_hz()) >= CUSTOM_MIN_HZ && param_i_get(cfg.js8.custom_hz()) <= CUSTOM_MAX_HZ) {
             cparam_i_set(cfg.cur.fg_freq(), param_i_get(cfg.js8.custom_hz()));
-        else
+            msg_update_text_fmt("%s", where_label()); /* not the preset load_band() just named */
+        } else {
             param_i_set(cfg.js8.custom_on(), false);
+        }
     }
     js8_usb_dig(); /* a custom frequency on another band loaded that band's mode */
 
@@ -5424,7 +5430,7 @@ static void ever_cb(button_data_t *btn) {
     map_qrz_show();
     if (st_all_time)
         msg_update_text_fmt("All time on %s: %d station%s you've exchanged messages with; press the MFK on one for its history",
-                            dial_band(), ever_count, ever_count == 1 ? "" : "s");
+                            band_name(dial_band()), ever_count, ever_count == 1 ? "" : "s");
     else msg_update_text_fmt("Recent: stations heard lately");
     rebuild_rows();
 }
@@ -7198,7 +7204,7 @@ static void hpage_open(const char *call, int64_t qso_id) {
                 format_when(q[i].start_ms, when, sizeof(when));
                 band = q[i].band;
             }
-        snprintf(line, sizeof(line), "%s  %s  %s", call, when, band);
+        snprintf(line, sizeof(line), "%s  %s  %s", call, when, band_name(band));
         lv_obj_t *t = lv_list_add_text(hpage_list, line);
         lv_obj_set_style_text_font(t, &sony_22, 0);
         int n = js8_history_lines(history_db, qso_id, l, HPAGE_LINES);
@@ -7238,12 +7244,12 @@ static void hpage_open(const char *call, int64_t qso_id) {
             char first_s[24], last_s[24];
             format_when(c.first_ms, first_s, sizeof(first_s));
             format_when(c.last_ms, last_s, sizeof(last_s));
-            int len = snprintf(line, sizeof(line), "%s: first %s, last %s", band, first_s, last_s);
+            int len = snprintf(line, sizeof(line), "%s: first %s, last %s", band_name(band), first_s, last_s);
             if (c.heard_us_ms && c.has_reported_snr)
                 snprintf(line + len, sizeof(line) - len, "; heard you %+03d", c.reported_snr);
             hpage_text(line, 0xc8c8c8);
         } else {
-            snprintf(line, sizeof(line), "No messages exchanged on %s yet", band);
+            snprintf(line, sizeof(line), "No messages exchanged on %s yet", band_name(band));
             hpage_text(line, 0xc8c8c8);
         }
         for (int kind = 0; kind < 2; kind++) {
@@ -7266,7 +7272,7 @@ static void hpage_open(const char *call, int64_t qso_id) {
         for (int i = 0; i < nq; i++) {
             hpage_ids[i] = q[i].id;
             format_when(q[i].start_ms, when, sizeof(when));
-            snprintf(line, sizeof(line), "%s   %s   %d message%s%s", when, q[i].band, q[i].lines,
+            snprintf(line, sizeof(line), "%s   %s   %d message%s%s", when, band_name(q[i].band), q[i].lines,
                      q[i].lines == 1 ? "" : "s", q[i].logged ? "   logged" : "");
             lv_obj_t *b = hpage_item(line, hpage_qso_cb, (void *)(intptr_t)i, false);
             if (!first) first = b;
@@ -8910,7 +8916,13 @@ static void freq_show(void) {
     lv_obj_set_style_bg_color(freq_list, lv_color_hex(0x202020), 0);
     lv_obj_set_style_border_color(freq_list, lv_color_white(), 0);
     char line[64];
-    snprintf(line, sizeof(line), "Now: %s", where_label());
+    if (param_i_get(cfg.js8.custom_on())) {
+        char khz[16];
+        format_khz(param_i_get(cfg.js8.custom_hz()), khz, sizeof(khz));
+        snprintf(line, sizeof(line), "Now: JS8 Custom, %s kHz", khz);
+    } else {
+        snprintf(line, sizeof(line), "Now: %s", where_label());
+    }
     lv_obj_t *t = lv_list_add_text(freq_list, line);
     lv_obj_set_style_text_font(t, &sony_22, 0);
 

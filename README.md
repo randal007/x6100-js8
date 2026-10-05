@@ -47,6 +47,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
+- [Since beta 4.6](#since-beta-46)
 - [New in beta 4.6](#new-in-beta-46)
 - [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
@@ -909,6 +910,18 @@ version or the new one; a `.tmp` left behind is
 picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
+
+## Since beta 4.6
+
+In test builds, for the next release:
+
+- **The transmit level ramps up live:** while the ALC reads zero the drive
+  rises smoothly within the transmission and holds as soon as the ALC
+  shows, so it's right within the first transmission or two instead of
+  creeping up a little each time ([Transmitting](#transmitting)).
+- **A custom frequency says "JS8 Custom"** on the status line, the message
+  line and the info rows (a CB frequency used to show the nearest
+  preset's band, "JS8 10m"); the Frequencies list still shows the kHz.
 
 ## New in beta 4.6
 

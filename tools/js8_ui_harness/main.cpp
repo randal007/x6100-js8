@@ -2061,7 +2061,7 @@ int main() {
         pump(300);
         printf("[freq] custom: '%s' dial %d (want 7110500), list focus %d\n", dialog_js8_freq_name(), stub_dial_hz(),
                ui_focus_is_table());
-        printf("[freq] info row: %d\n", ui_list_has("JS8 7110.5 kHz"));
+        printf("[freq] info row: %d (want 1: JS8 Custom), message '%s'\n", ui_list_has("JS8 Custom"), stub_last_msg);
         screenshot("46_freq_custom.ppm");
 
         // Out of range: nothing changes.
@@ -3053,6 +3053,8 @@ int main() {
         // band last used in USB: the app must still run in USB-D (the mode
         // keys are locked while it's open). A beta tester on CB was stuck in USB.
         pump(300);
+        // A CB frequency is no amateur band: the [msg] lines above end with
+        // "JS8 Custom", not the nearest preset's band (VE7NHW: "JS8 10m").
         printf("[mode] opened: dial %d, mode %d (want 27245000, %d USB-D)\n", stub_dial_hz(), stub_mode(),
                stub_usb_dig());
         open_freq();

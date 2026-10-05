@@ -391,6 +391,14 @@ heard paused them; [docs/review](review/)).
 
 ## Bugs
 
+- [x] **A custom frequency showed the wrong band** (user, 2026-10-05: a CB
+  frequency said "JS8 10m"). Opening JS8 with a custom frequency saved,
+  load_band(0) tuned the nearest preset first and its message named that
+  preset; where_label() now says "JS8 Custom" for any custom frequency
+  (status, message line, info rows), the open path repeats it after the
+  custom tune, the Frequencies list keeps the kHz ("Now: JS8 Custom, 27245
+  kHz"), and the History screens name an off-band frequency "Custom".
+
 - [x] **Can they reach...? (QUERY CALL)** only works when you type the `?`
   yourself after the call (the one thing that failed in on-air testing). Desktop sends `CALL QUERY CALL W1ABC?`: add
   the `?` for you. **Done:** `query_call_question()` (`src/js8/directed.cpp`),
