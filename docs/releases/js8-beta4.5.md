@@ -2,7 +2,7 @@
 
 Beta 4.5 brings a **station History**, **automatic time sync**, **saved messages with macros**, a smarter Stations view and map, **high-SWR protection**, more **APRS** services, a lighter and calmer **waterfall**, and a USB keyboard that works when you plug it in with the radio on.
 
-![A station's History page](https://raw.githubusercontent.com/randal007/x6100-js8/js8-beta4.5/docs/screenshots/16_history.png)
+![WB8PLB's History page on the radio](https://raw.githubusercontent.com/randal007/x6100-js8/js8-beta4.5/docs/screenshots/16_history.png)
 
 ### Install
 
@@ -48,6 +48,20 @@ Beta 4.5 brings a **station History**, **automatic time sync**, **saved messages
 
 - **GPS** time and location from a USB GPS
 - **A Bluetooth keyboard** tried with JS8
+
+### On the air
+
+A 40 m QSO with WB8PLB, kept in the History (12 messages, logged), and opened to read:
+
+![WB8PLB's History page](https://raw.githubusercontent.com/randal007/x6100-js8/js8-beta4.5/docs/screenshots/17_history_qso.png)
+
+The map on 40 m: blue paths to the stations that heard VE7NHW, white count tags where several share a square:
+
+![The map with count tags](https://raw.githubusercontent.com/randal007/x6100-js8/js8-beta4.5/docs/screenshots/18_map_counts.png)
+
+The World view on 20 m with DX heard (HB9BV in Switzerland selected) and the band's other QSOs as grey lines:
+
+![The World view](https://raw.githubusercontent.com/randal007/x6100-js8/js8-beta4.5/docs/screenshots/19_map_world.png)
 
 See the [manual](https://github.com/randal007/x6100-js8#readme) for how to use everything.
 

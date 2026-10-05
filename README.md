@@ -354,6 +354,9 @@ white border.
   without a grid at their call area's, so on a busy band several hide
   under one square; `3` says there are three. It counts what the map
   shows (with *Heard me*, only those).
+
+  ![On the radio, 40 m: paths to those who heard VE7NHW, count tags where several share a square, N3DNA selected](docs/screenshots/18_map_counts.png)
+
 - **Grey lines:** other stations talking to each other (`W7XYZ: K9DEF
   HW CPY?`), a relay's hops too, fading out over 10 minutes; drawn when
   both ends are on the map.
