@@ -227,6 +227,14 @@ static void        heartbeat_cb(button_data_t *btn);
 static void        query_cb(button_data_t *btn);
 static const char *hold_label_getter(void);
 static void        hold_cb(button_data_t *btn);
+static const char *ever_label_getter(void);
+static void        ever_cb(button_data_t *btn);
+static void        hpage_close(void);
+static bool        starts_with_call(const char *text, char *call, size_t len);
+static void        ever_merge(const char *call);
+static void        ever_load(void);
+static void        hclear_tick(void);
+static void        hpage_open(const char *call, int64_t qso_id);
 static const char *stations_label_getter(void);
 static void        stations_cb(button_data_t *btn);
 static void        query_close(void);
@@ -402,6 +410,9 @@ static int64_t now_mono_ms(void);
 static char map_qrz[MAP_QRZ][JS8_RX_CALL_LEN];
 static int  map_qrz_n;
 static js8_station_t  st_rows[MAX_ROWS];
+static bool           st_all_time;          /* Stations view and map: the history's stations of this band (Heard: All time) */
+static js8_station_t  ever_rows[MAX_ROWS];  /* those, from the station history (ever_load), newest first */
+static int            ever_count;
 static int            st_count;
 static lv_obj_t      *query_list;      /* Query popup, when open */
 static lv_obj_t      *aprs_list;       /* APRS popup, when open */
@@ -520,6 +531,8 @@ static struct {
 static int activity_head;
 static int               edit_target;        /* 0 compose, else an edit_t */
 static lv_obj_t         *texts_list;
+static lv_obj_t         *hpage_list; /* a station's History page */
+static lv_obj_t         *hclear_btn; /* Settings' Clear station history line, while open */
 
 /* Every list popup: whether it's open and how it closes. any_popup(),
  * close_popups() and destruct_cb() all go through this table, so a popup
@@ -531,6 +544,7 @@ static const struct {
 } popups[] = {
     {&query_list, query_close}, {&texts_list, texts_close},   {&aprs_list, aprs_close}, {&log_list, log_close},
     {&inbox_list, inbox_close}, {&alerts_list, alerts_close}, {&freq_list, freq_close}, {&spot_list, spot_close},
+    {&hpage_list, hpage_close},
 };
 #define POPUPS (sizeof(popups) / sizeof(popups[0]))
 
@@ -681,8 +695,11 @@ static button_data_t btn_inbox     = {.type = BTN_TEXT_FN, .label_fn = inbox_lab
 
 static buttons_page_t page_1 = {{&btn_p1, &btn_cq, &btn_hb, &btn_query, &btn_hw_cpy}};
 static buttons_page_t page_2 = {{&btn_p2, &btn_show, &btn_reply, &btn_send, &btn_clear}};
-/* Slot 2 is free: Hold moved to page 6 (where Decode was; Decode is in Settings). */
-static buttons_page_t page_3 = {{&btn_p3, &btn_map_view, NULL, &btn_stations, &btn_inbox}};
+/* Heard: Recent / All time in the Stations view and on the map; over the
+ * messages, Show History (the Stations view in All time). Hold took page
+ * 6's Decode slot to make room for it. */
+static button_data_t btn_ever = {.type = BTN_TEXT_FN, .label_fn = ever_label_getter, .press = ever_cb};
+static buttons_page_t page_3 = {{&btn_p3, &btn_map_view, &btn_ever, &btn_stations, &btn_inbox}};
 
 static button_data_t btn_p4     = {.type = BTN_TEXT, .label = "(JS8 4:6)", .press = js8_next_page_cb, .hold = js8_prev_page_cb, .next = &page_5, .prev = &page_3};
 static button_data_t btn_auto   = {.type = BTN_TEXT_FN, .label_fn = auto_label_getter, .press = auto_cb};
@@ -988,6 +1005,10 @@ static void process_message(js8_rx_msg_t *m) {
     js8_stations_add(stations, m, my_call(), now_wall_ms());
     if (m->tx) return;
     js8_history_rx(history_db, m, my_call(), (uint64_t)cparam_i_get(cfg.cur.fg_freq()), stations, now_wall_ms());
+    if (st_all_time) {
+        ever_merge(m->from);
+        if (view_stations) rebuild_station_rows();
+    }
     if (param_i_get(cfg.js8.relay())) { /* stations a relay to us came through, as desktop lists them */
         char via_calls[4][JS8_RX_CALL_LEN], via[JS8_RX_CALL_LEN];
         int  n = js8_relay_stations(m, my_call(), via_calls, 4, via, sizeof(via));
@@ -1133,7 +1154,9 @@ static void format_age(int64_t ms, char *buf, size_t size) {
     int64_t min = ms / 60000;
     if (min <= 0) snprintf(buf, size, "now");
     else if (min < 60) snprintf(buf, size, "%dm", (int)min);
-    else snprintf(buf, size, "%dh", (int)(min / 60));
+    else if (min < 48 * 60) snprintf(buf, size, "%dh", (int)(min / 60));
+    else if (min < 14 * 24 * 60) snprintf(buf, size, "%dd", (int)(min / (24 * 60)));
+    else snprintf(buf, size, "%dw", (int)(min / (7 * 24 * 60)));
 }
 
 /* Station-view fields, drawn in fixed columns by table_draw_end_cb() since
@@ -1298,6 +1321,73 @@ static void worked_forget(void) {
     memset(worked_cache, 0, sizeof(worked_cache));
 }
 
+/* ---- Heard: All time -------------------------------------------------
+ *
+ * The Stations view (and the map) can list every station of this band you
+ * have ever exchanged messages with, from the station history, instead of
+ * those heard in the last hour. Loaded once (button, band change); new
+ * messages update the copy here, so the file isn't read again. A station
+ * not heard now has no offset (freq_hz -1). */
+
+static const char *dial_band(void) {
+    return js8_log_band((uint64_t)cparam_i_get(cfg.cur.fg_freq()));
+}
+
+static void ever_from_live(js8_station_t *row, const js8_station_t *live) {
+    row->heard_ms = live->heard_ms;
+    row->snr      = live->snr;
+    row->freq_hz  = live->freq_hz;
+    row->submode  = live->submode;
+    if (live->grid[0]) snprintf(row->grid, sizeof(row->grid), "%s", live->grid);
+    if (live->heard_me && live->heard_me_ms >= row->heard_me_ms) {
+        row->heard_me    = true;
+        row->heard_me_ms = live->heard_me_ms;
+        if (live->has_reported_snr) {
+            row->has_reported_snr = true;
+            row->reported_snr     = live->reported_snr;
+        }
+    }
+    row->aprs_gate |= live->aprs_gate;
+}
+
+static void ever_load(void) {
+    static js8_hist_contact_t c[MAX_ROWS];
+    int     n   = js8_history_contacts(history_db, dial_band(), c, MAX_ROWS);
+    int64_t now = now_wall_ms();
+    ever_count  = 0;
+    for (int i = 0; i < n; i++) {
+        js8_station_t *r = &ever_rows[ever_count++];
+        memset(r, 0, sizeof(*r));
+        snprintf(r->call, sizeof(r->call), "%s", c[i].call);
+        snprintf(r->grid, sizeof(r->grid), "%s", c[i].grid);
+        r->heard_ms         = c[i].heard_ms > c[i].last_ms ? c[i].heard_ms : c[i].last_ms;
+        r->snr              = c[i].snr;
+        r->freq_hz          = -1;
+        r->heard_me         = c[i].heard_us_ms > 0;
+        r->heard_me_ms      = c[i].heard_us_ms;
+        r->has_reported_snr = c[i].has_reported_snr;
+        r->reported_snr     = c[i].reported_snr;
+        js8_station_t live;
+        if (js8_stations_find(stations, r->call, now, &live)) ever_from_live(r, &live); /* on the air now */
+    }
+}
+
+/* A message from or to `call`: its row brought up to date, or added if
+ * this was your first exchange with them on this band. */
+static void ever_merge(const char *call) {
+    if (!st_all_time || !call || !call[0]) return;
+    if (!js8_history_known(history_db, call, (uint64_t)cparam_i_get(cfg.cur.fg_freq()))) return;
+    js8_station_t live;
+    if (!js8_stations_find(stations, call, now_wall_ms(), &live)) return;
+    for (int i = 0; i < ever_count; i++)
+        if (strcasecmp(ever_rows[i].call, call) == 0) {
+            ever_from_live(&ever_rows[i], &live);
+            return;
+        }
+    if (ever_count >= MAX_ROWS) return;
+    ever_rows[ever_count++] = live;
+}
+
 static void rebuild_station_rows(void) {
     /* Keep the cursor on the same station while the list re-sorts. */
     char  keep[JS8_RX_CALL_LEN] = "";
@@ -1306,14 +1396,20 @@ static void rebuild_station_rows(void) {
     if (!selected_station(keep, sizeof(keep), &f, &n)) keep[0] = '\0';
 
     int64_t now = now_wall_ms();
-    st_count    = js8_stations_list(stations, now, st_rows, MAX_ROWS);
+    if (st_all_time) {
+        st_count = ever_count;
+        memcpy(st_rows, ever_rows, sizeof(st_rows[0]) * (size_t)ever_count);
+    } else {
+        st_count = js8_stations_list(stations, now, st_rows, MAX_ROWS);
+    }
     js8_stations_sort(st_rows, st_count, (js8_st_sort_t)(param_i_get(cfg.js8.st_sort()) % JS8_ST_SORT_COUNT),
                       my_grid());
 
     lv_table_set_row_cnt(table, 1);
     lv_table_set_cell_value(table, 0, 0, "");
     rows = 0;
-    if (st_count == 0) append_row("No stations heard yet", -1);
+    if (st_count == 0)
+        append_row(st_all_time ? "No stations in the history on this band yet" : "No stations heard yet", -1);
 
     int keep_row = 0;
     for (int i = 0; i < st_count; i++) {
@@ -1620,7 +1716,10 @@ static void select_at_cursor(bool announce) {
     qso_freq = freq;
     sel_snr  = snr;
     show_selection();
-    if (announce) msg_update_text_fmt("%s at %.0f Hz, %+d dB", call, freq, snr);
+    if (announce) {
+        if (freq > 0) msg_update_text_fmt("%s at %.0f Hz, %+d dB", call, freq, snr);
+        else msg_update_text_fmt("%s: not heard on this frequency lately", call);
+    }
 }
 
 static void clear_selection(void) {
@@ -1651,6 +1750,16 @@ static void table_press_cb(lv_event_t *e) {
         msg_update_text_fmt("%s unlocked", sel_call);
     }
     select_at_cursor(true);
+}
+
+/* A short press in the Stations view or on the map: the station's
+ * history. (After a hold, LVGL sends this too: the table is the group's
+ * only object.) */
+static void table_short_click_cb(lv_event_t *e) {
+    (void)e;
+    char call[JS8_RX_CALL_LEN];
+    if (press_held || !view_stations || !cursor_call(call, sizeof(call))) return;
+    hpage_open(call, 0);
 }
 
 /* Held (about half a second, LVGL's long press plus one repeat): lock the
@@ -2372,7 +2481,13 @@ static void ui_tx_status(void *arg) {
         snprintf(last_tx_text, sizeof(last_tx_text), "%s", st->text);
         /* The history keeps automatic ones too: an HB ACK is an exchange. */
         js8_history_tx(history_db, m.text, my_call(), (uint64_t)cparam_i_get(cfg.cur.fg_freq()), st->offset_hz,
-                       m.submode, tx_auto, stations, now_wall_ms());
+                       m.submode, tx_auto, sel_call, stations, now_wall_ms());
+        char        to[JS8_RX_CALL_LEN];
+        const char *body = strstr(m.text, ": "); /* "MYCALL: W1ABC ..." */
+        if (st_all_time && starts_with_call(body ? body + 2 : m.text, to, sizeof(to))) {
+            ever_merge(to);
+            if (view_stations) rebuild_station_rows();
+        }
         /* Only what you send is your side of a QSO: an unattended station
          * answering SNR? and hearing "TNX 73" hasn't had one. */
         char ended[JS8_RX_CALL_LEN];
@@ -2450,6 +2565,7 @@ static void tx_timer_cb(lv_timer_t *t) {
     (void)t;
     static unsigned ticks;
     swr_guard_tick();
+    hclear_tick();
     update_tx_bar();
     /* Keep the status clock moving; decode cycles, which also refresh it,
      * pause while we transmit. */
@@ -2629,6 +2745,7 @@ static bool tx_queue(const char *text) {
  * on ours, which is JS8 etiquette. */
 static void apply_hold(float their_freq) {
     if (param_i_get(cfg.js8.hold_offset())) return;
+    if (their_freq <= 0) return; /* from the history, not heard now: no offset to go to */
     int f = (int)(their_freq + 0.5f);
     if (f < JS8_TX_MIN_OFFSET) f = JS8_TX_MIN_OFFSET;
     if (f > js8_speed_max_offset_hz(cur_speed())) f = js8_speed_max_offset_hz(cur_speed());
@@ -3041,6 +3158,7 @@ static void retuned(void) {
     js8_rx_clear(rx);
     bool ended = partials_end();
     stations   = stations_for_band(); /* that band's list, as we left it */
+    if (st_all_time) ever_load();      /* and that band's history */
     js8_wf_clear();
     wf_queue_clear();
     marks_reset();
@@ -3248,6 +3366,7 @@ static void construct_cb(lv_obj_t *parent) {
     lv_obj_add_event_cb(table, table_press_cb, LV_EVENT_PRESSED, NULL);
     lv_obj_add_event_cb(table, table_select_cb, LV_EVENT_VALUE_CHANGED, NULL);
     lv_obj_add_event_cb(table, table_hold_cb, LV_EVENT_LONG_PRESSED_REPEAT, NULL);
+    lv_obj_add_event_cb(table, table_short_click_cb, LV_EVENT_SHORT_CLICKED, NULL);
     lv_obj_add_event_cb(table, table_key_pre_cb, LV_EVENT_KEY | LV_EVENT_PREPROCESS, NULL);
     lv_obj_add_event_cb(table, key_cb, LV_EVENT_KEY, NULL);
     lv_obj_add_event_cb(table, table_draw_cb, LV_EVENT_DRAW_PART_BEGIN, NULL);
@@ -4328,7 +4447,7 @@ static void map_update(bool force) {
         shown[i] = js8_map_place(st->call, st->grid, &pl[i]) && (!map_heard_me_only || st->heard_me || sel || qso[i]);
         if (!shown[i]) continue;
         int64_t mins = (wall - st->heard_ms) / 60000;
-        age[i]       = (uint8_t)LV_CLAMP(0, mins * 8 / MAP_FADE_MIN, 8);
+        age[i]       = st_all_time ? 0 : (uint8_t)LV_CLAMP(0, mins * 8 / MAP_FADE_MIN, 8); /* All time: no fading */
         grow[i]      = (int8_t)LV_CLAMP(-2, (st->snr + 10 + 60) / 6 - 10, 3); /* -24 dB -2 px ... +8 dB +3 px */
         new_kind[i]  = (uint8_t)js8_map_new_kind(st->call, st->grid, NULL, 0);
         cq[i]        = cq_heard_on(st->call, now);
@@ -5233,6 +5352,7 @@ static void stations_cb(button_data_t *btn) {
         map_show(false);
         map_qrz_n = 0; /* the list shows what they sent */
         view_stations = false;
+        st_all_time   = false; /* Show Stations is Recent; Show History is All time */
     } else if (view_stations) {
         map_show(true);
     } else {
@@ -5241,6 +5361,7 @@ static void stations_cb(button_data_t *btn) {
     cursor_freq = -1;
     buttons_refresh(btn);
     if (btn_map_view.disp_btn) buttons_refresh(&btn_map_view); /* Sort, Map: or nothing */
+    if (btn_ever.disp_btn) buttons_refresh(&btn_ever);
     map_qrz_show(); /* the QRZ line: over the Stations view or the map, not the messages */
     /* The Stations view ends a lock: the station stays selected, and the
      * knob selects again there. */
@@ -5249,6 +5370,44 @@ static void stations_cb(button_data_t *btn) {
         msg_update_text_fmt("%s unlocked", sel_call);
         update_tx_bar();
     }
+    rebuild_rows();
+}
+
+static const char *ever_label_getter(void) {
+    if (!view_stations) return "Show\nHistory";
+    return st_all_time ? "Heard:\nAll time" : "Heard:\nRecent";
+}
+
+/* Over the messages: the Stations view in All time. In the Stations view
+ * or on the map: Recent <-> All time. */
+static void ever_cb(button_data_t *btn) {
+    user_touch();
+    if (popup_guard()) return;
+    if (!history_db) {
+        msg_update_text_fmt("No station history: js8_history.db on the SD card couldn't be opened");
+        return;
+    }
+    bool from_messages = !view_stations;
+    if (from_messages) {
+        view_stations = true;
+        st_all_time   = true;
+        cursor_freq   = -1;
+        if (sel_locked) {
+            sel_locked = false;
+            update_tx_bar();
+        }
+    } else {
+        st_all_time = !st_all_time;
+    }
+    if (st_all_time) ever_load();
+    buttons_refresh(btn);
+    if (btn_stations.disp_btn) buttons_refresh(&btn_stations);
+    if (btn_map_view.disp_btn) buttons_refresh(&btn_map_view);
+    map_qrz_show();
+    if (st_all_time)
+        msg_update_text_fmt("All time on %s: %d station%s you've exchanged messages with; press the MFK on one for its history",
+                            dial_band(), ever_count, ever_count == 1 ? "" : "s");
+    else msg_update_text_fmt("Recent: stations heard lately");
     rebuild_rows();
 }
 
@@ -6196,6 +6355,7 @@ static void save_texts(void) {
 }
 
 static void texts_close(void) {
+    hclear_btn = NULL;
     if (!texts_list) return;
     lv_obj_del_async(texts_list);
     texts_list = NULL;
@@ -6220,6 +6380,17 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_TRESET   106 /* 105 was Time Sync now: the Time button (page 4) now */
 #define SETTINGS_WF       107
 #define SETTINGS_DECODE   108
+#define SETTINGS_HCLEAR   109 /* clear the station history: press, then again within HCLEAR_MS */
+#define HCLEAR_MS         5000
+
+static int64_t   hclear_armed_ms; /* the first press (monotonic), 0: not armed */
+
+/* Five seconds on without the second press: the line as it was. */
+static void hclear_tick(void) {
+    if (!hclear_armed_ms || now_mono_ms() - hclear_armed_ms < HCLEAR_MS) return;
+    hclear_armed_ms = 0;
+    if (texts_list && hclear_btn) lv_label_set_text(lv_obj_get_child(hclear_btn, 0), "Clear station history...");
+}
 
 static const char *relay_label(void) {
     return param_i_get(cfg.js8.relay()) ? "Relay: On" : "Relay: Off";
@@ -6241,6 +6412,13 @@ static const char *settings_label(int which) {
     case SETTINGS_MILES: return param_i_get(cfg.js8.miles()) ? "Distance: miles" : "Distance: km";
     case SETTINGS_MARKS: return param_i_get(cfg.js8.decode_marks()) ? "Decode marks: On" : "Decode marks: Off";
     case SETTINGS_DECODE: return param_i_get(cfg.js8.rx_all()) ? "Decode: All speeds" : "Decode: My speed";
+    case SETTINGS_HCLEAR:
+        if (hclear_armed_ms && now_mono_ms() - hclear_armed_ms < HCLEAR_MS) {
+            int n = js8_history_station_count(history_db);
+            snprintf(buf, sizeof(buf), "Press again: clear %d station%s", n, n == 1 ? "" : "s");
+            return buf;
+        }
+        return "Clear station history...";
     case SETTINGS_WF:
         snprintf(buf, sizeof(buf), "Waterfall: %s", wf_avg_name[param_i_get(cfg.js8.wf_avg()) % WF_AVG_LEVELS]);
         return buf;
@@ -6312,6 +6490,24 @@ static void texts_item_cb(lv_event_t *e) {
         case SETTINGS_DECODE:
             decode_toggle();
             break;
+        case SETTINGS_HCLEAR:
+            /* Everything, every band, for good: a second press within 5 s. */
+            if (!history_db) {
+                msg_update_text_fmt("No station history: js8_history.db on the SD card couldn't be opened");
+            } else if (hclear_armed_ms && now_mono_ms() - hclear_armed_ms < HCLEAR_MS) {
+                hclear_armed_ms = 0;
+                js8_history_clear(history_db);
+                if (st_all_time) {
+                    ever_load();
+                    if (view_stations) rebuild_station_rows();
+                }
+                msg_update_text_fmt("Station history cleared: every station, INFO, STATUS and QSO, every band");
+                add_info_row("Station history cleared");
+            } else {
+                hclear_armed_ms = now_mono_ms();
+                msg_update_text_fmt("Clear the whole station history (every band)? Press again within 5 s; it can't be undone");
+            }
+            break;
         }
         lv_label_set_text(lv_obj_get_child(lv_event_get_target(e), 0), settings_label(which));
         return;
@@ -6374,6 +6570,8 @@ static void texts_cb(button_data_t *btn) {
     settings_add(settings_label(SETTINGS_DECODE), SETTINGS_DECODE);
     settings_add(settings_label(SETTINGS_MARKS), SETTINGS_MARKS);
     settings_add(settings_label(SETTINGS_WF), SETTINGS_WF);
+    hclear_armed_ms = 0;
+    hclear_btn      = settings_add(settings_label(SETTINGS_HCLEAR), SETTINGS_HCLEAR);
     snprintf(label, sizeof(label), "Operator: %s", operator_call[0] ? operator_call : "(the station call)");
     settings_add(label, EDIT_OPERATOR);
 
@@ -6857,6 +7055,203 @@ static void aprs_open(bool more) {
     lv_group_add_obj(keyboard_group, close);
     lv_group_set_editing(keyboard_group, false);
     lv_group_focus_obj(first);
+}
+
+/* ---- A station's History page ------------------------------------------
+ *
+ * An MFK press on a station in the Stations view or on the map: what the
+ * station history knows of them. Their grid and distance, when you first
+ * and last exchanged messages on this band and how they heard you, their
+ * latest INFO and STATUS with how old they are, then the QSOs, newest
+ * first (heartbeat-only exchanges left out); a QSO opens to its messages,
+ * time-stamped. */
+
+#define HPAGE_QSOS  64
+#define HPAGE_LINES 120
+
+static char    hpage_call[JS8_RX_CALL_LEN];
+static int64_t hpage_ids[HPAGE_QSOS];
+static int64_t hpage_back_qso; /* focused again when back from reading it */
+
+/* "Oct 4 19:57Z"; another year: "Oct 4 2025". */
+static void format_when(int64_t ms, char *buf, size_t size) {
+    static const char *const mon[12] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun",
+                                        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"};
+    time_t    t = (time_t)(ms / 1000), now = (time_t)(now_wall_ms() / 1000);
+    struct tm tm, tn;
+    gmtime_r(&t, &tm);
+    gmtime_r(&now, &tn);
+    if (tm.tm_year == tn.tm_year) snprintf(buf, size, "%s %d %02d:%02dZ", mon[tm.tm_mon], tm.tm_mday, tm.tm_hour, tm.tm_min);
+    else snprintf(buf, size, "%s %d %d", mon[tm.tm_mon], tm.tm_mday, tm.tm_year + 1900);
+}
+
+static void hpage_close(void) {
+    if (!hpage_list) return;
+    lv_obj_del_async(hpage_list);
+    hpage_list = NULL;
+    if (table && !composing) {
+        lv_group_add_obj(keyboard_group, table);
+        lv_group_focus_obj(table);
+        lv_group_set_editing(keyboard_group, true);
+    }
+}
+
+static void hpage_close_cb(lv_event_t *e) {
+    (void)e;
+    hpage_close();
+}
+
+static void hpage_key_cb(lv_event_t *e) {
+    popup_key(e, hpage_close);
+}
+
+static void hpage_qso_cb(lv_event_t *e) {
+    int i          = (int)(intptr_t)lv_event_get_user_data(e);
+    hpage_back_qso = hpage_ids[i];
+    char call[JS8_RX_CALL_LEN];
+    snprintf(call, sizeof(call), "%s", hpage_call);
+    hpage_close();
+    hpage_open(call, hpage_back_qso);
+}
+
+static void hpage_back_cb(lv_event_t *e) {
+    (void)e;
+    char call[JS8_RX_CALL_LEN];
+    snprintf(call, sizeof(call), "%s", hpage_call);
+    hpage_close();
+    hpage_open(call, 0);
+}
+
+/* A line of text, wrapped, not a button. */
+static lv_obj_t *hpage_text(const char *text, uint32_t color) {
+    lv_obj_t *t = lv_list_add_text(hpage_list, text);
+    lv_label_set_long_mode(t, LV_LABEL_LONG_WRAP);
+    lv_obj_set_style_text_font(t, &sony_22, 0);
+    lv_obj_set_style_text_color(t, lv_color_hex(color), 0);
+    lv_obj_set_style_bg_opa(t, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_pad_ver(t, 3, 0);
+    return t;
+}
+
+static lv_obj_t *hpage_item(const char *text, lv_event_cb_t cb, void *data, bool wrap) {
+    lv_obj_t *b = list_add_item(hpage_list, text);
+    lv_obj_set_style_text_font(b, &sony_22, 0);
+    if (wrap) lv_label_set_long_mode(lv_obj_get_child(b, 0), LV_LABEL_LONG_WRAP);
+    if (cb) lv_obj_add_event_cb(b, cb, LV_EVENT_CLICKED, data);
+    lv_obj_add_event_cb(b, hpage_key_cb, LV_EVENT_KEY, NULL);
+    lv_group_add_obj(keyboard_group, b);
+    return b;
+}
+
+/* `qso_id` 0: the page; else that QSO's messages. */
+static void hpage_open(const char *call, int64_t qso_id) {
+    if (!history_db) {
+        msg_update_text_fmt("No station history: js8_history.db on the SD card couldn't be opened");
+        return;
+    }
+    snprintf(hpage_call, sizeof(hpage_call), "%s", call);
+    lv_group_remove_obj(table);
+    hpage_list = lv_list_create(dialog.obj);
+    lv_obj_set_size(hpage_list, 740, WF_HEIGHT - 10);
+    lv_obj_align(hpage_list, LV_ALIGN_TOP_MID, 0, 18);
+    lv_obj_set_style_text_font(hpage_list, &sony_22, 0);
+    lv_obj_set_style_bg_color(hpage_list, lv_color_hex(0x202020), 0);
+    lv_obj_set_style_border_color(hpage_list, lv_color_white(), 0);
+
+    char      line[JS8_RX_TEXT_LEN + 64], when[24], age[8];
+    lv_obj_t *first = NULL, *focus = NULL;
+    int64_t   now   = now_wall_ms();
+    if (qso_id) {
+        /* Reading one QSO, oldest message first. */
+        static js8_hist_qso_t  q[HPAGE_QSOS];
+        static js8_hist_line_t l[HPAGE_LINES];
+        int                    nq = js8_history_qsos(history_db, call, q, HPAGE_QSOS);
+        const char            *band = "";
+        for (int i = 0; i < nq; i++)
+            if (q[i].id == qso_id) {
+                format_when(q[i].start_ms, when, sizeof(when));
+                band = q[i].band;
+            }
+        snprintf(line, sizeof(line), "%s  %s  %s", call, when, band);
+        lv_obj_t *t = lv_list_add_text(hpage_list, line);
+        lv_obj_set_style_text_font(t, &sony_22, 0);
+        int n = js8_history_lines(history_db, qso_id, l, HPAGE_LINES);
+        for (int i = 0; i < n; i++) {
+            time_t    ts = (time_t)(l[i].ms / 1000);
+            struct tm tm;
+            gmtime_r(&ts, &tm);
+            snprintf(line, sizeof(line), "%02d:%02d  %s", tm.tm_hour, tm.tm_min, l[i].text);
+            lv_obj_t *b = hpage_item(line, NULL, NULL, true);
+            /* Yours in the red of your own rows, heartbeat ACKs grey. */
+            if (l[i].tx) lv_obj_set_style_text_color(b, lv_color_hex(0xff9a9a), 0);
+            if (l[i].heartbeat) lv_obj_set_style_text_color(b, lv_color_hex(0x9a9a9a), 0);
+            if (!first) first = b;
+        }
+        lv_obj_t *back = hpage_item("< Back", hpage_back_cb, NULL, false);
+        lv_obj_set_style_text_color(back, lv_color_hex(0xffc040), 0);
+        if (!first) first = back;
+    } else {
+        lv_obj_t *t = lv_list_add_text(hpage_list, call);
+        lv_obj_set_style_text_font(t, &sony_22, 0);
+        const char        *band = dial_band();
+        js8_hist_contact_t c;
+        bool               have = js8_history_contact(history_db, call, band, &c);
+        js8_station_t      st;
+        memset(&st, 0, sizeof(st));
+        for (int i = 0; i < st_count; i++)
+            if (strcasecmp(st_rows[i].call, call) == 0) st = st_rows[i];
+        if (!st.grid[0] && have) snprintf(st.grid, sizeof(st.grid), "%s", c.grid);
+        station_fields_t f;
+        station_fields(&st, now, &f);
+        if (st.grid[0]) {
+            /* "az 58" as the map's label: this font has no degree sign. */
+            snprintf(line, sizeof(line), "%s   %s   az %.*s", st.grid, f.dist, (int)strcspn(f.az, "\xC2"), f.az);
+            hpage_text(line, 0xffffff);
+        }
+        if (have) {
+            char first_s[24], last_s[24];
+            format_when(c.first_ms, first_s, sizeof(first_s));
+            format_when(c.last_ms, last_s, sizeof(last_s));
+            int len = snprintf(line, sizeof(line), "%s: first %s, last %s", band, first_s, last_s);
+            if (c.heard_us_ms && c.has_reported_snr)
+                snprintf(line + len, sizeof(line) - len, "; heard you %+03d", c.reported_snr);
+            hpage_text(line, 0xc8c8c8);
+        } else {
+            snprintf(line, sizeof(line), "No messages exchanged on %s yet", band);
+            hpage_text(line, 0xc8c8c8);
+        }
+        for (int kind = 0; kind < 2; kind++) {
+            js8_hist_info_t info;
+            const char     *what = kind ? "STATUS" : "INFO";
+            if (js8_history_info(history_db, call, kind, &info)) {
+                format_age(now - info.ms, age, sizeof(age));
+                snprintf(line, sizeof(line), strcmp(age, "now") ? "%s (%s ago): %s" : "%s (%s): %s", what,
+                         strcmp(age, "now") ? age : "just now", info.text);
+                hpage_text(line, 0xffd24a);
+            } else {
+                snprintf(line, sizeof(line), "%s: none heard yet", what);
+                hpage_text(line, 0x9a9a9a);
+            }
+        }
+        static js8_hist_qso_t q[HPAGE_QSOS];
+        int                   nq = js8_history_qsos(history_db, call, q, HPAGE_QSOS);
+        snprintf(line, sizeof(line), nq ? "QSOs, newest first:" : "No QSOs yet (heartbeats aren't listed)");
+        hpage_text(line, 0xc8c8c8);
+        for (int i = 0; i < nq; i++) {
+            hpage_ids[i] = q[i].id;
+            format_when(q[i].start_ms, when, sizeof(when));
+            snprintf(line, sizeof(line), "%s   %s   %d message%s%s", when, q[i].band, q[i].lines,
+                     q[i].lines == 1 ? "" : "s", q[i].logged ? "   logged" : "");
+            lv_obj_t *b = hpage_item(line, hpage_qso_cb, (void *)(intptr_t)i, false);
+            if (!first) first = b;
+            if (q[i].id == hpage_back_qso) focus = b;
+        }
+    }
+    lv_obj_t *close = hpage_item("Close", hpage_close_cb, NULL, false);
+    lv_obj_set_style_text_color(close, lv_color_hex(0xffc040), 0);
+    lv_group_set_editing(keyboard_group, false);
+    lv_group_focus_obj(focus ? focus : first ? first : close);
+    if (!qso_id) lv_obj_scroll_to_y(hpage_list, 0, LV_ANIM_OFF); /* the top lines in view */
 }
 
 /* ---- POTA / SOTA spot form (docs/SPOTS_PLAN.md) ------------------------ */

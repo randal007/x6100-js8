@@ -113,7 +113,28 @@ heard paused them; [docs/review](review/)).
     3 the History page; 4 the existing QSO log and Inbox brought in.
   - [x] Step 1 code: `src/js8/history.{hpp,cpp}` + `js8_history.h`,
     unit tests `[history]`, harness ONLY_HISTORY. Grid taken from the
-    Stations list when the exchange itself has none.
+    Stations list when the exchange itself has none. The CPU measurement
+    on the radio was skipped (user: a geomagnetic storm left nothing to
+    hear; carry on without it).
+  - [x] Step 2, All time: page 3's slot, *Show History* over the messages,
+    *Heard: Recent / All time* in the Stations view and on the map
+    (`ever_rows`, loaded on the press and band changes, kept up to date
+    from new messages; no fading on the map). A history-only station has
+    no offset (-1): `apply_hold()` leaves yours alone.
+  - [x] Step 3, the History page (`hpage_open()`): a short MFK press
+    (LV_EVENT_SHORT_CLICKED, skipped after a hold) in the Stations view
+    or on the map. Shots from the harness sent to the user before the
+    build.
+  - [x] **Lines without the calls** (user asked): their text with no
+    recipient joins their open QSO; a message with no sender (first frame
+    missed) joins the open QSO whose station sent on that offset (within
+    the speed's "same station" window); your free text joins the QSO with
+    the selected station. Never starts a QSO. Also fixed: our free text
+    went out as "MYCALL: GOOD COPY" and its first word was taken for a
+    call (classify() now decides the recipient).
+  - [x] **Settings > Clear station history...** (user asked): two presses
+    within 5 s; every band.
+  - [ ] Step 4: bring in the existing QSO log and the Inbox.
 - [x] A Sort button on the Stations list (SNR, last heard ...). **Done
   (user's choices):** page 3's second button in the Stations view (blank
   over the messages, the map's view button on the map): *Sort: Heard you*

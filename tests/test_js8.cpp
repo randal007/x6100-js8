@@ -4011,7 +4011,9 @@ TEST_CASE("history: QSOs, INFO and STATUS kept in the file, per band", "[js8][hi
         CHECK(*c20[0].reported_snr == -15);
         CHECK(h.contacts("40m").size() == 1);
         CHECK(h.contacts("80m").empty());
-        CHECK_FALSE(h.known("VE3KP"));
+        CHECK_FALSE(h.known("VE3KP", "20m"));
+        CHECK(h.known("W1ABC", "40m"));
+        CHECK_FALSE(h.known("W1ABC", "80m"));
 
         auto qsos = h.qsos("W1ABC");
         REQUIRE(qsos.size() == 3); // the heartbeat-only one left out
@@ -4045,7 +4047,7 @@ TEST_CASE("history: QSOs, INFO and STATUS kept in the file, per band", "[js8][hi
     // 30 min of the last one still joins its QSO.
     History h;
     REQUIRE(h.open(path));
-    CHECK(h.known("W1ABC"));
+    CHECK(h.known("W1ABC", "20m"));
     rx(h, "W1ABC", "W1ABC: K2XYZ ONE MORE THING", true, "20m", t0 + 140 * 60'000);
     auto all = h.qsos("W1ABC", true);
     REQUIRE(all.size() == 4);
@@ -4079,7 +4081,7 @@ TEST_CASE("history C API, and a damaged file kept aside", "[js8][history]") {
     m.partial = true; // the text so far of one still arriving: not kept
     std::snprintf(m.text, sizeof(m.text), "W1ABC: K2XYZ PARTIAL");
     js8_history_rx(h, &m, "K2XYZ", 7078000, nullptr, 1'790'000'010'000);
-    js8_history_tx(h, "K2XYZ: W1ABC RR TNX", "K2XYZ", 7078000, 1500, 0, false, nullptr, 1'790'000'020'000);
+    js8_history_tx(h, "K2XYZ: W1ABC RR TNX", "K2XYZ", 7078000, 1500, 0, false, nullptr, nullptr, 1'790'000'020'000);
 
     // N0XYZ's heartbeat (grid EN34) was heard before we answered it.
     js8_stations_t *st = js8_stations_create();
@@ -4089,7 +4091,7 @@ TEST_CASE("history C API, and a damaged file kept aside", "[js8][history]") {
     std::snprintf(hb.text, sizeof(hb.text), "N0XYZ: @HB HEARTBEAT EN34");
     hb.heartbeat = true;
     js8_stations_add(st, &hb, "K2XYZ", 1'790'000'030'000);
-    js8_history_tx(h, "K2XYZ: N0XYZ HEARTBEAT SNR -09", "K2XYZ", 7078000, 800, 0, true, st, 1'790'000'031'000);
+    js8_history_tx(h, "K2XYZ: N0XYZ HEARTBEAT SNR -09", "K2XYZ", 7078000, 800, 0, true, nullptr, st, 1'790'000'031'000);
     js8_stations_destroy(st);
 
     js8_hist_contact_t c[4];
@@ -4114,4 +4116,74 @@ TEST_CASE("history C API, and a damaged file kept aside", "[js8][history]") {
     CHECK(rows == 3);
     CHECK(failed == 0);
     js8_history_close(h);
+}
+
+TEST_CASE("history: text without the calls joins an open QSO, never starts one", "[js8][history]") {
+    using namespace x6100::js8;
+    // Free text goes out as "K2XYZ: GOOD COPY": to nobody, not to "GOOD".
+    auto free = history_note_tx("K2XYZ: GOOD COPY NAME IS BOB", "K2XYZ");
+    REQUIRE(free);
+    CHECK(free->loose);
+    CHECK(free->call.empty());
+    CHECK_FALSE(free->exchange);
+    auto theirs = history_note_rx("W1ABC", "W1ABC: NAME IS ALICE", false, "K2XYZ");
+    REQUIRE(theirs);
+    CHECK(theirs->loose);
+    CHECK_FALSE(history_note_rx("W1ABC", "W1ABC: @HB HEARTBEAT FN42", false, "K2XYZ")->loose);
+    CHECK_FALSE(history_note_rx("W1ABC", "W1ABC: N0XYZ HW CPY?", false, "K2XYZ")->loose); // to someone else
+
+    TempDir            dir;
+    const std::int64_t t0 = 1'790'000'000'000;
+    const double       f  = 14078000 + 1200; // W1ABC's offset
+    History            h;
+    REQUIRE(h.open(dir.path + "/js8_history.db"));
+    auto rx = [&](const char *from, const char *text, std::int64_t ms) {
+        auto n = history_note_rx(from, text, std::string(text).find("K2XYZ") != std::string::npos, "K2XYZ");
+        REQUIRE(n);
+        h.received(*n, text, "20m", f, -10, 0, ms);
+    };
+    auto tx_free = [&](const char *text, const char *partner, std::int64_t ms) {
+        auto n = history_note_tx(text, "K2XYZ");
+        REQUIRE(n);
+        n->call    = partner;
+        n->as_sent = partner;
+        h.sent(*n, text, "20m", 14078000 + 1500, 0, false, ms);
+    };
+    // Nothing open: free text and call-less text go nowhere.
+    tx_free("K2XYZ: GOOD COPY", "W1ABC", t0 - 60'000);
+    h.received_callless("QTH OMAHA", "20m", f, 10, -12, 0, t0 - 60'000);
+
+    rx("W1ABC", "W1ABC: K2XYZ HW CPY?", t0);
+    rx("W1ABC", "W1ABC: NAME IS ALICE", t0 + 15'000);                  // their text, our call dropped
+    h.received_callless("QTH OMAHA", "20m", f + 3, 10, -12, 0, t0 + 30'000); // sender missed, their offset
+    h.received_callless("CQ CONTEST", "20m", f + 200, 10, -12, 0, t0 + 31'000); // someone else's offset
+    tx_free("K2XYZ: GOOD COPY ALICE", "W1ABC", t0 + 45'000);            // ours, W1ABC selected
+    tx_free("K2XYZ: HELLO", "N0XYZ", t0 + 50'000);                      // N0XYZ: no QSO open
+    rx("W1ABC", "W1ABC: LATER", t0 + 50 * 60'000);                       // too late: the QSO ended
+
+    CHECK_FALSE(h.known("GOOD", "20m"));
+    CHECK_FALSE(h.known("N0XYZ", "20m"));
+    CHECK(h.contacts("20m").size() == 1);
+    auto q = h.qsos("W1ABC");
+    REQUIRE(q.size() == 1);
+    auto l = h.lines(q[0].id);
+    REQUIRE(l.size() == 4);
+    CHECK(l[0].text == "W1ABC: K2XYZ HW CPY?");
+    CHECK(l[1].text == "W1ABC: NAME IS ALICE");
+    CHECK(l[2].text == "QTH OMAHA");
+    CHECK_FALSE(l[2].tx);
+    CHECK(l[3].text == "K2XYZ: GOOD COPY ALICE");
+    CHECK(l[3].tx);
+    CHECK(q[0].end_ms == t0 + 45'000);
+
+    // Settings > Clear: gone, every band; the next exchange starts afresh.
+    CHECK(h.station_count() == 1);
+    h.clear();
+    CHECK(h.station_count() == 0);
+    CHECK(h.contacts("20m").empty());
+    CHECK(h.qsos("W1ABC", true).empty());
+    CHECK_FALSE(h.known("W1ABC", "20m"));
+    rx("W1ABC", "W1ABC: K2XYZ ARE YOU THERE", t0 + 51 * 60'000);
+    REQUIRE(h.qsos("W1ABC").size() == 1);
+    CHECK(h.lines(h.qsos("W1ABC")[0].id).size() == 1);
 }

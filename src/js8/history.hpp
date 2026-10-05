@@ -13,6 +13,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <condition_variable>
 #include <cstdint>
 #include <deque>
@@ -34,6 +35,9 @@ struct HistoryNote {
     std::string as_sent;        ///< as it was sent ("VE7ABC/P")
     bool        exchange  = false; ///< between us and them, either way
     bool        heartbeat = false; ///< a heartbeat ACK ("CALL HEARTBEAT SNR -12"): kept, not a QSO line shown
+    /// Text with no recipient ("W1ABC: GOOD COPY", or ours): in a long QSO
+    /// the calls get dropped. Joins an open QSO with them, never starts one.
+    bool        loose     = false;
     std::optional<int> reported_snr; ///< how they hear us, if they said
     int         info_kind = -1;    ///< 0 INFO, 1 STATUS: their own answer, to anyone
     std::string info_text;
@@ -47,7 +51,8 @@ std::optional<HistoryNote> history_note_rx(const std::string &from, const std::s
                                            const std::string &my_call);
 
 /// One of ours, "MYCALL: TO ...": an exchange when TO is a station (not a
-/// group, not @APRSIS).
+/// group, not @APRSIS); with no TO at all, loose (its station is the one
+/// you have selected, filled in by the caller).
 std::optional<HistoryNote> history_note_tx(const std::string &text, const std::string &my_call);
 
 /// A station of the all-time list (one band).
@@ -113,36 +118,50 @@ public:
               bool automatic, std::int64_t now_ms);
     /// The QSO with `call` on `band` went into the log.
     void logged(const std::string &call, const std::string &band, std::int64_t now_ms);
+    /// A message with no callsign at all (its first frame missed): it joins
+    /// the open QSO whose station sends on that offset (`freq_hz` dial +
+    /// offset, within `window_hz`).
+    void received_callless(const std::string &text, const std::string &band, double freq_hz, double window_hz,
+                           int snr, int speed, std::int64_t now_ms);
     /// Anything decoded from a known contact: when and how we last heard them.
     void heard(const std::string &call, const std::string &band, int snr, const std::string &grid,
                std::int64_t now_ms);
 
     /// Waits until everything sent so far is in the file.
     void flush();
+    /// Everything forgotten, every band (Settings). Waits until it's done.
+    void clear();
+    /// Stations in the history, every band.
+    int  station_count();
     HistoryStats take_stats();
 
     /// Reading (any thread; the writer's pending rows are flushed first).
     std::vector<HistoryContact> contacts(const std::string &band);
+    std::optional<HistoryContact> contact(const std::string &call, const std::string &band);
     std::optional<HistoryInfo>  latest_info(const std::string &call, int kind);
     std::vector<HistoryQso>     qsos(const std::string &call, bool with_heartbeat_only = false);
     std::vector<HistoryLine>    lines(std::int64_t qso_id);
-    bool                        known(const std::string &call) const;
+    /// Exchanged messages with `call` (a base call) on `band`.
+    bool                        known(const std::string &call, const std::string &band) const;
 
 private:
     struct Op {
-        enum Kind { Rx, Tx, Logged, Heard } kind = Rx;
+        enum Kind { Rx, Tx, Logged, Heard, Loose, Clear } kind = Rx;
         HistoryNote  note;
         std::string  text, band;
         double       freq_hz   = 0;
         int          snr       = 0;
         int          speed     = 0;
         bool         automatic = false;
+        bool         tx        = false; ///< Loose: ours
+        double       window_hz = 0;     ///< Loose without a call: how near their offset
         std::int64_t ms        = 0;
     };
     void post(Op op);
     void run();
     void apply(const Op &op);
     void exchange(const Op &op);
+    void loose(const Op &op);
     void write_all(std::deque<Op> &ops);
 
     sqlite3                *db_ = nullptr;
@@ -153,15 +172,22 @@ private:
     std::uint64_t           posted_ = 0, written_ = 0;
     bool                    stop_ = false, background_ = true;
     int                     flushes_ = 0; ///< callers waiting in flush()
-    std::unordered_set<std::string> known_; ///< calls with a contact row (any band)
+    std::unordered_set<std::string> known_; ///< "CALL BAND" of every contact row
     HistoryStats            stats_;
     std::mutex              db_mu_; ///< the connection: writer and readers take turns
-    /// The QSO still open per call: id, band, last message.
+    /// The QSO still open per call: id, band, last message, their offset.
     struct Open {
         std::int64_t id = 0, end_ms = 0;
         std::string  band;
+        double       rx_freq = 0; ///< dial + offset they last sent on (0: not known)
     };
     std::unordered_map<std::string, Open> open_;
+    Open &open_for(const std::string &call);
+    void  add_line(Open &o, const Op &op, bool rx, bool heartbeat, const std::string &call_as);
+    bool  is_open(const Open &o, const Op &op) const {
+        return o.id && o.band == op.band && op.ms - o.end_ms <= QSO_GAP_MS;
+    }
+    std::atomic<std::int64_t> last_exchange_ms_{0}; ///< no QSO this recent: call-less messages skipped at once
 };
 
 } // namespace x6100::js8

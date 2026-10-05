@@ -165,6 +165,21 @@ int ui_popup_has(const char *text) {
     }
     return 0;
 }
+/* Every line of the focused item's list, '>' on the focused one. */
+void ui_popup_print(const char *tag) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_list_btn_class)) {
+        printf("%s (no list)\n", tag);
+        return;
+    }
+    lv_obj_t *list = lv_obj_get_parent(f);
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(list); i++) {
+        lv_obj_t   *c = lv_obj_get_child(list, i);
+        lv_obj_t   *l = lv_obj_has_class(c, &lv_label_class) ? c : lv_obj_get_child(c, 0);
+        const char *t = l && lv_obj_has_class(l, &lv_label_class) ? lv_label_get_text(l) : "";
+        printf("%s %s%s\n", tag, c == f ? "> " : "  ", t);
+    }
+}
 /* Long-press of a bottom button. */
 void ui_hold(int i) {
     button_data_t *b = stub_page->items[i];
@@ -212,13 +227,23 @@ const char *ui_compose_text(void) {
     return (t && lv_obj_is_valid(t)) ? textarea_window_get() : "(no compose window)";
 }
 void ui_compose_enter(void) {
-    uint32_t key = LV_KEY_ENTER;
-    lv_event_send(textarea_window_text(), LV_EVENT_KEY, &key);
+    uint32_t  key = LV_KEY_ENTER;
+    lv_obj_t *t   = textarea_window_text();
+    if (!t || !lv_obj_is_valid(t)) { /* closed: its pointer is a dead one */
+        printf("[driver] ui_compose_enter(): no compose window\n");
+        return;
+    }
+    lv_event_send(t, LV_EVENT_KEY, &key);
 }
 /* ESC as the text box sees it (the on-screen keyboard has the focus). */
 void ui_compose_cancel(void) {
-    uint32_t key = LV_KEY_ESC;
-    lv_event_send(textarea_window_text(), LV_EVENT_KEY, &key);
+    uint32_t  key = LV_KEY_ESC;
+    lv_obj_t *t   = textarea_window_text();
+    if (!t || !lv_obj_is_valid(t)) {
+        printf("[driver] ui_compose_cancel(): no compose window\n");
+        return;
+    }
+    lv_event_send(t, LV_EVENT_KEY, &key);
 }
 /* Move the selection with MFK steps to the row for `call`, searching down
  * from the top. Station rows are drawn, not stored in the cell, so ask the

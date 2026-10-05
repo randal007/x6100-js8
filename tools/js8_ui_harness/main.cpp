@@ -47,6 +47,7 @@ void ui_page(int n);
 void ui_hold(int i);
 int  ui_list_count(const char *text);
 int  ui_popup_has(const char *text);
+void ui_popup_print(const char *tag);
 void ui_compose_clear(void);
 void ui_indevs_init(void);
 int  ui_kb_select_ok(void);
@@ -1540,6 +1541,21 @@ int main() {
         feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ SNR -08 TNX 73", 1320, 0.05f},
                    {"W1ABC", "FN42", "N0XYZ", "N0XYZ INFO IC-705 5W EFHW", 700, 0.05f}});
         pump(500);
+        // In a long QSO the calls get dropped: N0XYZ's free text, a message
+        // whose first frame (the sender) was missed, then ours with N0XYZ
+        // selected. All three join the QSO.
+        feed_band({{"N0XYZ", "EN34", "", "NAME IS BOB QTH OMAHA", 1320, 0.05f}});
+        feed_band({{"N0XYZ", "EN34", "", "RIG IS AN IC-7300 AT 100W INTO A DIPOLE UP 40 FEET", 1320, 0.05f}}, 1);
+        pump(500);
+        if (ui_popup_has("Save") > 0) ui_key(LV_KEY_ESC); // their 73 offered the log: not now
+        pump(300);
+        ui_select_row_from("N0XYZ");
+        ui_page(2);
+        ui_press(3); // Send...
+        pump(200);
+        ui_compose_append("GOOD COPY BOB");
+        ui_compose_enter();
+        wait_tx();
         js8_history_flush(h);
 
         static js8_hist_contact_t c[16];
@@ -1566,6 +1582,102 @@ int main() {
         int64_t  busy = 0;
         js8_history_stats(h, &rows, &commits, &failed, &busy);
         printf("[history] written: %u rows in %u transactions, %u failed\n", rows, commits, failed);
+
+        // N0XYZ's STATUS to us, and the screens (steps 2 and 3).
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ STATUS QRV AT THE PARK TILL 2200Z", 1320, 0.05f}});
+        pump(500);
+        auto rows_now = [&]() {
+            static char buf[256];
+            dialog_js8_station_rows(buf, sizeof(buf));
+            return (const char *)buf;
+        };
+        auto mfk = [](int ms) {
+            ui_mfk_set(true);
+            pump(ms);
+            ui_mfk_set(false);
+            pump(300);
+        };
+        ui_indevs_init(); // the MFK
+        ui_page(3);
+        printf("[history] page 3 button 2 over the messages: '%s' (want Show History)\n", ui_button_label(2));
+        ui_press(2); // Show History: the Stations view, All time
+        pump(400);
+        printf("[history] all time: '%s' / '%s', rows %s (want N0XYZ W1ABC, not VE3KP)\n", ui_button_label(2),
+               ui_button_label(3), rows_now());
+        printf("[history] message: '%s'\n", stub_last_msg);
+        screenshot("x0_history_all_time.ppm");
+        ui_press(2); // Heard: Recent
+        pump(400);
+        printf("[history] recent: '%s', rows %s (want VE3KP too)\n", ui_button_label(2), rows_now());
+        ui_press(2); // back to All time
+        pump(400);
+
+        // The MFK onto N0XYZ, a short press: its History page.
+        for (int i = 0; i < 4 && !strstr(rows_now(), ">N0XYZ"); i++) {
+            ui_mfk_turn(1);
+            pump(300);
+        }
+        printf("[history] cursor: %s\n", rows_now());
+        mfk(120);
+        ui_popup_print("[history] page:");
+        screenshot("x1_history_page.ppm");
+        ui_click_focused(); // the newest QSO
+        pump(400);
+        ui_popup_print("[history] qso:");
+        screenshot("x2_history_qso.ppm");
+        for (int i = 0; i < 20 && strcmp(ui_focused_text(), "< Back"); i++) ui_key(LV_KEY_DOWN);
+        ui_click_focused(); // < Back
+        pump(400);
+        printf("[history] back on: '%s' (want the QSO)\n", ui_focused_text());
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        printf("[history] after ESC, list focused: %s\n", ui_focus_is_table() ? "yes" : "no");
+
+        // W1ABC: INFO only, a heartbeat ACK only.
+        for (int i = 0; i < 4 && !strstr(rows_now(), ">W1ABC"); i++) {
+            ui_mfk_turn(1);
+            pump(300);
+        }
+        mfk(120);
+        ui_popup_print("[history] W1ABC page:");
+        screenshot("x3_history_w1abc.ppm");
+        ui_key(LV_KEY_ESC);
+        pump(300);
+        // A hold still locks, no page.
+        mfk(1500);
+        printf("[history] after a hold: popup %d (want -1), msg '%s'\n", ui_popup_has("Close"), stub_last_msg);
+        mfk(1500); // unlock
+        // The map in All time.
+        ui_page(3);
+        ui_press(3); // Show Map
+        pump(800);
+        printf("[history] map: '%s', stats '%s'\n", ui_button_label(2), dialog_js8_map_stats());
+        screenshot("x4_history_map.ppm");
+        ui_press(3); // Show Messages: All time ends
+        pump(300);
+        printf("[history] messages again: '%s' (want Show History)\n", ui_button_label(2));
+
+        // Settings > Clear station history: one press arms it, it disarms
+        // after 5 s, two presses clear it.
+        ui_page(4);
+        ui_press(4); // Settings
+        pump(200);
+        for (int i = 0; i < 20 && !strstr(ui_focused_text(), "station history"); i++) ui_key(LV_KEY_RIGHT);
+        printf("[history] settings: '%s'\n", ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        printf("[history] one press: '%s' / '%s'\n", ui_focused_text(), stub_last_msg);
+        screenshot("x5_history_clear.ppm");
+        pump(5500);
+        printf("[history] 5 s later: '%s' (want Clear station history...)\n", ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        ui_click_focused();
+        pump(500);
+        printf("[history] two presses: '%s', stations left %d (want 0)\n", stub_last_msg,
+               js8_history_station_count(h));
+        ui_key(LV_KEY_ESC);
+        pump(200);
         return 0;
     }
     if (getenv("ONLY_LOG")) {
@@ -2611,7 +2723,7 @@ int main() {
                    {"W1GW", "FN31", "@APRSIS", "@APRSIS MSG TO:VE7ABC HI DE SMS", 1100, 0.05f}});
         pump(1000);
         ui_page(3);
-        printf("[atgate] page 3 button 2: '%s' (want empty: Hold moved to page 6)\n", ui_button_label(2));
+        printf("[atgate] page 3 button 2: '%s' (want Show History: Hold moved to page 6)\n", ui_button_label(2));
         ui_press(3); // Show Stations
         pump(300);
         for (const char *c : {"NR4U", "W1GW", "K1AAA", "VE7BBB"})

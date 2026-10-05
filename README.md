@@ -39,6 +39,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [The buttons](#the-buttons)
 - [Transmitting](#transmitting)
 - [Saved messages](#saved-messages)
+- [History](#history)
 - [Time](#time)
 - [Speeds](#speeds)
 - [Messages and the Inbox](#messages-and-the-inbox)
@@ -396,7 +397,7 @@ to go back a page. In JS8 a hold is half a second.
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
 | 3 | **Sort: Heard you / SNR / Time / Distance** | In the Stations view: the order of the stations ([The screen](#the-screen)). |
 | 3 | **Map: Auto / Close-in / World** | The same button while [the map](#the-map) shows: which part of the world it shows. **Hold: Follow** the selected station (you and them framed, the long path too); press to stop. Over the messages it's blank. |
-| 3 | *(empty)* | Kept free for a feature to come (Hold moved to page 6). |
+| 3 | **Show History / Heard: Recent / All time** | Over the messages: the Stations view listing every station in the [history](#history) on this band. In the Stations view and on the map: switch between the stations heard lately and all of them. |
 | 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off when it hasn't been heard for *Stations kept* ([Settings](#settings); an hour to start). |
 | 3 | **Inbox** | Your messages, and messages held for others. Shows *N new* and turns green while you have unread messages. |
 | 4 | **AUTO: Off / On** | Answer questions sent to you automatically (see [Transmitting](#transmitting)). |
@@ -512,6 +513,47 @@ send it with the call left out).
 As on desktop, macros also work in messages you type (Reply, Send…; one
 that doesn't apply is sent as typed) and in your INFO and STATUS answers
 (e.g. STATUS `IDLE <MYIDLE> VERSION <MYVERSION>`, desktop's own).
+
+## History
+
+JS8 keeps a **history of every station you've exchanged messages with**,
+heartbeat ACKs included, **per band**, for good (it survives switching off
+and new builds; it lives in `js8_history.db` on the SD card). For each:
+
+- when you first and last exchanged messages on that band, how you heard
+  them and how they heard you;
+- their latest **INFO** and **STATUS**, with how long ago: their answers to
+  you, and to anyone else you decoded;
+- the **text of every QSO**, each message with its time. A QSO is the
+  messages between you and them until 30 minutes go by quietly (or you
+  change band). In a long QSO the callsigns get dropped: text with no
+  recipient (`W1ABC: GOOD COPY`), a message whose first frame was missed
+  (heard on their offset), and your own free text to the station you have
+  selected all join the QSO that's open. Exchanges of heartbeat ACKs alone
+  are kept but not listed as QSOs.
+
+Stations you never exchange a message with aren't kept.
+
+**Opening it:**
+
+- **Page 3, Show History** (over the messages): the Stations view, listing
+  everyone in the history **on this band** (*Heard: All time*); press it
+  again for *Heard: Recent*, the stations heard lately. **Show Map** then
+  shows them all on the map (no fading by age): where you've reached on
+  this band. Sort works as usual. Going back to the messages ends it;
+  *Show Stations* always starts on Recent.
+- **Press the MFK** on a station in the Stations view (Recent or All time)
+  or on the map: its **History page**. Their grid, distance and bearing,
+  first and last exchange on this band and the report they gave you,
+  their INFO and STATUS, then their QSOs, newest first (date, band, how
+  many messages, *logged* if you logged it). Press a QSO to read it, your
+  messages in red; *< Back* returns to the page, ESC closes. Holding the
+  MFK still locks a station, as before.
+- A station from the history that isn't on the air now has no offset: with
+  **Hold: Off**, replying to them leaves your offset where it is.
+
+**Settings > Clear station history...** forgets everything, every band:
+press it, then again within 5 seconds (the line shows how many stations).
 
 ## Time
 
@@ -665,6 +707,7 @@ Page 4 **Settings…**:
 | **Decode: All speeds / My speed** | Press to switch: decode every speed (the default), or only the one you send at. |
 | **Decode marks: On / Off** | Press to switch the [decode marks](#the-screen) on the waterfall (off to start, as desktop). |
 | **Waterfall: Sharp / Light / Medium / Calm** | Press to step through how much each waterfall row is averaged with the ones before. *Light* (the default) about 2 times less flicker as the waterfall moves; *Medium* about 2.6 times less; *Calm* averages most: least speckle, a darker background so signals stand out, about 4 times less flicker; *Sharp* shows every row as heard, as before. More in [The waterfall](#the-waterfall). |
+| **Clear station history...** | Forget the whole [history](#history), every band: press, then again within 5 seconds. Can't be undone. |
 | **Operator: …** | Someone else operating your station (desktop's *Operator Callsign*): their call goes in the log as `OPERATOR`; your station call is still what's sent on the air and logged as `STATION_CALLSIGN`. Empty: the station call. |
 
 ## Logging
@@ -883,9 +926,14 @@ New:
 - **`@` in the Stations view:** a station heard passing an APRS message
   back over JS8 (the answer to your Echo test, an SMS) is an APRS gateway
   both ways, and shows `@` in place of `*` ([The screen](#the-screen)).
+- **[History](#history):** every station you've exchanged messages with,
+  per band, kept for good: their INFO and STATUS and the text of every
+  QSO. Page 3's **Show History** lists them all on this band (and on the
+  map); an **MFK press** on a station opens its History page. Settings can
+  clear it.
 - **Buttons moved:** *Decode: All speeds / My speed* is a
-  [Settings](#settings) line now, and **Hold** took its place on page 6;
-  page 3's middle slot is free for a feature to come.
+  [Settings](#settings) line now, and **Hold** took its place on page 6,
+  making room for page 3's *Show History*.
 - **A lighter waterfall:** JS8's waterfall is drawn straight onto the
   display's lower layer, as the main screen's is, and the display puts the
   list on top. Measured on the radio, the app's screen thread fell from
@@ -1109,13 +1157,8 @@ The full list with notes is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md);
 what's done is in [New in beta 5 so far](#new-in-beta-5-so-far). Still to
 do for beta 5:
 
-- [ ] **Station history:** every station you've exchanged messages with,
-  heartbeats included, kept per band for good: their latest INFO and
-  STATUS and the text of each QSO, opened by pressing the MFK on a station
-  in the list or on the map; page 3's free button switches the Stations
-  view and the map between *Recent* and *All time*. Recording comes first
-  (in test builds now, measured on the radio before the screens are
-  built)
+- [ ] **History:** bring in the QSOs already in your log and the Inbox's
+  messages, so the history doesn't start empty
 - [ ] **GPS** time and location from a USB GPS
 - [ ] ALC for under 1 W into an amplifier
 - [ ] The Murus team's WeFax, NavTex and SSTV, once their fork is on

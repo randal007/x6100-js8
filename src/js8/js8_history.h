@@ -30,15 +30,27 @@ void           js8_history_close(js8_history_t *h);
 
 /* A complete received message (partials, our own and low-confidence ones
  * are skipped), on the dial frequency `dial_hz`. `stations` (or NULL): the
- * Stations list, for a grid they announced before you exchanged anything. */
+ * Stations list, for a grid they announced before you exchanged anything.
+ * Text without calls joins an open QSO: theirs ("W1ABC: GOOD COPY"), or,
+ * with no sender at all, the one whose station sends on that offset. */
 void js8_history_rx(js8_history_t *h, const js8_rx_msg_t *m, const char *my_call, uint64_t dial_hz,
                     js8_stations_t *stations, int64_t now_ms);
 /* One of ours as it goes out ("MYCALL: W1ABC HW CPY?"); `automatic`: an
- * automatic reply or ACK. */
+ * automatic reply or ACK. Free text ("MYCALL: GOOD COPY") joins the open
+ * QSO with `partner` (the station you have selected), if there is one. */
 void js8_history_tx(js8_history_t *h, const char *text, const char *my_call, uint64_t dial_hz, float offset_hz,
-                    uint8_t submode, bool automatic, js8_stations_t *stations, int64_t now_ms);
+                    uint8_t submode, bool automatic, const char *partner, js8_stations_t *stations, int64_t now_ms);
 /* The QSO with `call` went into the log (`freq_hz` its frequency). */
 void js8_history_logged(js8_history_t *h, const char *call, uint64_t freq_hz, int64_t now_ms);
+
+/* You've exchanged messages with `call` on `freq_hz`'s band. Quick (no
+ * file access). */
+bool js8_history_known(js8_history_t *h, const char *call, uint64_t freq_hz);
+
+/* Forget everything, every band (Settings). Waits until it's done. */
+void js8_history_clear(js8_history_t *h);
+/* Stations in the history, every band. */
+int  js8_history_station_count(js8_history_t *h);
 
 /* Waits until everything so far is in the file. */
 void js8_history_flush(js8_history_t *h);
@@ -84,6 +96,8 @@ typedef struct {
 /* The stations of `band` ("20m"), latest exchange first; returns how many
  * (up to max). */
 int  js8_history_contacts(js8_history_t *h, const char *band, js8_hist_contact_t *out, int max);
+/* `call` on `band`, if you've exchanged messages there. */
+bool js8_history_contact(js8_history_t *h, const char *call, const char *band, js8_hist_contact_t *out);
 /* Their latest INFO (kind 0) or STATUS (kind 1). */
 bool js8_history_info(js8_history_t *h, const char *call, int kind, js8_hist_info_t *out);
 /* Their QSOs, newest first, heartbeat-only exchanges left out. */
