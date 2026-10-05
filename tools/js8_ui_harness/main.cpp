@@ -895,12 +895,16 @@ int main() {
         struct {
             int         page, button;
             const char *name;
-        } pops[] = {{3, 4, "Inbox"}, {4, 4, "Settings"}, {5, 1, "APRS"}, {6, 1, "Alerts"}, {6, 4, "Freq"}};
+        } pops[] = {{3, 4, "Inbox"}, {4, 4, "Settings"}, {5, 1, "APRS"}, {6, 1, "Alerts"}, {0, 0, "Freq"}};
         int ok = 0; // (the Query list and the message list had it already)
         for (auto &p : pops) {
-            ui_page(p.page);
-            ui_press(p.button);
-            pump(200);
+            if (p.page) {
+                ui_page(p.page);
+                ui_press(p.button);
+                pump(200);
+            } else {
+                open_freq(); // Settings > Frequencies (page 6's Freq before)
+            }
             if (ui_focus_is_table()) { // didn't open: ESC would close JS8
                 printf("[keys] %s didn't open\n", p.name);
                 continue;
@@ -2466,7 +2470,7 @@ int main() {
         ui_page(4);
         ui_press(4); // Settings
         pump(200);
-        for (int i = 0; i < 16 && strncmp(ui_focused_text(), "Decode:", 7) != 0; i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 25 && strncmp(ui_focused_text(), "Decode:", 7) != 0; i++) ui_key(LV_KEY_RIGHT);
         printf("[speed] settings: '%s' (want Decode: All speeds)\n", ui_focused_text());
         ui_click_focused();
         pump(200);
@@ -2718,7 +2722,7 @@ int main() {
         ui_page(4);
         ui_press(4); // Settings...
         pump(200);
-        for (int i = 0; i < 14 && strncmp(ui_focused_text(), "INFO", 4) != 0; i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 25 && strncmp(ui_focused_text(), "INFO", 4) != 0; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
         ui_compose_clear();
@@ -3287,12 +3291,12 @@ int main() {
         ui_page(4);
         ui_press(4); // Settings
         pump(200);
-        for (int i = 0; i < 12 && !strstr(ui_focused_text(), "Distance"); i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 25 && !strstr(ui_focused_text(), "Distance"); i++) ui_key(LV_KEY_RIGHT);
         printf("[looks] on '%s'\n", ui_focused_text());
         ui_click_focused();
         pump(200);
         printf("[looks] after a press: '%s' (want Distance: miles)\n", ui_focused_text());
-        for (int i = 0; i < 12 && !strstr(ui_focused_text(), "Stations kept"); i++) ui_key(LV_KEY_LEFT);
+        for (int i = 0; i < 25 && !strstr(ui_focused_text(), "Stations kept"); i++) ui_key(LV_KEY_LEFT);
         printf("[looks] '%s'", ui_focused_text());
         ui_click_focused();
         pump(200);
@@ -3316,7 +3320,7 @@ int main() {
         ui_page(4);
         ui_press(4); // Settings
         pump(200);
-        for (int i = 0; i < 12 && !strstr(ui_focused_text(), "Operator"); i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 25 && !strstr(ui_focused_text(), "Operator"); i++) ui_key(LV_KEY_RIGHT);
         printf("[op] '%s'\n", ui_focused_text());
         ui_click_focused();
         pump(300);
@@ -3330,7 +3334,7 @@ int main() {
         pump(300);
         ui_press(4);
         pump(200);
-        for (int i = 0; i < 12 && !strstr(ui_focused_text(), "Operator"); i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 25 && !strstr(ui_focused_text(), "Operator"); i++) ui_key(LV_KEY_RIGHT);
         printf("[op] saved: '%s' (want Operator: VA7XYZ)\n", ui_focused_text());
         ui_key(LV_KEY_ESC);
         pump(300);
@@ -3854,7 +3858,7 @@ int main() {
         ui_page(4);
         ui_press(4); // Settings
         pump(200);
-        for (int i = 0; i < 14 && !strstr(ui_focused_text(), "Decode marks"); i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 25 && !strstr(ui_focused_text(), "Decode marks"); i++) ui_key(LV_KEY_RIGHT);
         printf("[marks] on '%s'\n", ui_focused_text());
         ui_click_focused();
         pump(200);
@@ -3883,7 +3887,7 @@ int main() {
         ui_page(4);
         ui_press(4);
         pump(200);
-        for (int i = 0; i < 14 && !strstr(ui_focused_text(), "Decode marks"); i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 25 && !strstr(ui_focused_text(), "Decode marks"); i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(200);
         printf("[marks] switched: '%s' (want Off)\n", ui_focused_text());
@@ -4155,7 +4159,7 @@ int main() {
         pump(200);
         printf("[texts] list open, focus: %s\n", ui_focus_desc());
         // Time Sync comes first in Settings now: find INFO.
-        for (int i = 0; i < 14 && strncmp(ui_focused_text(), "INFO", 4) != 0; i++) ui_key(LV_KEY_RIGHT);
+        for (int i = 0; i < 25 && strncmp(ui_focused_text(), "INFO", 4) != 0; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // INFO
         pump(300);          // lets the list's async delete run
         printf("[texts] editing INFO, focus: %s\n", ui_focus_desc());
