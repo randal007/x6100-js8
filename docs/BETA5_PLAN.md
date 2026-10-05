@@ -354,8 +354,24 @@ heard paused them; [docs/review](review/)).
   peak 56 %, never 70 % or more (this morning 79 %; Smooth 83 %); all
   cores 103 % of 400; decoder 24-26 % a minute, passes under 2.5 s. To
   do: the user's pick by eye.
-- [ ] A small ALC rework for low power (under 1 W) into an amplifier.
-  The TX audio path (`tx_player.c`) is shared with the FT8 app.
+- [x] A small ALC rework for low power (under 1 W) into an amplifier.
+  **Done after beta 4.5 (2026-10-04, user's video: 0.3 W into the XPA125B
+  swung 18-35 W, about every 2.5 s, ALC bouncing).** Cause: tx_player.c
+  corrected the gain every 2048-sample block (~23/s) from one reading;
+  power reads in 0.1 W steps (radio.c tx_power * 0.1), and our d1ef18f
+  "relative" up rule (< 80 % and > 0.1 W short) fired on a true 0.28 W
+  reading 0.2, then the ALC rule pulled down: a limit cycle. Upstream FT8
+  only raises when > 0.5 W short (never at 0.3 W). `src/tx_level.{c,h}`:
+  1 s averages; within a transmission only down (ALC > 0.5: half the old
+  formula, at most 1.5 dB a window; or power > 1.25 x setting + 0.1 W);
+  between transmissions up (frame average short with ALC < 0.25: half the
+  shortfall, 2 dB at most; within one reading step: creep 0.3 dB) until
+  the ALC starts to show. **tx_player.c is JS8's only since the 1.0.2
+  port** (FT8 runs upstream's src/ft8/tx_worker.c); they share the learned
+  `ft8_output_gain_offset`. Unit tests `[txlevel]`: a model radio (0.1 W
+  steps, meter lag) where the old loop swings 16 dB in a frame and the new
+  one holds within 0.8 dB over 54 lag/rounding/start cases. Video and
+  frames: ~/Work/x6100/research/alc-video/.
 - [ ] GPS time and location (USB GPS dongle ordered; testing when it
   arrives). The firmware already reads gpsd for the APRS beacon.
 

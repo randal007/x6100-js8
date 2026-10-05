@@ -26,7 +26,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     dialog.c dialog_swrscan.c
     dialog_ft8.c dialog_freq.c dialog_gps.c dialog_msg_cw.c
     dialog_js8.c js8_wf.c
-    tx_player.c
+    tx_player.c tx_level.c
     ft8_ui/table_view.c
     dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c
     textarea_window.c cw_encoder.c buttons.cpp vol.cpp recorder.c

@@ -17,32 +17,15 @@
 #include "cfg/cfg_api.h"
 #include "radio.h"
 #include "tx_info.h"
+#include "tx_level.h"
 
 #include <aether_radio/x6100_control/control.h>
 
 #define GAIN_MIN_DB (-30.0f)
 #define GAIN_MAX_DB 0.0f
 
-/* ALC-driven gain correction (legacy formula from dialog_ft8.c). */
-static float get_correction(void) {
-    static uint8_t msg_id = 0;
-    float correction = 0.0f;
-    float pwr        = 0.0f;
-    float alc        = 0.0f;
-
-    if (tx_info_refresh(&msg_id, &alc, &pwr, NULL)) {
-        float target_pwr = LV_MIN(param_f_get(cfg.pwr()), TX_PLAYER_MAX_PWR_W);
-        if (alc > 0.5f) {
-            correction = log10f(log10f(11.1f - alc)) * 20.0f - 0.38f;
-        } else if (pwr < target_pwr * 0.8f && target_pwr - pwr > 0.1f) {
-            /* Relative, not "0.5 W short": at 0.5-1 W a fixed 0.5 W margin
-             * meant the drive could only ever go down, and the learned
-             * (saved) offset stayed low until power was raised and lowered. */
-            correction = log10f(target_pwr / (pwr + 0.01f)) * 10.0f;
-            if (correction > 3.0f) correction = 3.0f;
-        }
-    }
-    return correction;
+static float clamp_gain(float g) {
+    return g > GAIN_MAX_DB ? GAIN_MAX_DB : g < GAIN_MIN_DB ? GAIN_MIN_DB : g;
 }
 
 float tx_player_base_gain_offset(void) {
@@ -72,21 +55,22 @@ bool tx_player_play(int16_t      *samples,
     radio_set_freq((int32_t)radio_freq + tx_offset_hz - TX_PLAYER_AUDIO_HZ);
     radio_set_modem(true);
 
+    /* The drive from the ALC and power readback (tx_level.c): steady within
+     * a transmission, only down there; up between transmissions. */
+    static uint8_t msg_id = 0;
+    tx_level_t     level;
+    tx_level_start(&level, LV_MIN(param_f_get(cfg.pwr()), TX_PLAYER_MAX_PWR_W));
+    tx_info_refresh(&msg_id, NULL, NULL, NULL); /* readings from before this one don't count */
+
     float    prev_gain_offset = gain_offset;
-    size_t   counter          = 0;
     int16_t *ptr              = samples;
     size_t   part;
 
     bool aborted = false;
     while (true) {
-        if (counter > 30) {
-            gain_offset += get_correction() * 0.4f;
-            if (gain_offset > GAIN_MAX_DB) {
-                gain_offset = GAIN_MAX_DB;
-            } else if (gain_offset < GAIN_MIN_DB) {
-                gain_offset = GAIN_MIN_DB;
-            }
-        }
+        float pwr = 0.0f, alc = 0.0f;
+        bool  have = tx_info_refresh(&msg_id, &alc, &pwr, NULL);
+        gain_offset = clamp_gain(gain_offset + tx_level_block(&level, have, pwr, alc));
         if (n_samples <= 0) {
             break;
         }
@@ -106,8 +90,8 @@ bool tx_player_play(int16_t      *samples,
         audio_play(ptr, part); /* R1CBU 1.0: its default player, AUDIO_PLAY_RATE */
         n_samples -= part;
         ptr       += part;
-        counter++;
     }
+    if (!aborted) gain_offset = clamp_gain(gain_offset + tx_level_end(&level)); /* for the next one */
 
     /* The learned gain offset is shared by FT8 and JS8: same audio path. */
     param_f_set(cfg.ft8.output_gain_offset(), gain_offset - base_gain_offset + play_gain_offset);

@@ -45,6 +45,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
+- [Since beta 4.5](#since-beta-45)
 - [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
@@ -435,7 +436,13 @@ the thing. ESC closes lists too, and the VOL knob works in all of them.
   500 Hz up to where the signal would pass 3000 Hz. The dial frequency
   stays locked. With **Hold: Off**, replying moves your offset to theirs.
 - **Power** is capped at 5 W while JS8 is open, as in the FT8 app. The
-  level is learned and shared with FT8.
+  drive level is learned (and shared with FT8) from the radio's ALC and
+  power readings: **within a transmission it only ever comes down** (when
+  the ALC shows overdrive), so the level stays steady for an amplifier
+  behind the radio; **between transmissions it goes up** a little if the
+  last one ran short of power with the ALC idle, until the ALC just
+  starts to show, which holds the power at your setting. At very low
+  power (0.3 W into an amplifier) it takes a few transmissions to settle.
 - **Stop:** ESC or the top knob, at any moment.
 - **Nothing sends by itself** unless you switch it on. AUTO, auto
   heartbeats, auto CQ and HB ACK are off every time the app opens, and the
@@ -900,6 +907,17 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
+## Since beta 4.5
+
+In test builds, for the next release:
+
+- **Steady transmit level at low power** (VE7NHW: 0.3 W into an XPA125B
+  swung 18-35 W every couple of seconds). The radio reads power in 0.1 W
+  steps, and the old level loop turned the drive up and down after every
+  reading, about 23 times a second; it now averages the readings, only
+  turns the drive down within a transmission, and turns it up between
+  transmissions ([Transmitting](#transmitting)). JS8 only: FT8 has its own.
+
 ## New in beta 4.5
 
 Released 2026-10-04. Most of it is in daily use on the air; what hasn't
@@ -1188,7 +1206,7 @@ What's left is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). Next:
 
 Ideas for later (not planned now):
 
-- ALC for under 1 W into an amplifier; a Setting for the map's home colour
+- A Setting for the map's home colour
 - The Murus team's WeFax, NavTex and SSTV, once their fork is on R1CBU 1.0
 - Performance: spreading the work over the radio's four cores
 - The same lower-layer drawing for the FT8 app's waterfall (that's
