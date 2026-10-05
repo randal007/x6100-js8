@@ -4,10 +4,12 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Beta 4.5** is the current release. In daily use on the air since beta
-> 1: heartbeats acknowledged, queries answered, QSOs and messages with
-> desktop JS8Call stations, all four speeds decoding, two-way SMS through
-> APRS. Beta 4.5 brings a **station History** (everyone you've exchanged
+> **Beta 4.6** is the current release: beta 4.5 with a fix for the
+> transmit level, which see-sawed at low power into an amplifier
+> ([New in beta 4.6](#new-in-beta-46)). In daily use on the air since
+> beta 1: heartbeats acknowledged, queries answered, QSOs and messages
+> with desktop JS8Call stations, all four speeds decoding, two-way SMS
+> through APRS. Beta 4.5 brought a **station History** (everyone you've exchanged
 > messages with, their INFO, STATUS and QSO texts, an all-time list and map
 > per band), automatic time sync from every decode, saved messages with
 > desktop's macros, Sort (QSO too), QRZ and an `@` for two-way APRS gateways
@@ -45,11 +47,11 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
-- [Since beta 4.5](#since-beta-45)
+- [New in beta 4.6](#new-in-beta-46)
 - [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
-- [Known issues in beta 4.5](#known-issues-in-beta-45)
+- [Known issues in beta 4.6](#known-issues-in-beta-46)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -102,7 +104,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta4.5.img.zip` from the Assets.
+   download `sdcard.js8-beta4.6.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works.
 3. Put the card in the radio and switch on. The first start creates the
@@ -907,9 +909,9 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
-## Since beta 4.5
+## New in beta 4.6
 
-In test builds, for the next release:
+Released 2026-10-05, a quick fix to beta 4.5:
 
 - **Steady transmit level at low power** (VE7NHW: 0.3 W into an XPA125B
   swung 18-35 W every couple of seconds). The radio reads power in 0.1 W
@@ -922,7 +924,7 @@ In test builds, for the next release:
 
 Released 2026-10-04. Most of it is in daily use on the air; what hasn't
 been tried on the air yet is listed in
-[Known issues](#known-issues-in-beta-45).
+[Known issues](#known-issues-in-beta-46).
 
 New:
 
@@ -1161,7 +1163,7 @@ with every change.
 ([Installing](#installing)) and put them back: beta 4 reads them as they
 are, and its new settings start at their defaults.
 
-## Known issues in beta 4.5
+## Known issues in beta 4.6
 
 - **WeFax, NavTex and the broadcast channel list are not included:** they
   came from the Murus team's (1KO125) fork, which is still on the older
