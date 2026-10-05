@@ -1,3 +1,5 @@
+> ⚠️ **Please use [beta 4.7](https://github.com/randal007/x6100-js8/releases/tag/js8-beta4.7) instead.** It has this transmit level fix improved (the level finds its place within the first transmission or two) and everything else from this release.
+
 **JS8 on the Xiegu X6100, running on the radio itself.** This is R1CBU's X6100 firmware (gdyuldin v1.0.2) with a JS8 app added next to FT8 and RTTY.
 
 **Beta 4.6 is a quick fix to beta 4.5: please use it instead of 4.5.** Everything that's new in 4.5 (the station History, Time: Auto, saved messages, Sort: QSO, the map's count tags, high-SWR protection, the APRS Echo test and services, the calmer waterfall, the USB keyboard fix) is in here too: see the [beta 4.5 notes](https://github.com/randal007/x6100-js8/releases/tag/js8-beta4.5).
