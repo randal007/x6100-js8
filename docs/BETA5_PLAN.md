@@ -371,7 +371,11 @@ heard paused them; [docs/review](review/)).
   `ft8_output_gain_offset`. Unit tests `[txlevel]`: a model radio (0.1 W
   steps, meter lag) where the old loop swings 16 dB in a frame and the new
   one holds within 0.8 dB over 54 lag/rounding/start cases. Video and
-  frames: ~/Work/x6100/research/alc-video/.
+  frames: ~/Work/x6100/research/alc-video/. Released as beta 4.6. **Then (user on 4.6: the ALC
+  never left 0.0 and the amp crept up a watt or two a transmission):**
+  while the ALC reads zero the between-transmissions step is 1 dB (0.3 dB
+  only once the ALC shows a little): at the setting by the third
+  transmission from 1.5 dB short instead of the sixth.
 - [ ] GPS time and location (USB GPS dongle ordered; testing when it
   arrives). The firmware already reads gpsd for the APRS beacon.
 

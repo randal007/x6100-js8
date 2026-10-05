@@ -4340,9 +4340,12 @@ TEST_CASE("drive level: only down within a transmission, up only between them", 
     CHECK(d == -TX_LEVEL_DOWN_MAX_DB); // overdriven: down, limited
     CHECK(tx_level_end(&l) == 0.0f);   // it came down: no raise after
     tx_level_start(&l, 0.3f);
-    for (int b = 0; b < 200; b++) tx_level_block(&l, true, 0.2f, 0.0f); // one reading step short
+    for (int b = 0; b < 200; b++) tx_level_block(&l, true, 0.2f, 0.0f); // one reading step short, ALC zero
+    CHECK(tx_level_end(&l) == Catch::Approx(1.0f)); // a step: the ALC isn't showing yet
+    tx_level_start(&l, 0.3f);
+    for (int b = 0; b < 200; b++) tx_level_block(&l, true, 0.2f, 0.1f); // the ALC shows a little
     CHECK(tx_level_end(&l) > 0.0f);
-    CHECK(tx_level_end(&l) < 0.5f); // a creep, not a jump
+    CHECK(tx_level_end(&l) < 0.5f); // a creep: nearly there
     tx_level_start(&l, 0.3f);
     for (int b = 0; b < 200; b++) tx_level_block(&l, true, 0.3f, 0.0f); // at the setting
     CHECK(tx_level_end(&l) == 0.0f);
@@ -4362,4 +4365,20 @@ TEST_CASE("drive level: steady whatever the meter's lag and rounding", "[js8][tx
                     CHECK(f[11].mean_w >= 0.3f * 0.7f);
                     CHECK(f[11].mean_alc <= 1.0f);
                 }
+}
+
+TEST_CASE("drive level: just short with the ALC at zero, up 1 dB a transmission", "[js8][txlevel]") {
+    // VE7NHW on 4.6: the ALC never left 0.0 and the amp crept up a watt or
+    // two a transmission (0.3 dB). 1.5 dB short reads 0.2 W of 0.3.
+    auto f = run_frames(false, 0.3f, -14.0f, -15.5f, 8);
+    int  at = -1;
+    for (int i = 0; i < 8 && at < 0; i++)
+        if (f[i].mean_w >= 0.29f) at = i;
+    std::printf("[txlevel] 1.5 dB short: at the setting by transmission %d\n", at + 1);
+    CHECK(at >= 0);
+    CHECK(at <= 2); // the third transmission at the latest (0.3 dB steps: the sixth)
+    for (int i = at; i < 8; i++) {
+        CHECK(swing_db(f[i]) < 0.8f);
+        CHECK(f[i].mean_alc <= 1.0f);
+    }
 }

@@ -10,9 +10,12 @@
 
 /* Below the setting by less than this (or reading it): no change. */
 #define NEAR_W 0.05f
-/* Short but within one reading step: creep up this much a transmission,
- * until the ALC starts to show (it then holds the power at the setting). */
-#define CREEP_DB 0.3f
+/* Short with the ALC at zero: step up this much a transmission (VE7NHW:
+ * 0.3 dB a time took many transmissions to get the amp up), until the
+ * ALC starts to show; then creep, as the power is about at the setting. */
+#define IDLE_STEP_DB 1.0f
+#define ALC_ZERO     0.05f
+#define CREEP_DB     0.3f
 
 void tx_level_start(tx_level_t *l, float target_w) {
     *l          = (tx_level_t){0};
@@ -55,8 +58,9 @@ float tx_level_end(const tx_level_t *l) {
     if (l->all_n < TX_LEVEL_WINDOW_BLOCKS || l->down_db < 0.0f || l->target_w <= 0.0f) return 0.0f;
     float p = l->all_pwr / l->all_n, a = l->all_alc / l->all_n;
     if (a >= TX_LEVEL_ALC_IDLE || p >= l->target_w - NEAR_W) return 0.0f;
-    if (p >= l->target_w * 0.8f - TX_LEVEL_PWR_STEP_W) return CREEP_DB; /* within a reading step */
+    float step = a < ALC_ZERO ? IDLE_STEP_DB : CREEP_DB; /* the ALC shows a little: nearly there */
+    if (p >= l->target_w * 0.8f - TX_LEVEL_PWR_STEP_W) return step; /* within a reading step */
     float up = 10.0f * log10f(l->target_w / (p + 0.01f)) * 0.5f;
-    if (up < CREEP_DB) up = CREEP_DB;
+    if (up < step) up = step;
     return up > TX_LEVEL_UP_MAX_DB ? TX_LEVEL_UP_MAX_DB : up;
 }

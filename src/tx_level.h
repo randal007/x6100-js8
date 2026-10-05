@@ -15,7 +15,8 @@
  *  the drive only goes down (the ALC shows overdrive, or the power is well
  *  over the setting), a limited step a second, so the level stays steady;
  *  it goes up only between transmissions, when a whole one averaged
- *  clearly short of power with the ALC idle, a few dB at a time. Pure
+ *  short of power with the ALC idle: 1 dB a time while the ALC reads
+ *  zero (up to 2 dB when far short), 0.3 dB once it shows a little. Pure
  *  arithmetic: tests/test_js8.cpp runs it against a model radio.
  */
 
