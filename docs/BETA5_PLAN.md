@@ -1,10 +1,16 @@
 # Beta 5: plan
 
+> **Released as beta 4.5 on 2026-10-04** (user's call): tag `js8-beta4.5`,
+> the tested image CI 37258042913 (19bbc77); notes in
+> [releases/js8-beta4.5.md](releases/js8-beta4.5.md). **Next, the only items
+> the user wants now:** GPS (USB dongle) and trying a Bluetooth keyboard.
+> The other open items below (ALC under 1 W, the map's home colour, POTA /
+> SOTA on the air, the Murus merge, performance) are parked as ideas.
+
 VE7NHW's list for beta 5 (2026-10-02), with notes on where each item
 touches the code. **Highest priorities:** time sync, high-SWR protection,
-the two upstream merges, and station history. Nothing here is started
-yet; items get ticked here and moved into the README's "New in beta 5"
-as they land.
+the two upstream merges, and station history. Items get ticked here and
+moved into the README's "New in ..." as they land.
 
 ## Core priorities
 

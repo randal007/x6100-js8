@@ -4,27 +4,20 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Beta 4.1** is the current release. In daily use on the air since beta 1:
-> heartbeats acknowledged, queries answered, QSOs and messages with desktop
-> JS8Call stations, all four speeds decoding, two-way SMS through APRS.
-> Beta 4.1 moves JS8 onto the latest R1CBU firmware (gdyuldin v1.0.2: a
-> cleaner screen, new themes, more room for the waterfall and the map),
-> and brings a Heartbeat button that works like CQ, a red band that shows
-> where a heartbeat goes, a green band as wide as the station's speed, and
-> QUERY CALL fixed ([New in beta 4.1](#new-in-beta-41)). Beta 4 added the
-> map, decode marks and the code review's fixes ([New in beta 4](#new-in-beta-4)).
-> Nothing transmits by itself when the app opens; automatic replies and
-> heartbeats are switches you turn on.
->
-> **This manual describes the latest code** (beta 5 in progress). New since
-> 4.1: a **station History** (every station you've exchanged messages with,
-> their INFO, STATUS and QSO texts, an all-time list and map per band),
-> automatic time sync from every decode, saved messages with desktop's
-> macros, Sort, QRZ and an `@` for two-way APRS gateways in the Stations
-> view, a count on stacked map squares, high-SWR protection, an APRS Echo
-> test and services list, and a lighter, calmer waterfall
-> ([New in beta 5 so far](#new-in-beta-5-so-far)). They're in test builds
-> now and in the next release.
+> **Beta 4.5** is the current release. In daily use on the air since beta
+> 1: heartbeats acknowledged, queries answered, QSOs and messages with
+> desktop JS8Call stations, all four speeds decoding, two-way SMS through
+> APRS. Beta 4.5 brings a **station History** (everyone you've exchanged
+> messages with, their INFO, STATUS and QSO texts, an all-time list and map
+> per band), automatic time sync from every decode, saved messages with
+> desktop's macros, Sort (QSO too), QRZ and an `@` for two-way APRS gateways
+> in the Stations view, a count on stacked map squares, high-SWR
+> protection, an APRS Echo test and services list, a lighter and calmer
+> waterfall, and a USB keyboard that works when plugged in while the radio
+> is on ([New in beta 4.5](#new-in-beta-45)). Beta 4.1 moved JS8 onto the
+> latest R1CBU firmware (gdyuldin v1.0.2), and beta 4 added the map and
+> decode marks. Nothing transmits by itself when the app opens; automatic
+> replies and heartbeats are switches you turn on.
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
@@ -52,10 +45,10 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
-- [New in beta 5 so far](#new-in-beta-5-so-far)
+- [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
-- [Known issues in beta 4.1](#known-issues-in-beta-41)
+- [Known issues in beta 4.5](#known-issues-in-beta-45)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -108,7 +101,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta4.1.img.zip` from the Assets.
+   download `sdcard.js8-beta4.5.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works.
 3. Put the card in the radio and switch on. The first start creates the
@@ -546,6 +539,10 @@ and new builds; it lives in `js8_history.db` on the SD card). For each:
 
 Stations you never exchange a message with aren't kept.
 
+| A station's History page | A QSO opened |
+|---|---|
+| ![History page](docs/screenshots/16_history.png) | ![A QSO](docs/screenshots/17_history_qso.png) |
+
 **Opening it:**
 
 - **Page 3, Show History** (over the messages): the Stations view, listing
@@ -900,10 +897,11 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
-## New in beta 5 so far
+## New in beta 4.5
 
-In test builds now; not yet in a release. To be tried on the air unless
-it says otherwise.
+Released 2026-10-04. Most of it is in daily use on the air; what hasn't
+been tried on the air yet is listed in
+[Known issues](#known-issues-in-beta-45).
 
 New:
 
@@ -979,7 +977,7 @@ Fixes:
   Stations view.
 
 **Updating from beta 4.1:** copy your DATA files off first as usual
-([Installing](#installing)) and put them back: beta 5 reads them as they
+([Installing](#installing)) and put them back: beta 4.5 reads them as they
 are. The new settings start at their defaults (Time: Auto on, Waterfall:
 Light, Sort: Heard you), the saved messages start as desktop's
 (`TNX 73 GL`, nine empty), and the [History](#history) starts empty: it
@@ -1142,37 +1140,31 @@ with every change.
 ([Installing](#installing)) and put them back: beta 4 reads them as they
 are, and its new settings start at their defaults.
 
-## Known issues in beta 4.1
+## Known issues in beta 4.5
 
-- **WeFax, NavTex and the broadcast channel list are not in beta 4.1:**
-  they came from the Murus team's (1KO125) fork, which is still on the
-  older firmware. They come back once their fork is on R1CBU 1.0.
-- **A very faint stutter in JS8's waterfall** while the MFK steps through
-  the list (each step redrew the whole list, with an animated scroll);
-  fixed for beta 5. It doesn't affect decoding.
+- **WeFax, NavTex and the broadcast channel list are not included:** they
+  came from the Murus team's (1KO125) fork, which is still on the older
+  firmware. They come back once their fork is on R1CBU 1.0.
 - **A slight flicker in the waterfall while it scrolls** (not when it's
-  still, e.g. while you transmit). Each new row moves the whole waterfall
-  by a pixel and the screen's pixels darken faster than they brighten, so
-  the waterfall dims for a moment 15 times a second. Much reduced after
-  4.1 by the *Waterfall* levels in Settings (*Light*, the default, about 2
-  times less change at each step; *Calm* about 4 times less).
-  It doesn't affect decoding.
-- **A USB keyboard plugged in while the radio is on isn't picked up** in
-  beta 4.1 (plug it in before switching on); fixed for beta 5.
-- **The radio's clock:** it has no network time and gains a few seconds a
-  week. Beta 4.1's Time Sync needed three decodes in two minutes, which a
-  quiet band rarely gives; from beta 5 [Time: Auto](#time) follows every
-  decode. At 2.5 s or more off nothing decodes: set it in the radio's
-  Settings (General: *Hour, Min, Sec*), or from beta 5 hold **Time** to
-  search.
-- **Relays, store and forward and messaging** work on the air with
-  desktop JS8Call stations.
-- **APRS:** the grid spot, two-way SMS and Winlink work on the air.
-  Winlink messages get two ACKs (the gateway's and Winlink's own reply);
-  fixed for beta 5. POTA and SOTA spots, position messages and email are
-  untested through the gateways.
-- **The map:** your own square is orange for now; a Setting to pick its
-  colour is to come.
+  still, e.g. while you transmit): each new row moves the whole waterfall
+  by a pixel, and the screen's pixels darken faster than they brighten.
+  Much reduced by the *Waterfall* levels in Settings (*Light*, the default,
+  about 2 times less change at each step; *Calm* about 4 times less). It
+  doesn't affect decoding.
+- **The radio's clock** has no network time and gains a few seconds a
+  week. [Time: Auto](#time) follows every decode; at 2.5 s or more off
+  nothing decodes: hold **Time** to search, or set the clock in the radio's
+  Settings (General: *Hour, Min, Sec*).
+- **Not tried on the air yet:** the high-SWR protection, the APRS Echo test
+  and More services list, POTA and SOTA spots, position messages and email
+  through the gateways, a **Bluetooth keyboard**. Relays, store and
+  forward, messaging, the grid spot, two-way SMS and Winlink all work on
+  the air.
+- **The [History](#history) starts empty** (QSOs from before beta 4.5
+  aren't brought in), and its All-time list holds the stations you've
+  exchanged messages with, not every station heard.
+- **The map:** your own square is orange; there's no Setting for its
+  colour.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
 - If the radio loses power, or you switch it off by holding POWER, while
@@ -1183,21 +1175,16 @@ are, and its new settings start at their defaults.
 
 ## Coming next
 
-The full list with notes is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md);
-what's done is in [New in beta 5 so far](#new-in-beta-5-so-far). Still to
-do for beta 5:
+What's left is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). Next:
 
 - [ ] **GPS** time and location from a USB GPS
-- [ ] ALC for under 1 W into an amplifier
-- [ ] The Murus team's WeFax, NavTex and SSTV, once their fork is on
-  R1CBU 1.0.2
-- [ ] Still from beta 4: the map's home colour Setting; POTA and SOTA
-  spots tried on the air
-- [ ] Later, after the features: performance (spreading the work over the
-  radio's four cores)
+- [ ] **A Bluetooth keyboard** tried with JS8
 
-Ideas for later:
+Ideas for later (not planned now):
 
+- ALC for under 1 W into an amplifier; a Setting for the map's home colour
+- The Murus team's WeFax, NavTex and SSTV, once their fork is on R1CBU 1.0
+- Performance: spreading the work over the radio's four cores
 - The same lower-layer drawing for the FT8 app's waterfall (that's
   upstream's code: an idea to offer them)
 - Decode marks: an option to hide the dim ones (faint maybes, mostly noise)
@@ -1211,7 +1198,7 @@ This is a beta: reports from testing are very welcome.
   release you're running (e.g. `js8-beta4`), the band and speed, what you
   did, what you expected and what happened. A photo or screenshot of the
   radio's screen helps, and so does the `app_logs` folder from the SD card's
-  DATA partition if the app closed or froze (from beta 5 on it also has a
+  DATA partition if the app closed or froze (from beta 4.5 on it also has a
   line a minute about how busy the decoder was, and notes screen stalls
   and time changes).
 - **Radio problems on Windows** (no power out, settings you can't find):
