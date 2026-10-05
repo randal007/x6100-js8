@@ -1,3 +1,5 @@
+> ⚠️ **Please use [beta 4.6](https://github.com/randal007/x6100-js8/releases/tag/js8-beta4.6) instead.** It fixes the transmit level, which in 4.5 see-saws during a transmission at low power (for example 0.3 W driving an amplifier). Everything else in these notes is in 4.6 too.
+
 **JS8 on the Xiegu X6100, running on the radio itself.** No PC, phone or tablet needed. This is R1CBU's X6100 firmware (gdyuldin v1.0.2) with a JS8 app added next to FT8 and RTTY.
 
 Beta 4.5 brings a **station History**, **automatic time sync**, **saved messages with macros**, a smarter Stations view and map, **high-SWR protection**, more **APRS** services, a lighter and calmer **waterfall**, and a USB keyboard that works when you plug it in with the radio on.
