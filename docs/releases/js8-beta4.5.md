@@ -42,6 +42,7 @@ Beta 4.5 brings a **station History**, **automatic time sync**, **saved messages
 - **Not tried on the air yet:** the high-SWR protection, the APRS Echo test and More services, POTA/SOTA spots, position messages and email through the gateways, a **Bluetooth keyboard**
 - The History starts empty with this release (earlier QSOs aren't brought in)
 - A power loss with JS8 open leaves the USB-D receive filter at 200–3000 Hz
+- The `<MYVERSION>` macro says `X6100 JS8 beta 5` in this release (it was built before the name was settled); it only goes out if you use it in a message, INFO or STATUS
 
 ### Coming next
 

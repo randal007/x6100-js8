@@ -1167,6 +1167,9 @@ are, and its new settings start at their defaults.
   colour.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
+- The `<MYVERSION>` [macro](#saved-messages) says `X6100 JS8 beta 5` in
+  this release (built before the name 4.5 was settled); it only goes out
+  if you put it in a message, INFO or STATUS.
 - If the radio loses power, or you switch it off by holding POWER, while
   JS8 is open, the USB-D receive filter stays at 200–3000 Hz, which suits
   digital modes; set yours back by hand if it was different. Leaving the
