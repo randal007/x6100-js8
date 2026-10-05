@@ -55,8 +55,8 @@ bool tx_player_play(int16_t      *samples,
     radio_set_freq((int32_t)radio_freq + tx_offset_hz - TX_PLAYER_AUDIO_HZ);
     radio_set_modem(true);
 
-    /* The drive from the ALC and power readback (tx_level.c): steady within
-     * a transmission, only down there; up between transmissions. */
+    /* The drive from the ALC and power readback (tx_level.c): ramped up
+     * while the ALC reads zero, held once it shows; kept for the next. */
     static uint8_t msg_id = 0;
     tx_level_t     level;
     tx_level_start(&level, LV_MIN(param_f_get(cfg.pwr()), TX_PLAYER_MAX_PWR_W));
@@ -91,7 +91,6 @@ bool tx_player_play(int16_t      *samples,
         n_samples -= part;
         ptr       += part;
     }
-    if (!aborted) gain_offset = clamp_gain(gain_offset + tx_level_end(&level)); /* for the next one */
 
     /* The learned gain offset is shared by FT8 and JS8: same audio path. */
     param_f_set(cfg.ft8.output_gain_offset(), gain_offset - base_gain_offset + play_gain_offset);

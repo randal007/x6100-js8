@@ -4,8 +4,8 @@
  *  Xiegu X6100 LVGL GUI - digital-mode TX player
  *
  *  Plays a prepared TX waveform with the radio keyed, setting the audio
- *  gain from the radio's ALC and power readback (tx_level.c: steady within
- *  a transmission, raised between them). JS8's; FT8 on R1CBU 1.0 has its
+ *  gain from the radio's ALC and power readback (tx_level.c: ramped up to
+ *  the ALC's onset, then held). JS8's; FT8 on R1CBU 1.0 has its
  *  own (src/ft8/tx_worker.c). They share the learned gain offset.
  *
  *  The waveform is synthesised around TX_PLAYER_AUDIO_HZ; while it plays

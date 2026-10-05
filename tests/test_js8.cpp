@@ -4244,6 +4244,7 @@ float old_correction(float target, float pwr, float alc) {
 
 struct FrameStats {
     float min_w, max_w, mean_w, mean_alc;
+    int   turns; // times the drive changed direction (up to down or back)
 };
 
 // Frames one after another, the gain carried over (the learned offset).
@@ -4258,8 +4259,8 @@ std::vector<FrameStats> run_frames(bool old_loop, float set_w, float full_db, fl
     for (int f = 0; f < frames; f++) {
         tx_level_t l;
         tx_level_start(&l, set_w);
-        FrameStats st{1e9f, 0, 0, 0};
-        int        n = 0;
+        FrameStats st{1e9f, 0, 0, 0, 0};
+        int        n = 0, last_dir = 0;
         for (int b = 0; b < FRAME_BLOCKS; b++) {
             float pwr, alc;
             r.block(g, &pwr, &alc);
@@ -4271,10 +4272,12 @@ std::vector<FrameStats> run_frames(bool old_loop, float set_w, float full_db, fl
                 st.mean_alc += r.true_alc(g);
                 n++;
             }
-            g += old_loop ? (b > 30 ? old_correction(set_w, pwr, alc) * 0.4f : 0.0f) : tx_level_block(&l, true, pwr, alc);
-            g = std::clamp(g, -30.0f, 0.0f);
+            float d = old_loop ? (b > 30 ? old_correction(set_w, pwr, alc) * 0.4f : 0.0f) : tx_level_block(&l, true, pwr, alc);
+            int   dir = d > 0 ? 1 : d < 0 ? -1 : 0;
+            if (dir && last_dir && dir != last_dir) st.turns++;
+            if (dir) last_dir = dir;
+            g = std::clamp(g + d, -30.0f, 0.0f);
         }
-        if (!old_loop) g = std::clamp(g + tx_level_end(&l), -30.0f, 0.0f);
         st.mean_w /= n;
         st.mean_alc /= n;
         out.push_back(st);
@@ -4295,7 +4298,7 @@ TEST_CASE("drive level at 0.3 W into an amplifier: steady within a frame, not sw
     auto old_f = run_frames(true, 0.3f, -14.0f, -12.0f, 10);
     auto new_f = run_frames(false, 0.3f, -14.0f, -12.0f, 10);
     float old_swing = 0, new_swing = 0;
-    for (int f = 2; f < 10; f++) {
+    for (int f = 1; f < 10; f++) {
         old_swing = std::max(old_swing, swing_db(old_f[f]));
         new_swing = std::max(new_swing, swing_db(new_f[f]));
         INFO("frame " << f << ": old " << old_f[f].min_w << "-" << old_f[f].max_w << " W, new " << new_f[f].min_w
@@ -4303,82 +4306,100 @@ TEST_CASE("drive level at 0.3 W into an amplifier: steady within a frame, not sw
                       << ")");
         CHECK(new_f[f].mean_w >= 0.3f * 0.7f); // within 1.5 dB of the setting
         CHECK(new_f[f].mean_alc <= 1.0f);      // not driven into the ALC
+        CHECK(new_f[f].turns <= 1);            // no see-saw
     }
     std::printf("[txlevel] 0.3 W: within-frame swing old %.1f dB, new %.2f dB\n", old_swing, new_swing);
     CHECK(old_swing > 2.0f);  // the old loop swings (as the radio did)
-    CHECK(new_swing < 0.8f);  // the new one holds (steady frames after the second)
+    CHECK(new_swing < 0.8f);  // the new one holds from the second frame on
 }
 
-TEST_CASE("drive level: starting far too low or too hot, it settles within a few frames", "[js8][txlevel]") {
+TEST_CASE("drive level: starting far too low or too hot, it settles within two transmissions", "[js8][txlevel]") {
     for (float set : {0.3f, 1.0f, 5.0f}) {
         INFO("set " << set << " W");
-        // 10 dB too low: up between frames, 2 dB at a time.
-        auto low = run_frames(false, set, -14.0f, -24.0f, 10);
-        CHECK(low[0].mean_w < set * 0.2f);
-        CHECK(low[8].mean_w >= set * 0.7f);
-        CHECK(low[9].mean_alc <= 1.0f);
-        // 10 dB too hot: down within the first frames (overdrive cut first).
+        // 6 dB too low: ramped up live in the first, steady from the second.
+        auto low = run_frames(false, set, -14.0f, -20.0f, 6);
+        CHECK(low[0].min_w < set * 0.6f); // it started short (measured from 2.6 s, the ramp already going)
+        CHECK(low[0].turns <= 1); // a ramp, not a see-saw
+        for (int f = 1; f < 6; f++) {
+            CHECK(low[f].mean_w >= set * 0.7f);
+            CHECK(low[f].mean_alc <= 1.0f);
+            CHECK(swing_db(low[f]) < 0.8f);
+        }
+        // 10 dB too low: there by the second transmission (8 dB a transmission at most).
+        auto far = run_frames(false, set, -14.0f, -24.0f, 6);
+        CHECK(far[1].max_w >= set * 0.7f);
+        for (int f = 2; f < 6; f++) CHECK(swing_db(far[f]) < 0.8f);
+        // 10 dB too hot: down within the first two, steady after.
         auto hot = run_frames(false, set, -14.0f, -4.0f, 10);
         CHECK(hot[0].mean_alc > 1.0f);
-        CHECK(hot[3].mean_alc <= 1.0f);
+        CHECK(hot[2].mean_alc <= 1.0f);
         CHECK(hot[9].mean_w >= set * 0.7f);
         CHECK(swing_db(hot[9]) < 0.8f);
     }
 }
 
-TEST_CASE("drive level: only down within a transmission, up only between them", "[js8][txlevel]") {
+TEST_CASE("drive level: ramps up while the ALC reads zero, holds once it shows", "[js8][txlevel]") {
     tx_level_t l;
     tx_level_start(&l, 0.3f);
+    for (int b = 0; b < TX_LEVEL_SETTLE_BLOCKS; b++) CHECK(tx_level_block(&l, true, 0.0f, 0.0f) == 0.0f); // settling
     float total = 0;
-    for (int b = 0; b < 200; b++) total += tx_level_block(&l, true, 0.0f, 0.0f); // reading nothing at all
-    CHECK(total == 0.0f);                       // never up mid-frame
-    CHECK(tx_level_end(&l) == TX_LEVEL_UP_MAX_DB); // far short with the ALC idle: the most up
+    for (int b = 0; b < 400; b++) total += tx_level_block(&l, true, 0.0f, 0.0f); // reading nothing at all
+    CHECK(total == Catch::Approx(TX_LEVEL_UP_MAX_DB)); // up, but no further than the limit
     tx_level_start(&l, 0.3f);
-    for (int b = 0; b < 30; b++) CHECK(tx_level_block(&l, true, 0.3f, 9.0f) == 0.0f); // settling: no change
+    for (int b = 0; b < TX_LEVEL_SETTLE_BLOCKS; b++) tx_level_block(&l, true, 0.3f, 9.0f);
     float d = 0;
     for (int b = 0; b < TX_LEVEL_WINDOW_BLOCKS; b++) d += tx_level_block(&l, true, 0.3f, 9.0f);
     CHECK(d == -TX_LEVEL_DOWN_MAX_DB); // overdriven: down, limited
-    CHECK(tx_level_end(&l) == 0.0f);   // it came down: no raise after
+    total = 0;
+    for (int b = 0; b < 200; b++) total += tx_level_block(&l, true, 0.0f, 0.0f);
+    CHECK(total == 0.0f); // it had to come down: no ramping up after, this transmission
     tx_level_start(&l, 0.3f);
-    for (int b = 0; b < 200; b++) tx_level_block(&l, true, 0.2f, 0.0f); // one reading step short, ALC zero
-    CHECK(tx_level_end(&l) == Catch::Approx(1.0f)); // a step: the ALC isn't showing yet
+    total = 0;
+    for (int b = 0; b < 200; b++) total += tx_level_block(&l, true, 0.2f, 0.2f); // the ALC shows a little
+    CHECK(total == 0.0f); // there: held
     tx_level_start(&l, 0.3f);
-    for (int b = 0; b < 200; b++) tx_level_block(&l, true, 0.2f, 0.1f); // the ALC shows a little
-    CHECK(tx_level_end(&l) > 0.0f);
-    CHECK(tx_level_end(&l) < 0.5f); // a creep: nearly there
+    total = 0;
+    for (int b = 0; b < 200; b++) total += tx_level_block(&l, true, 0.3f, 0.0f); // reads the setting
+    CHECK(total == 0.0f);
     tx_level_start(&l, 0.3f);
-    for (int b = 0; b < 200; b++) tx_level_block(&l, true, 0.3f, 0.0f); // at the setting
-    CHECK(tx_level_end(&l) == 0.0f);
+    total = 0;
+    for (int b = 0; b < 30 + 2 * TX_LEVEL_WINDOW_BLOCKS; b++) total += tx_level_block(&l, true, 0.2f, 0.0f); // near
+    CHECK(total == Catch::Approx(2 * TX_LEVEL_UP_SLOW_DB)); // gently
+    tx_level_start(&l, 0.3f);
+    total = 0;
+    for (int b = 0; b < 30 + 2 * TX_LEVEL_WINDOW_BLOCKS; b++) total += tx_level_block(&l, true, 0.1f, 0.0f); // far
+    CHECK(total == Catch::Approx(2 * TX_LEVEL_UP_FAST_DB)); // faster
 }
 
 TEST_CASE("drive level: steady whatever the meter's lag and rounding", "[js8][txlevel]") {
     for (size_t delay : {0u, 8u, 16u})
         for (float smooth : {1.0f, 0.25f, 0.1f})
             for (bool round_p : {false, true})
-                for (float start : {-24.0f, -12.0f, -4.0f}) {
-                    auto f = run_frames(false, 0.3f, -14.0f, start, 12, delay, smooth, round_p);
+                for (float start : {-24.0f, -16.0f, -12.0f, -4.0f}) {
+                    auto f = run_frames(false, 0.3f, -14.0f, start, 8, delay, smooth, round_p);
                     INFO("delay " << delay << " smooth " << smooth << " round " << round_p << " start " << start
-                                  << ": last frame " << f[11].min_w << "-" << f[11].max_w << " W, ALC "
-                                  << f[11].mean_alc);
-                    CHECK(swing_db(f[11]) < 0.8f);
-                    CHECK(swing_db(f[10]) < 0.8f);
-                    CHECK(f[11].mean_w >= 0.3f * 0.7f);
-                    CHECK(f[11].mean_alc <= 1.0f);
+                                  << ": frames 3-7 e.g. " << f[3].min_w << "-" << f[3].max_w << " W, ALC "
+                                  << f[3].mean_alc);
+                    for (int i = 0; i < 8; i++) CHECK(f[i].turns <= 2); // never a see-saw
+                    for (int i = 3; i < 8; i++) {
+                        CHECK(swing_db(f[i]) < 0.8f);
+                        CHECK(f[i].mean_w >= 0.3f * 0.7f);
+                        CHECK(f[i].mean_alc <= 1.0f);
+                    }
                 }
 }
 
-TEST_CASE("drive level: just short with the ALC at zero, up 1 dB a transmission", "[js8][txlevel]") {
+TEST_CASE("drive level: just short with the ALC at zero, there in the first transmission", "[js8][txlevel]") {
     // VE7NHW on 4.6: the ALC never left 0.0 and the amp crept up a watt or
-    // two a transmission (0.3 dB). 1.5 dB short reads 0.2 W of 0.3.
-    auto f = run_frames(false, 0.3f, -14.0f, -15.5f, 8);
-    int  at = -1;
-    for (int i = 0; i < 8 && at < 0; i++)
-        if (f[i].mean_w >= 0.29f) at = i;
-    std::printf("[txlevel] 1.5 dB short: at the setting by transmission %d\n", at + 1);
-    CHECK(at >= 0);
-    CHECK(at <= 2); // the third transmission at the latest (0.3 dB steps: the sixth)
-    for (int i = at; i < 8; i++) {
+    // two a transmission. 1.5 dB short reads 0.2 W of 0.3.
+    auto f = run_frames(false, 0.3f, -14.0f, -15.5f, 6);
+    std::printf("[txlevel] 1.5 dB short: first transmission %.2f-%.2f W (ALC %.2f), second %.2f-%.2f W\n",
+                f[0].min_w, f[0].max_w, f[0].mean_alc, f[1].min_w, f[1].max_w);
+    CHECK(f[0].max_w >= 0.29f);   // at the setting within the first
+    CHECK(f[0].turns <= 1);       // a smooth ramp up (at most a small step back)
+    for (int i = 1; i < 6; i++) { // steady from the second
         CHECK(swing_db(f[i]) < 0.8f);
+        CHECK(f[i].mean_w >= 0.28f);
         CHECK(f[i].mean_alc <= 1.0f);
     }
 }

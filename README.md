@@ -439,12 +439,13 @@ the thing. ESC closes lists too, and the VOL knob works in all of them.
   stays locked. With **Hold: Off**, replying moves your offset to theirs.
 - **Power** is capped at 5 W while JS8 is open, as in the FT8 app. The
   drive level is learned (and shared with FT8) from the radio's ALC and
-  power readings: **within a transmission it only ever comes down** (when
-  the ALC shows overdrive), so the level stays steady for an amplifier
-  behind the radio; **between transmissions it goes up** a little if the
-  last one ran short of power with the ALC idle, until the ALC just
-  starts to show, which holds the power at your setting. At very low
-  power (0.3 W into an amplifier) it takes a few transmissions to settle.
+  power readings, averaged over half a second: while the ALC reads zero
+  the drive **ramps up smoothly** (1 dB a second while far short, then
+  0.5 dB a second), and once the ALC starts to show (it then holds the
+  power at your setting) it **stops and holds** for the rest of the
+  transmission, coming down a little only if the ALC shows overdrive. The
+  level found is kept, so the next transmission starts there, steady for
+  an amplifier behind the radio.
 - **Stop:** ESC or the top knob, at any moment.
 - **Nothing sends by itself** unless you switch it on. AUTO, auto
   heartbeats, auto CQ and HB ACK are off every time the app opens, and the

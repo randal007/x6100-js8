@@ -375,7 +375,17 @@ heard paused them; [docs/review](review/)).
   never left 0.0 and the amp crept up a watt or two a transmission):**
   while the ALC reads zero the between-transmissions step is 1 dB (0.3 dB
   only once the ALC shows a little): at the setting by the third
-  transmission from 1.5 dB short instead of the sixth.
+  transmission from 1.5 dB short instead of the sixth. **Then (user: "is there a better way to do
+  it live?", 1-2 transmissions):** a live one-way ramp replaced the
+  between-transmission steps: half-second averages; while the ALC reads
+  zero, up 0.5 dB a window when under half the setting, else 0.25 (1 / 0.5
+  dB a second), at most 8 dB a transmission; held for the rest of the
+  transmission once the ALC shows (>= 0.1) or the power reads the setting,
+  or after an overdrive cut (ALC > 0.5: half the old formula, at most
+  0.75 dB a window). Can't see-saw: it never goes back up after holding.
+  Model: 1.5 dB short is at the setting within the first transmission
+  (ALC 0.28), steady from the second; never more than 2 direction changes
+  in any frame over 72 lag/rounding/start cases.
 - [ ] GPS time and location (USB GPS dongle ordered; testing when it
   arrives). The firmware already reads gpsd for the APRS beacon.
 
