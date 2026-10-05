@@ -1157,8 +1157,6 @@ The full list with notes is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md);
 what's done is in [New in beta 5 so far](#new-in-beta-5-so-far). Still to
 do for beta 5:
 
-- [ ] **History:** bring in the QSOs already in your log and the Inbox's
-  messages, so the history doesn't start empty
 - [ ] **GPS** time and location from a USB GPS
 - [ ] ALC for under 1 W into an amplifier
 - [ ] The Murus team's WeFax, NavTex and SSTV, once their fork is on

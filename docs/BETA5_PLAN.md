@@ -88,7 +88,8 @@ heard paused them; [docs/review](review/)).
 
 ## Stations and history
 
-- [ ] **Station history** (user's design, 2026-10-04; named *History*).
+- [x] **Station history** (user's design, 2026-10-04; named *History*).
+  **Done (d8263d9).**
   - **What's kept:** every station you've exchanged messages with, either
     way, heartbeat ACKs included, **per band**, for good (all-time list
     and map show where you've reached on that band). Their INFO and
@@ -134,7 +135,10 @@ heard paused them; [docs/review](review/)).
     call (classify() now decides the recipient).
   - [x] **Settings > Clear station history...** (user asked): two presses
     within 5 s; every band.
-  - [ ] Step 4: bring in the existing QSO log and the Inbox.
+  - ~~Step 4: bring in the existing QSO log and the Inbox~~: not wanted
+    (user, 2026-10-04: "we're good"); the history starts with this build.
+    Also declined: an "All time" marker on the status line (the button
+    shows it).
 - [x] A Sort button on the Stations list (SNR, last heard ...). **Done
   (user's choices):** page 3's second button in the Stations view (blank
   over the messages, the map's view button on the map): *Sort: Heard you*
