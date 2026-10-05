@@ -141,6 +141,9 @@ public:
     std::optional<HistoryInfo>  latest_info(const std::string &call, int kind);
     std::vector<HistoryQso>     qsos(const std::string &call, bool with_heartbeat_only = false);
     std::vector<HistoryLine>    lines(std::int64_t qso_id);
+    /// A QSO with `call` in the history (any band; heartbeat-only
+    /// exchanges don't count). Quick: no file access.
+    bool                        had_qso(const std::string &call) const;
     /// Exchanged messages with `call` (a base call) on `band`.
     bool                        known(const std::string &call, const std::string &band) const;
 
@@ -172,7 +175,8 @@ private:
     std::uint64_t           posted_ = 0, written_ = 0;
     bool                    stop_ = false, background_ = true;
     int                     flushes_ = 0; ///< callers waiting in flush()
-    std::unordered_set<std::string> known_; ///< "CALL BAND" of every contact row
+    std::unordered_set<std::string> known_;    ///< "CALL BAND" of every contact row
+    std::unordered_set<std::string> qso_calls_; ///< calls with a QSO that isn't heartbeats only
     HistoryStats            stats_;
     std::mutex              db_mu_; ///< the connection: writer and readers take turns
     /// The QSO still open per call: id, band, last message, their offset.
@@ -183,7 +187,7 @@ private:
     };
     std::unordered_map<std::string, Open> open_;
     Open &open_for(const std::string &call);
-    void  add_line(Open &o, const Op &op, bool rx, bool heartbeat, const std::string &call_as);
+    void  add_line(Open &o, const std::string &call, const Op &op, bool rx, bool heartbeat, const std::string &call_as);
     bool  is_open(const Open &o, const Op &op) const {
         return o.id && o.band == op.band && op.ms - o.end_ms <= QSO_GAP_MS;
     }

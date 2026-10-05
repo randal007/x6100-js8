@@ -4024,6 +4024,10 @@ TEST_CASE("history: QSOs, INFO and STATUS kept in the file, per band", "[js8][hi
         CHECK(qsos[2].logged);
         CHECK_FALSE(qsos[1].logged);
         CHECK(h.qsos("W1ABC", true).size() == 4);
+        CHECK(h.had_qso("W1ABC"));
+        tx(h, "K2XYZ: N0XYZ HEARTBEAT SNR -10", "20m", t0 + 150 * 60'000, true); // a heartbeat ACK only
+        CHECK(h.known("N0XYZ", "20m"));
+        CHECK_FALSE(h.had_qso("N0XYZ"));
 
         auto lines = h.lines(qsos[2].id);
         REQUIRE(lines.size() == 3);
@@ -4048,6 +4052,8 @@ TEST_CASE("history: QSOs, INFO and STATUS kept in the file, per band", "[js8][hi
     History h;
     REQUIRE(h.open(path));
     CHECK(h.known("W1ABC", "20m"));
+    CHECK(h.had_qso("W1ABC")); // read back from the file
+    CHECK_FALSE(h.had_qso("N0XYZ"));
     rx(h, "W1ABC", "W1ABC: K2XYZ ONE MORE THING", true, "20m", t0 + 140 * 60'000);
     auto all = h.qsos("W1ABC", true);
     REQUIRE(all.size() == 4);
@@ -4162,6 +4168,7 @@ TEST_CASE("history: text without the calls joins an open QSO, never starts one",
     rx("W1ABC", "W1ABC: LATER", t0 + 50 * 60'000);                       // too late: the QSO ended
 
     CHECK_FALSE(h.known("GOOD", "20m"));
+    CHECK(h.had_qso("W1ABC"));
     CHECK_FALSE(h.known("N0XYZ", "20m"));
     CHECK(h.contacts("20m").size() == 1);
     auto q = h.qsos("W1ABC");
@@ -4183,7 +4190,9 @@ TEST_CASE("history: text without the calls joins an open QSO, never starts one",
     CHECK(h.contacts("20m").empty());
     CHECK(h.qsos("W1ABC", true).empty());
     CHECK_FALSE(h.known("W1ABC", "20m"));
+    CHECK_FALSE(h.had_qso("W1ABC"));
     rx("W1ABC", "W1ABC: K2XYZ ARE YOU THERE", t0 + 51 * 60'000);
+    CHECK(h.had_qso("W1ABC"));
     REQUIRE(h.qsos("W1ABC").size() == 1);
     CHECK(h.lines(h.qsos("W1ABC")[0].id).size() == 1);
 }

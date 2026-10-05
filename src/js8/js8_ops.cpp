@@ -188,6 +188,7 @@ extern "C" void js8_stations_sort(js8_station_t *st, int n, js8_st_sort_t order,
         std::stable_sort(st, st + n, [](const js8_station_t &a, const js8_station_t &b) { return a.snr > b.snr; });
         break;
     case JS8_ST_SORT_TIME:
+    case JS8_ST_SORT_QSO:
         std::stable_sort(st, st + n,
                          [](const js8_station_t &a, const js8_station_t &b) { return a.heard_ms > b.heard_ms; });
         break;

@@ -84,3 +84,18 @@ upstream (gdyuldin/x6100_gui), keep these as they are:
 
 (First written 2026-09-30, review D10; the migrations part rewritten for
 R1CBU 1.0, see [upgrade-1.0.2](upgrade-1.0.2/README.md).)
+
+## Upstream code we fixed (worth offering upstream)
+
+- **`src/keyboard.c`, USB keyboard hot plug (2026-10-04).** On R1CBU 1.0
+  a keyboard plugged in while the radio is on is never found: udev's USB
+  "add" comes before the keyboard's `/dev/input/by-path/*-kbd` link
+  exists, and 1.0's `usb_devices.cpp` passes the events on at once (0.34
+  slept half a second between them), so the one look at each event finds
+  nothing. Ours looks again every 0.5 s for 5 s after any USB add or
+  remove, opens a keyboard that was unplugged and plugged back (new
+  device node), and frees the `glob()` result upstream leaked on every
+  look. Test: `tools/js8_ui_harness/kbd_hotplug_test.c` (fails on the old
+  code). Not sent upstream yet: show the user first.
+- `src/keyboard.c` also reads keys through `src/kbd_rollover.c` (beta 2),
+  so keys pressed together aren't lost.

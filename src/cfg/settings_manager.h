@@ -349,7 +349,7 @@ class SettingsManager {
         StorageType::GLOBAL, pending_writes_, &global_params_}; // Settings: waterfall rows averaged over time: 0 Sharp, 1 Light (default), 2 Medium, 3 Calm (less flicker as it steps)
     Parameter<int32_t> p_js8_map_mode{"js8_map_mode", 0, 0, 2,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // Show Map: 0 Auto, 1 Close-in, 2 World
-    Parameter<int32_t> p_js8_st_sort{"js8_st_sort", 0, 0, 3,
+    Parameter<int32_t> p_js8_st_sort{"js8_st_sort", 0, 0, 4,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // Stations view's Sort: 0 Heard you, 1 SNR, 2 Time, 3 Distance
     Parameter<int32_t> p_js8_tsync_auto{"js8_tsync_auto", 1, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // Time: Auto (JS8's timing follows the decodes, as desktop's Automatic Time Drift)

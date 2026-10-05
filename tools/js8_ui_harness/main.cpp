@@ -47,6 +47,8 @@ void ui_page(int n);
 void ui_hold(int i);
 int  ui_list_count(const char *text);
 int  ui_popup_has(const char *text);
+const char *ui_button_shown(int i);
+void ui_preset_auto_hb(void);
 void ui_popup_print(const char *tag);
 void ui_compose_clear(void);
 void ui_indevs_init(void);
@@ -55,6 +57,7 @@ void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 int  dialog_js8_station_rows(char *out, unsigned len);
 char dialog_js8_station_star(const char *call);
+const char *dialog_js8_freq_name(void);
 js8_history_t *dialog_js8_history(void);
 int  dialog_js8_map_stacks(const char **text);
 void dialog_js8_time_auto(bool on);
@@ -440,6 +443,17 @@ static void wf_bench(const char *name, int frames) {
            lvpx.mean(), add.mean() + put.mean() + render.mean() + flush.mean());
 }
 
+// Frequencies (Settings, page 6's Freq before): the JS8 / GhostNet /
+// Custom list, opened the way you do on the radio.
+static void open_freq() {
+    ui_page(4);
+    ui_press(4); // Settings
+    pump(200);
+    for (int i = 0; i < 20 && strncmp(ui_focused_text(), "Frequencies", 11) != 0; i++) ui_key(LV_KEY_RIGHT);
+    ui_click_focused();
+    pump(200);
+}
+
 int main() {
     setvbuf(stdout, nullptr, _IOLBF, 0); // keep the log if something aborts
     lv_init();
@@ -494,6 +508,11 @@ int main() {
     }
     // Saved messages start as desktop's ("TNX 73 GL") when there's no file.
     if (getenv("ONLY_SAVED")) unlink(JS8_SAVED_PATH);
+    if (getenv("ONLY_STSORT")) { // Sort: QSO reads the history: a new one
+        unlink(JS8_HISTORY_PATH);
+        unlink(JS8_HISTORY_PATH "-journal");
+    }
+    if (getenv("ONLY_BOOTHB")) ui_preset_auto_hb(); // switched off with auto HB on
     if (getenv("ONLY_HISTORY")) { // a new history file
         unlink(JS8_HISTORY_PATH);
         unlink(JS8_HISTORY_PATH "-journal");
@@ -901,9 +920,7 @@ int main() {
         ui_press(3); // Send... needs a callsign
         pump(200);
         printf("[keys] Send... with no callsign: %s (want (no compose window))\n", ui_compose_placeholder());
-        ui_page(6);
-        ui_press(4); // Freq
-        pump(200);
+        open_freq();
         for (int i = 0; i < 6 && !strstr(ui_focused_text(), "Custom"); i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // Custom kHz...
         pump(200);
@@ -1509,6 +1526,19 @@ int main() {
         printf("[aprsmore] ESC closed it: %d\n", ui_focus_is_table());
         return 0;
     }
+    if (getenv("ONLY_BOOTHB")) {
+        // The first open after the radio was switched off with auto
+        // heartbeats on: JS8 turns them off as it opens, and page 1's
+        // Heartbeat button must say so (it used to show "HB auto: soon",
+        // drawn before JS8 set its state, until the page changed).
+        pump(300);
+        std::string shown = ui_button_shown(2), now = ui_button_label(2);
+        for (auto *s : {&shown, &now})
+            for (auto &c : *s) c = c == '\n' ? ' ' : c;
+        printf("[boothb] Heartbeat shows '%s', is '%s' (want both Heart- beat)\n", shown.c_str(), now.c_str());
+        printf("[boothb] CQ shows '%s'\n", ui_button_shown(1));
+        return 0;
+    }
     if (getenv("ONLY_HISTORY")) {
         // The station history (step 1: recording only): a QSO with N0XYZ,
         // W1ABC's heartbeat ACK to us (kept, not a QSO) and its INFO to
@@ -1991,19 +2021,20 @@ int main() {
         return 0;
     }
     if (getenv("ONLY_FREQ")) {
-        // Page 6 Freq: JS8Call's presets, GhostNet's, or a custom frequency.
+        // Settings > Frequencies (page 6's Freq before): JS8Call's presets,
+        // GhostNet's, or a custom frequency.
         pump(300);
         ui_page(6);
-        printf("[freq] button: '%s' dial %d\n", ui_button_label(4), stub_dial_hz());
-        ui_press(4);
-        pump(200);
+        printf("[freq] page 6 button 4: '%s' (want (none): moved to Settings)\n", ui_button_label(4));
+        printf("[freq] setting: '%s' dial %d\n", dialog_js8_freq_name(), stub_dial_hz());
+        open_freq();
         printf("[freq] popup: %d, focused '%s'\n", ui_popup_has("GhostNet (3.575"), ui_focused_text());
         screenshot("45_freq_popup.ppm");
         ui_key(LV_KEY_RIGHT);
         printf("[freq] on '%s'\n", ui_focused_text());
         ui_click_focused(); // GhostNet
         pump(300);
-        printf("[freq] GhostNet: '%s' dial %d (want 14107000)\n", ui_button_label(4), stub_dial_hz());
+        printf("[freq] GhostNet: '%s' dial %d (want 14107000)\n", dialog_js8_freq_name(), stub_dial_hz());
         ui_band_down();
         pump(100);
         printf("[freq] band down: dial %d (want 7107000)\n", stub_dial_hz());
@@ -2015,8 +2046,7 @@ int main() {
         pump(100);
 
         // Custom: the keyboard, kHz.
-        ui_press(4);
-        pump(200);
+        open_freq();
         printf("[freq] focused '%s' (want GhostNet, the one in use)\n", ui_focused_text());
         ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // Custom kHz...
@@ -2025,14 +2055,13 @@ int main() {
         ui_compose_append("7110.5");
         ui_compose_enter();
         pump(300);
-        printf("[freq] custom: '%s' dial %d (want 7110500), list focus %d\n", ui_button_label(4), stub_dial_hz(),
+        printf("[freq] custom: '%s' dial %d (want 7110500), list focus %d\n", dialog_js8_freq_name(), stub_dial_hz(),
                ui_focus_is_table());
         printf("[freq] info row: %d\n", ui_list_has("JS8 7110.5 kHz"));
         screenshot("46_freq_custom.ppm");
 
         // Out of range: nothing changes.
-        ui_press(4);
-        pump(200);
+        open_freq();
         // Focus starts on Custom, the one in use.
         printf("[freq] on '%s'\n", ui_focused_text());
         ui_click_focused();
@@ -2050,15 +2079,14 @@ int main() {
         // Band keys leave the custom frequency for the preset list (GhostNet).
         ui_band_up();
         pump(200);
-        printf("[freq] band up from custom: '%s' dial %d (want 14107000)\n", ui_button_label(4), stub_dial_hz());
+        printf("[freq] band up from custom: '%s' dial %d (want 14107000)\n", dialog_js8_freq_name(), stub_dial_hz());
 
         // Back to JS8Call's list: the closest one.
-        ui_press(4);
-        pump(200);
+        open_freq();
         ui_key(LV_KEY_LEFT);
         ui_click_focused();
         pump(300);
-        printf("[freq] JS8: '%s' dial %d (want 14078000)\n", ui_button_label(4), stub_dial_hz());
+        printf("[freq] JS8: '%s' dial %d (want 14078000)\n", dialog_js8_freq_name(), stub_dial_hz());
         return 0;
     }
     if (getenv("ONLY_BADFILES")) {
@@ -2764,7 +2792,9 @@ int main() {
         }
         printf("[stsort] %-24s %s\n", "Sort: Heard you", rows_now());
         screenshot("t0_sort_heard.ppm");
-        for (int k = 0; k < 3; k++) {
+        // SNR, Time, Distance, then QSO: only K1AAA (it called us; the
+        // others only sent heartbeats and a CQ).
+        for (int k = 0; k < 4; k++) {
             ui_press(1);
             pump(300);
             std::string label = ui_button_label(1);
@@ -3021,9 +3051,7 @@ int main() {
         pump(300);
         printf("[mode] opened: dial %d, mode %d (want 27245000, %d USB-D)\n", stub_dial_hz(), stub_mode(),
                stub_usb_dig());
-        ui_page(6);
-        ui_press(4); // Freq
-        pump(200);
+        open_freq();
         for (int i = 0; i < 10 && !strstr(ui_focused_text(), "Custom"); i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);

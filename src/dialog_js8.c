@@ -296,8 +296,7 @@ static void        inbox_refresh_button(void);
 static void        msg_compose(const char *call, const char *kind);
 static void        alerts_cb(button_data_t *btn);
 static void        alerts_close(void);
-static const char *freq_label_getter(void);
-static void        freq_cb(button_data_t *btn);
+static const char *freq_name(void);
 static void        freq_close(void);
 static void        freq_show(void);
 static void        tune_custom(const char *khz);
@@ -721,8 +720,8 @@ static button_data_t  btn_p6        = {.type = BTN_TEXT, .label = "(JS8 6:6)", .
 static button_data_t  btn_alerts    = {.type = BTN_TEXT, .label = "Alerts >", .press = alerts_cb};
 static button_data_t  btn_speed     = {.type = BTN_TEXT_FN, .label_fn = speed_label_getter, .press = speed_cb, .hold = speed_hold_cb};
 static button_data_t  btn_hold      = {.type = BTN_TEXT_FN, .label_fn = hold_label_getter, .press = hold_cb};
-static button_data_t  btn_freq      = {.type = BTN_TEXT_FN, .label_fn = freq_label_getter, .press = freq_cb};
-static buttons_page_t page_6        = {{&btn_p6, &btn_alerts, &btn_speed, &btn_hold, &btn_freq}};
+/* Slot 4 is free: Freq is a Settings line now (Frequencies: ...). */
+static buttons_page_t page_6        = {{&btn_p6, &btn_alerts, &btn_speed, &btn_hold, NULL}};
 
 static dialog_t dialog = {
     .run          = false,
@@ -1402,14 +1401,24 @@ static void rebuild_station_rows(void) {
     } else {
         st_count = js8_stations_list(stations, now, st_rows, MAX_ROWS);
     }
-    js8_stations_sort(st_rows, st_count, (js8_st_sort_t)(param_i_get(cfg.js8.st_sort()) % JS8_ST_SORT_COUNT),
-                      my_grid());
+    js8_st_sort_t sort = (js8_st_sort_t)(param_i_get(cfg.js8.st_sort()) % JS8_ST_SORT_COUNT);
+    if (sort == JS8_ST_SORT_QSO) { /* only those you've had a QSO with: in the History, or logged (green) */
+        int n = 0;
+        for (int i = 0; i < st_count; i++)
+            if (js8_history_had_qso(history_db, st_rows[i].call) || worked_before(st_rows[i].call))
+                st_rows[n++] = st_rows[i];
+        st_count = n;
+    }
+    js8_stations_sort(st_rows, st_count, sort, my_grid());
 
     lv_table_set_row_cnt(table, 1);
     lv_table_set_cell_value(table, 0, 0, "");
     rows = 0;
     if (st_count == 0)
-        append_row(st_all_time ? "No stations in the history on this band yet" : "No stations heard yet", -1);
+        append_row(sort == JS8_ST_SORT_QSO ? "No stations here you've had a QSO with (Sort: QSO)"
+                   : st_all_time           ? "No stations in the history on this band yet"
+                                           : "No stations heard yet",
+                   -1);
 
     int keep_row = 0;
     for (int i = 0; i < st_count; i++) {
@@ -3165,7 +3174,6 @@ static void retuned(void) {
     clear_selection();
     if (view_stations || ended) rebuild_rows();
     add_info_row("%s", where_label());
-    if (btn_freq.disp_btn) buttons_refresh(&btn_freq);
     update_status();
 }
 
@@ -3464,6 +3472,14 @@ static void construct_cb(lv_obj_t *parent) {
     last_tx_text[0] = '\0';
     tx_timer = lv_timer_create(tx_timer_cb, 250, NULL);
     update_tx_bar();
+
+    /* dialog_construct() drew this page's buttons before we got here: an
+     * auto heartbeat left on when the radio was switched off with JS8 open
+     * showed "HB auto: soon" until the page changed, though the lines above
+     * turn it off. Draw them again with JS8's state as it is now. */
+    buttons_page_t *page = buttons_get_cur_page();
+    for (size_t i = 0; page && i < sizeof(page->items) / sizeof(page->items[0]); i++)
+        if (page->items[i]) buttons_refresh(page->items[i]);
 }
 
 static void destruct_cb(void) {
@@ -4769,7 +4785,7 @@ const char *dialog_js8_map_stats(void) {
 
 /* Page 3's second button: Sort in the Stations view, the map's view on
  * the map, nothing over the messages. */
-static const char *const st_sort_names[JS8_ST_SORT_COUNT] = {"Heard you", "SNR", "Time", "Distance"};
+static const char *const st_sort_names[JS8_ST_SORT_COUNT] = {"Heard you", "SNR", "Time", "Distance", "QSO"};
 
 static js8_st_sort_t st_sort(void) {
     return (js8_st_sort_t)(param_i_get(cfg.js8.st_sort()) % JS8_ST_SORT_COUNT);
@@ -4787,8 +4803,9 @@ static const char *map_view_label_getter(void) {
     return buf;
 }
 
-/* The Stations view: Heard you -> SNR -> Time -> Distance. The station
- * selected stays selected (rebuild_station_rows keeps the cursor on it). */
+/* The Stations view: Heard you -> SNR -> Time -> Distance -> QSO. The
+ * station selected stays selected (rebuild_station_rows keeps the cursor
+ * on it). */
 static void st_sort_next(button_data_t *btn) {
     js8_st_sort_t next = (js8_st_sort_t)((st_sort() + 1) % JS8_ST_SORT_COUNT);
     param_i_set(cfg.js8.st_sort(), next);
@@ -4796,7 +4813,8 @@ static void st_sort_next(button_data_t *btn) {
     rebuild_rows();
     static const char *const what[JS8_ST_SORT_COUNT] = {
         "Stations: who heard you first, then the newest", "Stations: strongest first",
-        "Stations: newest first", "Stations: farthest first (no grid: last)"};
+        "Stations: newest first", "Stations: farthest first (no grid: last)",
+        "Stations: only those you've had a QSO with (History or your log), newest first"};
     if (next == JS8_ST_SORT_DISTANCE && !my_grid()[0]) msg_update_text_fmt("Distance needs your grid: APP > QTH");
     else msg_update_text_fmt("%s", what[next]);
 }
@@ -6381,6 +6399,7 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_WF       107
 #define SETTINGS_DECODE   108
 #define SETTINGS_HCLEAR   109 /* clear the station history: press, then again within HCLEAR_MS */
+#define SETTINGS_FREQ     110 /* Frequencies: JS8Call's / GhostNet / custom kHz (page 6's Freq before) */
 #define HCLEAR_MS         5000
 
 static int64_t   hclear_armed_ms; /* the first press (monotonic), 0: not armed */
@@ -6412,6 +6431,7 @@ static const char *settings_label(int which) {
     case SETTINGS_MILES: return param_i_get(cfg.js8.miles()) ? "Distance: miles" : "Distance: km";
     case SETTINGS_MARKS: return param_i_get(cfg.js8.decode_marks()) ? "Decode marks: On" : "Decode marks: Off";
     case SETTINGS_DECODE: return param_i_get(cfg.js8.rx_all()) ? "Decode: All speeds" : "Decode: My speed";
+    case SETTINGS_FREQ: snprintf(buf, sizeof(buf), "Frequencies: %s", freq_name()); return buf;
     case SETTINGS_HCLEAR:
         if (hclear_armed_ms && now_mono_ms() - hclear_armed_ms < HCLEAR_MS) {
             int n = js8_history_station_count(history_db);
@@ -6490,6 +6510,11 @@ static void texts_item_cb(lv_event_t *e) {
         case SETTINGS_DECODE:
             decode_toggle();
             break;
+        case SETTINGS_FREQ:
+            /* Its own list, as page 6's Freq button opened it. */
+            texts_close();
+            freq_show();
+            return;
         case SETTINGS_HCLEAR:
             /* Everything, every band, for good: a second press within 5 s. */
             if (!history_db) {
@@ -6555,6 +6580,7 @@ static void texts_cb(button_data_t *btn) {
 
     /* Time Sync is the Time button now (page 4); its reset stays here. */
     lv_obj_t *first = settings_add(settings_label(SETTINGS_TRESET), SETTINGS_TRESET);
+    settings_add(settings_label(SETTINGS_FREQ), SETTINGS_FREQ);
 
     char label[TEXT_MAX + 16];
     snprintf(label, sizeof(label), "INFO: %s", info_text[0] ? info_text : "(not set)");
@@ -8775,15 +8801,14 @@ typedef enum {
     FQ_CLOSE,
 } freq_item_t;
 
-static const char *freq_label_getter(void) {
+/* Settings' Frequencies line: which list the band keys step through. */
+static const char *freq_name(void) {
     static char buf[32];
     if (param_i_get(cfg.js8.custom_on())) {
-        char khz[16];
-        format_khz(param_i_get(cfg.js8.custom_hz()), khz, sizeof(khz));
-        snprintf(buf, sizeof(buf), "Freq:\n%s", khz);
+        format_khz(param_i_get(cfg.js8.custom_hz()), buf, sizeof(buf));
         return buf;
     }
-    return param_i_get(cfg.js8.ghostnet()) ? "Freq:\nGhostNet" : "Freq:\nJS8";
+    return param_i_get(cfg.js8.ghostnet()) ? "GhostNet" : "JS8Call's";
 }
 
 static void freq_close(void) {
@@ -8909,14 +8934,7 @@ static void freq_show(void) {
     lv_group_focus_obj(cur);
 }
 
-static void freq_cb(button_data_t *btn) {
-    (void)btn;
-    user_touch();
-    if (freq_list) { /* Freq again closes it */
-        freq_close();
-        return;
-    }
-    if (popup_guard()) return;
-    if (composing) return;
-    freq_show();
+/* For tools/js8_ui_harness: the Frequencies setting as Settings shows it. */
+const char *dialog_js8_freq_name(void) {
+    return freq_name();
 }

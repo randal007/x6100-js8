@@ -62,6 +62,10 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build -j"$(nproc)"
 
+      - name: USB keyboard hot plug
+        working-directory: tools/js8_ui_harness
+        run: ./build/kbd_hotplug_test
+
       # Each scenario prints "(want ...)" lines to read; this fails on a crash,
       # a sanitizer report or a hang. The logs are kept as an artifact.
       - name: Run the scenarios
@@ -71,7 +75,7 @@ jobs:
           fail=0
           for sc in FULL APRS TXSAFE TEXTS LOG OPERATOR ALERTS KEYS URGENT AUTOCQ LOOKS LOCK SPEED MAP \
                     HELD RELAY QUERYCALL KNOB FINDER INBOX SMS HBPAUSE MARKS LOGPEND REPLYQ RETUNE COMPOSE TXMARK \
-                    TXBAR STALL NEWSTN PARTIAL BANDS FREQ ROWS BADFILES FREQMARK QSOFREQ DRIFT MODE WFRING WFCALM SWR APRSMORE SAVED STSORT STQRZ ATGATE MAPSTACK HISTORY \
+                    TXBAR STALL NEWSTN PARTIAL BANDS FREQ ROWS BADFILES FREQMARK QSOFREQ DRIFT MODE WFRING WFCALM SWR APRSMORE SAVED STSORT STQRZ ATGATE MAPSTACK HISTORY BOOTHB \
                     GEN=query GEN=aprs GEN=texts GEN=alerts; do
             case $sc in
               FULL) env=() ;;

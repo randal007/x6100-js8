@@ -208,6 +208,8 @@ bool History::open(const std::string &path, bool background) {
     {
         Stmt q(db_, "SELECT call, band FROM contacts");
         while (q.step()) known_.insert(q.col_text(0) + " " + q.col_text(1));
+        Stmt w(db_, "SELECT DISTINCT call FROM qsos WHERE real_lines > 0");
+        while (w.step()) qso_calls_.insert(w.col_text(0));
     }
     stop_       = false;
     background_ = background;
@@ -230,6 +232,7 @@ void History::close() {
     sqlite3_close(db_);
     db_ = nullptr;
     known_.clear();
+    qso_calls_.clear();
     open_.clear();
     queue_.clear();
 }
@@ -263,6 +266,7 @@ void History::received(const HistoryNote &n, const std::string &text, const std:
         if (n.exchange) {
             std::lock_guard<std::mutex> lk(mu_);
             known_.insert(n.call + " " + band);
+            if (!n.heartbeat) qso_calls_.insert(n.call); // now, not when it's written: Sort: QSO shows them at once
             last_exchange_ms_ = now_ms;
         }
         op.kind = Op::Rx;
@@ -285,6 +289,7 @@ void History::sent(const HistoryNote &n, const std::string &text, const std::str
     } else {
         std::lock_guard<std::mutex> lk(mu_);
         known_.insert(n.call + " " + band);
+        if (!n.heartbeat) qso_calls_.insert(n.call);
         last_exchange_ms_ = now_ms;
     }
     Op op;
@@ -337,6 +342,11 @@ void History::heard(const std::string &call, const std::string &band, int snr, c
     post(std::move(op));
 }
 
+bool History::had_qso(const std::string &call) const {
+    std::lock_guard<std::mutex> lk(mu_);
+    return qso_calls_.count(call) != 0;
+}
+
 bool History::known(const std::string &call, const std::string &band) const {
     std::lock_guard<std::mutex> lk(mu_);
     return known_.count(call + " " + band) != 0;
@@ -357,6 +367,7 @@ void History::clear() {
     {
         std::lock_guard<std::mutex> lk(mu_);
         known_.clear(); // from now on nobody is known
+        qso_calls_.clear();
     }
     last_exchange_ms_ = 0;
     Op op;
@@ -495,7 +506,7 @@ void History::exchange(const Op &op) {
         s.text(1, n.call).text(2, op.band).i64(3, op.ms).run();
         o = {sqlite3_last_insert_rowid(db_), op.ms, op.band, 0};
     }
-    add_line(o, op, rx, n.heartbeat, n.as_sent);
+    add_line(o, n.call, op, rx, n.heartbeat, n.as_sent);
 }
 
 // The latest QSO with `call`: remembered, or read from the file once.
@@ -511,7 +522,12 @@ History::Open &History::open_for(const std::string &call) {
     return it->second;
 }
 
-void History::add_line(Open &o, const Op &op, bool rx, bool heartbeat, const std::string &call_as) {
+void History::add_line(Open &o, const std::string &call, const Op &op, bool rx, bool heartbeat,
+                       const std::string &call_as) {
+    if (!heartbeat) {
+        std::lock_guard<std::mutex> lk(mu_);
+        qso_calls_.insert(call);
+    }
     Stmt(db_, "UPDATE qsos SET end_ms = MAX(end_ms, ?2), lines = lines + 1, real_lines = real_lines + ?3"
               " WHERE id = ?1")
         .i64(1, o.id)
@@ -535,20 +551,22 @@ void History::loose(const Op &op) {
     const HistoryNote &n = op.note;
     if (!n.call.empty()) {
         Open &o = open_for(n.call);
-        if (is_open(o, op)) add_line(o, op, !op.tx, false, n.as_sent);
+        if (is_open(o, op)) add_line(o, n.call, op, !op.tx, false, n.as_sent);
         return;
     }
-    Open  *best = nullptr;
-    double best_d = op.window_hz;
+    Open       *best = nullptr;
+    std::string best_call;
+    double      best_d = op.window_hz;
     for (auto &[call, o] : open_) {
         if (!is_open(o, op) || o.rx_freq <= 0) continue;
         double d = std::fabs(o.rx_freq - op.freq_hz);
         if (d <= best_d) {
-            best   = &o;
-            best_d = d;
+            best      = &o;
+            best_call = call;
+            best_d    = d;
         }
     }
-    if (best) add_line(*best, op, true, false, "");
+    if (best) add_line(*best, best_call, op, true, false, "");
 }
 
 namespace {
@@ -700,6 +718,10 @@ extern "C" void js8_history_tx(js8_history_t *h, const char *text, const char *m
 extern "C" void js8_history_logged(js8_history_t *h, const char *call, uint64_t freq_hz, int64_t now_ms) {
     if (!h || !call) return;
     h->h.logged(call, x6100::js8::adif_band(freq_hz), now_ms);
+}
+
+extern "C" bool js8_history_had_qso(js8_history_t *h, const char *call) {
+    return h && call && h->h.had_qso(x6100::js8::base_callsign(call));
 }
 
 extern "C" bool js8_history_known(js8_history_t *h, const char *call, uint64_t freq_hz) {

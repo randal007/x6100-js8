@@ -137,8 +137,8 @@ older firmware would misread them.
    the clock in the radio's SETTINGS.
 3. **Open JS8:** APP → page 3 → **JS8**. The radio tunes the nearest JS8
    frequency; the **band keys** step through JS8Call's standard frequencies
-   (160 m to 6 m), or GhostNet's, or you can type your own (**Freq**, page
-   6). While JS8 is open the receive filter is 200–3000 Hz, the transmit
+   (160 m to 6 m), or GhostNet's, or you can type your own (Settings >
+   **Frequencies**). While JS8 is open the receive filter is 200–3000 Hz, the transmit
    filter 160–3000 Hz (the radio's default), noise reduction, the noise
    blanker and the notch filters are off, and power is capped at 5 W; all
    go back when you leave.
@@ -243,9 +243,12 @@ on, as on desktop. Stations drop off an hour after they were last heard
 (*Stations kept* in [Settings](#settings)). **Sort** (page 3, the second
 button, while the Stations view shows) steps through *Heard you* (who
 heard you first, then the newest: the order to start), *SNR* (strongest
-first), *Time* (newest first) and *Distance* (farthest first; stations
-without a grid last). The choice is remembered, and the selected station
-stays selected. **QRZ** in yellow under the status line: who sent you a
+first), *Time* (newest first), *Distance* (farthest first; stations
+without a grid last) and *QSO*: only the stations you've had a QSO with
+(one in the [History](#history), heartbeat ACKs alone don't count, or
+logged: the green calls), newest first; [the map](#the-map) then shows
+only those too. The choice is remembered, and the selected station stays
+selected. **QRZ** in yellow under the status line: who sent you a
 message while you were in the Stations view (heartbeat replies don't
 count), newest first, as on [the map](#the-map); a station drops off when
 you select it or send to it, and the line clears when you go back to the
@@ -404,7 +407,7 @@ to go back a page. In JS8 a hold is half a second.
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead (each station its own, for 5 minutes). |
 | 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
-| 3 | **Sort: Heard you / SNR / Time / Distance** | In the Stations view: the order of the stations ([The screen](#the-screen)). |
+| 3 | **Sort: Heard you / SNR / Time / Distance / QSO** | In the Stations view: the order of the stations, or *QSO*: only those you've had a QSO with ([The screen](#the-screen)). |
 | 3 | **Map: Auto / Close-in / World** | The same button while [the map](#the-map) shows: which part of the world it shows. **Hold: Follow** the selected station (you and them framed, the long path too); press to stop. Over the messages it's blank. |
 | 3 | **Show History / Heard: Recent / All time** | Over the messages: the Stations view listing every station in the [history](#history) on this band. In the Stations view and on the map: switch between the stations heard lately and all of them. |
 | 3 | **Show Stations / Map / Messages** | Step through the message list, the Stations view and [the map](#the-map). Each frequency has its own Stations list: change band and back, and it's still there. The lists last while the radio is on, JS8 closed and reopened included; a station drops off when it hasn't been heard for *Stations kept* ([Settings](#settings); an hour to start). |
@@ -420,10 +423,10 @@ to go back a page. In JS8 a hold is half a second.
 | 6 | **Alerts >** | [Alerts](#alerts): beeps and alert words. |
 | 6 | **Speed** | The [speed](#speeds) you send at. Press to cycle; hold to match the selected station. |
 | 6 | **Hold: Off / On** | Off: Reply and Query move your offset to the station's first. On: stay on your own offset. |
-| 6 | **Freq: JS8 / GhostNet / kHz** | Which frequencies the band keys step through: **JS8Call's** (7.078, 14.078 …) or **GhostNet's** (3.575, 7.107, 14.107 MHz), tuning the closest one. Or **Custom kHz…**: type a dial frequency (e.g. `7107.5`; the last one is filled in). The band keys go from a custom frequency back to the list. |
+| 6 | *(empty)* | Freq moved to Settings (*Frequencies*). |
 
 While a list is open (Query, Settings…, APRS, the POTA/SOTA spot form, Log,
-Inbox, Alerts, Freq), any other button just closes it; press again to do
+Inbox, Alerts, Frequencies), any other button just closes it; press again to do
 the thing. ESC closes lists too, and the VOL knob works in all of them.
 
 | Query list | Log popup |
@@ -706,6 +709,7 @@ Page 4 **Settings…**:
 | Line | Does |
 |---|---|
 | **Reset time drift** | Back on the radio's clock (the line shows the drift). With [Time: Auto](#time) on, the next decode sets it again. Time Sync itself is page 4's **Time** button now. |
+| **Frequencies: JS8Call's / GhostNet / kHz** | Press for the list: which frequencies the band keys step through, **JS8Call's** (7.078, 14.078 …) or **GhostNet's** (3.575, 7.107, 14.107 MHz), tuning the closest one; or **Custom kHz…**: type a dial frequency (e.g. `7107.5`; the last one is filled in). The band keys go from a custom frequency back to the list. (Page 6's *Freq* button before.) |
 | **INFO: …** | What AUTO sends for INFO? ([macros](#saved-messages) work here) |
 | **STATUS: …** | What AUTO sends for STATUS? (macros too) |
 | **Relay: On / Off** | Press to switch. On (the default, as on desktop): relays are passed on and `MSG TO:` messages held for others. Off: both are ignored (desktop's *Disable message relay*). |
@@ -940,9 +944,12 @@ New:
   QSO. Page 3's **Show History** lists them all on this band (and on the
   map); an **MFK press** on a station opens its History page. Settings can
   clear it.
-- **Buttons moved:** *Decode: All speeds / My speed* is a
-  [Settings](#settings) line now, and **Hold** took its place on page 6,
-  making room for page 3's *Show History*.
+- **Sort: QSO** in the Stations view: only the stations you've had a QSO
+  with (History or your log), on the map too.
+- **Buttons moved:** *Decode: All speeds / My speed* and *Freq* are
+  [Settings](#settings) lines now (*Decode*, *Frequencies*), and **Hold**
+  took Decode's place on page 6, making room for page 3's *Show History*;
+  page 6's last slot is free.
 - **A lighter waterfall:** JS8's waterfall is drawn straight onto the
   display's lower layer, as the main screen's is, and the display puts the
   list on top. Measured on the radio, the app's screen thread fell from
@@ -954,6 +961,16 @@ New:
 
 Fixes:
 
+- **A USB keyboard plugged in while the radio is on** wasn't picked up
+  (since beta 4.1's move to R1CBU 1.0: it looked for the keyboard once, a
+  moment before the keyboard was ready); now it keeps looking for a few
+  seconds after anything is plugged in or out, and a keyboard unplugged
+  and plugged back works again. One that was in before switching on
+  always worked. (The radio's shared keyboard code, so everywhere, not
+  just JS8.)
+- The Heartbeat button on the first open after switching the radio off
+  with auto heartbeats on showed *HB auto: soon* (auto is off whenever JS8
+  opens) until the page changed.
 - The waterfall's faint stutter while the MFK steps through the list: each
   step now redraws only the rows it moves between.
 - Winlink messages no longer get a second ACK (they went with an APRS
@@ -1140,6 +1157,8 @@ are, and its new settings start at their defaults.
   4.1 by the *Waterfall* levels in Settings (*Light*, the default, about 2
   times less change at each step; *Calm* about 4 times less).
   It doesn't affect decoding.
+- **A USB keyboard plugged in while the radio is on isn't picked up** in
+  beta 4.1 (plug it in before switching on); fixed for beta 5.
 - **The radio's clock:** it has no network time and gains a few seconds a
   week. Beta 4.1's Time Sync needed three decodes in two minutes, which a
   quiet band rarely gives; from beta 5 [Time: Auto](#time) follows every

@@ -80,3 +80,10 @@ set_source_files_properties(main.cpp PROPERTIES COMPILE_OPTIONS "-std=c++20")
 set_source_files_properties(${CMAKE_BINARY_DIR}/scheduler_host.cpp PROPERTIES COMPILE_OPTIONS "-include;cstdlib")
 target_link_libraries(js8_ui_harness PRIVATE lvgl cfg JS8 JS8TestSignal js8core ${D}/lib/libliquid.a sqlite3 m)
 add_dependencies(js8_ui_harness params_db)
+
+# The USB keyboard's hot plug (src/keyboard.c) against a by-path folder of
+# its own: run build/kbd_hotplug_test.
+add_executable(kbd_hotplug_test kbd_hotplug_test.c ${X}/src/keyboard.c ${X}/src/kbd_rollover.c)
+target_compile_definitions(kbd_hotplug_test PRIVATE DIR="${CMAKE_BINARY_DIR}/kbd-by-path"
+                                                    KBD_GLOB="${CMAKE_BINARY_DIR}/kbd-by-path/*-kbd")
+target_link_libraries(kbd_hotplug_test PRIVATE lvgl)

@@ -51,21 +51,34 @@ void     dialog_audio_samples(unsigned int n, float *samples) {
     if (audio_sub_cb && audio_sub_on) audio_sub_cb(n, samples);
 }
 
-/* Buttons: remember the loaded page so the driver can press them. */
+/* Buttons: remember the loaded page so the driver can press them, and the
+ * text each button was last drawn with (as the real ones keep it until
+ * refreshed). */
 buttons_page_t *stub_page;
-void            buttons_load_page(buttons_page_t *page) { stub_page = page; }
+char            stub_shown[BUTTONS][48];
+static void     stub_draw(int i) {
+    button_data_t *b = stub_page ? stub_page->items[i] : NULL;
+    snprintf(stub_shown[i], sizeof(stub_shown[i]), "%s",
+             !b ? "" : b->type == BTN_TEXT_FN ? b->label_fn() : b->label ? b->label : "");
+}
+void buttons_load_page(buttons_page_t *page) {
+    stub_page = page;
+    for (int i = 0; i < BUTTONS; i++) stub_draw(i);
+}
 void            buttons_unload_page() { stub_page = NULL; }
 buttons_page_t *buttons_get_cur_page() { return stub_page; }
 void            buttons_refresh(button_data_t *d) {
     if (d->type == BTN_TEXT_FN) printf("[button] %s\n", d->label_fn());
+    for (int i = 0; stub_page && i < BUTTONS; i++)
+        if (stub_page->items[i] == d) stub_draw(i);
 }
 /* The real one tints the button green (btn_active_style); record it. */
 void buttons_mark(button_data_t *d, bool val) {
     if (d->mark != val && d->type == BTN_TEXT_FN) printf("[button] %s: %s\n", d->label_fn(), val ? "green" : "plain");
     d->mark = val;
 }
-void button_next_page_cb(button_data_t *d) { stub_page = d->next; }
-void button_prev_page_cb(button_data_t *d) { stub_page = d->prev; }
+void button_next_page_cb(button_data_t *d) { buttons_load_page(d->next); }
+void button_prev_page_cb(button_data_t *d) { buttons_load_page(d->prev); }
 
 void knobs_display(bool v) { (void)v; }
 void waterfall_refresh_period_set(uint8_t k) { (void)k; }

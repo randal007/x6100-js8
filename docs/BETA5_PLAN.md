@@ -204,6 +204,32 @@ heard paused them; [docs/review](review/)).
   picked white from green / white / dark mock-ups). Marks within 2 px
   are one spot; counts what the map shows. Harness ONLY_MAPSTACK.
 
+- [x] **Sort: QSO (user, 2026-10-04):** a fifth Sort choice, only the
+  stations you've had a QSO with: a QSO in the History that isn't
+  heartbeat ACKs only (`js8_history_had_qso()`, an in-memory set loaded at
+  open, marked as messages arrive), or logged (worked_before, the green
+  calls: the History started empty with this build). Newest first; the
+  map follows. Harness ONLY_STSORT.
+- [x] **Freq into Settings (user, 2026-10-04):** *Frequencies: JS8Call's /
+  GhostNet / kHz* (SETTINGS_FREQ 110, second line) opens the same list;
+  page 6's slot 4 is empty. Harness ONLY_FREQ/KEYS/MODE use Settings.
+- [x] **Bug: a USB keyboard plugged in while running did nothing** (user,
+  2026-10-04; lights on, no keys). R1CBU 1.0's keyboard.c looked for
+  `/dev/input/by-path/*-kbd` once per udev USB event, before the input
+  node exists (0.34's USB thread slept 0.5 s between events, which hid
+  it). User chose the shared-code fix (B) over a JS8-only rescan:
+  keyboard.c rechecks every 0.5 s for 5 s after any USB add/remove,
+  reopens a re-plugged keyboard (st_rdev/st_ino), frees the glob.
+  `tools/js8_ui_harness/kbd_hotplug_test` (in the Tests workflow's harness
+  job) fails on the old code. Noted in docs/UPSTREAM_README.md as worth
+  offering upstream (ask the user first).
+- [x] **Bug: Heartbeat button on the first open after power-on** (user):
+  dialog_construct() draws the page's buttons before construct_cb, which
+  turns auto HB off; with auto HB saved on (radio switched off with it
+  running) the button showed "HB auto: soon" until the page changed, and
+  hb_tick only refreshes it while auto is on. construct_cb now redraws
+  the page's buttons at its end. Harness ONLY_BOOTHB (the stub buttons
+  now keep the text they were drawn with; failed on the old code).
 - [x] **Buttons moved (user, 2026-10-04), to free a slot for the next
   feature:** *Decode: All speeds / My speed* left page 6 for a Settings
   line; **Hold** moved from page 3 into Decode's place on page 6; page 3's

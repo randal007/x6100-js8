@@ -47,6 +47,10 @@ void js8_history_logged(js8_history_t *h, const char *call, uint64_t freq_hz, in
  * file access). */
 bool js8_history_known(js8_history_t *h, const char *call, uint64_t freq_hz);
 
+/* You've had a QSO with `call` (any band; heartbeat ACKs alone don't
+ * count). Quick (no file access). */
+bool js8_history_had_qso(js8_history_t *h, const char *call);
+
 /* Forget everything, every band (Settings). Waits until it's done. */
 void js8_history_clear(js8_history_t *h);
 /* Stations in the history, every band. */

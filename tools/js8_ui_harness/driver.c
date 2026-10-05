@@ -191,6 +191,12 @@ const char *ui_button_label(int i) {
     return b->type == BTN_TEXT_FN ? b->label_fn() : b->label;
 }
 int ui_button_exists(int i) { return stub_page->items[i] != NULL; }
+/* What button i shows (drawn at page load or the last refresh), not what
+ * its label function would say now. */
+extern char stub_shown[BUTTONS][48];
+const char *ui_button_shown(int i) { return stub_shown[i]; }
+/* The radio switched off with auto heartbeats on: params.db still says on. */
+void ui_preset_auto_hb(void) { param_i_set(cfg.js8.hb(), true); }
 int ui_button_marked(int i) {
     button_data_t *b = stub_page->items[i];
     return b && b->mark;

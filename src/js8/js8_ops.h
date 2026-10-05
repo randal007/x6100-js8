@@ -103,6 +103,7 @@ typedef enum {
     JS8_ST_SORT_SNR,      /* strongest first */
     JS8_ST_SORT_TIME,     /* newest first */
     JS8_ST_SORT_DISTANCE, /* farthest from my_grid first; no grid (theirs or ours) last */
+    JS8_ST_SORT_QSO,      /* only those you've had a QSO with (the caller leaves the rest out), newest first */
     JS8_ST_SORT_COUNT,
 } js8_st_sort_t;
 
