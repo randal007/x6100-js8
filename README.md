@@ -108,7 +108,12 @@ the radio's firmware, next to the FT8 and RTTY apps.
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
    download `sdcard.js8-beta4.7.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
-   or Rufus (they unzip it for you). Any card of 1 GB or more works.
+   or Rufus (they unzip it for you). Any card of 1 GB or more works; a
+   name-brand 8–32 GB card (SanDisk, Samsung) from a trusted seller is best.
+   Fake or worn cards fail on writes: if JS8 says *Can't write
+   /mnt/js8_texts.txt* (or settings and logs don't stick), the card's DATA
+   partition has gone read-only after a card error. Check the card on a PC
+   (H2testw or `f3`) and try a new one.
 3. Put the card in the radio and switch on. The first start creates the
    card's **DATA** partition, where your settings and logs live.
 
