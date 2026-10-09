@@ -6,6 +6,48 @@
 > the user wants now:** GPS (USB dongle) and trying a Bluetooth keyboard.
 > The other open items below (ALC under 1 W, the map's home colour, POTA /
 > SOTA on the air, the Murus merge, performance) are parked as ideas.
+> **2026-10-09:** VE7NHW's new list (APRS NACK, Echo test) is the next
+> section.
+
+## VE7NHW's list (2026-10-09)
+
+Notes only so far: nothing below is changed in the code yet.
+
+- [ ] **Received APRS messages show a NACK command.** VE7NHW: every
+  message coming back from APRS shows NACK, although nothing on the
+  APRS side sends one. **Checked so far (2026-10-09):** `" NACK"` is
+  directed command code 2 in js8core, old desktop JS8Call and current
+  JS8Call-improved (7fd8ecd) alike, so it isn't a command-table mismatch.
+  Nobody sends it on purpose: JS8Call-improved only lists it in
+  Varicode.cpp and DirectedMessageParser.cpp, and our code only has it
+  in the parse tables (`src/js8/directed.cpp`, `assembler.cpp`). The
+  relay station's inbound APRS (AprsInboundRelay.cpp) sends
+  `@APRSIS MSG to:<CALL> <text> DE <SENDER>` (its `to:` is lowercase now;
+  it drops APRS `ack` messages and strips the `{id}`). **Next:** a
+  screenshot of a row showing it (or the radio's `app_logs` on DATA),
+  then find where the word comes from: the decoded frames, our parse
+  (classify / `parse_directed`), or how the row is drawn (commands are
+  coloured yellow). Side finding on findu.com: on 2026-10-06 00:06Z,
+  something sent APRS **rejects** to SMS in VE7NHW's name (`rej40}`,
+  `rej19004`, `rej19005`, each followed by SMS's "Invalid Command or
+  Msg!"). Our app never sends `rej`, so it was likely a relay station
+  answering for us. Worth a look while we're in there.
+- [ ] **Echo test: drop it, and find another way to earn the `@` badge.**
+  VE7NHW: Echo never comes back. **Checked on findu.com
+  (msg.cgi?call=ECHO, 2026-10-09):** the ECHO service works and our
+  command is right. It answered VE7NHW `ECHO:TEST{97` 6 s after the
+  2026-10-05 06:23Z test (and again 2026-10-06 00:03Z), and it answers
+  other people daily. So the answer reached APRS-IS and was lost on the
+  way back over JS8, or reached the radio and wasn't shown. One
+  suspect on our side: the relayed text would be
+  `@APRSIS MSG TO:VE7NHW ECHO:TEST DE ECHO`, and the `ECHO:` looks like a
+  `CALL:` start to a parser (worth a harness test before removing).
+  MPAD, JOKE, EMAIL-2, WLNK-1 and SMS all answered VE7NHW on 2026-10-08/09.
+  **User's plan:** remove Echo test from the APRS list. The `@` badge
+  already comes from hearing any station send `@APRSIS MSG TO:...`
+  (`Station::aprs_gate`, `src/js8/stations.cpp`), so it keeps working
+  from SMS and other services' answers. Pick a new "test both
+  directions" item if one is wanted (e.g. a short MPAD or JOKE request).
 
 VE7NHW's list for beta 5 (2026-10-02), with notes on where each item
 touches the code. **Highest priorities:** time sync, high-SWR protection,
