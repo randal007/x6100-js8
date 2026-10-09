@@ -68,9 +68,23 @@ Notes only so far: nothing below is changed in the code yet.
   addressee (or anyone, for a group), not to @ALLCALL, and a `Stored`
   answer goes out only with AUTO on (otherwise it's offered on Reply).
   Desktop (processCommandActivity.cpp ~885) does the same from its one
-  inbox. To find out: what exactly they sent (`QUERY MSG 3`? `QUERY MSGS`?
-  through a relay?), our AUTO state, and whether the message was in
-  `js8_held.txt` or only in our Inbox. Reproduce in the harness (ONLY_HELD).
+  inbox. **VE7NHW's on-air test (2026-10-09), AUTO on:** desktop JS8Call
+  on a Hermes Lite 2 at low power, the X6100 at 1 W into a dummy load,
+  about −15 dB both ways, the two set to different calls. Desktop (as
+  A) left `X6100 MSG TO:B ...`, then (as B) asked `QUERY MSGS` and the
+  X6100 answered `YES MSG ID n`. Desktop's `QUERY MSG n` then got
+  **nothing** back. So the held message, the addressee match and AUTO
+  were all fine (QUERY MSGS uses the same lookups as QUERY MSG). The
+  answer is lost between decoding and sending. **Checked:** the unit
+  tests feed `QUERY MSG n` as finished text (`incoming()`), and the UI
+  harness never sends it over audio, so the real path is untested:
+  desktop's frames → assembler → `classify` checksum (`" QUERY"` is
+  16-bit checksummed; a bad checksum drops the message silently) →
+  `js8_process()` → AUTO's send. **Next:** a test that sends desktop's
+  exact frames for `K2XYZ QUERY MSG 3` through the decoder (our encoder
+  matches desktop bit-for-bit, 868d051) and checks the answer goes out;
+  the radio's `app_logs` from that test would also show what it decoded.
+  Bench for retesting: the same HL2 + X6100 setup.
 - [ ] **Show (All / Directed / No HB): blank rows after switching.**
   Changing what Show shows doesn't pull the remaining rows down to the
   bottom at once, leaving blank space. `show_cb()` → `rebuild_rows()`
