@@ -85,6 +85,18 @@ Notes only so far: nothing below is changed in the code yet.
   matches desktop bit-for-bit, 868d051) and checks the answer goes out;
   the radio's `app_logs` from that test would also show what it decoded.
   Bench for retesting: the same HL2 + X6100 setup.
+  **Ruled out on the PC (2026-10-09):** desktop's frames for
+  `K2XYZ QUERY MSG n` (js8core's port of desktop's encoder; desktop's
+  Varicode and command tables unchanged up to 7fd8ecd) decode on our side
+  and pass the checksum. The whole sequence through `js8_process()` (MSG
+  TO: kept, QUERY MSGS → YES MSG ID 1, QUERY MSG 1 → SEND
+  `W1ABC MSG MEET AT THE PARK FROM N0XYZ`, deliver 1) works with AUTO on.
+  The send queue (`auto_try_send()`) shows an "Auto: ... not sent" line
+  for every drop, and `tx_queue_at()` a message for every failure. AUTO's
+  idle watchdog is 60 min. **Waiting on the radio:** read (only) its
+  `js8_history.db` (the exact text decoded from desktop), `js8_held.txt`
+  (the message and its id) and `app_logs` ("JS8 auto: ..." lines), plus
+  the calls used on each side and the id it gave.
 - [ ] **Show (All / Directed / No HB): blank rows after switching.**
   Changing what Show shows doesn't pull the remaining rows down to the
   bottom at once, leaving blank space. `show_cb()` → `rebuild_rows()`
@@ -102,8 +114,20 @@ Notes only so far: nothing below is changed in the code yet.
 - [ ] **JS8 60 "Ultra" speed (experimental).** js8core already has it
   (`SubmodeId::I`, engine.cpp case 8); our speed table
   (`src/js8/speeds.cpp`) and Speed button have Slow/Normal/Fast/Turbo
-  only. Check desktop JS8Call-improved's Ultra parameters, the decoder's
-  CPU on the radio, and how many stations use it before adding.
+  only. **Desktop (JS8Call-improved 7fd8ecd, shown since #371 on
+  2026-09-27):** "JS8 60", submode 8, 384 samples a symbol (31.25 baud, so
+  about 250 Hz wide), 4 s slots, start delay 100 ms, modified Costas,
+  decodes down to −18 dB (Turbo −20), rxThreshold 50 Hz, no heartbeats or
+  HB ACKs (as Turbo), decoded once its samples are in (as Turbo), half the
+  late-start allowance (as Turbo). Desktop now also calls Turbo "JS8 40".
+  **Work:** speed table row + `JS8_SUBMODE_ULTRA` bit (mapped to the
+  engine's I); decode Ultra only while the Setting is on (CPU); TX at
+  submode 8 on 4 s slots; Speed button cycles to Ultra only with Settings
+  *JS8 60 (experimental)* on (new param, default off); no HB in Ultra;
+  waterfall finder 250 Hz; unit test TX audio → decode at Ultra, harness
+  ONLY_SPEED. Check on the radio: CPU with five speeds (cpulog), and the
+  clock (4 s slots are less forgiving: Time Auto doesn't learn from Ultra
+  decodes, desktop's Normal + Slow only).
 - [ ] **GPS** from a USB dongle (time and position), already the next item (below).
 - [ ] **A Bluetooth keyboard** with JS8, already the next item (below). v1.0.2 has
   no pairing screen: pair with `bluetoothctl` over the USB console.
