@@ -6,8 +6,10 @@
 > the user wants now:** GPS (USB dongle) and trying a Bluetooth keyboard.
 > The other open items below (ALC under 1 W, the map's home colour, POTA /
 > SOTA on the air, the Murus merge, performance) are parked as ideas.
-> **2026-10-09:** VE7NHW's new list (APRS NACK, Echo test) is the next
-> section.
+> **2026-10-09:** VE7NHW's new list is the next section: APRS NACK, Echo
+> test, @ALLCALL QUERY MSGS, the held-message pickup bug, Show's blank
+> rows, a default STATUS, JS8 60, plus GPS and the Bluetooth keyboard
+> (still wanted for beta 5).
 
 ## VE7NHW's list (2026-10-09)
 
@@ -48,6 +50,49 @@ Notes only so far: nothing below is changed in the code yet.
   (`Station::aprs_gate`, `src/js8/stations.cpp`), so it keeps working
   from SMS and other services' answers. Pick a new "test both
   directions" item if one is wanted (e.g. a short MPAD or JOKE request).
+- [ ] **"Anyone have messages for me?" (`@ALLCALL QUERY MSGS`) in the
+  Query list, always**, with or without a station selected. VE7NHW:
+  dropping a selection is hard, so in practice the @ALLCALL items are only
+  seen right after the app opens. **Checked:** there's no
+  `@ALLCALL QUERY MSGS` item at all today; with no selection the list has
+  only *Can anyone reach...?* (`QUERY_ALLCALL_ITEM`, `query_open()` /
+  `query_msg_cb()` in `src/dialog_js8.c`). A selection is only dropped by
+  Clear or a band change (`clear_selection()`). Our side already answers
+  it as desktop (YES MSG ID n to the asker, never NO to a group). Maybe
+  also an easy way to unselect (to decide).
+- [ ] **Bug: a station retrieving a message we hold gets nothing.** When
+  someone sends the command to pick up a message stored here, nothing
+  happens and we never send it. **Where:** `QUERY MSG n` is handled in
+  `src/js8/autoreply.cpp` (~line 220). It answers only from the held
+  store (`MSG TO:` messages left here for someone), only for the
+  addressee (or anyone, for a group), not to @ALLCALL, and a `Stored`
+  answer goes out only with AUTO on (otherwise it's offered on Reply).
+  Desktop (processCommandActivity.cpp ~885) does the same from its one
+  inbox. To find out: what exactly they sent (`QUERY MSG 3`? `QUERY MSGS`?
+  through a relay?), our AUTO state, and whether the message was in
+  `js8_held.txt` or only in our Inbox. Reproduce in the harness (ONLY_HELD).
+- [ ] **Show (All / Directed / No HB): blank rows after switching.**
+  Changing what Show shows doesn't pull the remaining rows down to the
+  bottom at once, leaving blank space. `show_cb()` → `rebuild_rows()`
+  (`src/dialog_js8.c`); likely the table's row count or scroll position
+  isn't reset. Reproduce in the harness.
+- [x] ~~Picking up a message from another station leaves it there~~:
+  **checked, that's how JS8Call works.** VE7NHW pulled a relayed message
+  from another station and ACKed it, and it stayed in their inbox.
+  Desktop's `markMsgDelivered()` (JS8Call-improved UI_Constructor.cpp)
+  only changes the message's type to `DELIVERED`, so later QUERY MSGS and
+  heartbeats don't offer it again; it never deletes it. Ours does the
+  same (`delivered` in `js8_held.txt`). No change.
+- [ ] **A default station STATUS for this app** (VE7NHW: details to talk
+  over later). Today STATUS is empty until set in Settings.
+- [ ] **JS8 60 "Ultra" speed (experimental).** js8core already has it
+  (`SubmodeId::I`, engine.cpp case 8); our speed table
+  (`src/js8/speeds.cpp`) and Speed button have Slow/Normal/Fast/Turbo
+  only. Check desktop JS8Call-improved's Ultra parameters, the decoder's
+  CPU on the radio, and how many stations use it before adding.
+- [ ] **GPS** from a USB dongle (time and position), already the next item (below).
+- [ ] **A Bluetooth keyboard** with JS8, already the next item (below). v1.0.2 has
+  no pairing screen: pair with `bluetoothctl` over the USB console.
 
 VE7NHW's list for beta 5 (2026-10-02), with notes on where each item
 touches the code. **Highest priorities:** time sync, high-SWR protection,
