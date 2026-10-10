@@ -17,7 +17,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     main.c main_screen.c
     styles.c spectrum.c radio.c dsp.cpp util.cpp
     app_ports.cpp
-    waterfall.c rotary.cpp keyboard.c encoder.c
+    waterfall.c rotary.cpp keyboard.c kbd_rollover.c encoder.c
     events.c msg.c msg_tiny.c keypad.c
     hkey.c clock.c
     meter.c band_info.cpp tx_info.c
@@ -25,6 +25,8 @@ target_sources(${PROJECT_NAME} PUBLIC
     rtty.c screenshot.c display.cpp gps.c
     dialog.c dialog_swrscan.c
     dialog_ft8.c dialog_freq.c dialog_gps.c dialog_msg_cw.c
+    dialog_js8.c js8_wf.c js8_clock.c
+    tx_player.c tx_level.c
     ft8_ui/table_view.c
     dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c
     textarea_window.c cw_encoder.c buttons.cpp vol.cpp recorder.c
@@ -42,6 +44,7 @@ add_subdirectory(cfg)
 add_subdirectory(cat)
 add_subdirectory(settings)
 add_subdirectory(cw_decoder)
+add_subdirectory(js8)
 
 include_directories(utf8)
 include_directories(${CMAKE_SYSROOT}/usr/include/RHVoice/)
@@ -69,6 +72,7 @@ liquid
 RHVoice RHVoice_core RHVoice_audio
 ft8
 cw_decoder
+JS8
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

@@ -1,0 +1,11 @@
+--- a/br2_external/board/X6100/linux/rootfs-overlay/etc/init.d/S50gpsd
++++ b/br2_external/board/X6100/linux/rootfs-overlay/etc/init.d/S50gpsd
+@@ -5,7 +5,7 @@
+ 
+ NAME=gpsd
+ DAEMON=/usr/sbin/$NAME
+-DEVICES="-n /dev/ttyACM0"
++DEVICES="-n -F /var/run/gpsd.sock /dev/ttyACM0"
+ PIDFILE=/var/run/$NAME.pid
+ 
+ start() {

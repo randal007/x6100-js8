@@ -1,0 +1,99 @@
+#!/bin/sh
+# Pair a Bluetooth keyboard with the X6100 (run on the radio as root, over
+# the USB console or SSH). The radio has no pairing screen yet.
+#
+#   x6100-bt-pair            pair the first keyboard that shows up
+#   x6100-bt-pair NAME       only one whose name contains NAME (e.g. F01)
+#
+# Switch WiFi on first (APP > WiFi): the same switch powers Bluetooth.
+# Then run this and press the keyboard's pairing key. Many keyboards only
+# take a pairing for a few seconds after that key, so this keeps scanning
+# and pairs the moment the keyboard appears. Once paired it reconnects by
+# itself when you press a key.
+
+NAME=$1
+OUT=/tmp/x6100-bt-pair.out
+IN=/tmp/x6100-bt-pair.in
+
+if [ -z "$(ls /sys/class/bluetooth 2>/dev/null)" ]; then
+    echo "Bluetooth is off: switch WiFi on (APP > WiFi), it powers Bluetooth too. Then run this again."
+    exit 1
+fi
+
+ESC=$(printf '\033'); CR=$(printf '\r')
+clean() { sed "s/$ESC\[[0-9;]*m//g; s/$CR//g" "$OUT"; }
+is_keyboard() { bluetoothctl info "$1" 2>/dev/null | grep -q 'Icon: input-keyboard'; }
+is_paired() { bluetoothctl info "$1" 2>/dev/null | grep -q 'Paired: yes'; }
+
+# Earlier attempts that never finished get in the way: forget them.
+for d in $(bluetoothctl devices | cut -d' ' -f2); do
+    if is_keyboard "$d" && ! is_paired "$d"; then bluetoothctl remove "$d" >/dev/null; fi
+done
+
+# One bluetoothctl session, fed through a FIFO, as the default agent: the
+# image's own agent (bt-agent, "no input, no output") cancels keyboards.
+rm -f "$IN" "$OUT"
+mkfifo "$IN"
+bluetoothctl <"$IN" >"$OUT" 2>&1 &
+BT=$!
+exec 3>"$IN"
+say() { echo "$1" >&3; }
+finish() { say "scan off"; say quit; sleep 1; exec 3>&-; kill "$BT" 2>/dev/null; rm -f "$IN"; }
+trap finish INT TERM
+
+sleep 2; say "agent off"; sleep 1; say "agent KeyboardDisplay"; sleep 1; say "default-agent"; sleep 1
+say "scan on"
+echo "Press the keyboard's pairing key now (waiting up to 3 minutes)..."
+
+MAC=""; seen=" "; i=0
+while [ -z "$MAC" ] && [ $i -lt 360 ]; do
+    for d in $(clean | grep -o 'Device [0-9A-F:]\{17\}' | cut -d' ' -f2 | sort -u); do
+        case "$seen" in *" $d "*) continue ;; esac
+        seen="$seen$d "
+        if [ -n "$NAME" ]; then
+            bluetoothctl info "$d" 2>/dev/null | grep -i "Name: .*$NAME" >/dev/null && MAC=$d
+        else
+            is_keyboard "$d" && MAC=$d
+        fi
+        [ -n "$MAC" ] && break
+    done
+    [ -n "$MAC" ] && break
+    i=$((i + 1)); sleep 0.5
+done
+if [ -z "$MAC" ]; then
+    echo "No keyboard found. Is it in pairing mode (light blinking)? Try again."
+    finish; exit 1
+fi
+echo "Found $(bluetoothctl info "$MAC" | sed -n 's/^[[:space:]]*Name: //p') ($MAC): pairing..."
+say "pair $MAC"
+
+# Wait for the result, showing a passkey to type and answering yes/no.
+asked=0; shown=""; i=0
+while [ $i -lt 120 ]; do
+    if clean | grep -q 'Pairing successful'; then break; fi
+    if clean | grep -q 'Failed to pair'; then break; fi
+    key=$(clean | grep -o 'Passkey: [0-9]*' | tail -1 | cut -d' ' -f2)
+    if [ -n "$key" ] && [ "$key" != "$shown" ]; then
+        echo "Type $key on the keyboard, then Enter."
+        shown=$key
+    fi
+    n=$(clean | grep -c 'yes/no')
+    if [ "$n" -gt "$asked" ]; then say yes; asked=$n; fi
+    i=$((i + 1)); sleep 0.5
+done
+
+if clean | grep -q 'Pairing successful'; then
+    say "trust $MAC"; sleep 2
+    say "connect $MAC"; sleep 6
+    finish
+    if bluetoothctl info "$MAC" | grep -q 'Connected: yes'; then
+        echo "Paired and connected: the keyboard is ready to type."
+    else
+        echo "Paired. Press a key on the keyboard to connect it."
+    fi
+    exit 0
+fi
+echo "Pairing didn't finish: $(clean | grep -o 'Failed to pair.*' | tail -1)"
+echo "Press the keyboard's pairing key again and run this again."
+finish
+exit 1
