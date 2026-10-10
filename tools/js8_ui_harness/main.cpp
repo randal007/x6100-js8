@@ -2974,8 +2974,10 @@ int main() {
         // ... once it is, once.
         stub_clock_synced = true;
         for (int i = 0; i < 350; i++) pump(100);
-        printf("[gps] synced: saves %d (want 1), info row %d (want 1)\n", stub_rtc_saves,
-               ui_list_has("Battery clock set from GPS time"));
+        bool rtc_fail = getenv("HARNESS_RTC_FAIL") != nullptr;
+        printf("[gps] synced: saves %d (want 1), 'set' row %d (want %d), 'not set' row %d (want %d)\n",
+               stub_rtc_saves, ui_list_has("Battery clock set from GPS time"), !rtc_fail,
+               ui_list_has("Battery clock not set"), rtc_fail);
         for (int i = 0; i < 700; i++) pump(100);
         printf("[gps] a minute later: saves %d (want 1)\n", stub_rtc_saves);
         // JS8 closed and opened again (same power-on): still not again.

@@ -277,6 +277,10 @@ int  stub_rtc_saves    = 0;
 bool js8_clock_synced(void) { return stub_clock_synced; }
 bool js8_clock_save_rtc(void) {
     stub_rtc_saves++;
+    if (getenv("HARNESS_RTC_FAIL")) { /* hwclock failing (i2c error) */
+        printf("[clock] battery clock save FAILED (HARNESS_RTC_FAIL)\n");
+        return false;
+    }
     printf("[clock] battery clock saved (hwclock -w -u -f /dev/rtc1)\n");
     return true;
 }

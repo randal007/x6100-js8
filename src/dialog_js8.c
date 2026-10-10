@@ -6289,6 +6289,7 @@ static void msg_age_tick(void) {
 #endif
 static bool        rtc_done;
 static atomic_bool rtc_busy;
+static atomic_int  rtc_result; /* from the save thread for the list: 1 set, -1 failed, 0 nothing new */
 
 static void *rtc_save_thread(void *arg) {
     (void)arg;
@@ -6298,11 +6299,19 @@ static void *rtc_save_thread(void *arg) {
         FILE *f = fopen(JS8_RTC_FLAG_PATH, "w");
         if (f) fclose(f);
     }
+    atomic_store(&rtc_result, ok ? 1 : -1);
     atomic_store(&rtc_busy, false);
     return NULL;
 }
 
 static void rtc_tick(void) {
+    /* The list says what happened once the write is done, not when it
+     * starts. A failed write isn't tried again this power-on: rtc1 shares
+     * i2c-0 with the amplifier's band data. */
+    int result = atomic_exchange(&rtc_result, 0);
+    if (result > 0) add_info_row("Battery clock set from GPS time (kept when the GPS is unplugged)");
+    if (result < 0) add_info_row("Battery clock not set: writing it failed (the time is right until power-off)");
+
     static int64_t next;
     int64_t        now = now_mono_ms();
     if (rtc_done || atomic_load(&rtc_busy) || now < next) return;
@@ -6320,7 +6329,6 @@ static void rtc_tick(void) {
         return;
     }
     pthread_detach(t);
-    add_info_row("Battery clock set from GPS time (kept when the GPS is unplugged)");
 }
 
 static void hb_tick(void) {

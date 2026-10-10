@@ -327,7 +327,11 @@ Each item says what was done, or what's still needed.
     heartbeats / CQ / the map, APRS position spots from the GPS, `GPS` vs
     `GPS no fix` in the top line, and a clock step by hand with JS8 open.
     Then send the gpsd PR (upstream-patches.md).
-  - **To look at later (VE7NHW: note it, decide later):** the list's
+  - **Done 2026-10-10 (VE7NHW: "fix it"):** the line now comes from the
+    write's result (`rtc_result`, shown by `rtc_tick()` on the GUI thread):
+    *Battery clock set from GPS time ...* or *Battery clock not set:
+    writing it failed ...* (not retried this power-on: i2c-0). Harness
+    ONLY_GPS passes both ways (`HARNESS_RTC_FAIL=1`). Was: the list's
     *Battery clock set from GPS time* line is added when the save
     **starts** (`rtc_tick()`, `src/dialog_js8.c`), before `hwclock` has
     run on its thread; if the write fails, only the app log says
@@ -837,7 +841,9 @@ store and forward and Winlink all work; only QUERY CALL failed (above).
   decoder avg 25 % of a core, at 95 %+ for 11 s in 10 min in 1-2 s bursts,
   longest pass 1.5 s, ~2 windows merged a minute; all four cores never
   over 90 % together; GUI main avg 24 %, never 70 %, 0 ms wait.
-- [ ] Performance: each part's CPU use on the radio, spread over its four
+- [x] ~~Performance: each part's CPU use on the radio, spread over its four~~
+  **Dropped 2026-10-10 (VE7NHW: nothing left worth optimizing; the radio
+  CPU logs agree: the GUI never waited, Ultra ~10 % of a core).**
   cores. First measurement and the waterfall fix done (above, "Screen and
   radio"); the GUI thread's remaining ~29 % with no rows is still to look at.
 - [ ] Leftovers in the [fix plan](review/fix-plan.md) ("Not now": I-02,
