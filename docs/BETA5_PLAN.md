@@ -160,8 +160,41 @@ Notes only so far: nothing below is changed in the code yet.
   and Slow, as desktop. Tests: unit speed table, Ultra slots, loopback at
   every speed incl. Ultra, five speeds on one band; harness ONLY_SPEED
   (Setting, a `U` row, the button, HB refused, an Ultra frame's length,
-  Setting off → Normal). **To check on the radio:** CPU with Ultra on
-  (x6100-cpulog), and an Ultra QSO with desktop (the HL2 bench).
+  Setting off → Normal). **Measured on the radio 2026-10-10** (card
+  3cc3827, evening band, Normal speed; research/cpulog/2026-10-10-0228Z
+  Ultra off, -0247Z Ultra on): Ultra's thread 9-11 % of one core (30
+  passes a minute, 0.3-0.7 s each, 0 windows waiting after the first
+  minute; its first pass 6.2 s, building the decoder, once a session);
+  main decoder unchanged (26-28 %, 2 windows merged a minute; its longest
+  pass follows the band, 3-4 s with 6-9 decodes a minute); GUI main never
+  waited (0 ms); all four cores never busy at once; whole radio 118 → 139
+  % of 400. **So (user, 2026-10-10): Ultra is always decoded, as desktop;
+  the Setting is now "Ultra on Speed button" (off to start), the button
+  goes Normal, Fast, Turbo, Ultra, Slow (`speed_order`; js8_speed_t keeps
+  its numbers); Hold Speed switches to Ultra either way; turning the
+  Setting off on Ultra keeps you there until Speed is pressed.**
+  **Code review 2026-10-10 (all of it, js8core patches 14-15 to the app):**
+  no defects found. Checked: Ultra's numbers and decoder constants against
+  desktop 7fd8ecd; the two lanes (start/stop, merge per lane, the Ultra
+  snapshot's own copy of the audio, `thread_local` decoders, FFTW planning
+  under `fftw_mutex`); DecodeStarted/Finished across lanes (`main_busy_`,
+  Time: Auto only from the main lane, AUTO's cycle end); the per-lane
+  stats; DuplicateFilter (3 s window for Ultra's 1 s retry); the
+  assembler; the TX path (1536 samples a symbol at 48 kHz exactly, slot
+  grid, 2750 Hz top offset, the drive ramp: an Ultra frame (2.5 s) is
+  shorter than the ramp's 1.3 s settle + 0.5 s windows, so it converges
+  over frames, each starting at the learned level, no dip); no speed lists
+  outside speeds.cpp. Ultra's time search reaches ±2.0 s (250 quarter-
+  symbol steps; Normal ±2.5 s) and js8core's 1 s retry takes signals up to
+  ~1.1 s late. Replies go at your own speed, as desktop's (it only offers
+  "Jump to <speed>", our Hold Speed). **Differences from desktop, kept on
+  purpose:** js8core decodes Turbo and Ultra once the symbols are in and
+  again a second later (two passes a slot), desktop once a slot at
+  symbols + 0.6 s: ours costs about twice the CPU (still ~10 %) and takes
+  later signals. **To check:** an Ultra QSO with desktop on the HL2 bench
+  (the DT desktop shows for our Ultra signal: our TX latency), and a busy
+  band on the antenna; with an amp, Ultra keys it every 4 s (2.5 s on,
+  1.5 s off).
 - [ ] **GPS** from a USB dongle (time and position). The user has the dongle;
   work on it **at the radio** (it must be plugged into the radio's HOST
   port). **Findings 2026-10-09 (code + AetherX6100Buildroot aca5e53):**

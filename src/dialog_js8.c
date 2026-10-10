@@ -954,17 +954,25 @@ static void rebuild_rows(void) {
     follow();
 }
 
-/* Ultra is experimental: only with its Setting on is it decoded and on
- * the Speed button (desktop decodes it always; the Setting is here until
- * its CPU cost on the radio is known). */
-static bool speed_offered(js8_speed_t s) {
+/* The Speed button's order, fastest-but-one up to Slow: Ultra after Turbo
+ * (the user's choice). js8_speed_t (and the saved js8_speed) keeps its
+ * numbers; only the stepping order is this. */
+static const js8_speed_t speed_order[JS8_SPEED_COUNT] = {
+    JS8_SPEED_NORMAL, JS8_SPEED_FAST, JS8_SPEED_TURBO, JS8_SPEED_ULTRA, JS8_SPEED_SLOW,
+};
+
+/* Ultra is always decoded, as desktop does (measured on the radio
+ * 2026-10-10: about a tenth of a core); its Setting only puts it on the
+ * Speed button, so nobody lands on it by accident. Hold Speed on an Ultra
+ * station switches to it either way. */
+static bool speed_on_button(js8_speed_t s) {
     return s != JS8_SPEED_ULTRA || param_i_get(cfg.js8.ultra());
 }
 
 /* The speed we transmit at (page 6). */
 static js8_speed_t cur_speed(void) {
     int s = param_i_get(cfg.js8.speed());
-    return s < JS8_SPEED_COUNT && speed_offered((js8_speed_t)s) ? (js8_speed_t)s : JS8_SPEED_NORMAL;
+    return s < JS8_SPEED_COUNT ? (js8_speed_t)s : JS8_SPEED_NORMAL;
 }
 
 /* What the receiver decodes: every speed (desktop's multi-decoder, the
@@ -972,8 +980,7 @@ static js8_speed_t cur_speed(void) {
 static int rx_speed_mask(void) {
     if (!param_i_get(cfg.js8.rx_all())) return js8_speed_rx_mask(cur_speed());
     int mask = 0;
-    for (int s = 0; s < JS8_SPEED_COUNT; s++)
-        if (speed_offered((js8_speed_t)s)) mask |= js8_speed_rx_mask((js8_speed_t)s);
+    for (int s = 0; s < JS8_SPEED_COUNT; s++) mask |= js8_speed_rx_mask((js8_speed_t)s);
     return mask;
 }
 
@@ -6466,7 +6473,7 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_DECODE   108
 #define SETTINGS_HCLEAR   109 /* clear the station history: press, then again within HCLEAR_MS */
 #define SETTINGS_FREQ     110 /* Frequencies: JS8Call's / GhostNet / custom kHz (page 6's Freq before) */
-#define SETTINGS_ULTRA    111 /* Ultra (experimental) on/off */
+#define SETTINGS_ULTRA    111 /* Ultra on the Speed button (experimental) */
 #define HCLEAR_MS         5000
 
 static int64_t   hclear_armed_ms; /* the first press (monotonic), 0: not armed */
@@ -6498,7 +6505,7 @@ static const char *settings_label(int which) {
     case SETTINGS_MILES: return param_i_get(cfg.js8.miles()) ? "Distance: miles" : "Distance: km";
     case SETTINGS_MARKS: return param_i_get(cfg.js8.decode_marks()) ? "Decode marks: On" : "Decode marks: Off";
     case SETTINGS_DECODE: return param_i_get(cfg.js8.rx_all()) ? "Decode: All speeds" : "Decode: My speed";
-    case SETTINGS_ULTRA: return param_i_get(cfg.js8.ultra()) ? "Ultra (experimental): On" : "Ultra (experimental): Off";
+    case SETTINGS_ULTRA: return param_i_get(cfg.js8.ultra()) ? "Ultra on Speed button: On" : "Ultra on Speed button: Off";
     case SETTINGS_FREQ: snprintf(buf, sizeof(buf), "Frequencies: %s", freq_name()); return buf;
     case SETTINGS_HCLEAR:
         if (hclear_armed_ms && now_mono_ms() - hclear_armed_ms < HCLEAR_MS) {
@@ -8830,9 +8837,12 @@ static void speed_cb(button_data_t *btn) {
     (void)btn;
     user_touch();
     if (popup_guard()) return;
-    js8_speed_t next = cur_speed();
-    do next = (js8_speed_t)((next + 1) % JS8_SPEED_COUNT);
-    while (!speed_offered(next));
+    int at = 0;
+    for (int i = 0; i < JS8_SPEED_COUNT; i++)
+        if (speed_order[i] == cur_speed()) at = i;
+    js8_speed_t next;
+    do next = speed_order[at = (at + 1) % JS8_SPEED_COUNT];
+    while (!speed_on_button(next));
     set_speed(next);
 }
 
@@ -8850,11 +8860,7 @@ static void speed_hold_cb(button_data_t *btn) {
         msg_update_text_fmt("Already sending %s", js8_speed_name(their));
         return;
     }
-    if (!speed_offered(their)) {
-        msg_update_text_fmt("%s is off: turn it on in Settings first", js8_speed_name(their));
-        return;
-    }
-    set_speed(their);
+    set_speed(their); /* Ultra too, even if it isn't on the button */
 }
 
 /* Decode: all speeds or only the one we send at (a Settings line; it was
@@ -8862,29 +8868,20 @@ static void speed_hold_cb(button_data_t *btn) {
 static void decode_toggle(void) {
     param_i_set(cfg.js8.rx_all(), !param_i_get(cfg.js8.rx_all()));
     js8_rx_set_submodes(rx, rx_speed_mask());
-    if (param_i_get(cfg.js8.rx_all()))
-        msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Slow%s)",
-                            param_i_get(cfg.js8.ultra()) ? ", Ultra" : "");
+    if (param_i_get(cfg.js8.rx_all())) msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Ultra, Slow)");
     else msg_update_text_fmt("Decoding %s only", js8_speed_name(cur_speed()));
 }
 
-/* Ultra on or off (Settings, experimental). Off while sending it: back to
- * Normal. */
+/* Ultra on the Speed button or not (Settings, experimental). It's decoded
+ * either way; switched off while you send Ultra, you stay on it until the
+ * next press of Speed. */
 static void ultra_toggle(void) {
     bool on = !param_i_get(cfg.js8.ultra());
-    if (!on && param_i_get(cfg.js8.speed()) == JS8_SPEED_ULTRA) {
-        if (js8_tx_busy(tx)) {
-            msg_update_text_fmt("Not while sending Ultra - Stop TX first");
-            return;
-        }
-        param_i_set(cfg.js8.ultra(), 0);
-        set_speed(JS8_SPEED_NORMAL);
-    }
     param_i_set(cfg.js8.ultra(), on);
-    js8_rx_set_submodes(rx, rx_speed_mask());
-    if (btn_speed.disp_btn) buttons_refresh(&btn_speed);
-    msg_update_text_fmt(on ? "Ultra on (experimental): decoded, and on the Speed button (page 6)"
-                           : "Ultra off: not decoded, not on the Speed button");
+    msg_update_text_fmt(on ? "Ultra on the Speed button (page 6): after Turbo"
+                           : cur_speed() == JS8_SPEED_ULTRA
+                               ? "Ultra off the Speed button: you stay on Ultra until you press Speed"
+                               : "Ultra off the Speed button (still decoded; hold Speed on an Ultra station to match)");
 }
 
 /* ---- Frequency: JS8Call's, GhostNet's, or your own ---------------------- */

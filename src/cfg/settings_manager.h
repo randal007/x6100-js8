@@ -368,7 +368,7 @@ class SettingsManager {
     Parameter<int32_t> p_js8_rx_all{"js8_rx_all", 1, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // decode every speed (desktop's multi-decoder)
     Parameter<int32_t> p_js8_ultra{"js8_ultra", 0, 0, 1,
-        StorageType::GLOBAL, pending_writes_, &global_params_}; // Ultra (experimental): decoded, and on the Speed button
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // Ultra on the Speed button (it is always decoded)
     Parameter<int32_t> p_js8_ghostnet{"js8_ghostnet", 0, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // band keys step through GhostNet's frequencies
     Parameter<int32_t> p_js8_custom_on{"js8_custom_on", 0, 0, 1,

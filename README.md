@@ -635,13 +635,13 @@ JS8 has four speeds, and a fifth, **Ultra**, that's experimental here
 - **Receiving:** every speed at once, as desktop's multi-decoder does; the
   list and Stations view mark `F`, `T`, `S` and `U`. *Decode: My speed* ([Settings](#settings))
   decodes only your speed.
-- **Ultra** is off to start: turn on *Ultra (experimental)* in
-  [Settings](#settings) and it's decoded all the time (whatever speed
-  you send at) and the **Speed** button steps through it too. Desktop
-  decodes it always; it's a Setting here until we know what it costs the
-  radio's processor. Its 4 s slots leave little room for a clock that's
-  off: keep [Time: Auto](#time) on (it learns from Normal and Slow
-  stations, as desktop's does).
+- **Ultra** is always decoded, as desktop does (it costs the radio about a
+  tenth of one processor core, on its own decoder thread). To send at it,
+  turn on *Ultra on Speed button* in [Settings](#settings): the **Speed**
+  button then goes Normal, Fast, Turbo, **Ultra**, Slow. Or **hold Speed**
+  on an Ultra station to match it, button or not. Its 4 s slots leave little
+  room for a clock that's off: keep [Time: Auto](#time) on (it learns from
+  Normal and Slow stations, as desktop's does).
 - **Sending:** everything goes at the speed on page 6, automatic replies
   included. Replying to someone heard at another speed warns you; **hold
   Speed** to switch to theirs.
@@ -746,7 +746,7 @@ Page 4 **Settings…**:
 | **Messages kept: …** | Press to change: messages leave the list this long after they arrived (15 min to 2 hours), or *all* (the default: the list keeps the newest 150 to 200 messages; it's trimmed back to 150 when it reaches 200). |
 | **Distance: km / miles** | Press to switch the Stations view's distances (km to start). |
 | **Decode: All speeds / My speed** | Press to switch: decode every speed (the default), or only the one you send at. |
-| **Ultra (experimental): On / Off** | Press to switch the [Ultra speed](#speeds) (off to start): on, it's decoded and on the **Speed** button. Off while you're on Ultra puts you back on Normal. |
+| **Ultra on Speed button: On / Off** | Press to switch whether the **Speed** button steps through [Ultra](#speeds), after Turbo (off to start; experimental). Ultra is decoded either way. Switched off while you're on Ultra, you stay on it until you press Speed. |
 | **Decode marks: On / Off** | Press to switch the [decode marks](#the-screen) on the waterfall (off to start, as desktop). |
 | **Waterfall: Sharp / Light / Medium / Calm** | Press to step through how much each waterfall row is averaged with the ones before. *Light* (the default) about 2 times less flicker as the waterfall moves; *Medium* about 2.6 times less; *Calm* averages most: least speckle, a darker background so signals stand out, about 4 times less flicker; *Sharp* shows every row as heard, as before. More in [The waterfall](#the-waterfall). |
 | **Clear station history...** | Forget the whole [history](#history), every band: press, then again within 5 seconds. Can't be undone. |
