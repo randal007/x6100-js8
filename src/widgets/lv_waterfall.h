@@ -25,10 +25,14 @@ extern "C" {
 
 typedef struct {
     lv_img_t        obj;
-    lv_img_dsc_t    *dsc;
+    lv_img_dsc_t    *dsc;       /* the image LVGL draws: a window into ring */
 
     uint32_t        line_len;
     uint8_t         *line_buf;
+
+    uint8_t         *ring;      /* 2 x height lines: each line is also kept one height below */
+    uint32_t        head;       /* ring line of the newest row, 0 .. height - 1 */
+    uint32_t        rows;       /* rows added so far (wraps): tells how far a mark has scrolled */
 
     lv_color_t      *palette;
     uint16_t        palette_cnt;
@@ -62,6 +66,15 @@ void lv_waterfall_add_data_with_ts(lv_obj_t * obj, float * data, uint16_t cnt, s
 
 /* Return the timestamp of the most recent PSD frame, or {0,0} if none yet. */
 struct timespec lv_waterfall_get_frame_ts(lv_obj_t * obj);
+
+/* Rows added so far (wraps around). Row y of the image (0 = newest) now
+ * shows what was the newest row when this read `rows - y`. */
+uint32_t lv_waterfall_get_rows(lv_obj_t * obj);
+
+/* Paint a rectangle into the image, in image coordinates (y 0 = the newest
+ * row), clipped to it. It scrolls down with the waterfall like the rows. */
+void lv_waterfall_fill_rect(lv_obj_t * obj, lv_coord_t x1, lv_coord_t y1, lv_coord_t x2, lv_coord_t y2,
+                            lv_color_t color);
 
 void lv_waterfall_set_min(lv_obj_t *obj, int16_t val);
 void lv_waterfall_set_max(lv_obj_t *obj, int16_t val);
