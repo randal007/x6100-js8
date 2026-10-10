@@ -243,6 +243,24 @@ Notes only so far: nothing below is changed in the code yet.
     `timeout`, and `gpspipe -n` waits forever without reports: Ctrl-C via
     `x6100-console send $'\x03'`.) Clock matched the PC to the second at
     02:27Z without GPS.
+  - **Root cause found 2026-10-10 03:20Z (card 3cc3827, dongle plugged
+    in, basement):** gpsd runs **without its control socket**: the image's
+    `/etc/init.d/S50gpsd` starts `gpsd -P ... -n /dev/ttyACM0` with no
+    `-F /var/run/gpsd.sock` (the file exists, but connecting gives
+    "Connection refused"). The gpsd package's hotplug rule does fire on a
+    replug (`logread`: `gpsd.hotplug: add /dev/ttyACM0`), but `gpsdctl` has
+    nothing to talk to, so a GPS plugged in (or re-enumerated) after boot
+    is never used until a reboot. Not permissions: gpsd runs uid nobody,
+    gid 18 = dialout, the device is root:dialout 660. The dongle itself is
+    fine: plain NMEA at 9600 (`$GPRMC,,V`, `$GPGGA,...,0,00`: no fix, no
+    time, 0 satellites in the basement). **Fix (shared Linux layer; user
+    to OK):** one more `sed` in `.github/workflows/main.yml` (it already
+    patches AetherX6100Buildroot) adding `-F /var/run/gpsd.sock` to
+    S50gpsd's gpsd line; offer it upstream to gdyuldin too. Until then:
+    plug the GPS in before switching the radio on. Then outside for the
+    first fix (cold start: up to minutes), APP > GPS to watch it lock,
+    `ntpq -n -p 127.0.0.1` for `*` on .GPS., and catch 3 (Time: Auto vs
+    the clock step) before relying on it with JS8 open.
   - **First steps at the radio (read-only):** plug the dongle into HOST;
     `dmesg | tail` (ttyACM0 or ttyUSB0, chip), `ps | grep -E 'gpsd|ntpd'`,
     `gpspipe -w -n 5` (if installed) or APP > GPS, `ntpq -p` (GPS refid,
