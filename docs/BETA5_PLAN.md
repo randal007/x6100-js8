@@ -1,19 +1,22 @@
 # Beta 5: plan
 
-> **Released as beta 4.5 on 2026-10-04** (user's call): tag `js8-beta4.5`,
-> the tested image CI 37258042913 (19bbc77); notes in
-> [releases/js8-beta4.5.md](releases/js8-beta4.5.md). **Next, the only items
-> the user wants now:** GPS (USB dongle) and trying a Bluetooth keyboard.
-> The other open items below (ALC under 1 W, the map's home colour, POTA /
-> SOTA on the air, the Murus merge, performance) are parked as ideas.
-> **2026-10-09:** VE7NHW's new list is the next section: APRS NACK, Echo
-> test, @ALLCALL QUERY MSGS, the held-message pickup bug, Show's blank
-> rows, a default STATUS, Ultra (done), plus GPS and the Bluetooth keyboard
-> (still wanted for beta 5).
+> **Where it stands (2026-10-10):** latest release beta 4.7 (2026-10-05).
+> On `main` since then, for beta 5 (README "In main since beta 4.7"):
+> Ultra (always decoded, own decoder thread, after Turbo on the Speed
+> button), decoders kept off one core, *Anyone have messages?*, the
+> default STATUS, `QUERY MSG [ID]` brackets, the Echo test removed, and
+> the image's gpsd hotplug fix. VE7NHW's card: 3cc3827 (flashed
+> 2026-10-09 19:22 PDT); the image with everything (7cb0fe2) is building.
+> **Open:** GPS (a fix outside, clock, JS8 using the GPS grid, Time: Auto
+> vs a clock step), the Bluetooth keyboard, Ultra on the air, Show's blank
+> rows (not reproduced), the APRS NACK (needs a screenshot). Ideas parked
+> lower down: the map's home colour, POTA / SOTA on the air, the Murus
+> merge, ALC under 1 W. What we carry outside the JS8 app and the PRs to
+> send: [upstream-patches.md](upstream-patches.md).
 
 ## VE7NHW's list (2026-10-09)
 
-Notes only so far: nothing below is changed in the code yet.
+Each item says what was done, or what's still needed.
 
 - [ ] **Received APRS messages show a NACK command.** VE7NHW: every
   message coming back from APRS shows NACK, although nothing on the

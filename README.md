@@ -21,6 +21,13 @@ the radio's firmware, next to the FT8 and RTTY apps.
 > latest R1CBU firmware (gdyuldin v1.0.2), and beta 4 added the map and
 > decode marks. Nothing transmits by itself when the app opens; automatic
 > replies and heartbeats are switches you turn on.
+>
+> **On `main` since 4.7, for beta 5** (test builds only so far): the
+> **Ultra** speed (desktop's "JS8 60") decoded on its own processor core,
+> *Anyone have messages?* to everyone, desktop's default STATUS, message
+> pick-ups that work with desktop's `[ID]` brackets left in, and a USB GPS
+> that's found when plugged in after the radio is on
+> ([In main since beta 4.7](#in-main-since-beta-47)).
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
@@ -48,6 +55,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
+- [In main since beta 4.7](#in-main-since-beta-47)
 - [New in beta 4.7](#new-in-beta-47)
 - [New in beta 4.6](#new-in-beta-46)
 - [New in beta 4.5](#new-in-beta-45)
@@ -927,6 +935,35 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
+## In main since beta 4.7
+
+Not released yet: on `main` and in test builds, for beta 5
+([docs/BETA5_PLAN.md](docs/BETA5_PLAN.md)).
+
+- **Ultra speed** (desktop JS8Call-improved's "JS8 60": 4 s slots, 250 Hz
+  wide, `U` in the lists): always decoded, as desktop does, on its own
+  decoder thread so it never holds up the other speeds; *Ultra on Speed
+  button* in Settings puts it on the **Speed** button after Turbo, and
+  **hold Speed** on an Ultra station matches it either way
+  ([Speeds](#speeds)). Measured on the radio: about a tenth of one
+  processor core.
+- **The decoders stay off one processor core**, so the screen (and the
+  waterfall) always has a core of its own.
+- **Anyone have messages?** in the Query list sends `@ALLCALL QUERY MSGS`
+  (with or without a station selected), right below *Any messages?*
+  ([Messages](#messages-and-the-inbox)).
+- **STATUS starts as desktop's default**, `IDLE <MYIDLE> VERSION
+  <MYVERSION>`, once; a STATUS you clear stays empty ([Settings](#settings)).
+- **Fetching a held message works with brackets**: `QUERY MSG [3]` or
+  `[ID 3]`, as desktop's template leaves them, are answered like
+  `QUERY MSG 3` (found with desktop JS8Call on the air).
+- **The APRS Echo test is gone**: relay stations don't bring ECHO's answer
+  back over JS8. The `@` badge still comes from any relayed APRS answer.
+- **A USB GPS plugged in after the radio is on** is found (the image's
+  gpsd had no control socket for its hotplug rule; a change to the Linux
+  image, listed in [docs/upstream-patches.md](docs/upstream-patches.md)
+  to offer upstream).
+
 ## New in beta 4.7
 
 Released 2026-10-05, a quick follow-up to 4.6:
@@ -1234,14 +1271,20 @@ are, and its new settings start at their defaults.
 
 What's left is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). Next:
 
-- [ ] **GPS** time and location from a USB GPS
+- [ ] **GPS** time and location from a USB GPS: the image now finds a GPS
+  plugged in at any time; next, a fix outside, the clock set from it, JS8
+  using the GPS grid, and Time: Auto handling the clock being corrected
 - [ ] **A Bluetooth keyboard** tried with JS8
+- [ ] **Ultra on the air** with desktop JS8Call, and on a busy band
+- [ ] **Show's blank rows** (switching Show All / No HB / Directed): not
+  reproduced in testing yet; radio screenshots wanted
 
 Ideas for later (not planned now):
 
 - A Setting for the map's home colour
 - The Murus team's WeFax, NavTex and SSTV, once their fork is on R1CBU 1.0
-- Performance: spreading the work over the radio's four cores
+- Performance: one decoder thread per speed if needed (Ultra has its own
+  already, and the decoders stay off the screen's core)
 - The same lower-layer drawing for the FT8 app's waterfall (that's
   upstream's code: an idea to offer them)
 - Decode marks: an option to hide the dim ones (faint maybes, mostly noise)

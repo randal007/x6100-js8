@@ -6,6 +6,19 @@ outside our own JS8 code can be lost or clash when either moves on. **When
 updating to a newer upstream, go through this list**, and send the fixes
 that help everyone upstream as PRs, so they stop being ours to carry.
 
+## PRs to send (the queue)
+
+Everything here is outside our JS8 app. Tick it when the PR is merged and
+drop our copy.
+
+| # | To | What | Status |
+|---|---|---|---|
+| 1 | gdyuldin/AetherX6100Buildroot | gpsd with a control socket (`-F /var/run/gpsd.sock` in S50gpsd): USB GPS hotplug works (section 1) | ready; send after a test on the radio (boot without the GPS, plug it in) |
+| 2 | gdyuldin/x6100_gui | USB keyboard hot plug (`src/keyboard.c`), then the other keyboard fixes (section 2) | agreed order with gdyuldin: first PR; waiting for his GitHub organization |
+| 3 | gdyuldin/x6100_gui | js8core + `src/js8` + the JS8 app, map and extras | after 2; licence question (GPLv3 js8core) open with gdyuldin |
+| 4 | JS8Call-improved/Android-port (js8core) | local patches 1-15, e.g. 14 (Ultra decoded on Turbo's schedule) and 15 (Ultra on its own decode thread, a thread-start hook) | listed in [UPSTREAM.md](../third-party/js8core/UPSTREAM.md); bugs already reported in issue #104 |
+| 5 | gdyuldin/x6100_gui | `dialog_rotary` timestamp-based knob speed (as his main knob) | offered to gdyuldin 2026-10-06 |
+
 ## 1. The Linux image (AetherX6100Buildroot), patched in our build
 
 Our image build (`.github/workflows/main.yml`, *Build image*) checks out
