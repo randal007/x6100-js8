@@ -2337,7 +2337,12 @@ Decoded decode_all_speeds(const std::vector<float> &band, int rate, int submodes
     Receiver rx(cfg, cb);
 
     const std::int64_t now  = wall_ms();
-    std::size_t        lead = (std::size_t)((30'000 - now % 30'000) * rate / 1000) + (std::size_t)30 * rate;
+    // The band starts on a minute: every speed's slots line up there (Ultra's
+    // 4 s slots don't at :30, so a band starting then had Ultra frames
+    // between slots and decoded them only half the time).
+    std::int64_t       to_minute = 60'000 - now % 60'000;
+    if (to_minute < 30'000) to_minute += 60'000; // at least 30 s for the receiver to settle
+    std::size_t        lead = (std::size_t)(to_minute * rate / 1000);
     std::vector<float> audio(lead, 0.0f);
     audio.insert(audio.end(), band.begin(), band.end());
     audio.resize(audio.size() + (std::size_t)31 * rate, 0.0f); // time for the last decodes
@@ -2434,6 +2439,55 @@ TEST_CASE("our TX audio decodes at every speed (loopback)", "[js8][speed][tx][.s
         CHECK(has_message(d, plan.preview, sp.varicode));
         CHECK(plan.preview == "W1ABC: K2XYZ LOOPBACK AT EVERY SPEED");
     }
+}
+
+TEST_CASE("Ultra decodes on its own thread; decoders stay off the last core", "[js8][speed][receiver]") {
+    std::mutex               mu;
+    std::vector<std::string> lines;
+    Receiver::Config         cfg;
+    cfg.input_rate = 11025;
+    cfg.submodes   = JS8_SUBMODE_NORMAL | JS8_SUBMODE_ULTRA;
+    Receiver::Callbacks cb;
+    cb.on_report = [&](const std::string &l) {
+        std::lock_guard<std::mutex> lock(mu);
+        lines.push_back(l);
+    };
+    Receiver rx(cfg, cb);
+    std::this_thread::sleep_for(std::chrono::milliseconds(300)); // the threads start
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    {
+        std::lock_guard<std::mutex> lock(mu);
+        auto has = [&](const std::string &want) {
+            return std::any_of(lines.begin(), lines.end(), [&](auto &l) { return l.find(want) != std::string::npos; });
+        };
+        for (auto &l : lines) UNSCOPED_INFO(l);
+        if (n >= 3) {
+            CHECK(has("decode thread main: off core " + std::to_string(n - 1)));
+            CHECK(has("decode thread ultra: off core " + std::to_string(n - 1) + " (left for the screen), nice 5"));
+        }
+    }
+    // The kernel's view of each thread: name, allowed cores, nice.
+    int found = 0;
+    for (auto &t : std::filesystem::directory_iterator("/proc/self/task")) {
+        std::ifstream c(t.path() / "comm");
+        std::string   name;
+        std::getline(c, name);
+        if (name != "js8-decode" && name != "js8-decode-u") continue;
+        found++;
+        std::ifstream st(t.path() / "status");
+        std::string   line, allowed;
+        while (std::getline(st, line))
+            if (line.rfind("Cpus_allowed_list:", 0) == 0) allowed = line.substr(line.find_first_not_of(" \t", 18));
+        INFO(name << " allowed " << allowed);
+        if (n >= 3) CHECK(allowed == (n - 2 == 0 ? std::string("0") : "0-" + std::to_string(n - 2)));
+        std::ifstream sf(t.path() / "stat");
+        std::string   stat((std::istreambuf_iterator<char>(sf)), std::istreambuf_iterator<char>());
+        std::istringstream rest(stat.substr(stat.rfind(')') + 2));
+        std::string        field;
+        for (int k = 0; k < 17 && rest >> field; k++) {} // field 19: nice
+        CHECK(std::stoi(field) == (name == "js8-decode-u" ? 5 : 0));
+    }
+    CHECK(found == 2);
 }
 
 TEST_CASE("speeds switched on while running decode from their next slot", "[js8][speed][receiver][.slow]") {

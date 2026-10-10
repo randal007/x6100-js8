@@ -160,12 +160,20 @@ private:
     std::uint64_t         samples_since_align_ = 0;
     std::atomic<unsigned> realigns_{0};
 
-    // Decode load for on_report, from the engine's log (decode thread; the
-    // merge note comes from the worker).
+    // Decode load for on_report, from the engine's log (decode threads; the
+    // merge note comes from the worker). [0] the main decode thread, [1]
+    // Ultra's own (js8core patch 15).
+    struct PassStats {
+        std::chrono::steady_clock::time_point pass_start;
+        unsigned                              passes = 0, decodes = 0, merged = 0;
+        double                                busy_s = 0, longest_s = 0;
+    };
     std::mutex                            stats_mutex_;
-    std::chrono::steady_clock::time_point stats_start_, pass_start_;
-    unsigned                              passes_ = 0, decodes_ = 0, merged_ = 0;
-    double                                busy_s_ = 0, longest_s_ = 0;
+    std::chrono::steady_clock::time_point stats_start_;
+    PassStats                             stats_[2];
+    /// The main decode thread is in a pass: an Ultra pass ending meanwhile
+    /// isn't the end of a cycle (the main pass's end is).
+    std::atomic<bool> main_busy_{false};
 
     // Automatic time sync: frames and passes on the decode thread, restarts
     // from the caller's.

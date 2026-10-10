@@ -34,7 +34,10 @@ Notes only so far: nothing below is changed in the code yet.
   `rej19004`, `rej19005`, each followed by SMS's "Invalid Command or
   Msg!"). Our app never sends `rej`, so it was likely a relay station
   answering for us. Worth a look while we're in there.
-- [ ] **Echo test: drop it, and find another way to earn the `@` badge.**
+- [x] **Echo test: drop it, and find another way to earn the `@` badge.**
+  **Done 2026-10-09:** removed from APRS > (user agreed); the `@` badge
+  needs nothing new (any relayed APRS answer earns it). Harness ONLY_APRS /
+  ONLY_APRSMORE updated.
   VE7NHW: Echo never comes back. **Checked on findu.com
   (msg.cgi?call=ECHO, 2026-10-09):** the ECHO service works and our
   command is right. It answered VE7NHW `ECHO:TEST{97` 6 s after the
@@ -50,8 +53,11 @@ Notes only so far: nothing below is changed in the code yet.
   (`Station::aprs_gate`, `src/js8/stations.cpp`), so it keeps working
   from SMS and other services' answers. Pick a new "test both
   directions" item if one is wanted (e.g. a short MPAD or JOKE request).
-- [ ] **"Anyone have messages for me?" (`@ALLCALL QUERY MSGS`) in the
-  Query list, always**, with or without a station selected. VE7NHW:
+- [x] **"Anyone have messages for me?" (`@ALLCALL QUERY MSGS`) in the
+  Query list, always** **Done 2026-10-09 (user: keep every station item, no
+  unselect needed):** *Anyone have messages?* right below *Any messages?*,
+  sent at once, also with no station selected (`allcall` flag on
+  `query_msg_items`). Harness ONLY_QUERYCALL., with or without a station selected. VE7NHW:
   dropping a selection is hard, so in practice the @ALLCALL items are only
   seen right after the app opens. **Checked:** there's no
   `@ALLCALL QUERY MSGS` item at all today; with no selection the list has
@@ -106,6 +112,17 @@ Notes only so far: nothing below is changed in the code yet.
   (the message and its id) and `app_logs` ("JS8 auto: ..." lines), plus
   the calls used on each side and the id it gave.
 - [ ] **Show (All / Directed / No HB): blank rows after switching.**
+  **Not reproduced yet (2026-10-09):** harness ONLY_SHOWSCROLL (64 rows,
+  21 after the switch, more than a screenful; hooks
+  `dialog_js8_test_message`, `dialog_js8_list_overscroll`) ends exactly at
+  the newest row, with or without a change, so the first idea (the list
+  scrolled past its new end) isn't it. `list_scroll_end()` now backs up a
+  list scrolled past its end anyway (harmless). **Suspect:** a repaint on
+  the radio: the MFK path redraws only the rows that change
+  (`table_key_pre_cb`, `table_invalidate_row`) and R1CBU rotates every
+  redrawn pixel in software; the harness runs stock LVGL. **Next:** radio
+  screenshots (`x6100-screenshot`) right after a Show press with blank
+  rows, then after the MFK bump.
   Changing what Show shows doesn't pull the remaining rows down to the
   bottom at once, leaving blank space. `show_cb()` → `rebuild_rows()`
   (`src/dialog_js8.c`); likely the table's row count or scroll position
@@ -193,7 +210,8 @@ moved into the README's "New in ..." as they land.
   on), three beeps once TX is done. Harness ONLY_SWR. On the user's card
   since 2026-10-04 (image CI 37183047679 = fe42a8d: waterfall four levels +
   SWR guard + APRS Echo test / More services); to be tried on the air.
-- [ ] **Update to the latest gdyuldin release**
+- [x] **Update to the latest gdyuldin release** (done in beta 4.1: we're on
+  v1.0.2; his ver_1.1 with the Bluetooth pairing screen isn't released)
   ([x6100_gui releases](https://github.com/gdyuldin/x6100_gui/releases)):
   the list said v1.0.1; **v1.0.2 came out 2026-10-02**. Cleaner UI with
   more room for the map. **First, and without the Murus fork** (user,
@@ -572,8 +590,18 @@ store and forward and Winlink all work; only QUERY CALL failed (above).
 
 ## Low priority (after the features)
 
-- [ ] **Decoder threads (ideas, VE7NHW 2026-10-09; after measuring
-  Ultra):** (1) Ultra on its own decode thread, so its 4 s slots never wait
+- [x] **Decoder threads (VE7NHW 2026-10-09, my recommendation: both before
+  Ultra could decode by default). Done 2026-10-09:** js8core patch 15
+  (Ultra's own decode thread `js8-decode-u`, `on_decode_thread_start`
+  hook); `src/js8/cpu_fence.{hpp,cpp}` keeps both decode threads and the
+  time search off the last core (core 3 on the radio; core 0 takes the
+  interrupts), Ultra's at nice 5; the GUI may run anywhere. Receiver: an
+  Ultra pass ends a cycle (AUTO's replies) only while the main thread
+  isn't in a pass; Time: Auto applies only at the main pass's end; a
+  second stats line "decode Ultra: ..." each minute. Unit test checks the
+  threads, their allowed cores and nice in /proc. **To measure on the
+  radio:** this build vs the baseline below, Ultra on, then a busy band.
+  Original notes: (1) Ultra on its own decode thread, so its 4 s slots never wait
   behind a Normal/Slow pass (js8core: `legacy_decode()` runs the speeds one
   after another on one thread; each pass has its own copy of the audio,
   decoders are `thread_local`, FFTW plan creation is already behind

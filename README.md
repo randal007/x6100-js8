@@ -15,7 +15,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 > per band), automatic time sync from every decode, saved messages with
 > desktop's macros, Sort (QSO too), QRZ and an `@` for two-way APRS gateways
 > in the Stations view, a count on stacked map squares, high-SWR
-> protection, an APRS Echo test and services list, a lighter and calmer
+> protection, an APRS services list, a lighter and calmer
 > waterfall, and a USB keyboard that works when plugged in while the radio
 > is on ([New in beta 4.5](#new-in-beta-45)). Beta 4.1 moved JS8 onto the
 > latest R1CBU firmware (gdyuldin v1.0.2), and beta 4 added the map and
@@ -236,8 +236,8 @@ keyboard works too; lowercase is typed as capitals.
 desktop's Call Activity. `*` and gold: they heard you (they replied or
 acknowledged your heartbeat), with the report they gave you ("heard you
 −13"). `@`: an **APRS gateway both ways**: they were heard passing an APRS
-message back over JS8 (`@APRSIS MSG TO:...`, e.g. the answer to your
-[Echo test](#aprs) or an SMS), so APRS can reach you through them; `@`
+message back over JS8 (`@APRSIS MSG TO:...`, e.g. an SMS or the answer
+from one of the [APRS services](#aprs)), so APRS can reach you through them; `@`
 takes the place of `*` (the row stays gold if they heard you). Gateways
 that only send to APRS are silent on JS8, so they can't be marked. Then time since heard, their SNR here, speed, grid, distance and
 bearing (degrees from north). Calls you've logged are green. Stations
@@ -407,7 +407,7 @@ to go back a page. In JS8 a hold is half a second.
 |---|---|---|
 | 1 | **CQ** | `CQ CQ CQ <grid>`. Heartbeats carry on (a CQ doesn't pause them; see [Transmitting](#transmitting)). **Hold for auto CQ**: one now, and the main knob sets how many minutes after each CQ ends the next one goes (1–30, remembered; press CQ when done, or hold CQ later to change it; answers and heartbeats sent in between don't move it). The button then counts down, until someone answers you, you reply to someone, press CQ again, stop TX, change band or frequency, or leave it alone for an hour. |
 | 1 | **Heartbeat** | Works as CQ does. Press: one heartbeat now, on your own offset if that is 1000 Hz or below, else at a free spot in the 500–1000 Hz heartbeat sub-band (clear of anything heard in the last 30 s), as desktop; the red band shows where while it waits and goes. **Hold for auto heartbeats**: one now, and the main knob sets the minutes between them (5–30, remembered; press Heartbeat when done, or hold it later to change it). The button then counts down to the next one, or shows *paused* (see [Transmitting](#transmitting)); holding it then carries on at once. Press it while auto is on to switch auto off. None in Turbo. |
-| 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Fetch message #…, Relay via them…, Can they reach…?, Can anyone reach…? (with no station selected, only that one), and **Saved messages >** just before Close ([Saved messages](#saved-messages)) |
+| 1 | **Query >** | One-press messages to the selected station: SNR?, Send SNR, GRID?, My grid, INFO?, STATUS?, HEARING?, AGN?, RR, 73, Message…, Message via them…, Any messages?, Anyone have messages?, Fetch message #…, Relay via them…, Can they reach…?, Can anyone reach…? (with no station selected, only the two to everyone: *Anyone have messages?* and *Can anyone reach…?*), and **Saved messages >** just before Close ([Saved messages](#saved-messages)) |
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. On [the map](#the-map): **All heard / Heard me**. |
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead (each station its own, for 5 minutes). |
@@ -679,7 +679,8 @@ to the selected station.
 | Message… | `N0XYZ MSG <text>` | their inbox |
 | Message via them… | `N0XYZ MSG TO:W1ABC <text>` | N0XYZ holds it until W1ABC asks |
 | Any messages? | `N0XYZ QUERY MSGS` | they answer `YES MSG ID 3` (`+2`: two more after it) or `NO` |
-| Fetch message #… | `N0XYZ QUERY MSG 3` | the message they hold for you |
+| Anyone have messages? | `@ALLCALL QUERY MSGS` | sent at once, to everyone: each station with AUTO on that holds a message for you answers `YES MSG ID 3` (stations with nothing for you stay quiet); in the list with no station selected too |
+| Fetch message #… | `N0XYZ QUERY MSG 3` | the message they hold for you. When someone fetches one from you, the number counts with or without the brackets of desktop's `QUERY MSG [ID]` (`[3]`, `[ID 3]`) |
 | Relay via them… | `N0XYZ>W1ABC <text>` | N0XYZ passes it on to W1ABC ([Relays](#relays)) |
 | Can they reach…? | `N0XYZ QUERY CALL W1ABC?` | N0XYZ answers `YES -12 (5m)` if they've heard W1ABC. Type just the call: the `?` goes on by itself, as desktop sends it |
 | Can anyone reach…? | `@ALLCALL QUERY CALL W1ABC?` | everyone with AUTO on who has heard W1ABC answers; in the list with no station selected too |
@@ -801,7 +802,6 @@ JS8Spotter do):
 
 | Item | Sends | You type |
 |---|---|---|
-| Echo test | `@APRSIS CMD :ECHO     :TEST` | just Enter: ECHO sends the text back, so an answer in your Inbox proves both directions work; the station that brought it gets `@` in the Stations view |
 | Spot my grid | `@APRSIS GRID CN89LH`, or with a message `@APRSIS CMD =4916.25N/12305.00WGMADE IT TO CAMP` | a message, or just Enter |
 | Spot GPS position | the same from your GPS fix: `@APRSIS GRID CN89KG12AB` or a position with the message | a message, or just Enter (needs a GPS on the radio) |
 | POTA spot | `@APRSIS CMD :APSPOT   :! POTA CA-1234 7.078 DATA JS8` | nothing: a [spot form](#pota-and-sota-spots) |
@@ -869,8 +869,7 @@ count as you type. (JS8's `GRID` command can't carry a message, so this
 one goes as a raw APRS packet through `CMD`.) ESC sends nothing.
 
 Confirmed on the air so far: the plain **Spot my grid**, **SMS** (both
-ways) and **Winlink**. The other items, the Echo test and More services
-included, follow desktop JS8Call's, JS8Spotter's and the gateways' own
+ways) and **Winlink**. The other items, More services included, follow desktop JS8Call's, JS8Spotter's and the gateways' own
 formats (and survive JS8 encoding in our tests) but still need testing
 through the gateways.
 
@@ -976,7 +975,8 @@ New:
 - **[High-SWR protection](#transmitting)**: over 3:1 while sending turns
   AUTO, heartbeats, HB ACK and auto CQ off, with three beeps.
 - **APRS:** an **Echo test** first in the list (an answer in your Inbox
-  proves both directions work) and a **More services >** list: weather,
+  proves both directions work; *removed after 4.7: relay stations don't
+  bring ECHO's answer back over JS8*) and a **More services >** list: weather,
   sunrise, repeaters, ISS passes, nearest hospital / fuel / water, email
   your position, callsign lookup and more, each message filled in
   ([APRS](#aprs)).
@@ -1209,8 +1209,8 @@ are, and its new settings start at their defaults.
   week. [Time: Auto](#time) follows every decode; at 2.5 s or more off
   nothing decodes: hold **Time** to search, or set the clock in the radio's
   Settings (General: *Hour, Min, Sec*).
-- **Not tried on the air yet:** the high-SWR protection, the APRS Echo test
-  and More services list, POTA and SOTA spots, position messages and email
+- **Not tried on the air yet:** the high-SWR protection, the APRS
+  More services list, POTA and SOTA spots, position messages and email
   through the gateways, a **Bluetooth keyboard**. Relays, store and
   forward, messaging, the grid spot, two-way SMS and Winlink all work on
   the air.

@@ -7,6 +7,7 @@
 #include "timesync.hpp"
 
 #include "render.hpp"
+#include "cpu_fence.hpp"
 
 #include "js8core/decoder.hpp"
 
@@ -183,6 +184,7 @@ void TimeSearch::loop() {
     // Below everything else: the decoder, the screen and the audio come first.
     setpriority(PRIO_PROCESS, (id_t)syscall(SYS_gettid), 10);
 #endif
+    fence_decoder_thread(0); // off the screen's core too, as the decode threads
     std::vector<std::int16_t> window(WINDOW);
 
     std::unique_lock<std::mutex> lock(mutex_);

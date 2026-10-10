@@ -57,6 +57,8 @@ void ui_usb_init(void);
 bool dialog_js8_selected_call(char *call, unsigned len);
 int  dialog_js8_station_rows(char *out, unsigned len);
 char dialog_js8_station_star(const char *call);
+void dialog_js8_test_message(const js8_rx_msg_t *m);
+int  dialog_js8_list_overscroll(void);
 const char *dialog_js8_freq_name(void);
 js8_history_t *dialog_js8_history(void);
 int  dialog_js8_map_stacks(const char **text);
@@ -367,7 +369,9 @@ static void feed_speeds(const std::vector<x6100::js8::TestStation> &band) {
     auto               audio = x6100::js8::make_test_band(band, RATE, 0.02f, 7);
     auto               now   = std::chrono::system_clock::now().time_since_epoch();
     long long          ms    = std::chrono::duration_cast<std::chrono::milliseconds>(now).count();
-    std::size_t        lead  = (std::size_t)((30000 - ms % 30000) * RATE / 1000);
+    // From the next minute: every speed's slots line up there (Ultra's 4 s
+    // slots don't at :30).
+    std::size_t        lead  = (std::size_t)((60000 - ms % 60000) * RATE / 1000);
     std::vector<float> all(lead, 0.0f);
     std::mt19937                    rng(3);
     std::normal_distribution<float> noise(0.0f, 0.02f);
@@ -1247,7 +1251,6 @@ int main() {
         ui_page(5);
         ui_press(1); // APRS >
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_click_focused(); // Spot my grid (second item): a message box
         pump(300);
         printf("[aprs] beacon box: '%s' focus %s\n", ui_compose_text(), ui_focus_desc());
@@ -1258,7 +1261,6 @@ int main() {
         // With a message: a position report carrying it.
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_click_focused();
         pump(300);
         ui_compose_append("MADE IT TO CAMP");
@@ -1269,7 +1271,6 @@ int main() {
         // Spot GPS position (second item): no fix -> message only.
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         printf("[aprs] item 2: '%s'\n", ui_focused_text());
         ui_click_focused();
@@ -1277,7 +1278,6 @@ int main() {
         setenv("HARNESS_GPS", "49.2827,-123.1207", 1);
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
@@ -1286,7 +1286,6 @@ int main() {
         printf("[aprs] GPS spot sent: %d (want @APRSIS GRID CN89KG + 4)\n", ui_list_has("@APRSIS GRID CN89KG"));
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
@@ -1298,7 +1297,6 @@ int main() {
         int frames = stub_tx_frames;
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_click_focused();
         pump(300);
         ui_compose_cancel();
@@ -1320,7 +1318,6 @@ int main() {
 
         ui_press(1); // APRS >
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         printf("[aprs] list open, focused '%s'\n", ui_focused_text());
         for (int i = 0; i < 4; i++) ui_key(LV_KEY_RIGHT);
         printf("[aprs] after 4 steps: '%s' (want SMS text)\n", ui_focused_text());
@@ -1334,7 +1331,6 @@ int main() {
 
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // POTA spot: the form
@@ -1357,7 +1353,6 @@ int main() {
         // Again: the park is remembered, focus on Send. Your SSB run instead.
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         ui_key(LV_KEY_RIGHT);
         ui_key(LV_KEY_RIGHT);
         ui_click_focused();
@@ -1385,7 +1380,6 @@ int main() {
         // SOTA: its own summit, the same frequency and mode.
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // SOTA spot
         pump(300);
@@ -1416,7 +1410,6 @@ int main() {
         // A bad frequency keeps the keyboard open.
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         for (int i = 0; i < 3; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused();
         pump(300);
@@ -1437,7 +1430,6 @@ int main() {
 
         ui_press(1);
         pump(200);
-        ui_key(LV_KEY_RIGHT); // past Echo test (first item)
         for (int i = 0; i < 5; i++) ui_key(LV_KEY_RIGHT);
         ui_click_focused(); // Email
         pump(300);
@@ -1460,22 +1452,20 @@ int main() {
         return 0;
     }
     if (getenv("ONLY_APRSMORE")) {
-        // Echo test first in APRS >; More services > (before Close) opens
-        // the services list, each message filled in; Back and Close.
+        // Spot my grid first in APRS > (the Echo test is gone); More
+        // services > (before Close) opens the services list, each message
+        // filled in; Back and Close.
         pump(300);
         ui_page(5);
         ui_press(1); // APRS >
         pump(200);
-        printf("[aprsmore] list open, focused '%s' (want Echo test)\n", ui_focused_text());
-        ui_click_focused();
+        printf("[aprsmore] list open, focused '%s' (want Spot my grid)\n", ui_focused_text());
+        bool echo = false;
+        for (int i = 0; i < 12; i++, ui_key(LV_KEY_RIGHT))
+            if (strstr(ui_focused_text(), "Echo")) echo = true;
+        printf("[aprsmore] Echo test listed: %d (want 0)\n", echo);
+        ui_key(LV_KEY_ESC);
         pump(300);
-        printf("[aprsmore] echo prefill '%s' (want @APRSIS CMD :ECHO     :TEST)\n", ui_compose_text());
-        printf("[aprsmore] hint '%s'\n", stub_last_msg);
-        int frames = stub_tx_frames;
-        ui_compose_enter();
-        for (int i = 0; i < 200 && stub_tx_frames == frames; i++) pump(100);
-        for (int i = 0; i < 400; i++) pump(100);
-        printf("[aprsmore] echo sent: %d\n", ui_list_has("@APRSIS CMD :ECHO     :TEST"));
 
         ui_press(1);
         pump(200);
@@ -1524,7 +1514,7 @@ int main() {
         screenshot("24e_aprs_services_end.ppm");
         ui_click_focused();
         pump(300);
-        printf("[aprsmore] Back: focused '%s' (want Echo test)\n", ui_focused_text());
+        printf("[aprsmore] Back: focused '%s' (want Spot my grid)\n", ui_focused_text());
         ui_key(LV_KEY_ESC);
         pump(300);
         printf("[aprsmore] ESC closed it: %d\n", ui_focus_is_table());
@@ -2920,6 +2910,49 @@ int main() {
         printf("[stqrz] Show to the messages and back: '%s' (want empty)\n", qrz());
         return 0;
     }
+    if (getenv("ONLY_SHOWSCROLL")) {
+        // Show (page 2) on a long list: the shorter list after a switch
+        // sits at its end, no blank rows (VE7NHW: it needed an MFK bump).
+        pump(300);
+        ui_page(2);
+        for (int i = 0; i < 3 && !strstr(ui_button_label(1), "All"); i++) ui_press(1);
+        pump(200);
+        int64_t now = js8_wall_ms();
+        for (int i = 0; i < 64; i++) {
+            js8_rx_msg_t m{};
+            time_t       t = (time_t)(now / 1000) - 600 + i * 8;
+            struct tm    tm;
+            gmtime_r(&t, &tm);
+            m.utc     = tm.tm_hour * 10000 + tm.tm_min * 100 + tm.tm_sec;
+            m.snr     = -10;
+            m.freq_hz = 600 + (i % 60) * 35;
+            m.type    = JS8_FRAME_FIRST | JS8_FRAME_LAST;
+            bool hb   = i % 3 != 2; // two heartbeats to a message: 21 messages, still more than a screenful
+            m.heartbeat = hb;
+            m.to_me     = !hb;
+            snprintf(m.from, sizeof m.from, "W%dAB%c", i % 10, 'A' + i / 10);
+            snprintf(m.to, sizeof m.to, "%s", hb ? "@HB" : "K2XYZ");
+            if (hb) snprintf(m.text, sizeof m.text, "%s: @HB HEARTBEAT FN42", m.from);
+            else snprintf(m.text, sizeof m.text, "%s: K2XYZ HELLO NUMBER %d", m.from, i);
+            dialog_js8_test_message(&m);
+            pump(20);
+        }
+        pump(500);
+        printf("[showscroll] '%s': %d rows, blank below %d px (want 0)\n", ui_button_label(1), ui_list_count(":"),
+               dialog_js8_list_overscroll());
+        for (int k = 0; k < 3; k++) {
+            ui_press(1); // All -> No HB -> Directed -> All
+            pump(300);
+            std::string label = ui_button_label(1);
+            for (auto &c : label) if (c == '\n') c = ' ';
+            printf("[showscroll] '%s': %d rows, blank below %d px (want 0), last row shown %d\n", label.c_str(),
+                   ui_list_count(":"), dialog_js8_list_overscroll(), ui_list_has("HELLO NUMBER 62"));
+            char shot[40];
+            snprintf(shot, sizeof shot, "c9_showscroll_%d.ppm", k);
+            screenshot(shot);
+        }
+        return 0;
+    }
     if (getenv("ONLY_QUERYCALL")) {
         auto wait_tx = [&]() {
             int b = stub_tx_frames;
@@ -2937,15 +2970,22 @@ int main() {
         };
         pump(300);
 
-        // Nothing selected: Query > opens with the @ALLCALL item only.
+        // Nothing selected: Query > opens with the @ALLCALL items only.
         ui_page(1);
         printf("[querycall] page 1 button 3: '%s' (want Query >)\n", ui_button_label(3));
         ui_press(3);
         pump(200);
-        printf("[querycall] no selection: list for @ALLCALL %d (want 1), focused '%s' (want Can anyone reach...?)\n",
+        printf("[querycall] no selection: list for @ALLCALL %d (want 1), focused '%s' (want Anyone have messages?)\n",
                ui_popup_has("To @ALLCALL"), ui_focused_text());
         printf("[querycall] station items shown: %d (want 0)\n", ui_popup_has("Can they reach"));
         screenshot("c0_query_allcall.ppm");
+        ui_click_focused(); // Anyone have messages?: sent at once
+        wait_tx();
+        printf("[querycall] @ALLCALL QUERY MSGS sent: %d (want 1)\n", ui_list_has("K2XYZ: @ALLCALL QUERY MSGS"));
+        ui_page(1);
+        ui_press(3);
+        pump(200);
+        printf("[querycall] then on Can anyone reach: %d (want 1)\n", focus_on("Can anyone reach"));
         ui_click_focused();
         pump(300);
         printf("[querycall] prefill '%s' (want @ALLCALL QUERY CALL )\n", ui_compose_text());
@@ -2960,6 +3000,13 @@ int main() {
         ui_page(1);
         ui_press(3);
         pump(200);
+        {
+            bool any = focus_on("Any messages?");
+            ui_key(LV_KEY_RIGHT);
+            printf("[querycall] selected: Any messages? %d, then '%s' (want 1, Anyone have messages?)\n", any,
+                   ui_focused_text());
+            screenshot("c0b_query_selected.ppm");
+        }
         printf("[querycall] selected: on Can they reach %d, Can anyone reach also there %d (want 1 1)\n",
                focus_on("Can they reach"), ui_popup_has("Can anyone reach"));
         ui_click_focused();

@@ -833,11 +833,19 @@ static void select_row(uint16_t r) {
     auto_selecting = false;
 }
 
-/* Scroll to the very end: a long last row can be taller than its step. */
+/* Scroll to the very end: a long last row can be taller than its step.
+ * After the list got shorter (Show, a rebuild) the old scroll can sit past
+ * the new end, which showed blank rows until the MFK moved: back up to the
+ * end then, or to the top if it all fits. */
 static void list_scroll_end(void) {
     lv_obj_update_layout(table);
     lv_coord_t below = lv_obj_get_scroll_bottom(table);
-    if (below > 0) lv_obj_scroll_by(table, 0, -below, LV_ANIM_OFF);
+    if (below > 0) {
+        lv_obj_scroll_by(table, 0, -below, LV_ANIM_OFF);
+    } else if (below < 0) {
+        lv_coord_t y = lv_obj_get_scroll_y(table) + below;
+        lv_obj_scroll_to_y(table, y > 0 ? y : 0, LV_ANIM_OFF);
+    }
 }
 
 static void follow(void) {
@@ -5558,20 +5566,23 @@ static lv_obj_t *list_add_item(lv_obj_t *list, const char *label) {
 }
 
 /* The Query list's message items, as desktop's call menu has them: the
- * text started in the keyboard (NULL: sent at once) and what to type. */
+ * text started in the keyboard (NULL: sent at once, `send` the text) and
+ * what to type. The @ALLCALL ones go to everyone, so they're there without
+ * a station selected too. */
 static const struct {
-    const char *label, *prefill, *hint;
+    const char *label, *prefill, *hint, *send;
+    bool        allcall;
 } query_msg_items[] = {
-    {"Message...", "%s MSG ", "Message for %s's inbox: type it and press Enter"},
-    {"Message via them...", "%s MSG TO:", "Left at %s for someone: type their call, a space, the message"},
-    {"Any messages?", NULL, NULL}, /* QUERY MSGS */
-    {"Fetch message #...", "%s QUERY MSG ", "Type the number of the message %s holds for you"},
-    {"Relay via them...", "%s>", "Passed on by %s: type the call it's for, a space, the message"},
-    {"Can they reach...?", "%s QUERY CALL ", "Ask %s if they hear a station: type its call (the ? goes on by itself)"},
-    /* To everyone, so it's there without a station selected too. */
-    {"Can anyone reach...?", "@ALLCALL QUERY CALL ", "Ask everyone if they hear a station: type its call (the ? goes on by itself)"},
+    {"Message...", "%s MSG ", "Message for %s's inbox: type it and press Enter", NULL, false},
+    {"Message via them...", "%s MSG TO:", "Left at %s for someone: type their call, a space, the message", NULL, false},
+    {"Any messages?", NULL, NULL, "%s QUERY MSGS", false},
+    /* VE7NHW (2026-10-09): ask everyone too, without unselecting first. */
+    {"Anyone have messages?", NULL, NULL, "@ALLCALL QUERY MSGS", true},
+    {"Fetch message #...", "%s QUERY MSG ", "Type the number of the message %s holds for you", NULL, false},
+    {"Relay via them...", "%s>", "Passed on by %s: type the call it's for, a space, the message", NULL, false},
+    {"Can they reach...?", "%s QUERY CALL ", "Ask %s if they hear a station: type its call (the ? goes on by itself)", NULL, false},
+    {"Can anyone reach...?", "@ALLCALL QUERY CALL ", "Ask everyone if they hear a station: type its call (the ? goes on by itself)", NULL, true},
 };
-#define QUERY_ALLCALL_ITEM 6 /* the one above that needs no selected station */
 #define QUERY_MSG_ITEMS (int)(sizeof(query_msg_items) / sizeof(query_msg_items[0]))
 
 static void query_msg_cb(lv_event_t *e) {
@@ -5580,7 +5591,12 @@ static void query_msg_cb(lv_event_t *e) {
     float freq;
     int   snr;
     bool  have = selected_station(call, sizeof(call), &freq, &snr);
-    if (which == QUERY_ALLCALL_ITEM) {
+    if (query_msg_items[which].allcall) { /* to everyone: at our own offset */
+        if (!query_msg_items[which].prefill) {
+            query_close();
+            tx_queue(query_msg_items[which].send);
+            return;
+        }
         popup_leave(&query_list); /* into the keyboard */
         if (popup_to_keyboard(NULL, 0, query_msg_items[which].prefill)) msg_update_text_fmt("%s", query_msg_items[which].hint);
         return;
@@ -5589,8 +5605,8 @@ static void query_msg_cb(lv_event_t *e) {
         query_close();
         if (!have) return;
         apply_hold(freq);
-        char text[JS8_RX_CALL_LEN + 16];
-        snprintf(text, sizeof(text), "%s QUERY MSGS", call);
+        char text[JS8_RX_CALL_LEN + 24];
+        snprintf(text, sizeof(text), query_msg_items[which].send, call);
         tx_queue(text);
         return;
     }
@@ -5645,7 +5661,7 @@ static void query_open(void) {
     char title[40];
     if (have) snprintf(title, sizeof(title), "To %s (%+d dB)", call, snr);
     else snprintf(title, sizeof(title), "To @ALLCALL"); /* no station selected */
-    query_list = query_list_create(300, title);
+    query_list = query_list_create(330, title); /* "Anyone have messages?" fits */
 
     lv_obj_t *first = NULL;
     for (int q = 0; have && q < JS8_Q_COUNT; q++) {
@@ -5656,7 +5672,7 @@ static void query_open(void) {
         if (!first) first = b;
     }
     for (int i = 0; i < QUERY_MSG_ITEMS; i++) {
-        if (!have && i != QUERY_ALLCALL_ITEM) continue;
+        if (!have && !query_msg_items[i].allcall) continue;
         lv_obj_t *b = list_add_item(query_list, query_msg_items[i].label);
         lv_obj_set_style_text_color(b, lv_color_hex(0x80ff80), 0);
         lv_obj_add_event_cb(b, query_msg_cb, LV_EVENT_CLICKED, (void *)(intptr_t)i);
@@ -5918,6 +5934,22 @@ char dialog_js8_station_star(const char *call) {
             return f.star[0];
         }
     return 0;
+}
+
+/* For tools/js8_ui_harness: a decoded message, handed over as the
+ * receiver's thread does. */
+void dialog_js8_test_message(const js8_rx_msg_t *m) {
+    on_message(m, NULL);
+}
+
+/* For tools/js8_ui_harness: how far the list is scrolled past its end, in
+ * pixels (blank space under the last row); 0 when it isn't. */
+int dialog_js8_list_overscroll(void) {
+    if (!table) return -1;
+    lv_obj_update_layout(table);
+    lv_coord_t below = lv_obj_get_scroll_bottom(table), y = lv_obj_get_scroll_y(table);
+    if (below >= 0 || y <= 0) return 0;
+    return -below < y ? -below : y;
 }
 
 /* For tools/js8_ui_harness: does message-list row `row` have the green bar? */
@@ -6645,8 +6677,10 @@ static void texts_cb(button_data_t *btn) {
 #define APRS_CMD_RAW  "@APRSIS CMD " /* any APRS packet body, e.g. a position */
 #define APRS_TEXT_MAX 67
 
+/* The Echo test is gone (VE7NHW, 2026-10-09): the ECHO service answers
+ * (findu.com shows it), but relay stations don't bring its answer back
+ * over JS8. The @ badge comes from any relayed answer (SMS, MPAD...). */
 typedef enum {
-    APRS_ECHO,
     APRS_GRID,
     APRS_GPS,
     APRS_POTA,
@@ -6661,8 +6695,8 @@ typedef enum {
 } aprs_item_t;
 
 static const char *const aprs_labels[APRS_COUNT] = {
-    "Echo test",      "Spot my grid",  "Spot GPS position", "POTA spot",       "SOTA spot", "SMS text", "Email",
-    "Winlink: start", "Winlink: text", "Winlink: send",     "More services >",
+    "Spot my grid",   "Spot GPS position", "POTA spot",       "SOTA spot", "SMS text", "Email",
+    "Winlink: start", "Winlink: text",     "Winlink: send",   "More services >",
 };
 
 /* More services >: APRS information services, each message filled in
@@ -6971,10 +7005,6 @@ static void aprs_item_cb(lv_event_t *e) {
     popup_leave(&aprs_list);
 
     switch (item) {
-    case APRS_ECHO:
-        aprs_compose(APRS_CMD "ECHO     :TEST", "");
-        msg_update_text_fmt("ECHO sends your text back: an answer in the Inbox proves both directions work");
-        break;
     case APRS_MORE:
         aprs_open(true);
         return;

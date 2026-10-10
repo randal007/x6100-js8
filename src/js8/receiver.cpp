@@ -7,6 +7,7 @@
 #include "receiver.hpp"
 
 #include "classify.hpp"
+#include "cpu_fence.hpp"
 #include "js8core/engine.hpp"
 
 #include <algorithm>
@@ -34,6 +35,8 @@ constexpr std::int64_t CLOCK_CHECK_MS = 2000;
 // A decode pass longer than this is reported at once (others only in the
 // minute's summary): with four speeds decoding, the next windows wait.
 constexpr double LONG_PASS_S = 10.0;
+// Ultra's own decode thread runs below the main one and the GUI.
+constexpr int ULTRA_DECODE_NICE = 5;
 
 // Audio this far behind the clock went missing (a stall, or the caller
 // stopped feeding it during TX). The gap is filled with silence: a realign
@@ -85,8 +88,23 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
     // Schedules for every speed; set_submodes() below picks what's decoded.
     ec.submodes         = SUBMODE_NORMAL | SUBMODE_FAST | SUBMODE_TURBO | SUBMODE_SLOW | SUBMODE_ULTRA;
     ec.spectrum_enabled = false;
+    // Ultra on its own decode thread (patch 15): its 4 s slots don't wait
+    // behind a pass of the slower speeds, nor theirs behind it.
+    ec.ultra_own_thread = true;
 
     js8core::EngineCallbacks ecb;
+    // Both decode threads stay off one core, so the GUI (the waterfall)
+    // always has one free; Ultra's runs at a lower priority too.
+    ecb.on_decode_thread_start = [this](std::string_view lane) {
+        bool ultra = lane == "ultra";
+        int  free  = fence_decoder_thread(ultra ? ULTRA_DECODE_NICE : 0);
+        char line[96];
+        if (free >= 0)
+            snprintf(line, sizeof(line), "decode thread %.*s: off core %d (left for the screen)%s", (int)lane.size(),
+                     lane.data(), free, ultra ? ", nice 5" : "");
+        else snprintf(line, sizeof(line), "decode thread %.*s: on any core", (int)lane.size(), lane.data());
+        report(line);
+    };
     ecb.on_event = [this](js8core::events::Variant const &ev) {
         if (auto d = std::get_if<js8core::events::Decoded>(&ev)) {
             {
@@ -122,7 +140,17 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
             m.decoded = s->kind == js8core::events::SyncState::Kind::Decoded;
             m.sync    = m.decoded ? 0 : s->sync.candidate;
             cb_.on_sync(m);
+        } else if (auto st = std::get_if<js8core::events::DecodeStarted>(&ev)) {
+            if (st->submodes & ~SUBMODE_ULTRA) main_busy_ = true;
         } else if (auto fin = std::get_if<js8core::events::DecodeFinished>(&ev)) {
+            // Ultra's own thread (patch 15): its pass ending is a cycle's end
+            // only while the main thread isn't in a pass (its end is then);
+            // Time: Auto doesn't learn from Ultra, as desktop.
+            if (fin->submodes == SUBMODE_ULTRA) {
+                if (!main_busy_ && cb_.on_cycle_done) cb_.on_cycle_done(fin->decoded);
+                return;
+            }
+            main_busy_ = false;
             if (auto_on_) { // desktop sets its drift here, at the end of the pass
                 std::optional<std::int64_t> drift;
                 unsigned                    frames = 0;
@@ -226,36 +254,50 @@ void Receiver::report(const std::string &line) {
 void Receiver::engine_log(std::string_view m) {
     using clock = std::chrono::steady_clock;
     auto now    = clock::now();
+    // Ultra's own decode thread (patch 15) prefixes its lines.
+    constexpr std::string_view ULTRA = "[ultra] ";
+    int lane = 0;
+    if (m.starts_with(ULTRA)) {
+        lane = 1;
+        m.remove_prefix(ULTRA.size());
+    }
     std::lock_guard<std::mutex> lock(stats_mutex_);
+    PassStats &ps = stats_[lane];
     if (m.starts_with("Calling legacy_decode")) {
-        pass_start_ = now;
+        ps.pass_start = now;
         return;
     }
     if (m.starts_with("decode window merged")) {
-        merged_++;
+        ps.merged++;
         return;
     }
-    if (!m.starts_with("legacy_decode returned") || pass_start_ == clock::time_point{}) return;
-    double s    = std::chrono::duration<double>(now - pass_start_).count();
-    pass_start_ = {};
-    passes_++;
-    busy_s_ += s;
-    longest_s_ = std::max(longest_s_, s);
-    auto colon = m.find(':');
-    if (colon != std::string_view::npos) decodes_ += (unsigned)std::atoi(std::string(m.substr(colon + 1)).c_str());
-    char line[160];
+    if (!m.starts_with("legacy_decode returned") || ps.pass_start == clock::time_point{}) return;
+    double s      = std::chrono::duration<double>(now - ps.pass_start).count();
+    ps.pass_start = {};
+    ps.passes++;
+    ps.busy_s += s;
+    ps.longest_s = std::max(ps.longest_s, s);
+    auto colon   = m.find(':');
+    if (colon != std::string_view::npos) ps.decodes += (unsigned)std::atoi(std::string(m.substr(colon + 1)).c_str());
+    char line[176];
     if (s > LONG_PASS_S) {
-        snprintf(line, sizeof(line), "decode pass took %.1f s", s);
+        snprintf(line, sizeof(line), "decode pass%s took %.1f s", lane ? " (Ultra)" : "", s);
         report(line);
     }
     double span = std::chrono::duration<double>(now - stats_start_).count();
     if (span < 60) return;
-    snprintf(line, sizeof(line), "decode: %u passes in %.0f s, busy %.1f s (%.0f %%), longest %.1f s, %u decodes, %u windows waited",
-             passes_, span, busy_s_, 100 * busy_s_ / span, longest_s_, decodes_, merged_);
-    report(line);
+    for (int l = 0; l < 2; l++) {
+        PassStats &p = stats_[l];
+        if (l == 1 && !p.passes && !p.merged) continue; // Ultra off: no line
+        snprintf(line, sizeof(line),
+                 "decode%s: %u passes in %.0f s, busy %.1f s (%.0f %%), longest %.1f s, %u decodes, %u windows waited",
+                 l ? " Ultra" : "", p.passes, span, p.busy_s, 100 * p.busy_s / span, p.longest_s, p.decodes, p.merged);
+        report(line);
+        auto start   = p.pass_start; // a pass still running carries on
+        p            = PassStats{};
+        p.pass_start = start;
+    }
     stats_start_ = now;
-    passes_ = decodes_ = merged_ = 0;
-    busy_s_ = longest_s_ = 0;
 }
 
 void Receiver::worker_loop() {
