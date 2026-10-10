@@ -660,7 +660,7 @@ A USB GPS dongle in the radio's **HOST** USB port (one that shows up as
 
 ## Using a Bluetooth keyboard
 
-New in beta 5 (being tested). A Bluetooth keyboard types everywhere a USB
+New in beta 5. A Bluetooth keyboard types everywhere a USB
 one does: JS8, Callsign, QTH and the other text boxes. If a USB keyboard is
 plugged in as well, the USB one is used.
 
@@ -1031,7 +1031,7 @@ Not released yet: on `main` and in test builds, for beta 5
   while there is one, `GPS` in the top line, GPS time saved to the radio's
   battery clock once, and JS8's time kept steady when the radio's clock is
   set (by the GPS or by hand) while JS8 is open.
-- **Bluetooth keyboards** (being tested): the image's kernel was missing
+- **Bluetooth keyboards** (tested with VE7NHW's LE keyboard): the image's kernel was missing
   the part LE keyboards need (uhid), so they paired and connected but no
   keys arrived; and the radio's GUI program only looked for USB keyboards.
   Now it also finds a Bluetooth keyboard, everywhere you type (JS8,

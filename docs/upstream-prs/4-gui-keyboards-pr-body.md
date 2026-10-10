@@ -19,15 +19,17 @@ A Bluetooth keyboard gets no `/dev/input/by-path` link (it's a virtual uhid devi
 The box accepts capitals only, so on a keyboard without Caps Lock every letter was silently dropped. An `LV_EVENT_INSERT` handler turns lowercase into capitals. LVGL inserts the replacement as if typed, so the accepted list still applies.
 
 **Tested**
-- On the radio: a USB keyboard (fast typing, closing the text window), in our builds since September. A Bluetooth LE keyboard's keys reached the GUI.
+- On the radio (our image with these changes, v1.0.2 base):
+  - **USB keyboard:** fast typing and closing the text window, in our builds since September.
+  - **Bluetooth LE keyboard** (an "F01-keyboard"): found by itself once it connected, with no USB event and nothing done by hand. It typed in JS8, and in Callsign with Caps Lock (the build before the lowercase change).
+  - **Both keyboards together:** plugging in a USB keyboard while the Bluetooth one was connected, the USB one took over. After unplugging it, the Bluetooth keyboard took over again as soon as it was typed on.
 - On the PC: a small test of the hot plug logic, covering:
   - USB add/remove, with the link arriving late
   - a Bluetooth keyboard connecting, sleeping, and waking as a new node
   - USB first, then back to Bluetooth when USB is unplugged
 
   I can add the test to the repo if you'd like it.
-- A full image build with these files (our CI), and every changed file compiled against current `main`.
-- Still to confirm on the radio: the Bluetooth keyboard being found by itself in every text box, after sleep and after a power cycle. I'll report back here.
+- A full image build with these files (our CI), and every changed file compiled against current `main`. The Callsign handler is the same one our JS8 text boxes use on the radio.
 
 Randal VE7NHW
 

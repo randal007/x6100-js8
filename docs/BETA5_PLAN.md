@@ -376,6 +376,14 @@ Each item says what was done, or what's still needed.
   Enter / arrows / F-keys (it reports as an Apple keyboard: hid-apple);
   power off/on and type (reconnect); switch off normally, flash an update,
   check it still connects (backup). Then PRs 2, 6, 7 + feedback 8.
+  **On d0bd053 (2026-10-10):** `x6100-bt-pair` paired the F01 at the first
+  try; the GUI found it by itself; typed in JS8 and Callsign (Caps Lock:
+  the lowercase fix came after this build); a USB keyboard plugged in took
+  over, unplugged the Bluetooth one took back over. **Sent:**
+  AetherX6100Buildroot#2 (gpsd), #3 (uhid), x6100_gui#281 (keyboards),
+  feedback on x6100_gui#280; the pairings backup held (myshak1's
+  S39btstate). **Still to try:** reconnect after a power cycle, sleep,
+  the pairing kept across the next update, ESC / arrows / F-keys.
 
 VE7NHW's list for beta 5 (2026-10-02), with notes on where each item
 touches the code. **Highest priorities:** time sync, high-SWR protection,
