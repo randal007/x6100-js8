@@ -1304,7 +1304,8 @@ JS8 app by VE7NHW.
   [AetherX6100Buildroot](https://github.com/gdyuldin/AetherX6100Buildroot)
   (about an hour): run *Build image* on `main` for a test image (an
   artifact), or on a tag to publish a release with the image attached
-  (pushing a tag doesn't start it);
+  (pushing a tag doesn't start it); the steps for a release, the version
+  string first, are in [docs/releases/CHECKLIST.md](docs/releases/CHECKLIST.md);
   upstream notes in
   [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
 

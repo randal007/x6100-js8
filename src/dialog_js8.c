@@ -95,7 +95,9 @@
 #define JS8_SAVED_PATH   "/mnt/js8_saved.txt"   /* saved messages, one a line (empty: none) */
 #endif
 #define SAVED_N          10     /* saved messages (Query > Saved messages >) */
-#define JS8_APP_VERSION  "X6100 JS8 beta 5" /* <MYVERSION>; desktop's is its version number */
+/* <MYVERSION> and the default STATUS send this: set it to the release's
+ * name for every release (docs/releases/CHECKLIST.md, step 1). */
+#define JS8_APP_VERSION  "X6100 JS8 beta 5" /* desktop's is its version number */
 #ifndef JS8_LOG_PATH
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
