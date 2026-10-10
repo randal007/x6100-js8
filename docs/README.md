@@ -11,6 +11,7 @@ This folder holds the plans, research and reviews behind it.
 | [upgrade-1.0.2/](upgrade-1.0.2/README.md) | **Moving to gdyuldin v1.0.2** (without the Murus fork for now): the study, the trial merge, every upstream commit |
 | [feature-ideas.md](feature-ideas.md) | Brainstorm of features to pick from (APRS services, off-grid, desktop parity) |
 | [MAP_PLAN.md](MAP_PLAN.md) | Show Map design and decisions; phases 1–4 built, the home colour Setting and on-air polish left |
+| [upstream-patches.md](upstream-patches.md) | **What we carry on top of upstream** (the Linux image's patches in our build, e.g. the gpsd hotplug fix; shared GUI code; js8core): check it when updating, and the PRs to send |
 | [UPSTREAM_README.md](UPSTREAM_README.md) | The upstream firmware's README, plus our rule for merging upstream (stored numbers) |
 | [js8core-bug-reports.md](js8core-bug-reports.md) | Bugs found in the js8core engine, written to send to the JS8Call-improved team |
 | [review/](review/) | The full code review: `bugs.md`, `improvements.md`, `features.md` and `fix-plan.md` (packages WP1–WP8 all done for beta 4; a few "Not now" items left) |

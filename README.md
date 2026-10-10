@@ -1307,7 +1307,9 @@ JS8 app by VE7NHW.
   (pushing a tag doesn't start it); the steps for a release, the version
   string first, are in [docs/releases/CHECKLIST.md](docs/releases/CHECKLIST.md);
   upstream notes in
-  [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md).
+  [docs/UPSTREAM_README.md](docs/UPSTREAM_README.md); what we change on top
+  of upstream (and must keep when updating) in
+  [docs/upstream-patches.md](docs/upstream-patches.md).
 
 ## License
 

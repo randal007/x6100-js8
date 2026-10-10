@@ -1,0 +1,69 @@
+# What we carry on top of upstream
+
+Our image is gdyuldin's **x6100_gui** (the GUI, with JS8 added) built by
+gdyuldin's **AetherX6100Buildroot** (the Linux image). Anything we change
+outside our own JS8 code can be lost or clash when either moves on. **When
+updating to a newer upstream, go through this list**, and send the fixes
+that help everyone upstream as PRs, so they stop being ours to carry.
+
+## 1. The Linux image (AetherX6100Buildroot), patched in our build
+
+Our image build (`.github/workflows/main.yml`, *Build image*) checks out
+AetherX6100Buildroot and edits it before building. These edits live **only
+in that workflow**: a new Buildroot doesn't remove them, but a changed line
+upstream can make one stop applying.
+
+| Step in main.yml | What it changes | Why | Upstream? |
+|---|---|---|---|
+| *Patch GUI mk* | `x6100_gui.mk`: build our checkout instead of gdyuldin's repo | builds our GUI | no (ours only) |
+| *Enable JS8 dependencies* | `x6100_gui.mk` + `X6100_defconfig`: boost (headers) and fftw-single | js8core needs them | with the JS8 PR |
+| *Enable gpsd hotplug (control socket)* (2026-10-10) | `rootfs-overlay/etc/init.d/S50gpsd`: `DEVICES="-n -F /var/run/gpsd.sock /dev/ttyACM0"` | without `-F`, the gpsd package's hotplug rule (`gpsd.hotplug` → `gpsdctl add`) has no control socket to talk to, so a GPS plugged in after boot (or one that drops off USB and comes back) is never used until a reboot. Found on the radio: `logread` shows `gpsd.hotplug: add /dev/ttyACM0`, the socket refuses connections, `gpspipe` shows `"devices":[]` | **yes: PR to send** |
+
+The gpsd step **fails the build** if S50gpsd's line isn't what it expects,
+so it can't be lost silently: check upstream's S50gpsd and adjust (or drop
+the step if upstream took the fix).
+
+**PR to send (AetherX6100Buildroot):** "gpsd: start with a control socket
+so USB GPS hotplug works": the one-line change above; the test: boot with
+the GPS unplugged, plug it in, `gpspipe -w` lists the device and
+`ntpq -n -p 127.0.0.1` reaches `.GPS.`.
+
+**Not pinned:** the workflow takes AetherX6100Buildroot's newest commit at
+every build, so upstream changes (e.g. 2026-10: Bluetooth profiles, a
+display panel kernel patch, PulseAudio settings) go into our images
+without us choosing them. Pinning a commit (`ref:` in the checkout step)
+would make builds repeatable; then updating = moving the pin on purpose
+and reading this list. Not decided yet.
+
+## 2. Shared GUI code (x6100_gui outside the JS8 app)
+
+`git diff --stat upstream-main..main -- . ':!src/js8' ':!src/dialog_js8.*'
+':!third-party' ':!docs' ':!tests' ':!tools'` lists them (2026-10-10:
+38 files). The main ones, by what they're for:
+
+- **USB keyboard** (PR candidates, first in the agreed order with
+  gdyuldin): `src/keyboard.c` (hot plug), `src/kbd_rollover.{c,h}` (keys
+  lost while another is down), `src/textarea_window.c` (a held key leaking
+  into the next field), `src/keypad.{c,h}` (hold time while JS8 is open).
+- **JS8's transmit level**: `src/tx_level.{c,h}`, `src/tx_player.{c,h}`
+  (also used by FT8: same audio path).
+- **Radio helpers**: `src/radio.{c,h}` (TX filter, speaker play, RX DSP
+  off while JS8 is open).
+- **Waterfall widget**: `src/widgets/lv_waterfall.{c,h}` (fill rect for
+  decode marks, exact invalidation).
+- **Settings and database**: `src/cfg/*` (JS8 params, js8_db),
+  `src/settings_manager.h`, `sql/digital_modes.csv` (JS8 and GhostNet
+  frequencies), `src/adif.c` / `src/qso_log.h` (MODE JS8).
+- **Hooking JS8 in**: `src/main_screen.c`, `src/buttons.cpp`,
+  `src/settings_types.h`, `src/CMakeLists.txt`, `CMakeLists.txt`.
+- Also changed (check before a merge): `src/cat/civ_processor.cpp`,
+  `src/cfg/db.cpp`, `src/settings/settings_page_ui.cpp`.
+
+Upgrade notes from the 1.0.2 move: [upgrade-1.0.2/](upgrade-1.0.2/README.md).
+
+## 3. The JS8 engine (js8core)
+
+Local patches, one commit each, with what to send upstream:
+[third-party/js8core/UPSTREAM.md](../third-party/js8core/UPSTREAM.md)
+(15 as of 2026-10-10). Bugs reported to the JS8Call-improved team:
+[js8core-bug-reports.md](js8core-bug-reports.md).

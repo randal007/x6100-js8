@@ -67,6 +67,20 @@ jobs:
         echo "BR2_PACKAGE_BOOST=y" >> AetherX6100Buildroot/br2_external/configs/X6100_defconfig
         grep "^X6100_GUI_DEPENDENCIES" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
 
+    # gpsd's control socket: the image starts gpsd without -F, so the gpsd
+    # package's hotplug rule (gpsdctl) can't hand it a GPS plugged in after
+    # boot (found 2026-10-10; docs/upstream-patches.md, to send upstream).
+    # Fails the build if upstream changed the line, so the fix can't be
+    # lost silently.
+    - name: Enable gpsd hotplug (control socket)
+      run: |
+        f=AetherX6100Buildroot/br2_external/board/X6100/linux/rootfs-overlay/etc/init.d/S50gpsd
+        if ! grep -q -- '-F /var/run/gpsd.sock' "$f"; then
+          grep -q '^DEVICES="-n /dev/ttyACM0"$' "$f" || { echo "S50gpsd changed upstream: check the gpsd -F fix (docs/upstream-patches.md)"; exit 1; }
+          sed -i 's,^DEVICES="-n /dev/ttyACM0"$,DEVICES="-n -F /var/run/gpsd.sock /dev/ttyACM0",' "$f"
+        fi
+        grep '^DEVICES=' "$f"
+
     # Ccache
     - name: Prepare ccache timestamp
       id: ccache_cache_timestamp

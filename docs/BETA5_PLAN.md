@@ -256,7 +256,11 @@ Notes only so far: nothing below is changed in the code yet.
     time, 0 satellites in the basement). **Fix (shared Linux layer; user
     to OK):** one more `sed` in `.github/workflows/main.yml` (it already
     patches AetherX6100Buildroot) adding `-F /var/run/gpsd.sock` to
-    S50gpsd's gpsd line; offer it upstream to gdyuldin too. Until then:
+    S50gpsd's gpsd line; offer it upstream to gdyuldin too. **Done
+    2026-10-10 (user: fix it, PR it, note it):** CI step *Enable gpsd
+    hotplug (control socket)* (fails the build if upstream's line changed);
+    listed in [upstream-patches.md](upstream-patches.md) with the PR to
+    send. To try: boot without the GPS, plug it in, `gpspipe -w`. Until then:
     plug the GPS in before switching the radio on. Then outside for the
     first fix (cold start: up to minutes), APP > GPS to watch it lock,
     `ntpq -n -p 127.0.0.1` for `*` on .GPS., and catch 3 (Time: Auto vs
