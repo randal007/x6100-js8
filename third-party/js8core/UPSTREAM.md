@@ -132,7 +132,20 @@ Each one is its own commit on top of the pristine import, so
     JS8Call-improved (`mainwindow.cpp`, `turboOrUltra`) treats the two
     alike, so I now takes C's path.
 
-All fourteen are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
+15. **Ultra on its own decode thread, and a thread-start hook.**
+    `EngineConfig::ultra_own_thread`: the engine's decode queue and
+    thread become two "lanes"; a ready window's Ultra (I) part is copied
+    into its own snapshot for the second thread (`js8-decode-u`), the rest
+    goes to the first (`js8-decode`) as before, each lane merging as patch
+    8. Safe because each pass has its own copy of the audio, decoders are
+    `thread_local` and FFTW plan creation is already under `fftw_mutex`.
+    `DecodeFinished` carries the pass's `submodes`, so a host can tell the
+    lanes' passes apart; the second lane's log lines start `[ultra] `.
+    `EngineCallbacks::on_decode_thread_start(lane)` runs on each decode
+    thread as it starts, for the host's CPU affinity and priority. Off by
+    default: one thread, as before.
+
+All fifteen are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 

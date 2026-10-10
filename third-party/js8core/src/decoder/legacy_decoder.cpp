@@ -2585,7 +2585,7 @@ std::size_t legacy_decode(DecodeState const& state,
                        "Decode loop finished, sum=%zu, emitting DecodeFinished", sum);
 #endif
 
-    emit(events::DecodeFinished{sum});
+    emit(events::DecodeFinished{sum, set});
 
 #ifdef __ANDROID__
     __android_log_print(ANDROID_LOG_INFO, "JS8Decoder",

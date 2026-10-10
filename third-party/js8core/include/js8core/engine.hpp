@@ -60,6 +60,7 @@ struct Decoded {
 
 struct DecodeFinished {
   std::size_t decoded = 0;
+  int submodes = 0;  // x6100 patch 15: the pass's submodes (which decode thread)
 };
 
 struct Spectrum {
@@ -82,6 +83,10 @@ struct EngineConfig {
   // Hosts that draw their own waterfall can skip the engine's spectrum
   // thread and its per-buffer FFT.
   bool spectrum_enabled = true;
+  // x6100 patch 15: decode submode I (Ultra) on a second decode thread, so
+  // its 4 s slots never wait behind a pass of the slower submodes (and
+  // theirs never behind it).
+  bool ultra_own_thread = false;
 };
 
 struct TxMessageRequest {
@@ -108,6 +113,10 @@ struct EngineCallbacks {
   std::function<void(events::Variant const&)> on_event;
   std::function<void(std::string_view message)> on_error;
   std::function<void(LogLevel level, std::string_view message)> on_log;
+  // x6100 patch 15: called on each decode thread as it starts ("main", or
+  // "ultra" with EngineConfig::ultra_own_thread), so the host can set its
+  // CPU affinity or priority.
+  std::function<void(std::string_view lane)> on_decode_thread_start;
 };
 
 struct EngineDependencies {

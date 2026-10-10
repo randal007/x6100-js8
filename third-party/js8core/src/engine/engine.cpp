@@ -1079,12 +1079,21 @@ public:
     events::Variant spectrum_event_{events::Spectrum{}};
     std::mutex event_mutex_;
 
-    std::thread decode_thread_;
-    std::mutex decode_mutex_;
-    std::condition_variable decode_cv_;
-    std::deque<DecodeState> decode_queue_;
-    bool decode_stop_{false};
-    std::atomic<bool> decode_pending_{false};
+    // A decode thread and its queue. lanes_[0] decodes everything, or
+    // everything but Ultra with ultra_own_thread (patch 15); lanes_[1] then
+    // decodes Ultra only.
+    struct DecodeLane {
+      const char* name = "main";
+      const char* thread_name = "js8-decode";
+      const char* log_prefix = "";
+      std::thread thread;
+      std::mutex mutex;
+      std::condition_variable cv;
+      std::deque<DecodeState> queue;
+      bool stop{false};
+    };
+    DecodeLane lanes_[2];
+    static constexpr int kUltraBit = 1 << static_cast<int>(protocol::SubmodeId::I);
 
     std::thread spectrum_thread_;
     std::mutex spectrum_mutex_;
@@ -1139,18 +1148,27 @@ public:
     }
 
     void start_decode_worker() {
-      decode_thread_ = std::thread([this]() { decode_worker_loop(); });
+      lanes_[1].name = "ultra";
+      lanes_[1].thread_name = "js8-decode-u";
+      lanes_[1].log_prefix = "[ultra] ";
+      for (int i = 0; i < (config_.ultra_own_thread ? 2 : 1); ++i) {
+        DecodeLane& lane = lanes_[i];
+        lane.stop = false;
+        lane.thread = std::thread([this, &lane]() { decode_worker_loop(lane); });
+      }
     }
 
     void stop_decode_worker() {
-      {
-        std::lock_guard<std::mutex> lock(decode_mutex_);
-        decode_stop_ = true;
-        decode_queue_.clear();
-        decode_pending_.store(false);
+      for (auto& lane : lanes_) {
+        {
+          std::lock_guard<std::mutex> lock(lane.mutex);
+          lane.stop = true;
+          lane.queue.clear();
+        }
+        lane.cv.notify_one();
       }
-      decode_cv_.notify_one();
-      if (decode_thread_.joinable()) decode_thread_.join();
+      for (auto& lane : lanes_)
+        if (lane.thread.joinable()) lane.thread.join();
     }
 
     void start_spectrum_worker() {
@@ -1193,20 +1211,40 @@ public:
     }
 
     void enqueue_decode(DecodeState snapshot) {
+      // Patch 15: Ultra's window goes to its own thread, the rest as before.
+      if (config_.ultra_own_thread && (snapshot.params.nsubmodes & kUltraBit)) {
+        if ((snapshot.params.nsubmodes & ~kUltraBit) == 0) {
+          enqueue_lane(lanes_[1], std::move(snapshot));
+          return;
+        }
+        DecodeState ultra;
+        ultra.params = snapshot.params;
+        ultra.params.nsubmodes = kUltraBit;
+        ultra.samples = snapshot.samples;
+        ultra.drift_ms_at_capture = snapshot.drift_ms_at_capture;
+        snapshot.params.nsubmodes &= ~kUltraBit;
+        enqueue_lane(lanes_[1], std::move(ultra));
+      }
+      enqueue_lane(lanes_[0], std::move(snapshot));
+    }
+
+    void enqueue_lane(DecodeLane& lane, DecodeState snapshot) {
       {
-        std::lock_guard<std::mutex> lock(decode_mutex_);
-        if (!decode_queue_.empty()) {
-          merge_windows(snapshot.params, decode_queue_.back().params);
-          decode_queue_.back() = std::move(snapshot);
+        std::lock_guard<std::mutex> lock(lane.mutex);
+        if (!lane.queue.empty()) {
+          merge_windows(snapshot.params, lane.queue.back().params);
+          lane.queue.back() = std::move(snapshot);
           // x6100 patch 13: how often the decoder is still busy when the
           // next window is ready (the app counts these).
-          if (callbacks_.on_log) callbacks_.on_log(LogLevel::Info, "decode window merged: the decoder was busy");
+          if (callbacks_.on_log) {
+            std::string m = std::string(lane.log_prefix) + "decode window merged: the decoder was busy";
+            callbacks_.on_log(LogLevel::Info, m);
+          }
         } else {
-          decode_queue_.push_back(std::move(snapshot));
+          lane.queue.push_back(std::move(snapshot));
         }
-        decode_pending_.store(true);
       }
-      decode_cv_.notify_one();
+      lane.cv.notify_one();
     }
 
     void enqueue_spectrum(const std::int16_t* data,
@@ -1230,26 +1268,28 @@ public:
       spectrum_cv_.notify_one();
     }
 
-    void decode_worker_loop() {
+    void decode_worker_loop(DecodeLane& lane) {
 #if defined(__linux__)
       // x6100 patch 13: named, so per-thread CPU tools can tell it apart.
-      pthread_setname_np(pthread_self(), "js8-decode");
+      pthread_setname_np(pthread_self(), lane.thread_name);
 #endif
+      // x6100 patch 15: the host may pin or deprioritise this thread.
+      if (callbacks_.on_decode_thread_start) callbacks_.on_decode_thread_start(lane.name);
       for (;;) {
         DecodeState task;
         {
-          std::unique_lock<std::mutex> lock(decode_mutex_);
-          decode_cv_.wait(lock, [&]() { return decode_stop_ || !decode_queue_.empty(); });
-          if (decode_stop_) return;
-          task = std::move(decode_queue_.front());
-          decode_queue_.pop_front();
+          std::unique_lock<std::mutex> lock(lane.mutex);
+          lane.cv.wait(lock, [&]() { return lane.stop || !lane.queue.empty(); });
+          if (lane.stop) return;
+          task = std::move(lane.queue.front());
+          lane.queue.pop_front();
         }
 
         if (callbacks_.on_log) {
           char log_msg[512];
           snprintf(log_msg, sizeof(log_msg),
-                   "Calling legacy_decode: nsubmodes=0x%x, freq_range=%d-%d Hz, nfqso=%d Hz, sample_rate=%d, buffer_size=%zu, callback=%s",
-                   task.params.nsubmodes, task.params.nfa, task.params.nfb, task.params.nfqso,
+                   "%sCalling legacy_decode: nsubmodes=0x%x, freq_range=%d-%d Hz, nfqso=%d Hz, sample_rate=%d, buffer_size=%zu, callback=%s",
+                   lane.log_prefix, task.params.nsubmodes, task.params.nfa, task.params.nfb, task.params.nfqso,
                    config_.sample_rate_hz, task.samples.size(),
                    callbacks_.on_event ? "SET" : "NULL");
           callbacks_.on_log(LogLevel::Info, log_msg);
@@ -1265,15 +1305,11 @@ public:
           }
           emit_event(ev);
         });
-        {
-          std::lock_guard<std::mutex> lock(decode_mutex_);
-          decode_pending_.store(!decode_queue_.empty());
-        }
 
         if (callbacks_.on_log) {
           char log_msg[256];
           snprintf(log_msg, sizeof(log_msg),
-                   "legacy_decode returned: %zu decodes", decode_count);
+                   "%slegacy_decode returned: %zu decodes", lane.log_prefix, decode_count);
           callbacks_.on_log(LogLevel::Info, log_msg);
         }
       }
