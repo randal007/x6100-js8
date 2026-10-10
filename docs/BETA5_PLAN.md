@@ -1,23 +1,22 @@
 # Beta 5: plan
 
-> **Where it stands (2026-10-10):** latest release beta 4.7 (2026-10-05).
-> On `main` since then, for beta 5 (README "In main since beta 4.7"):
-> Ultra (always decoded, own decoder thread, after Turbo on the Speed
-> button), decoders kept off one core, *Anyone have messages?*, the
-> default STATUS, `QUERY MSG [ID]` brackets, the Echo test removed, and
-> the image's gpsd hotplug fix, and GPS in JS8. VE7NHW's card: a0259bd
-> (everything; flashed 2026-10-10 00:10 PDT), then 2eec73c (+ uhid,
-> 07:38 PDT). **Checked on a0259bd
-> (2026-10-10):** a GPS plugged in after boot is found, Ultra back and forth
-> on the HL2 bench (no problems), SMS both ways, APRS messages without the
-> NACK. **Open:** GPS outside (clock, JS8 using the GPS grid, the battery
-> clock, the APRS position from the GPS, Time: Auto vs a clock step), the
-> Bluetooth keyboard (LE keyboards need the image's new uhid: building),
-> Ultra on a busy band, Show's blank rows (not reproduced), and issue #3
-> (FT8 after JS8: not reproduced here; asked kj7prs for details). Ideas
-> parked lower down: the map's home colour, POTA / SOTA on the air, the Murus
-> merge, ALC under 1 W. What we carry outside the JS8 app and the PRs to
-> send: [upstream-patches.md](upstream-patches.md).
+> **Where it stands (2026-10-10, end of day):** latest release beta 4.7
+> (2026-10-05). On `main` since then, for beta 5 (README "In main since
+> beta 4.7"): Ultra, decoders kept off one core, *Anyone have messages?*,
+> the default STATUS, `QUERY MSG [ID]` brackets, the Echo test removed,
+> GPS (hotplug + GPS in JS8), Bluetooth keyboards (uhid, the GUI finding
+> them, `x6100-bt-pair`, pairings kept across updates) and lowercase in
+> Callsign. VE7NHW's card: d0bd053 (everything but the Callsign fix).
+> **Checked on the radio:** GPS plugged in after boot, Ultra on the HL2
+> bench, SMS, APRS without the NACK, the Bluetooth keyboard (paired at the
+> first try, found by itself, USB takes over and back). **Open:** GPS
+> outside (clock, grid, battery clock, APRS position, a clock step), Ultra
+> on a busy band, Show's blank rows (not reproduced), issue #3 (not
+> reproduced; waiting for kj7prs), the Bluetooth keyboard's optional
+> checks (power cycle, kept across an update, ESC / arrows / F-keys).
+> Then the release. Ideas parked lower down: the map's home colour,
+> POTA / SOTA on the air, the Murus merge, performance. Upstream PRs (gpsd
+> merged; uhid, keyboards open): [upstream-patches.md](upstream-patches.md).
 
 ## VE7NHW's list (2026-10-09)
 
