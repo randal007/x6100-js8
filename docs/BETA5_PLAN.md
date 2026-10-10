@@ -364,8 +364,18 @@ Each item says what was done, or what's still needed.
   watches `input` (`MSG_INPUT_DEVICE_CHANGED`), and the search falls back
   to udev's database (`ID_INPUT_KEYBOARD`, `ID_BUS=bluetooth`) when there's
   no USB keyboard. `kbd_hotplug_test`: connect, sleep, wake as a new node,
-  USB first, back to Bluetooth (14/14). **Next:** flash, pair again, type
-  in JS8 *and* outside it (Callsign, QTH), leave it to sleep, type again.
+  USB first, back to Bluetooth (14/14). **Also (VE7NHW agreed
+  2026-10-10):** `x6100-bt-pair` in the image (`rootfs/usr/bin`: finds a
+  keyboard or one by name, pairs the moment it appears, shows a passkey,
+  clears half-done attempts, says if WiFi is off; tested on the PC with a
+  fake bluetoothctl), pairings kept across updates (`/var/lib/bluetooth` in
+  S04restore_backup_config's backup, a CI step), README *Using a Bluetooth
+  keyboard*; feedback for gdyuldin's `ver_1.1` screen listed
+  (upstream-patches.md #8). **Next:** flash, `x6100-bt-pair`, type in JS8
+  *and* outside it (Callsign, QTH), leave it to sleep, type again; ESC /
+  Enter / arrows / F-keys (it reports as an Apple keyboard: hid-apple);
+  power off/on and type (reconnect); switch off normally, flash an update,
+  check it still connects (backup). Then PRs 2, 6, 7 + feedback 8.
 
 VE7NHW's list for beta 5 (2026-10-02), with notes on where each item
 touches the code. **Highest priorities:** time sync, high-SWR protection,

@@ -48,6 +48,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [History](#history)
 - [Time](#time)
 - [Using a GPS](#using-a-gps)
+- [Using a Bluetooth keyboard](#using-a-bluetooth-keyboard)
 - [Speeds](#speeds)
 - [Messages and the Inbox](#messages-and-the-inbox)
 - [Relays](#relays)
@@ -657,6 +658,38 @@ A USB GPS dongle in the radio's **HOST** USB port (one that shows up as
 - Plugging the GPS in while the radio is on works from beta 5; with beta
   4.7 and earlier, plug it in before switching the radio on.
 
+## Using a Bluetooth keyboard
+
+New in beta 5 (being tested). A Bluetooth keyboard types everywhere a USB
+one does: JS8, Callsign, QTH and the other text boxes. If a USB keyboard is
+plugged in as well, the USB one is used.
+
+- **WiFi must be on** (APP > WiFi): one switch powers the radio's WiFi and
+  Bluetooth chip. It doesn't need to join a network.
+- **Pairing, once:** the radio has no pairing screen yet (one is coming
+  with R1CBU's next firmware), so it's done with one command over the
+  radio's USB console (DEV port, 115200 baud, login `root` / `123`) or
+  over SSH:
+
+  ```
+  x6100-bt-pair            pairs the first keyboard that shows up
+  x6100-bt-pair F01        only one whose name contains F01
+  ```
+
+  Run it, then press the keyboard's pairing key: many keyboards accept a
+  pairing only for a few seconds after that, so it keeps looking and
+  pairs the moment the keyboard appears. If the keyboard wants a number
+  typed, it shows it: type it on the keyboard and press Enter.
+- **After that** the keyboard connects by itself when you press a key,
+  also after it has slept or the radio has been off (the first key press
+  may only wake it).
+- **Updates keep the pairing** (from beta 5): it's saved to the SD card's
+  DATA partition when the radio is switched off normally, and put back at
+  the next start. Pulling the power instead of switching off skips that
+  save.
+- Tested with a Bluetooth LE keyboard (VE7NHW's F01). Classic Bluetooth
+  keyboards should work the same way; reports welcome.
+
 ## Speeds
 
 JS8 has four speeds, and a fifth, **Ultra**, that's experimental here
@@ -1003,12 +1036,12 @@ Not released yet: on `main` and in test builds, for beta 5
   keys arrived; and the radio's GUI program only looked for USB keyboards.
   Now it also finds a Bluetooth keyboard, everywhere you type (JS8,
   Callsign, QTH ...), and picks it up again when it wakes from sleep; a
-  USB keyboard plugged in still comes first. Changes to the Linux image
-  and the GUI program, listed in
+  USB keyboard plugged in still comes first. Pairing with one command
+  (`x6100-bt-pair`), and pairings kept across updates
+  ([Using a Bluetooth keyboard](#using-a-bluetooth-keyboard)). Changes to
+  the Linux image and the GUI program, listed in
   [docs/upstream-patches.md](docs/upstream-patches.md) to offer upstream.
-  The radio has no pairing screen yet (it comes with R1CBU's next
-  firmware): pair over the USB console with `bluetoothctl`, with WiFi
-  switched on (APP > WiFi), since one switch powers both.
+  WiFi must be on (APP > WiFi): one switch powers both.
 
 ## New in beta 4.7
 

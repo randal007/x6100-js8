@@ -99,6 +99,22 @@ jobs:
         fi
         grep -n -A1 '^start() {$' "$f"
 
+    # Bluetooth pairings kept across updates: they live in /var/lib/bluetooth
+    # on the rootfs, which every flash replaces. S04restore_backup_config
+    # saves WiFi connections and SSH keys to DATA at shutdown and puts them
+    # back at boot (before bluetoothd starts); add the pairings to that list.
+    # Only if the folder exists: the script runs with set -e, and a missing
+    # path would fail the whole backup, WiFi included (docs/upstream-patches.md).
+    - name: Keep Bluetooth pairings across updates
+      run: |
+        f=AetherX6100Buildroot/br2_external/board/X6100/linux/rootfs-overlay/etc/init.d/S04restore_backup_config
+        if ! grep -q '/var/lib/bluetooth' "$f"; then
+          [ "$(grep -c '^  tar c -avf ${BACKUP_PATH} /etc/NetworkManager/system-connections/\* /etc/ssh/\*_key\* /root/.ssh/\*$' "$f")" = 1 ] ||
+            { echo "S04restore_backup_config changed upstream: check the Bluetooth pairings backup (docs/upstream-patches.md)"; exit 1; }
+          sed -i 's,^\(  tar c -avf ${BACKUP_PATH} /etc/NetworkManager/system-connections/\* /etc/ssh/\*_key\* /root/.ssh/\*\)$,\1 $(ls -d /var/lib/bluetooth 2>/dev/null),' "$f"
+        fi
+        grep -n 'tar c' "$f"
+
     # Ccache
     - name: Prepare ccache timestamp
       id: ccache_cache_timestamp
