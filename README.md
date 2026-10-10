@@ -1341,8 +1341,6 @@ are, and its new settings start at their defaults.
 - **The [History](#history) starts empty** (QSOs from before beta 4.5
   aren't brought in), and its All-time list holds the stations you've
   exchanged messages with, not every station heard.
-- **The map:** your own square is orange; there's no Setting for its
-  colour.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
 - The `<MYVERSION>` [macro](#saved-messages) says `X6100 JS8 beta 5` in
@@ -1369,7 +1367,6 @@ What's left is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). Next:
 
 Ideas for later (not planned now):
 
-- A Setting for the map's home colour
 - The Murus team's WeFax, NavTex and SSTV, once their fork is on R1CBU 1.0
 - Performance: one decoder thread per speed if needed (Ultra has its own
   already, and the decoders stay off the screen's core)

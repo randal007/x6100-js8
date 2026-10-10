@@ -10,7 +10,7 @@ This folder holds the plans, research and reviews behind it.
 | [BETA5_PLAN.md](BETA5_PLAN.md) | **Beta 5: the current work list**, with merge notes |
 | [upgrade-1.0.2/](upgrade-1.0.2/README.md) | **Moving to gdyuldin v1.0.2** (without the Murus fork for now): the study, the trial merge, every upstream commit |
 | [feature-ideas.md](feature-ideas.md) | Brainstorm of features to pick from (APRS services, off-grid, desktop parity) |
-| [MAP_PLAN.md](MAP_PLAN.md) | Show Map design and decisions; phases 1–4 built, the home colour Setting and on-air polish left |
+| [MAP_PLAN.md](MAP_PLAN.md) | Show Map design and decisions; phases 1–4 built, on-air polish left |
 | [upstream-patches.md](upstream-patches.md) | **What we carry on top of upstream** (the Linux image's patches in our build, e.g. the gpsd hotplug fix; shared GUI code; js8core): check it when updating, and the PRs to send |
 | [upstream-prs/](upstream-prs/README.md) | **Drafts ready to send upstream**: PR texts + patches (gpsd hotplug, uhid, Bluetooth pairings backup, keyboards) and feedback on gdyuldin's Bluetooth screen; nothing sent yet |
 | [UPSTREAM_README.md](UPSTREAM_README.md) | The upstream firmware's README, plus our rule for merging upstream (stored numbers) |

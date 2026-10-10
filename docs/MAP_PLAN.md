@@ -23,7 +23,7 @@ the world view when JA1ABC is heard.*
 - **GridTracker's look:** Web Mercator (the stretched-near-the-poles shape),
   its Dark Gray colours (ocean `#232227`, land `#3f3f41`, lighter borders),
   stations as see-through filled 4-character grid squares.
-- **Colours:** you orange `#FFA600` (GridTracker's QTH colour; a Setting),
+- **Colours:** you orange `#FFA600` (GridTracker's QTH colour; no Setting: VE7NHW dropped it 2026-10-10),
   stations heard green `#00FF00`, the **selected station red**, paths
   at first purple `#AB00B6` (sampled from the reference video: Ham Radio
   Crash Course, "Make Your WSJT-X & GridTracker Look Awesome and Work
@@ -67,7 +67,7 @@ the world view when JA1ABC is heard.*
 | Page 3, 2nd | Time Sync | **Map: Auto / Close-in / World**, only while the map shows (blank otherwise) |
 | Page 3, 4th | Show Stations / Messages | cycles **Messages → Stations → Map** |
 | Page 2, 2nd | Show: No HB / Directed / All | in the map: **All heard / Heard me** |
-| Settings list | — | *Time Sync now*, *Reset time drift*, *My map colour* |
+| Settings list | — | *Time Sync now*, *Reset time drift* (*My map colour* dropped) |
 
 The MFK steps through the stations on the map (the selection is shared with
 the list and the Stations view: select on the map, Reply, Query ... work as
@@ -249,7 +249,7 @@ uses). *Heard me* adds the path.
    corners on the map so its see-through black stays off them. Your own
    CQ gets the **CQ** tag on your square too, while it goes out and for
    5 min after a CQ sent in full (`my_cq_until_ms`, set in `ui_tx_done()`).
-   Still to come: a Setting for your colour.
+   (A Setting for your colour: dropped, it stays orange.)
 5. **On the air**, then a beta.
 
 ## Credits and licences

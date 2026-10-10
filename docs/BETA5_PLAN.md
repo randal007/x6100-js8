@@ -14,7 +14,7 @@
 > on a busy band, Show's blank rows (not reproduced), issue #3 (not
 > reproduced; waiting for kj7prs), the Bluetooth keyboard's optional
 > checks (power cycle, kept across an update, ESC / arrows / F-keys).
-> Then the release. Ideas parked lower down: the map's home colour,
+> Then the release. Ideas parked lower down:
 > POTA / SOTA on the air, the Murus merge, performance. Upstream PRs (gpsd
 > merged; uhid, keyboards open): [upstream-patches.md](upstream-patches.md).
 > **Ultrareview** (three cloud reviews of the whole app, 2026-10-10):
@@ -815,8 +815,9 @@ On the air with beta 4 (VE7NHW, up to 2026-10-02): relays, messaging,
 store and forward and Winlink all work; only QUERY CALL failed (above).
 
 - [ ] On-air tests still to do: POTA and SOTA spots through the gateways.
-- [ ] Show Map: a Setting for your own square's colour (orange for now),
-  polish from use on the air ([MAP_PLAN.md](MAP_PLAN.md)).
+- [ ] Show Map: polish from use on the air ([MAP_PLAN.md](MAP_PLAN.md)).
+  (A Setting for your own square's colour: dropped 2026-10-10, VE7NHW:
+  it stays orange.)
 
 ## Low priority (after the features)
 
