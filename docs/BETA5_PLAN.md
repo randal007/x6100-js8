@@ -6,7 +6,8 @@
 > button), decoders kept off one core, *Anyone have messages?*, the
 > default STATUS, `QUERY MSG [ID]` brackets, the Echo test removed, and
 > the image's gpsd hotplug fix, and GPS in JS8. VE7NHW's card: a0259bd
-> (everything; flashed 2026-10-10 00:10 PDT). **Checked on it
+> (everything; flashed 2026-10-10 00:10 PDT), then 2eec73c (+ uhid,
+> 07:38 PDT). **Checked on a0259bd
 > (2026-10-10):** a GPS plugged in after boot is found, Ultra back and forth
 > on the HL2 bench (no problems), SMS both ways, APRS messages without the
 > NACK. **Open:** GPS outside (clock, JS8 using the GPS grid, the battery
