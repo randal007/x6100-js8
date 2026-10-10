@@ -16,7 +16,7 @@ drop our copy.
 
 | # | To | What | Status |
 |---|---|---|---|
-| 1 | gdyuldin/AetherX6100Buildroot | gpsd with a control socket (`-F /var/run/gpsd.sock` in S50gpsd): USB GPS hotplug works (section 1) | **sent 2026-10-10: OpenX6100/AetherX6100Buildroot#2** (gdyuldin's repos moved to the OpenX6100 organization) |
+| 1 | gdyuldin/AetherX6100Buildroot | gpsd with a control socket (`-F /var/run/gpsd.sock` in S50gpsd): USB GPS hotplug works (section 1) | **MERGED 2026-10-10: OpenX6100/AetherX6100Buildroot#2** (gdyuldin's repos moved to the OpenX6100 organization). Our CI step now skips itself (it checks for `-F` first); remove it when convenient |
 | 2 | gdyuldin/x6100_gui | USB keyboard hot plug (`src/keyboard.c`), Bluetooth keyboards found and followed (`src/keyboard.c`, `src/usb_devices.cpp`, `src/pubsub_ids.h`), then the other keyboard fixes (section 2) | **sent 2026-10-10: OpenX6100/x6100_gui#281** (branch randal007/x6100_gui:keyboards; with the Callsign lowercase fix) |
 | 3 | gdyuldin/x6100_gui | js8core + `src/js8` + the JS8 app, map and extras | after 2; licence question (GPLv3 js8core) open with gdyuldin |
 | 4 | JS8Call-improved/Android-port (js8core) | local patches 1-15, e.g. 14 (Ultra decoded on Turbo's schedule) and 15 (Ultra on its own decode thread, a thread-start hook) | listed in [UPSTREAM.md](../third-party/js8core/UPSTREAM.md); bugs already reported in issue #104 |
