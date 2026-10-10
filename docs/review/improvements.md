@@ -1,0 +1,403 @@
+# Improvements found in the feature review
+
+Ways to make the code faster, lighter, simpler, safer or better tested,
+found by reading it feature by feature (check sheet:
+[features.md](features.md)). These aren't bugs: the app works as it is.
+**No code was changed.** Started 2026-09-28 on `main` at `9391f80`; line
+numbers refer to that commit.
+
+- **Kind:** *efficiency* (CPU, memory, SD card writes), *simplify*
+  (less or clearer code), *robustness* (safer against a future change or
+  an odd input), *tests* (a gap in the unit tests or the harness).
+- **Worth:** *high* (clear win, small change), *medium*, *low* (nice to
+  have).
+
+## Summary
+
+| ID | Feature | Improvement | Kind | Worth |
+|---|---|---|---|---|
+| I-01 | F02, F04 | ~~Test closing the app while a frame is keyed~~ **done in 2ed19a8** | tests | high |
+| I-02 | F02 | Synthesise TX audio without 16 MB of temporary buffers | efficiency | medium |
+| I-03 | F10 | ~~Keep the JS8 presets out of upstream's migration numbers~~ **rule written down in 1acbeb5 (D10)** | robustness | medium |
+| I-04 | F03 | Plan each message once, not twice | efficiency | low |
+| I-05 | F05, F89 | ~~One list of popups instead of three~~ **fixed in 3e20282** | simplify | low |
+| I-06 | F01 | Save the learned TX gain once per message, not per frame | efficiency | low |
+| I-07 | F11–F20 | ~~A desktop-parity test table for the auto-reply rules~~ **done in 4140fbb** | tests | medium |
+| I-08 | F11, F20 | ~~Decide once, when the reply is actually sent~~ **done in 4140fbb** | simplify | low |
+| I-09 | F11 | ~~Prune the auto-reply rate-limit map~~ **done in 4140fbb** | efficiency | low |
+| I-10 | F22 | Test the receiver's stall path | tests | low |
+| I-11 | F31 | ~~Size the groups setting for ten groups~~ **done in 4bfb8d6** | robustness | low |
+| I-12 | F32, F33, F38 | ~~One safe "write the file" helper for all three data files~~ **done in 4bfb8d6** | simplify | medium |
+| I-13 | F32, F33, F38 | ~~Tests for damaged, unreadable and half-written data files~~ **done in 4bfb8d6** | tests | medium |
+| I-14 | F51 | ~~Restyle the TX bar and the waterfall frame only when they change~~ **done in 68fd0fe** | efficiency | high |
+| I-15 | F45, F46, F59 | ~~Work out each row's colours and fields once, not on every redraw~~ **not done: measured, not worth it** | efficiency | medium |
+| I-16 | F42, F43 | ~~Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes~~ **done in 68fd0fe (JS8 side)** | efficiency | low |
+| I-17 | F58, F62 | ~~Forget expired stations; look one up without copying the list~~ **done in 68fd0fe** | efficiency | medium |
+| I-18 | F63, F67, F40 | ~~One "from a popup into the keyboard" helper~~ **fixed in 3e20282** | simplify | medium |
+| I-19 | F75 | ~~Keep `MODE_JS8`'s number clear of upstream's~~ **rule written down in 1acbeb5 (D10)** | robustness | low |
+| I-20 | F95, F96, F97 | ~~Run the unit tests and the harness in CI~~ **done in d729111** | tests | high |
+| I-21 | F97 | Pin buildroot and the third-party actions; find out why tags never build | robustness | medium |
+| I-22 | F94, F98 | Leave the WAV test mode out of the firmware; compiler warnings on | simplify | low |
+| I-23 | F100 | ~~`x6100-console`: refuse to type into a login prompt, and tidy up~~ **done (outside the repo, package 7)** | robustness | medium |
+| I-24 | F99 | ~~`x6100-flash`: no stale default, check the image's partition table~~ **done (outside the repo, package 7)** | robustness | low |
+| I-25 | F101 | ~~README: two stale button rows, one number, and a link to this review~~ **done in 1acbeb5** | docs | low |
+
+## Batch 1: Transmitting and the radio
+
+### I-01. Test closing the app while a frame is keyed — tests, high
+
+`tools/js8_ui_harness` closes the app with popups open (`[gen]`, `[log]`,
+`[inbox]`) but never during a transmission, which is how B-01 went
+unseen. Its `tx_player_play` stub already polls `abort_check`, so a
+scenario "queue a message, wait for `[radio] PTT on`, `dialog_destruct()`"
+would crash under ASan today. Also a unit test: `js8_tx_destroy()` while
+`play` polls `js8_tx_stopping()`.
+
+### I-02. Synthesise TX audio without 16 MB of temporary buffers — efficiency, medium
+
+`synth_frame()` (`src/js8/tx.cpp:138-175`) builds the whole frame's
+phase steps as `double`s, then a `float` waveform, and the play callback
+(`js8_tx.cpp:63-65`) copies it again to `int16_t`. At 44.1 kHz a Slow
+frame (1.11 M samples) needs ~9.1 MB + 4.5 MB + 2.2 MB, Normal half that,
+and every sample does a `std::fmod`. It runs on the TX thread between
+frames (about 1 s of slack at Turbo). The Gaussian pulse spans only three
+symbols, so the phase step can be computed per sample from a 3-symbol
+window, the phase kept in range with a subtraction, and `int16_t`
+written directly: one 2.2 MB buffer (or none, synthesising part by part as
+`tx_player_play` plays), same waveform bit for bit apart from rounding.
+
+### I-03. Keep the JS8 presets out of upstream's migration numbers — robustness, medium
+
+**Rule written down in 1acbeb5** (D10): `docs/UPSTREAM_README.md`, *Merging upstream*: upstream's migrations go after our 4 and 5.
+
+`src/params/migrations.c` adds `_4_add_js8_presets` and
+`_5_add_ghostnet_presets` after upstream's 0–3. `params.db` lives on the
+DATA partition (`/mnt`), which survives reflashing. When upstream adds its
+own migration 4 and 5, a database already at version 5 skips them: after
+we merge upstream (unless we renumber carefully), and whenever someone
+goes back to an upstream image with the same card. The inserts are
+idempotent (`INSERT OR IGNORE` + `UNIQUE(freq, type)`), so they can simply
+run at every start outside the version sequence, or keep their own version
+table.
+
+### I-04. Plan each message once, not twice — efficiency, low
+
+`tx_queue_at()` (`src/dialog_js8.c:1666-1676`) calls `js8_tx_preview()`
+and then `js8_tx_send()`, which runs `plan_message()` again: two frame
+builds and two decode-backs on the LVGL thread for every message. Have
+`js8_tx_send()` return the preview, frame count and seconds (or take the
+plan).
+
+### I-05. One list of popups instead of three — simplify, low
+
+**Done in 3e20282** (package 5): the `popups[]` table, used by `any_popup()`, `close_popups()` and `destruct_cb()`.
+
+`any_popup()` (`:3965`), `close_popups()` (`:2752`) and `destruct_cb()`
+(`:2263-2294`) each name all eight popups. A popup missing from one of
+them is exactly the "GEN with the Query list open crashed the app" bug
+fixed earlier. One table of `{lv_obj_t **list, close_fn}` used by all
+three keeps them in step.
+
+### I-06. Save the learned TX gain once per message, not per frame — efficiency, low
+
+`tx_player_play()` (`src/tx_player.c:114`) calls `params_float_set()`
+after every frame; the params thread (`params.c:447`, every 100 ms) then
+writes `params.db` on the SD card. A 20-frame message writes it 20
+times. Save when the message ends, or only when the value moved by more
+than ~0.1 dB. Shared with FT8, so a change here touches both apps.
+
+## Batch 2: Automatic sending
+
+### I-07. A desktop-parity test table for the auto-reply rules — tests, medium
+
+**Done in 4140fbb** (package 3): `[parity]` in `tests/test_js8.cpp`, incoming text and switches against desktop's answer.
+
+`tests/test_js8.cpp` checks our own expectations of `process()`. The
+frame encoder was made bit-for-bit with desktop by building desktop's code
+and comparing (patch 11); `processCommandActivity()` is too tied to Qt for
+that, but a table of (incoming text, switches, held messages) → (desktop's
+reply, what it stores) written from reading desktop, one row per branch
+(SNR?, INFO?, HEARING?, relays with and without a command, MSG / MSG TO:
+/ QUERY / QUERY MSGS / QUERY CALL, @ALLCALL and group forms, the 55-min
+cooldown, B-04's open-buffer rule), would catch drift both ways when
+desktop changes. Plus a harness scenario for B-04: a heartbeat arriving
+between the frames of a message to us.
+
+### I-08. Decide once, when the reply is actually sent — simplify, low
+
+**Done in 4140fbb** (package 3): `js8_auto_decide()` at send time, from `auto_try_send()`.
+
+`AutoPolicy::decide()` runs when the message is decoded, and `auto_send()`
+checks the switches again because they "may have changed while it
+waited"; the Turbo rule for HB ACKs is only in `auto_send()`, and the
+rate-limit record (`js8_auto_sent`) only happens if it's queued. Keeping
+the decoded reply and calling `decide()` once at send time would put all
+the rules in one place (and is where B-04's hold-off would go too).
+
+### I-09. Prune the auto-reply rate-limit map — efficiency, low
+
+**Done in 4140fbb** (package 3).
+
+`AutoPolicy::last_sent_` (`autoreply.hpp:128`) gets a key per station and
+command answered and never drops one; `autop` lives until power-off. A
+relay or heartbeat station running for days keeps every station it ever
+ACKed. Tiny per entry, but pruning entries older than the longest window
+(55 min once B-05 is fixed) at each `sent()` keeps it bounded.
+
+## Batch 3: Receiving and decoding
+
+### I-10. Test the receiver's stall path — tests, low
+
+`tests/test_js8.cpp` covers the realign (`:466`) and the TX gap fill
+(`:483`) but not the "worker fell more than 5 s behind" branch
+(`receiver.cpp:175-180`), where B-11 lives. A test feeding 6 s of audio
+in one burst and checking that no frame from before the burst decodes
+again would pin it down.
+
+### I-11. Size the groups setting for ten groups — robustness, low
+
+`js8_groups_normalise()` keeps up to 10 groups, but `groups_text` is 96
+characters (`dialog_js8.c:294`): ten long group names (up to about 10
+characters each, plus spaces) don't fit, and `copy_str()` cuts the last
+one mid-name, which then silently matches nothing (or the wrong group).
+Either a bigger buffer or stop at the last group that fits whole.
+
+## Batch 4: Inbox, saved data, settings
+
+### I-12. One safe "write the file" helper for all three data files — simplify, medium
+
+`Inbox::save()` and `HeldMessages::save()` (`inbox.cpp:102-120`,
+`:214-233`) are the same code twice (header, `.tmp`, `fsync`, `rename`,
+clean-up), and `save_texts()` doesn't use it at all (B-15). One helper,
+`write_file_atomically(path, lines)`, with the directory `fsync` and a
+load-side `.tmp` fallback (BH-16), would fix B-15 and BH-16 in one place.
+The two `load()`s also share their line splitting and `try`/`catch`
+parsing.
+
+### I-13. Tests for damaged, unreadable and half-written data files — tests, medium
+
+`tests/test_js8.cpp` checks that files from the last release load
+(`:2500`) and that the Inbox survives a reload (`:1538`). Nothing checks
+what happens when a file exists but can't be read (B-14), when only the
+`.tmp` survived (BH-16), or when `js8_texts.txt` is cut short (B-15). All
+three are easy to set up in a temporary directory.
+
+## Batch 5: The screen
+
+No new bugs here (BH-18, info rows vanishing on a rebuild, is still
+there). Three ways to draw less.
+
+### I-14. Restyle the TX bar and the waterfall frame only when they change — efficiency, high
+
+**Done in 68fd0fe** (package 4). Measured first with the new harness case `ONLY_LOAD` (LVGL timers running): idle, JS8 sent about 1,031,000 pixels a second to the screen (7.2 ms of GUI work a second on a PC); now 10,000 (the clock) and 0.6 ms. With waterfall rows and a full list, 26.7 → 19 ms/s.
+
+`tx_timer_cb()` calls `update_tx_bar()` every 250 ms, idle or not
+(`src/dialog_js8.c:1567-1579`), and `update_tx_bar()` always sets the TX
+bar's background colour, its text, and the waterfall's border width and
+colour (`:1590-1636`). In LVGL 8.3 every style setter ends in
+`lv_obj_refresh_style()` → `lv_obj_invalidate()`, changed or not
+(`lvgl/src/core/lv_obj_style.c:270-276`, `:167-173`), and
+`lv_obj_area_is_visible()` grows the area by 5 px for the object *and* for
+its parent (`lv_obj_pos.c:896`, `:908`, `lv_obj_get_transformed_area()`
+→ `lv_area_increase(area, 5, 5)`). For the waterfall that is exactly the
+path 72b134e removed for waterfall rows: the area spills past the opaque
+`wf_box`, so LVGL redraws from the dialog background (the 1 MB
+`dialog.bin`, read and blended line by line) — now four times a second,
+all the time JS8 is open. `lv_label_set_text()` also re-lays out the TX
+bar each time.
+
+**Improvement:** keep the last state, text and colours; call the setters
+only when they change (the frame changes only when keying starts and
+stops). Worth measuring first: the harness's `wf_bench` (`main.cpp:272`)
+calls `lv_refr_now()` in a tight loop and never runs LVGL timers, so it
+can't see this; a case that also runs `lv_timer_handler()` would.
+Likely rather than confirmed: read in the code, not measured.
+
+### I-15. Work out each row's colours and fields once, not on every redraw — efficiency, medium
+
+**Not done** (package 4, D-C: only if the measurement said so). gprof over `WFPERF_PROFILE=full`: `js8_command_span()` is 0.2% of the redraw, and a command row's text is drawn once (the table's own pass is transparent), so there's nothing worth caching; nearly all the time is drawing the letters.
+
+The list is see-through over the waterfall, so every waterfall row
+(15 a second) redraws every visible list row. For each one,
+`table_draw_cb()` runs `row_command()` → `js8_command_span()`
+(`js8_ops.cpp:133-157`: a `std::string` copy, `parse_directed()` with
+more copies), then `draw_recoloured()` measures the text and draws it a
+second time; in the Stations view `table_draw_end_cb()` calls
+`station_fields()` (age, distance, bearing, formatted) per row per frame.
+The command span only depends on the message: compute it once in
+`add_message()` and keep it with the history slot; the station fields
+change once per `rebuild_station_rows()` (every 5 s). The README's
+"solid (not see-through) list" idea goes further: with an opaque list only
+the 55-pixel strip above it needs redrawing per row.
+
+### I-16. Cheaper waterfall rows: no malloc/qsort per row, direct pixel writes — efficiency, low
+
+**Done in 68fd0fe** (package 4) on the JS8 side: a fixed ring of rows (no malloc or free per row, no leak when one is dropped) and a quickselect for the floor (checked equal to the sort on 200,000 rows). The widget's per-pixel painting and its unused `line_buf` are left alone: `lv_waterfall.c` is shared with the FT8 app.
+
+On the receiver thread, `wf_emit_row()` (`dialog_js8.c:1323-1360`)
+allocates two buffers per row and `qsort`s all 771 values to find the
+30th percentile: a preallocated buffer and a selection
+(`nth_element`-style quickselect, O(n)) do the same. In the widget,
+`lv_waterfall_add_data_with_ts()` paints each pixel through
+`lv_img_buf_set_px_color()` (format checks per call); writing the row as a
+`lv_color_t` array is simpler. `line_buf` (`lv_waterfall.c:90`) is
+allocated and never read (already so upstream).
+
+## Batch 6: Selecting, navigating, Stations
+
+### I-17. Forget expired stations; look one up without copying the list — efficiency, medium
+
+**Done in 68fd0fe** (package 4): expired stations erased at most once a minute (never with "always"), `js8_stations_find()` and `js8_stations_recent()` (a partial sort of the 32 wanted); `free_hb_offset()` stopped reading the list in package 3. Tests `[stations]`.
+
+`StationList` (`src/js8/stations.cpp`) never erases anything: expired
+stations are only filtered out when read (`sorted()`, `:85-97`), and the
+lists live while the radio is on. Every read copies and `stable_sort`s all
+of them into `js8_station_t`s (`js8_ops.cpp:159-180`), and that happens
+several times per decoded message on the LVGL thread: `find_station()`
+(which lists 200 stations to find one), `heard_stations()` in
+`handle_incoming()`, `free_hb_offset()` for every heartbeat and HB ACK,
+and `rebuild_station_rows()` every 5 s in the Stations view. After days
+on a busy band that's thousands of entries copied and sorted per message.
+Erase entries past the expiry in `add()` (or every few minutes), and add a
+`js8_stations_find(call)` that looks the key up directly. It also fixes
+the 200-station blind spot in B-20.
+
+## Batch 7: Sending by hand
+
+### I-18. One "from a popup into the keyboard" helper — simplify, medium
+
+**Done in 3e20282** (package 5): `popup_leave()` and `popup_to_keyboard()`, used by all twelve places; a refusal resets the edit mode (B-16).
+
+The same six steps are written out in `texts_item_cb`, `query_msg_cb`,
+`freq_item_cb`, the Inbox items (`inbox_leave` + `msg_compose`), the log,
+alerts, spot and beacon forms: take the list's buttons out of the group,
+`lv_obj_del_async` the list, NULL its pointer, set `edit_target`,
+`compose_open(prefill)`, `lv_group_set_editing(true)`, then a hint. Each
+copy has to get the order right (memory: "lists opening the keyboard
+remove their buttons from the group first"), and none of them undoes
+`edit_target` when `compose_open()` refuses (B-16). One
+`popup_to_keyboard(list, target, prefill, hint)` would hold the rule and
+the reset in one place.
+
+## Batch 8: Logging and APRS
+
+No new bugs: the QSO tracker, the ADIF record, the Log popup, the APRS
+formats (message IDs, position ambiguity, the POTA and SOTA gateways'
+formats) and the Maidenhead conversion all read correctly. Still there
+from the bug hunt: BH-6 (grids from any grid-shaped word), BH-12 (the log
+prompt holds up automatic TX), BH-13 ("73" anywhere ends the QSO), and the
+APRS length check counting the `{NN}` ID. Correction to the bug hunt's
+"typed log grid" item: a typed grid *is* upper-cased (the keyboard turns
+lowercase into capitals as it's typed), but it still isn't checked, so
+"HOME" can reach the log.
+
+### I-19. Keep `MODE_JS8`'s number clear of upstream's — robustness, low
+
+**Rule written down in 1acbeb5** (D10): `docs/UPSTREAM_README.md`, *Merging upstream*: `MODE_JS8` stays 8, `ACTION_APP_JS8` stays where it is.
+
+`qso_log.db` (on the DATA partition, kept across reflashing) stores the
+mode as an integer (`qso_log.c:188`, `mode INT NOT NULL`), and we appended
+`MODE_JS8` to `qso_log_mode_t` (`qso_log.h:40`), so it's 8. Upstream's
+enum stops at `MODE_RTTY` = 7; the next mode they add will also be 8.
+Merging upstream then needs `MODE_JS8` kept at 8 and theirs moved, and a
+card used with an upstream image would show our JS8 QSOs as their new mode
+(worked-before marks, ADIF export). Same kind of risk as I-03: a fixed,
+high value (e.g. 100) for `MODE_JS8` now, before more records are written,
+avoids it; the few existing records would need a one-off update.
+
+The same holds for `ACTION_APP_JS8`, appended to `press_action_t`, whose
+values are saved as the long-press actions (`params.h:56`); that enum
+already differs from upstream's (1KO125 added WeFax and NavTex before it).
+
+## Batch 10: Engine, build, tests, tools, docs
+
+The eleven js8core patches read as `UPSTREAM.md` describes them and are
+covered by tests (patch 11 bit for bit against desktop). Offering them
+upstream is still an open question (the js8core bug list went to
+Android-port#104).
+
+### I-20. Run the unit tests and the harness in CI — tests, high
+
+**Done in d729111** (package 7, J): `.github/workflows/tests.yml`, the unit tests on every push; the harness when started by hand with *harness* ticked.
+
+`.github/workflows/main.yml` builds the SD image and nothing else: the 95
+Catch2 tests (`tests/test_js8.cpp`, `run_tests.sh`) and the UI harness
+(`tools/js8_ui_harness`, ASan/UBSan) only run when someone runs them on
+this PC. A separate quick job on `ubuntu-22.04` (fast tests, `~[.slow]`,
+a couple of minutes; then the harness scenarios) on every push and
+before the hour-long image build would catch regressions on GitHub, and
+I-01's close-while-keyed case would then guard B-01 for good.
+
+### I-21. Pin buildroot and the third-party actions; find out why tags never build — robustness, medium
+
+**Partly done in d729111** (package 7): the tag trigger removed (it never fired; releases come from starting *Build image* by hand on the tag, which keeps its Release step). Pinning Buildroot and the actions: **not done** (D9, your call).
+
+- `gdyuldin/AetherX6100Buildroot` is checked out at whatever its default
+  branch is that day: the same commit can build a different image, and
+  `x6100-flash` assumes the image ends exactly where DATA starts. Pin a
+  commit (`ref:`) and move it on purpose.
+- `jlumbroso/free-disk-space@main` and `softprops/action-gh-release@v2`
+  run with `permissions: contents: write`; pin them to commit SHAs.
+- The workflow has `on: push: tags: '*'`, but all 35 runs on record were
+  started by hand (`workflow_dispatch`), betas 1–3 included (memory:
+  "pushing a tag did NOT start CI"). The repo isn't a fork and Actions are
+  on; the cause isn't visible from here. Worth one test tag, or drop the
+  trigger and keep the documented manual start.
+
+### I-22. Leave the WAV test mode out of the firmware; compiler warnings on — simplify, low
+
+The Test WAV button went in 0e18013, but `js8_rx_play_wav()`, its thread
+and the status bar's "TEST WAV" flag are still built into the firmware,
+unreachable; only the tests and the harness use them. Build `wav.cpp` and
+the play path only for those. Separately, `src/js8/` and `dialog_js8.c`
+are compiled without `-Wall -Wextra` (the ARM syntax check in memory adds
+`-Wall` by hand); turning warnings on for our own targets would make that
+check part of every build.
+
+### I-23. `x6100-console`: refuse to type into a login prompt, and tidy up — robustness, medium
+
+**Done** (package 7, outside the repo): cmd/send refuse while the radio boots or shows the stock Xiegu login or banner, cmd also at the login or password prompt (`--force` overrides); stale `daemon.pid` removed with a clear message; default `/dev/ttyACM0`; `console.log` rotated to `console.log.1` when the daemon starts with it over 4 MB; `tail` reads from the end. Tested on a socat pty with a fake radio.
+
+`~/Work/bin/x6100-console` (outside the repo):
+- `cmd` and `send` type into whatever the console shows. The rule "tail
+  first; at a login, a password prompt or the stock Xiegu banner, send
+  nothing" (memory: hands off during flashes) is only procedure. The
+  daemon sees every byte: it can track the last prompt and make
+  `cmd`/`send` refuse (with a message) unless the last thing seen was a
+  root shell prompt.
+- A stale `daemon.pid` after the daemon died gives `OSError: [Errno 6]`;
+  check the PID is alive and say "daemon not running".
+- `daemon` defaults to `/dev/ttyUSB0`; the radio is `/dev/ttyACM0`.
+- `console.log` is never rotated (12 MB now, screenshots add their
+  base64), and `tail` reads the whole file each time; rotate it and read
+  from the end.
+
+### I-24. `x6100-flash`: no stale default, check the image's partition table — robustness, low
+
+**Done** (package 7, outside the repo): the image's own partition table is checked before anything is written (BOOT + rootfs ending at `P3_START`; tested with fake images laid out wrong); backup folders carry the seconds and never reuse an existing one.
+
+Besides B-27: the script only checks the image isn't bigger than DATA's
+start. It could also check the image's own partition table (two
+partitions, ending at `P3_START`) before writing, since `sfdisk --append`
+fails after `dd` if a future image has a third one (see I-21's unpinned
+buildroot). And if two runs happen in the same minute, `cp -a` copies
+DATA *into* the existing backup folder, and the later `diff` then reports
+a difference that isn't there.
+
+### I-25. README: two stale button rows, one number, and a link to this review — docs, low
+
+**Done in 1acbeb5** (package 8), with a read-through of the whole README against the code: also the grids rule, the SMS paragraph, the map in *What it does*, the popups (Freq, the spot form, the VOL knob), the power-off note (holding POWER too), "Still to do".
+
+- The buttons table's **Show Stations** row still says a station "drops
+  off an hour after it was last heard" (now *Stations kept* in Settings),
+  and the **Settings…** row lists only INFO, STATUS, Relay and groups
+  (beta 4 added Stations kept, Messages kept, Distance, Operator; the
+  Settings section itself is up to date).
+- *Messages kept: all* says "the newest 200 stay"; the list is trimmed to
+  150 when it reaches 200, and the app's own message says 150.
+- The list of popups that any button closes leaves out Freq and the spot
+  form.
+- "For developers" and "Still to do" point at the bug hunt only; add
+  `docs/review/`.
+- The power-off known issue (B-02) says "loses power"; holding POWER does
+  the same.
