@@ -12,8 +12,9 @@
 > NACK. **Open:** GPS outside (clock, JS8 using the GPS grid, the battery
 > clock, the APRS position from the GPS, Time: Auto vs a clock step), the
 > Bluetooth keyboard (LE keyboards need the image's new uhid: building),
-> Ultra on a busy band, Show's blank rows (not reproduced), and **issue #3:
-> FT8 can't transmit after JS8 until a restart**. Ideas parked lower down: the map's home colour, POTA / SOTA on the air, the Murus
+> Ultra on a busy band, Show's blank rows (not reproduced), and issue #3
+> (FT8 after JS8: not reproduced here; asked kj7prs for details). Ideas
+> parked lower down: the map's home colour, POTA / SOTA on the air, the Murus
 > merge, ALC under 1 W. What we carry outside the JS8 app and the PRs to
 > send: [upstream-patches.md](upstream-patches.md).
 
@@ -33,7 +34,16 @@ Each item says what was done, or what's still needed.
   stream or the modem/PTT state after close. To do at the radio: FT8 TX
   into the dummy load before and after JS8 (console: app log, `pactl`
   streams if available), then the harness: open/close JS8 and check every
-  radio_* / audio_* call is undone. No reply on GitHub yet (user to OK).
+  radio_* / audio_* call is undone. **Not reproduced (2026-10-10, card
+  a0259bd):** VE7NHW went back and forth JS8 ↔ FT8 several times and made
+  FT8 contacts after each JS8 session, no restart. Code read: FT8 (1.0.2)
+  has its own TX worker (`src/ft8/tx_worker.c`, own 6 kHz audio player);
+  JS8's close restores power, TX filter, RX DSP, mem slot and the speaker
+  path; the only shared state is the learned `cfg.ft8.output_gain_offset`
+  (saved, so a restart wouldn't change it). **Replied on GitHub**
+  (issuecomment-6095524318): which build, update to beta 4.7, and if it
+  still happens: keys with no power or not at all, power/amp, the app log.
+  Waiting for kj7prs.
 
 - [x] ~~**Received APRS messages show a NACK command.**~~ **Dropped
   2026-10-10:** VE7NHW couldn't make it happen again on a0259bd; APRS
