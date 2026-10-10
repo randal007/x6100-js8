@@ -195,6 +195,21 @@ Notes only so far: nothing below is changed in the code yet.
     receiver's ring realign (`check_clock`) does the right thing too.
   - **Precision:** NMEA time without PPS is usually 0.1-0.5 s late
     (`time1 0.0` doesn't correct it); fine for JS8, Auto absorbs it.
+  - **At the radio, 2026-10-09 (beta 5 test card 3cc3827):** the user's
+    dongle is a **CDC-ACM device: /dev/ttyACM0** (with PPS: the kernel's
+    pps_ldisc made pps0 "source /dev/ttyACM0"), so catch 1's device name is
+    fine. gpsd (`-n /dev/ttyACM0`) and ntpd (`-g`) run at boot. But the
+    dongle was unplugged and replugged 60 s after boot, and **gpsd then had
+    no device** (`gpspipe -w`: `"devices":[]`; `ntpq -n -p 127.0.0.1`:
+    127.127.28.0 .GPS. reach 0, ntpd stratum 16 INIT): nothing re-adds a
+    GPS plugged in after boot. Fix options: a udev rule (shared Linux
+    layer) running `gpsdctl add /dev/%k` for ttyACM*/ttyUSB* GPS devices,
+    or JS8-only `gpsdctl add /dev/ttyACM0` at open; to test first by hand:
+    `gpsdctl add /dev/ttyACM0` then ntpq. (`ntpq -p` without `-n
+    127.0.0.1` fails: "Name or service not known"; busybox has no
+    `timeout`, and `gpspipe -n` waits forever without reports: Ctrl-C via
+    `x6100-console send $'\x03'`.) Clock matched the PC to the second at
+    02:27Z without GPS.
   - **First steps at the radio (read-only):** plug the dongle into HOST;
     `dmesg | tail` (ttyACM0 or ttyUSB0, chip), `ps | grep -E 'gpsd|ntpd'`,
     `gpspipe -w -n 5` (if installed) or APP > GPS, `ntpq -p` (GPS refid,
