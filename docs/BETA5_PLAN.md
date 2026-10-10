@@ -327,6 +327,15 @@ Each item says what was done, or what's still needed.
     heartbeats / CQ / the map, APRS position spots from the GPS, `GPS` vs
     `GPS no fix` in the top line, and a clock step by hand with JS8 open.
     Then send the gpsd PR (upstream-patches.md).
+  - **To look at later (VE7NHW: note it, decide later):** the list's
+    *Battery clock set from GPS time* line is added when the save
+    **starts** (`rtc_tick()`, `src/dialog_js8.c`), before `hwclock` has
+    run on its thread; if the write fails, only the app log says
+    "battery clock not set". Possible fix: show the line from the
+    thread's result (set / not set). Also worth knowing: the battery
+    clock is only saved while JS8 is open (the radio's own clock is set
+    from the GPS by ntpd in any app); opening JS8 once with a fix is
+    enough each power-on.
   - **First steps at the radio (read-only):** plug the dongle into HOST;
     `dmesg | tail` (ttyACM0 or ttyUSB0, chip), `ps | grep -E 'gpsd|ntpd'`,
     `gpspipe -w -n 5` (if installed) or APP > GPS, `ntpq -p` (GPS refid,
