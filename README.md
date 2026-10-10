@@ -1306,10 +1306,10 @@ are, and its new settings start at their defaults.
 
 What's left is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). Next:
 
-- [ ] **GPS** on the air: plugging it in after boot, and JS8's GPS grid,
-  status and battery clock on the radio (done in testing)
+- [ ] **GPS** outside: the clock, JS8's GPS grid, status and battery clock
+  on the radio (plugging it in after boot works)
 - [ ] **A Bluetooth keyboard** tried with JS8
-- [ ] **Ultra on the air** with desktop JS8Call, and on a busy band
+- [ ] **Ultra on a busy band** (with desktop JS8Call it works)
 - [ ] **Show's blank rows** (switching Show All / No HB / Directed): not
   reproduced in testing yet; radio screenshots wanted
 

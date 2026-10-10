@@ -5,12 +5,15 @@
 > Ultra (always decoded, own decoder thread, after Turbo on the Speed
 > button), decoders kept off one core, *Anyone have messages?*, the
 > default STATUS, `QUERY MSG [ID]` brackets, the Echo test removed, and
-> the image's gpsd hotplug fix. VE7NHW's card: 3cc3827 (flashed
-> 2026-10-09 19:22 PDT); the image with everything (7cb0fe2) is building.
-> **Open:** GPS (a fix outside, clock, JS8 using the GPS grid, Time: Auto
-> vs a clock step), the Bluetooth keyboard, Ultra on the air, Show's blank
-> rows (not reproduced), the APRS NACK (needs a screenshot), and **issue #3:
-> FT8 can't transmit after JS8 until a restart**. Ideas parked
+> the image's gpsd hotplug fix, and GPS in JS8. VE7NHW's card: a0259bd
+> (everything; flashed 2026-10-10 00:10 PDT). **Checked on it
+> (2026-10-10):** a GPS plugged in after boot is found, Ultra back and forth
+> on the HL2 bench (no problems), SMS both ways, APRS messages without the
+> NACK. **Open:** GPS outside (clock, JS8 using the GPS grid, the battery
+> clock, the APRS position from the GPS, Time: Auto vs a clock step), the
+> Bluetooth keyboard, Ultra on a busy band, Show's blank rows (not
+> reproduced), and **issue #3: FT8 can't transmit after JS8 until a
+> restart**. Ideas parked
 > lower down: the map's home colour, POTA / SOTA on the air, the Murus
 > merge, ALC under 1 W. What we carry outside the JS8 app and the PRs to
 > send: [upstream-patches.md](upstream-patches.md).
@@ -33,7 +36,10 @@ Each item says what was done, or what's still needed.
   streams if available), then the harness: open/close JS8 and check every
   radio_* / audio_* call is undone. No reply on GitHub yet (user to OK).
 
-- [ ] **Received APRS messages show a NACK command.** VE7NHW: every
+- [x] ~~**Received APRS messages show a NACK command.**~~ **Dropped
+  2026-10-10:** VE7NHW couldn't make it happen again on a0259bd; APRS
+  messages come in fine (likely an older build). Notes kept below in case
+  it comes back. VE7NHW: every
   message coming back from APRS shows NACK, although nothing on the
   APRS side sends one. **Checked so far (2026-10-09):** `" NACK"` is
   directed command code 2 in js8core, old desktop JS8Call and current
@@ -209,10 +215,10 @@ Each item says what was done, or what's still needed.
   purpose:** js8core decodes Turbo and Ultra once the symbols are in and
   again a second later (two passes a slot), desktop once a slot at
   symbols + 0.6 s: ours costs about twice the CPU (still ~10 %) and takes
-  later signals. **To check:** an Ultra QSO with desktop on the HL2 bench
-  (the DT desktop shows for our Ultra signal: our TX latency), and a busy
-  band on the antenna; with an amp, Ultra keys it every 4 s (2.5 s on,
-  1.5 s off).
+  later signals. **HL2 bench, 2026-10-10 (a0259bd):** VE7NHW sent back
+  and forth with desktop at Ultra: worked fine, nothing wrong found.
+  **Still to check:** a busy band on the antenna; with an amp, Ultra keys
+  it every 4 s (2.5 s on, 1.5 s off).
 - [ ] **GPS** from a USB dongle (time and position). The user has the dongle;
   work on it **at the radio** (it must be plugged into the radio's HOST
   port). **Findings 2026-10-09 (code + AetherX6100Buildroot aca5e53):**
@@ -306,6 +312,12 @@ Each item says what was done, or what's still needed.
     the GPS screen saves it). Still to test: GPS plugged in after boot
     (needs the 7cb0fe2 image), JS8 using the GPS grid (to build), a large
     clock error stepped while JS8 is open (catch 3, to build).
+  - **On a0259bd, 2026-10-10 (indoors):** the GPS plugged in after boot
+    is found (gpsd hotplug fix works). **Still to test outside:** the clock
+    set from the GPS, *Battery clock set from GPS time*, the GPS grid in
+    heartbeats / CQ / the map, APRS position spots from the GPS, `GPS` vs
+    `GPS no fix` in the top line, and a clock step by hand with JS8 open.
+    Then send the gpsd PR (upstream-patches.md).
   - **First steps at the radio (read-only):** plug the dongle into HOST;
     `dmesg | tail` (ttyACM0 or ttyUSB0, chip), `ps | grep -E 'gpsd|ntpd'`,
     `gpspipe -w -n 5` (if installed) or APP > GPS, `ntpq -p` (GPS refid,
