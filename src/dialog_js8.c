@@ -6381,9 +6381,14 @@ static void data_file_notice(const char *notice) {
     add_info_row("%s", notice);
 }
 
+/* Desktop's default STATUS (Configuration.cpp "MyStatus"), the user's
+ * choice (2026-10-09): what STATUS? is answered with until you change it. */
+#define STATUS_DEFAULT "IDLE <MYIDLE> VERSION <MYVERSION>"
+
 static void load_texts(void) {
     info_text[0] = status_text[0] = last_pota[0] = last_sota[0] = alert_words[0] = spot_note[0] = '\0';
     groups_text[0] = operator_call[0] = '\0';
+    bool status_def = false; /* STATUSDEF=1: the default was given once */
     char buf[2048], notice[160];
     texts_writable = js8_file_read(JS8_TEXTS_PATH, buf, sizeof(buf), notice, sizeof(notice));
     data_file_notice(notice);
@@ -6392,6 +6397,7 @@ static void load_texts(void) {
         line[strcspn(line, "\r")] = '\0';
         if (strncmp(line, "INFO=", 5) == 0) snprintf(info_text, sizeof(info_text), "%s", line + 5);
         if (strncmp(line, "STATUS=", 7) == 0) snprintf(status_text, sizeof(status_text), "%s", line + 7);
+        if (strcmp(line, "STATUSDEF=1") == 0) status_def = true;
         if (strncmp(line, "POTA=", 5) == 0) snprintf(last_pota, sizeof(last_pota), "%s", line + 5);
         if (strncmp(line, "SOTA=", 5) == 0) snprintf(last_sota, sizeof(last_sota), "%s", line + 5);
         if (strncmp(line, "ALERTS=", 7) == 0) js8_alert_words_normalise(line + 7, alert_words, sizeof(alert_words));
@@ -6404,6 +6410,13 @@ static void load_texts(void) {
         if (strncmp(line, "SPOTNOTE=", 9) == 0) snprintf(spot_note, sizeof(spot_note), "%s", line + 9);
     }
     if (!spot_typed_hz) spot_use_typed = false;
+    /* Every card so far saved an empty STATUS= without anyone choosing it:
+     * the default goes in once (STATUSDEF=1 marks that); a STATUS cleared
+     * after that stays empty, as on desktop. */
+    if (!status_def) {
+        if (!status_text[0]) snprintf(status_text, sizeof(status_text), "%s", STATUS_DEFAULT);
+        if (texts_writable) save_texts();
+    }
 }
 
 /* Written safely (js8_file_write): a power cut during a save used to leave
@@ -6417,7 +6430,7 @@ static void save_texts(void) {
     snprintf(buf, sizeof(buf),
              "INFO=%s\nSTATUS=%s\nPOTA=%s\nSOTA=%s\nALERTS=%s\n"
              "SPOTMODE=%s\nSPOTHZ=%d\nSPOTTYPED=%d\nSPOTNOTE=%s\n"
-             "GROUPS=%s\nOPERATOR=%s\n",
+             "GROUPS=%s\nOPERATOR=%s\nSTATUSDEF=1\n",
              info_text, status_text, last_pota, last_sota, alert_words, spot_mode, (int)spot_typed_hz,
              spot_use_typed ? 1 : 0, spot_note, groups_text, operator_call);
     if (!js8_file_write(JS8_TEXTS_PATH, buf)) msg_update_text_fmt("Can't write %s", JS8_TEXTS_PATH);

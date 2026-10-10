@@ -739,7 +739,7 @@ Page 4 **Settings…**:
 | **Reset time drift** | Back on the radio's clock (the line shows the drift). With [Time: Auto](#time) on, the next decode sets it again. Time Sync itself is page 4's **Time** button now. |
 | **Frequencies: JS8Call's / GhostNet / kHz** | Press for the list: which frequencies the band keys step through, **JS8Call's** (7.078, 14.078 …) or **GhostNet's** (3.575, 7.107, 14.107 MHz), tuning the closest one; or **Custom kHz…**: type a dial frequency (e.g. `7107.5`; the last one is filled in). The band keys go from a custom frequency back to the list. (Page 6's *Freq* button before.) |
 | **INFO: …** | What AUTO sends for INFO? ([macros](#saved-messages) work here) |
-| **STATUS: …** | What AUTO sends for STATUS? (macros too) |
+| **STATUS: …** | What AUTO sends for STATUS? (macros too). Starts as desktop's default, `IDLE <MYIDLE> VERSION <MYVERSION>` (answered e.g. `STATUS IDLE 12M VERSION X6100 JS8 BETA 5`); a STATUS you clear stays empty |
 | **Relay: On / Off** | Press to switch. On (the default, as on desktop): relays are passed on and `MSG TO:` messages held for others. Off: both are ignored (desktop's *Disable message relay*). |
 | **Groups: …** | The groups you're in, e.g. `@NET @CANADA` (desktop's *My groups*): messages and questions to them are answered as if to you, and `MSG TO:@NET` messages are held for their members. |
 | **Stations kept: …** | Press to change: how long a station stays in the Stations view after it was last heard (15 min to 6 hours, or always; 1 hour to start). |

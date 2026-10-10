@@ -134,7 +134,13 @@ Notes only so far: nothing below is changed in the code yet.
   only changes the message's type to `DELIVERED`, so later QUERY MSGS and
   heartbeats don't offer it again; it never deletes it. Ours does the
   same (`delivered` in `js8_held.txt`). No change.
-- [ ] **A default station STATUS for this app** (VE7NHW: details to talk
+- [x] **A default station STATUS for this app** **Done 2026-10-09 (user:
+  desktop's default):** `IDLE <MYIDLE> VERSION <MYVERSION>` (JS8Call-improved
+  Configuration.cpp "MyStatus"; our `<MYIDLE>` matches desktop's: 0M, 12M,
+  3H, 2D). Every card so far saved `STATUS=` empty without anyone choosing
+  it, so it's given once: `STATUSDEF=1` in js8_texts.txt marks that, and a
+  STATUS cleared later stays empty, as desktop. Harness ONLY_STATUSDEF.
+  (VE7NHW: details to talk
   over later). Today STATUS is empty until set in Settings.
 - [x] **Ultra speed (experimental; desktop's "JS8 60").** **Done
   2026-10-09 (user's choices: names stay Turbo and Ultra, letters T and U,

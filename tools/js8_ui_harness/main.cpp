@@ -498,6 +498,12 @@ int main() {
         unlink(JS8_TEXTS_PATH);
     }
     if (getenv("ONLY_APRS")) unlink(JS8_TEXTS_PATH); // no park or spot settings yet
+    if (getenv("ONLY_STATUSDEF")) {
+        // A card from before: STATUS= saved empty, no STATUSDEF marker.
+        FILE *f = fopen(JS8_TEXTS_PATH, "w");
+        fputs("INFO=X6100 5W EFHW\nSTATUS=\nPOTA=\nSOTA=\nALERTS=\nSPOTMODE=AM\n", f);
+        fclose(f);
+    }
     if (getenv("ONLY_BADFILES")) {
         // An SD card read error: the Inbox and the settings file exist but
         // can't be read (before package 2 the next save wrote over them).
@@ -2908,6 +2914,66 @@ int main() {
         ui_press(3); // Stations
         pump(300);
         printf("[stqrz] Show to the messages and back: '%s' (want empty)\n", qrz());
+        return 0;
+    }
+    if (getenv("ONLY_STATUSDEF")) {
+        // Desktop's default STATUS, given once to a card whose STATUS was
+        // saved empty without anyone choosing it; cleared later, it stays so.
+        auto texts_has = [](const char *want) {
+            FILE *f = fopen(JS8_TEXTS_PATH, "r");
+            if (!f) return false;
+            char buf[2048] = "";
+            size_t n = fread(buf, 1, sizeof buf - 1, f);
+            buf[n] = '\0';
+            fclose(f);
+            return strstr(buf, want) != nullptr;
+        };
+        auto status_line = [&]() {
+            ui_page(4);
+            ui_press(4); // Settings
+            pump(200);
+            for (int i = 0; i < 25 && strncmp(ui_focused_text(), "STATUS", 6) != 0; i++) ui_key(LV_KEY_RIGHT);
+            std::string line = ui_focused_text();
+            return line;
+        };
+        pump(300);
+        std::string line = status_line();
+        printf("[statusdef] Settings: '%s' (want STATUS: IDLE <MYIDLE> VERSION <MYVERSION>)\n", line.c_str());
+        ui_key(LV_KEY_ESC);
+        pump(200);
+        printf("[statusdef] saved with the marker: %d, default in the file: %d (want 1 1)\n", texts_has("STATUSDEF=1"),
+               texts_has("STATUS=IDLE <MYIDLE> VERSION <MYVERSION>"));
+
+        // STATUS? with AUTO on: desktop's answer, macros filled in.
+        ui_page(4);
+        ui_press(1); // AUTO on
+        pump(200);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ STATUS?", 1320, 0.05f}});
+        {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 300 && stub_tx_frames == b; i++) pump(100);
+            for (int i = 0; i < 300; i++) pump(100);
+        }
+        printf("[statusdef] answer sent: %d, version filled in: %d (want 1 1)\n",
+               ui_list_has("N0XYZ STATUS IDLE"), ui_list_has("VERSION X6100 JS8 BETA"));
+        screenshot("c10_statusdef.ppm");
+
+        // Cleared by hand: stays empty, also after JS8 opens again.
+        status_line();
+        ui_click_focused(); // STATUS: into the keyboard
+        pump(300);
+        ui_compose_clear();
+        ui_compose_enter();
+        pump(300);
+        printf("[statusdef] cleared: STATUS= empty in the file %d (want 1)\n", texts_has("STATUS=\nPOTA="));
+        dialog_destruct();
+        pump(300);
+        ui_open();
+        pump(500);
+        line = status_line();
+        printf("[statusdef] reopened: '%s' (want STATUS: (not set))\n", line.c_str());
+        ui_key(LV_KEY_ESC);
+        pump(200);
         return 0;
     }
     if (getenv("ONLY_SHOWSCROLL")) {
