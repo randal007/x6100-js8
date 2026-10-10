@@ -283,6 +283,15 @@ Each item says what was done, or what's still needed.
     first fix (cold start: up to minutes), APP > GPS to watch it lock,
     `ntpq -n -p 127.0.0.1` for `*` on .GPS., and catch 3 (Time: Auto vs
     the clock step) before relying on it with JS8 open.
+  - **First fix, 2026-10-10 ~03:40Z (card 3cc3827, GPS plugged in before
+    power-on, taken outside):** fix outside, lost again indoors. ntpd chose
+    the GPS (`*127.127.28.0 .GPS.`, stratum 1, offset -0.98 ms; reach 340
+    once indoors: holds its time); `/var/log/ntp.log` shows no step (the
+    clock was within ~128 ms, so ntpd slewed it: Time: Auto undisturbed).
+    gpsd took the dongle at boot (pps0 at 8 s). QTH stayed CN89sb (only
+    the GPS screen saves it). Still to test: GPS plugged in after boot
+    (needs the 7cb0fe2 image), JS8 using the GPS grid (to build), a large
+    clock error stepped while JS8 is open (catch 3, to build).
   - **First steps at the radio (read-only):** plug the dongle into HOST;
     `dmesg | tail` (ttyACM0 or ttyUSB0, chip), `ps | grep -E 'gpsd|ntpd'`,
     `gpspipe -w -n 5` (if installed) or APP > GPS, `ntpq -p` (GPS refid,
