@@ -162,7 +162,44 @@ Notes only so far: nothing below is changed in the code yet.
   (Setting, a `U` row, the button, HB refused, an Ultra frame's length,
   Setting off → Normal). **To check on the radio:** CPU with Ultra on
   (x6100-cpulog), and an Ultra QSO with desktop (the HL2 bench).
-- [ ] **GPS** from a USB dongle (time and position), already the next item (below).
+- [ ] **GPS** from a USB dongle (time and position). The user has the dongle;
+  work on it **at the radio** (it must be plugged into the radio's HOST
+  port). **Findings 2026-10-09 (code + AetherX6100Buildroot aca5e53):**
+  - **How it reaches the GUI:** gpsd (`localhost:2947`); `src/gps.c`
+    (R1CBU) publishes each report as MSG_GPS. Subscribers: the GPS screen
+    (`dialog_gps.c`) and JS8 (`gps_msg_cb`, for *Spot GPS position*: done).
+  - **Clock, no code (in principle):** the image runs gpsd at boot
+    (`/etc/init.d/S50gpsd`, `-n /dev/ttyACM0`) and ntpd with `-g`
+    (`S49ntp`), `/etc/ntp.conf`: `server 127.127.28.0 minpoll 4 maxpoll 4`
+    + `fudge 127.127.28.0 time1 0.0 refid GPS` (gpsd's shared memory). So
+    ntpd should set the clock minutes after a fix. The GUI never sets the
+    clock itself. rtc1 isn't written (it drifts again without the GPS;
+    optional: one `hwclock -w -u -f /dev/rtc1` after a sync, never in a
+    loop, [i2c-0 is shared]).
+  - **Catch 1, the device name:** gpsd watches **/dev/ttyACM0 only**.
+    u-blox dongles show as ttyACM0 (works); Prolific / CH340 / CP210x ones
+    show as **ttyUSB0** (gpsd never sees them). If so, the fix is in the
+    radio's Linux layer (shared, not JS8; flag it to the user): add the
+    device to S50gpsd, or a udev rule that runs `gpsdctl add` on hotplug.
+    A JS8-only stopgap would be `gpsdctl add /dev/ttyUSB0` when JS8 opens.
+  - **Catch 2, the grid:** only the GPS screen (APP > GPS) saves the GPS
+    grid into QTH (`param_t_set(cfg.qth())`, while that screen is open).
+    Recommended (JS8-only): JS8 uses the GPS grid while there's a current
+    fix, for heartbeats, CQ, GRID answers, `<MYGRID4>` / `<MYGRID12>` and
+    the map's home square; else the saved QTH.
+  - **Catch 3, Time: Auto vs a clock step (needs code):** Auto's drift is
+    learned against the old clock (e.g. −2.9 s); when ntpd then steps the
+    clock by that much, JS8 time ends up ~2.9 s off and stops decoding
+    until a search. Detect a system-clock step (CLOCK_REALTIME vs
+    CLOCK_MONOTONIC) and reset the JS8 drift / restart Auto; check the
+    receiver's ring realign (`check_clock`) does the right thing too.
+  - **Precision:** NMEA time without PPS is usually 0.1-0.5 s late
+    (`time1 0.0` doesn't correct it); fine for JS8, Auto absorbs it.
+  - **First steps at the radio (read-only):** plug the dongle into HOST;
+    `dmesg | tail` (ttyACM0 or ttyUSB0, chip), `ps | grep -E 'gpsd|ntpd'`,
+    `gpspipe -w -n 5` (if installed) or APP > GPS, `ntpq -p` (GPS refid,
+    offset, `*` once selected), `date -u` against the PC. Then decide on
+    catch 1, write catches 2 and 3, test with the harness's HARNESS_GPS.
 - [ ] **A Bluetooth keyboard** with JS8, already the next item (below). v1.0.2 has
   no pairing screen: pair with `bluetoothctl` over the USB console.
 
@@ -546,8 +583,7 @@ heard paused them; [docs/review](review/)).
   Model: 1.5 dB short is at the setting within the first transmission
   (ALC 0.28), steady from the second; never more than 2 direction changes
   in any frame over 72 lag/rounding/start cases.
-- [ ] GPS time and location (USB GPS dongle ordered; testing when it
-  arrives). The firmware already reads gpsd for the APRS beacon.
+- GPS: see "GPS" in VE7NHW's list (2026-10-09) at the top (merged there).
 
 ## Bugs
 
