@@ -150,7 +150,6 @@ void lv_waterfall_add_data_with_ts(lv_obj_t * obj, float * data, uint16_t cnt, s
     /* Scroll down: the window now starts one line up */
 
     waterfall->head = (waterfall->head + h - 1) % h;
-    waterfall->rows++;
     dsc->data = waterfall->ring + waterfall->head * line_len;
 
     /* Paint the top line, then its copy one height below */
@@ -171,51 +170,6 @@ void lv_waterfall_add_data_with_ts(lv_obj_t * obj, float * data, uint16_t cnt, s
         lv_img_buf_set_px_color(dsc, x, 0, waterfall->palette[id]);
     }
     memcpy((uint8_t *)dsc->data + h * line_len, dsc->data, line_len);
-
-    lv_img_cache_invalidate_src(dsc);
-    invalidate_exact(obj);
-}
-
-uint32_t lv_waterfall_get_rows(lv_obj_t * obj) {
-    LV_ASSERT_OBJ(obj, MY_CLASS);
-    return ((lv_waterfall_t *)obj)->rows;
-}
-
-/* Image row y is ring line head + y (the window), and that line's copy is one
- * height away: both are painted, as add_data paints both. */
-void lv_waterfall_fill_rect(lv_obj_t * obj, lv_coord_t x1, lv_coord_t y1, lv_coord_t x2, lv_coord_t y2,
-                            lv_color_t color) {
-    LV_ASSERT_OBJ(obj, MY_CLASS);
-
-    lv_waterfall_t  *waterfall = (lv_waterfall_t *)obj;
-    lv_img_dsc_t    *dsc = waterfall->dsc;
-
-    if (!dsc || !waterfall->ring) {
-        return;
-    }
-
-    lv_coord_t w = dsc->header.w;
-    lv_coord_t h = dsc->header.h;
-
-    if (x1 < 0) x1 = 0;
-    if (y1 < 0) y1 = 0;
-    if (x2 > w - 1) x2 = w - 1;
-    if (y2 > h - 1) y2 = h - 1;
-    if (x1 > x2 || y1 > y2) {
-        return;
-    }
-
-    for (lv_coord_t y = y1; y <= y2; y++) {
-        uint32_t    line = waterfall->head + y;
-        uint32_t    copy = line < (uint32_t)h ? line + h : line - h;
-        lv_color_t  *a = (lv_color_t *)(waterfall->ring + line * waterfall->line_len);
-        lv_color_t  *b = (lv_color_t *)(waterfall->ring + copy * waterfall->line_len);
-
-        for (lv_coord_t x = x1; x <= x2; x++) {
-            a[x] = color;
-            b[x] = color;
-        }
-    }
 
     lv_img_cache_invalidate_src(dsc);
     invalidate_exact(obj);
@@ -254,7 +208,6 @@ static void lv_waterfall_constructor(const lv_obj_class_t * class_p, lv_obj_t * 
     waterfall->ring = NULL;
     waterfall->head = 0;
     waterfall->line_len = 0;
-    waterfall->rows = 0;
     waterfall->line_buf = NULL;
     waterfall->min = -40;
     waterfall->max = 0;

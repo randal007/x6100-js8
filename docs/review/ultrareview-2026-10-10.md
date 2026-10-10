@@ -55,7 +55,26 @@ the radio: NR on over CAT with JS8 open.
 |---|---|---|---|
 | R7 | JS8 turns NR, NB and DNF off on the radio once at open, without changing the saved settings. The settings stay wired to the radio (`radio_init` subscriptions), so changing one while JS8 is open (CAT, or a front-panel control if it reaches through) turns it back on for the rest of the session; JS8 decodes through it. | `radio.c` `radio_set_rx_dsp_off` and the `cfg.dsp.*` subscriptions | **Decide** (shared GUI code): (A) remember "held off" in `radio.c` and have the NR/NB/DNF/auto-notch subscribers send off while it's held; touches every app's DSP path, small but shared. (B) JS8 only: JS8 subscribes to the four settings itself and sends "off" again whenever one changes while it's open. **Recommend B.** Check at the radio: toggle NR over CAT with JS8 open. |
 
-### UR4: Cleanups (decide)
+### UR4: Cleanups — decided 2026-10-10 (VE7NHW: as recommended)
+
+R9 done: both functions and the `rows` counter that only fed them
+removed (shared widget; FT8 calls none of them; the ring buffer stays).
+R10 won't fix. R8 reviewed (below), to do before the JS8 code goes
+upstream.
+
+**R8 review:** 16 copies in 11 files: `upper()` x7 (assembler,
+autoreply, callsign_place, classify, commands, directed, macros; all the
+same), `words()` x4 + assembler's `split_ws()` (all the same: split on any
+whitespace), `trim()` x4 in three kinds: spaces only (autoreply,
+history), space/tab/CR/LF (assembler), any whitespace (callsign_place,
+which reads cty.dat). Not copies, left alone: directed's `ltrim()`,
+inbox's `split(char)`, alerts' `split(seps)`. The `trim()` kinds only
+differ on tabs and line ends, which decoded text never has (the JS8
+alphabet has none) and js8_texts.txt loses at load (`\r` cut); so one
+`trim()` stripping any whitespace changes nothing on the air (a tab at
+the end of an INFO typed on a PC would be trimmed, not sent as a space).
+Plan: header-only `src/js8/strutil.hpp` (`upper`, `trim`, `words`), the
+copies removed; unit tests + full harness run.
 
 | # | Finding | Where | Verdict |
 |---|---|---|---|
