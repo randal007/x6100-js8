@@ -159,6 +159,7 @@ private:
     std::int64_t          align_wall_ms_ = 0;
     std::uint64_t         samples_since_align_ = 0;
     std::atomic<unsigned> realigns_{0};
+    ClockStepWatch        clock_watch_; ///< the system clock stepped (worker thread)
 
     // Decode load for on_report, from the engine's log (decode threads; the
     // merge note comes from the worker). [0] the main decode thread, [1]

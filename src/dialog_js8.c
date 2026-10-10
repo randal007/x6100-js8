@@ -48,6 +48,7 @@
 #include "waterfall.h"
 #include "widgets/lv_finder.h"
 #include "js8_wf.h"
+#include "js8_clock.h"
 
 #include <liquid/liquid.h>
 
@@ -178,15 +179,35 @@ static const char *my_call(void) {
     return param_t_get_into(cfg.callsign(), buf, sizeof(buf));
 }
 
-static const char *my_grid(void) {
-    static char buf[PARAM_TEXT_MAX];
-    return param_t_get_into(cfg.qth(), buf, sizeof(buf));
-}
-
-static uint32_t audio_sub = AUDIO_SUB_INVALID; /* receive audio, 12 kHz (dsp_audio_subscribe_float) */
 static void    *gps_sub;            /* MSG_GPS while JS8 is open */
 static double   gps_lat, gps_lon;   /* the latest 2D/3D fix */
 static time_t   gps_when;           /* when it came; 0: none since JS8 opened */
+static time_t   gps_seen;           /* the latest GPS report, fix or not */
+#define GPS_FRESH_S 120             /* a fix this recent is where we are */
+
+static bool gps_fix_current(void) {
+    return gps_when && time(NULL) - gps_when <= GPS_FRESH_S;
+}
+
+/* Our grid: a current GPS fix's, else the saved QTH (APP > QTH). The GPS
+ * grid isn't saved (the radio's GPS screen does that); `chars` 6 for what
+ * goes on the air, 10 for <MYGRID12>. The radio's style: CN89sb. */
+static const char *grid_of(int chars) {
+    static char buf[PARAM_TEXT_MAX];
+    char        g[12];
+    if (gps_fix_current() && js8_latlon_to_grid(gps_lat, gps_lon, chars, g, sizeof(g))) {
+        for (int i = 4; i < 6 && g[i]; i++) g[i] = (char)tolower((unsigned char)g[i]);
+        snprintf(buf, sizeof(buf), "%s", g);
+        return buf;
+    }
+    return param_t_get_into(cfg.qth(), buf, sizeof(buf));
+}
+
+static const char *my_grid(void) {
+    return grid_of(6);
+}
+
+static uint32_t audio_sub = AUDIO_SUB_INVALID; /* receive audio, 12 kHz (dsp_audio_subscribe_float) */
 static void key_cb(lv_event_t *e);
 
 static const char *show_label_getter(void);
@@ -1278,7 +1299,7 @@ static bool station_dt(const char *call, float *dt) {
 static void macros_fill(const char *text, bool prune, char *out, size_t out_len) {
     js8_macro_values_t v = {
         .my_call   = my_call(),
-        .my_grid   = my_grid(),
+        .my_grid   = grid_of(10), /* <MYGRID12>: a GPS fix to 10 characters */
         .my_info   = info_text,
         .my_status = status_text,
         .version   = JS8_APP_VERSION,
@@ -2063,8 +2084,12 @@ static void update_status(void) {
     char    drift[24] = "";
     int64_t d         = js8_drift_ms();
     if (d) snprintf(drift, sizeof(drift), " drift %+.1fs", d / 1000.0);
-    lv_label_set_text_fmt(status, "%s%s%s  %02d:%02d:%02dZ%s  total %u", flags, testing ? "TEST WAV  " : "",
-                          where_label(), tm.tm_hour, tm.tm_min, tm.tm_sec, drift, hist_count);
+    /* GPS: our grid comes from it while it has a fix. */
+    const char *gps = gps_fix_current()                          ? "  GPS"
+                      : gps_seen && time(NULL) - gps_seen <= 10 ? "  GPS no fix"
+                                                                 : "";
+    lv_label_set_text_fmt(status, "%s%s%s%s  %02d:%02d:%02dZ%s  total %u", flags, testing ? "TEST WAV  " : "",
+                          where_label(), gps, tm.tm_hour, tm.tm_min, tm.tm_sec, drift, hist_count);
     if (map_status && view_map) { /* the same, over the map */
         lv_label_set_text(map_status, lv_label_get_text(status));
         map_status_changed();
@@ -3454,7 +3479,7 @@ static void construct_cb(lv_obj_t *parent) {
     /* Receive audio from here on (dsp's thread, into the receiver). */
     if (audio_sub == AUDIO_SUB_INVALID) audio_sub = dsp_audio_subscribe_float(audio_cb, SAMPLE_RATE);
     dsp_audio_set_active(audio_sub, true);
-    gps_when = 0;
+    gps_when = gps_seen = 0;
     gps_sub  = lv_msg_subscribe(MSG_GPS, gps_msg_cb, NULL);
     update_status();
 
@@ -5945,6 +5970,15 @@ char dialog_js8_station_star(const char *call) {
     return 0;
 }
 
+/* For tools/js8_ui_harness: the status line (top right), and our grid now. */
+const char *dialog_js8_status_text(void) {
+    update_status();
+    return status ? lv_label_get_text(status) : "";
+}
+const char *dialog_js8_my_grid(void) {
+    return my_grid();
+}
+
 /* For tools/js8_ui_harness: a decoded message, handed over as the
  * receiver's thread does. */
 void dialog_js8_test_message(const js8_rx_msg_t *m) {
@@ -6245,8 +6279,53 @@ static void msg_age_tick(void) {
 }
 
 /* Once a second: send a heartbeat when one is due. */
+/* GPS time into the battery clock (rtc1), so the radio keeps it after the
+ * GPS is unplugged: once a power-on, when the system clock is synced
+ * (ntpd, from the GPS: the radio has no network) and there's a current
+ * fix, never while sending. rtc1 shares i2c-0 with the amplifier's band
+ * data: one write, on its own thread (hwclock takes ~0.1 s). */
+#ifndef JS8_RTC_FLAG_PATH
+#define JS8_RTC_FLAG_PATH "/tmp/js8_rtc_saved" /* /tmp is cleared at boot */
+#endif
+static bool        rtc_done;
+static atomic_bool rtc_busy;
+
+static void *rtc_save_thread(void *arg) {
+    (void)arg;
+    bool ok = js8_clock_save_rtc();
+    LV_LOG_USER("JS8: battery clock %s from GPS time", ok ? "set" : "not set");
+    if (ok) {
+        FILE *f = fopen(JS8_RTC_FLAG_PATH, "w");
+        if (f) fclose(f);
+    }
+    atomic_store(&rtc_busy, false);
+    return NULL;
+}
+
+static void rtc_tick(void) {
+    static int64_t next;
+    int64_t        now = now_mono_ms();
+    if (rtc_done || atomic_load(&rtc_busy) || now < next) return;
+    next = now + 30000;
+    if (access(JS8_RTC_FLAG_PATH, F_OK) == 0) { /* done since power-on */
+        rtc_done = true;
+        return;
+    }
+    if (!gps_fix_current() || tx_active || !js8_clock_synced()) return;
+    rtc_done = true;
+    atomic_store(&rtc_busy, true);
+    pthread_t t;
+    if (pthread_create(&t, NULL, rtc_save_thread, NULL) != 0) {
+        atomic_store(&rtc_busy, false);
+        return;
+    }
+    pthread_detach(t);
+    add_info_row("Battery clock set from GPS time (kept when the GPS is unplugged)");
+}
+
 static void hb_tick(void) {
     beep_log_level();
+    rtc_tick();
     if (hb_adjusting && now_wall_ms() - hb_adjust_ms > HB_ADJUST_MS) hb_adjust_end();
     /* The transmitter is idle but ui_tx_done never came (its message was
      * lost): don't wait for it for ever. */
@@ -6910,6 +6989,7 @@ static void gps_msg_cb(void *s, lv_msg_t *m) {
     (void)m;
     struct gps_data_t d;
     gps_get_snapshot(&d);
+    gps_seen = time(NULL);
     if (d.fix.mode < MODE_2D || !isfinite(d.fix.latitude) || !isfinite(d.fix.longitude)) return;
     gps_lat  = d.fix.latitude;
     gps_lon  = d.fix.longitude;

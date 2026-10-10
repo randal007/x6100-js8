@@ -58,6 +58,10 @@ bool dialog_js8_selected_call(char *call, unsigned len);
 int  dialog_js8_station_rows(char *out, unsigned len);
 char dialog_js8_station_star(const char *call);
 void dialog_js8_test_message(const js8_rx_msg_t *m);
+const char *dialog_js8_status_text(void);
+const char *dialog_js8_my_grid(void);
+extern bool stub_clock_synced;
+extern int  stub_rtc_saves;
 int  dialog_js8_list_overscroll(void);
 const char *dialog_js8_freq_name(void);
 js8_history_t *dialog_js8_history(void);
@@ -498,6 +502,7 @@ int main() {
         unlink(JS8_TEXTS_PATH);
     }
     if (getenv("ONLY_APRS")) unlink(JS8_TEXTS_PATH); // no park or spot settings yet
+    if (getenv("ONLY_GPS")) unlink(JS8_RTC_FLAG_PATH); // the battery clock not saved since "power-on"
     if (getenv("ONLY_STATUSDEF")) {
         // A card from before: STATUS= saved empty, no STATUSDEF marker.
         FILE *f = fopen(JS8_TEXTS_PATH, "w");
@@ -2928,6 +2933,65 @@ int main() {
         ui_press(3); // Stations
         pump(300);
         printf("[stqrz] Show to the messages and back: '%s' (want empty)\n", qrz());
+        return 0;
+    }
+    if (getenv("ONLY_GPS")) {
+        // A USB GPS: our grid from its fix (else the saved QTH), "GPS" in
+        // the status line, and GPS time saved to the battery clock once,
+        // only when the system clock is synced.
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 300 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        auto has = [](const char *text, const char *want) { return strstr(text, want) != nullptr; };
+        unsetenv("HARNESS_GPS");
+        pump(1500);
+        printf("[gps] no GPS: grid '%s' (want FN42AB), status GPS %d (want 0)\n", dialog_js8_my_grid(),
+               has(dialog_js8_status_text(), "GPS"));
+        setenv("HARNESS_GPS", "nofix", 1); // reports, no position
+        pump(2500);
+        printf("[gps] no fix yet: grid '%s' (want FN42AB), status 'GPS no fix' %d (want 1)\n", dialog_js8_my_grid(),
+               has(dialog_js8_status_text(), "GPS no fix"));
+        setenv("HARNESS_GPS", "49.888,-119.496", 1); // Kelowna: DN09gv
+        pump(2500);
+        printf("[gps] fix: grid '%s' (want DN09gv), status '%s'\n", dialog_js8_my_grid(), dialog_js8_status_text());
+        ui_page(1);
+        ui_press(2); // Heartbeat: the GPS grid goes out
+        wait_tx();
+        printf("[gps] heartbeat with the GPS grid: %d (want 1)\n", ui_list_has("HEARTBEAT DN09"));
+        screenshot("c11_gps.ppm");
+
+        // Battery clock: not while the system clock isn't synced ...
+        stub_clock_synced = false;
+        for (int i = 0; i < 350; i++) pump(100);
+        printf("[gps] clock not synced: saves %d (want 0)\n", stub_rtc_saves);
+        // ... once it is, once.
+        stub_clock_synced = true;
+        for (int i = 0; i < 350; i++) pump(100);
+        printf("[gps] synced: saves %d (want 1), info row %d (want 1)\n", stub_rtc_saves,
+               ui_list_has("Battery clock set from GPS time"));
+        for (int i = 0; i < 700; i++) pump(100);
+        printf("[gps] a minute later: saves %d (want 1)\n", stub_rtc_saves);
+        // JS8 closed and opened again (same power-on): still not again.
+        dialog_destruct();
+        pump(300);
+        ui_open();
+        for (int i = 0; i < 350; i++) pump(100);
+        printf("[gps] reopened: saves %d (want 1)\n", stub_rtc_saves);
+
+        // The fix lost (2 min): back to the saved QTH.
+        setenv("HARNESS_GPS", "nofix", 1);
+        printf("[gps] fix gone (wait 2 min) ...\n");
+        for (int i = 0; i < 1250; i++) pump(100);
+        printf("[gps] fix 2 min old: grid '%s' (want FN42AB), status 'GPS no fix' %d (want 1)\n", dialog_js8_my_grid(),
+               has(dialog_js8_status_text(), "GPS no fix"));
+        unsetenv("HARNESS_GPS");
         return 0;
     }
     if (getenv("ONLY_STATUSDEF")) {

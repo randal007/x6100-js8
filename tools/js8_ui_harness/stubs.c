@@ -270,6 +270,17 @@ void keypad_set_long_time(uint32_t ms) { printf("[keypad] hold time %u ms\n", (u
 void radio_set_rx_dsp_off(bool off) { printf("[radio] NR/NB/notches %s\n", off ? "off" : "back to the settings"); }
 void radio_speaker_play(bool on) { printf("[radio] speaker play %s\n", on ? "on" : "off"); }
 
+/* js8_clock.h: the PC's clock is never written; the scenario sets whether
+ * the system clock counts as synced and counts the battery-clock saves. */
+bool stub_clock_synced = false;
+int  stub_rtc_saves    = 0;
+bool js8_clock_synced(void) { return stub_clock_synced; }
+bool js8_clock_save_rtc(void) {
+    stub_rtc_saves++;
+    printf("[clock] battery clock saved (hwclock -w -u -f /dev/rtc1)\n");
+    return true;
+}
+
 /* ONLY_MODE: on 14.2 MHz in USB with a custom 27.245 MHz (CB) saved, and
  * CB last used in USB too: the settings manager loads a band's own mode
  * when the dial moves into it. */

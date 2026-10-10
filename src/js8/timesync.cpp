@@ -178,6 +178,18 @@ TimeSearch::Result TimeSearch::decode_window(const std::int16_t *samples, std::i
     return best;
 }
 
+std::int64_t ClockStepWatch::check(std::int64_t wall_ms, std::int64_t mono_ms) {
+    const std::int64_t offset = wall_ms - mono_ms;
+    if (!have_) {
+        have_   = true;
+        offset_ = offset;
+        return 0;
+    }
+    const std::int64_t step = offset - offset_;
+    offset_                 = offset; // a slew follows along, a step is reported once
+    return std::llabs(step) >= THRESHOLD_MS ? step : 0;
+}
+
 void TimeSearch::loop() {
 #if defined(__linux__)
     pthread_setname_np(pthread_self(), "js8-tsearch");

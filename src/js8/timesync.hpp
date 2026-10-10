@@ -66,6 +66,22 @@ private:
     int                       n_   = 0; ///< desktop's m_driftMsMMA_N: the next frame's divisor
 };
 
+/// Notices the system clock being stepped (ntpd setting it from a GPS, the
+/// radio's Settings, hwclock): the wall clock jumping against the monotonic
+/// one. ntpd's slewing (at most 0.5 ms a second) never counts. Fed both
+/// clocks often (the receiver, every audio block); no clock of its own.
+class ClockStepWatch {
+public:
+    static constexpr std::int64_t THRESHOLD_MS = 250;
+    /// The step (wall clock moved by this, + forward) if one happened since
+    /// the last call, else 0.
+    std::int64_t check(std::int64_t wall_ms, std::int64_t mono_ms);
+
+private:
+    bool         have_   = false;
+    std::int64_t offset_ = 0; ///< wall - monotonic, as last seen
+};
+
 /// The search: decodes the latest 15 s of audio every 4 s (Normal), until
 /// one decodes or time runs out. Its own thread (js8core's decoders are per
 /// thread); fed the 12 kHz audio the engine gets.

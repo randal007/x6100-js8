@@ -375,6 +375,30 @@ void Receiver::push_pcm(const std::int16_t *pcm, std::size_t count) {
 }
 
 void Receiver::check_clock(std::size_t new_samples) {
+    // The system clock stepped (ntpd setting it from a GPS, the radio's
+    // Settings): JS8's time stays where it was, the drift moving the other
+    // way, so decode windows, TX slots and Time: Auto carry on (a clock
+    // that was 2.9 s fast with Auto at -2.9 s, set right, leaves Auto at
+    // 0). Auto's average starts again: its frames were timed against the
+    // old clock. Without this, a step forward read as missing audio and a
+    // step back as a clock error, and JS8 ended up off by the step.
+    {
+        using namespace std::chrono;
+        const std::int64_t real = duration_cast<milliseconds>(system_clock::now().time_since_epoch()).count();
+        const std::int64_t mono = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
+        if (const std::int64_t step = clock_watch_.check(real, mono)) {
+            const std::int64_t kept = drift_ms() - step;
+            set_drift_ms(kept);
+            {
+                std::lock_guard<std::mutex> lock(auto_mutex_);
+                auto_sync_.restart(kept, false);
+            }
+            char line[112];
+            snprintf(line, sizeof(line), "clock stepped %+.1f s (GPS / settings): JS8 time kept, drift now %+.1f s",
+                     step / 1000.0, kept / 1000.0);
+            report(line);
+        }
+    }
     const std::int64_t drift = drift_ms();
     if (drift != applied_drift_ms_) {
         // Time Sync moved JS8's time. The engine realigns its ring to it

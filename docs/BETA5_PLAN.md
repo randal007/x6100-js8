@@ -283,6 +283,20 @@ Each item says what was done, or what's still needed.
     first fix (cold start: up to minutes), APP > GPS to watch it lock,
     `ntpq -n -p 127.0.0.1` for `*` on .GPS., and catch 3 (Time: Auto vs
     the clock step) before relying on it with JS8 open.
+  - **Built 2026-10-10 (user: "all the recommendations"):** JS8 uses the
+    GPS grid while there's a fix under 2 min old (`grid_of()`/`my_grid()`:
+    6 chars on the air, 10 for `<MYGRID12>`; QTH not written); the top
+    line says `GPS` / `GPS no fix`; GPS time saved to rtc1 once a
+    power-on (`src/js8_clock.{h,c}`: adjtimex says synced + a current fix
+    + not sending; `hwclock -w -u -f /dev/rtc1` on its own thread; flag
+    /tmp/js8_rtc_saved); catch 3 done: `ClockStepWatch` (timesync) in the
+    receiver's `check_clock()` moves the drift by minus a step of 250 ms
+    or more and restarts Auto (unit test incl. an hour of max-rate slew).
+    README "Using a GPS". Harness ONLY_GPS (stubs for js8_clock). Not done
+    (as recommended): PPS for sub-ms time. **To try on the radio:** the
+    rtc save (`logread`/app log "battery clock set"), a step (set the clock
+    off by hand in Settings with JS8 open: "clock stepped" in the app log,
+    decoding carries on).
   - **First fix, 2026-10-10 ~03:40Z (card 3cc3827, GPS plugged in before
     power-on, taken outside):** fix outside, lost again indoors. ntpd chose
     the GPS (`*127.127.28.0 .GPS.`, stratum 1, offset -0.98 ms; reach 340

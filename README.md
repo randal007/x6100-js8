@@ -47,6 +47,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Saved messages](#saved-messages)
 - [History](#history)
 - [Time](#time)
+- [Using a GPS](#using-a-gps)
 - [Speeds](#speeds)
 - [Messages and the Inbox](#messages-and-the-inbox)
 - [Relays](#relays)
@@ -626,6 +627,36 @@ it waits on a quiet band.
 
 **Reset time drift** (Settings) puts JS8 back on the radio's clock.
 
+If the radio's clock itself is set while JS8 is open (by a [GPS](#using-a-gps),
+or by hand in the radio's Settings), JS8 keeps its own time where it was
+and Time: Auto starts its average again, so decoding carries on.
+
+## Using a GPS
+
+A USB GPS dongle in the radio's **HOST** USB port (one that shows up as
+`/dev/ttyACM0`, as u-blox ones do; tested with VE7NHW's) gives the radio the time and JS8 your grid:
+
+- **The clock:** the radio's own software sets its clock from the GPS
+  (ntpd, through gpsd) a few minutes after the first fix, to within about
+  a millisecond. With the clock right, [Time: Auto](#time) has almost
+  nothing to correct.
+- **The battery clock:** once the clock is set from the GPS, JS8 saves
+  it to the radio's battery-backed clock once (*Battery clock set from GPS
+  time* in the list), so the time stays right after you unplug the GPS.
+- **Your grid:** while the GPS has a fix, JS8 uses its grid (6
+  characters; 10 for `<MYGRID12>`) for heartbeats, CQ, GRID answers,
+  distances, the map and APRS spots, instead of the one saved in the
+  radio (APP > QTH). Without a fix for 2 minutes it goes back to the saved
+  one. The saved QTH isn't changed (the radio's GPS screen, APP > GPS,
+  does that while it's open).
+- **The top line** says `GPS` while there's a fix, `GPS no fix` while the
+  GPS is plugged in and searching.
+- **The first fix** after the GPS has been unpowered a long time (a cold
+  start) needs open sky and can take several minutes; indoors it may never
+  come. After that it's much quicker. APP > GPS shows the satellites.
+- Plugging the GPS in while the radio is on works from beta 5; with beta
+  4.7 and earlier, plug it in before switching the radio on.
+
 ## Speeds
 
 JS8 has four speeds, and a fifth, **Ultra**, that's experimental here
@@ -963,6 +994,10 @@ Not released yet: on `main` and in test builds, for beta 5
   gpsd had no control socket for its hotplug rule; a change to the Linux
   image, listed in [docs/upstream-patches.md](docs/upstream-patches.md)
   to offer upstream).
+- **GPS in JS8** ([Using a GPS](#using-a-gps)): your grid from the GPS fix
+  while there is one, `GPS` in the top line, GPS time saved to the radio's
+  battery clock once, and JS8's time kept steady when the radio's clock is
+  set (by the GPS or by hand) while JS8 is open.
 
 ## New in beta 4.7
 
@@ -1271,9 +1306,8 @@ are, and its new settings start at their defaults.
 
 What's left is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). Next:
 
-- [ ] **GPS** time and location from a USB GPS: the image now finds a GPS
-  plugged in at any time; next, a fix outside, the clock set from it, JS8
-  using the GPS grid, and Time: Auto handling the clock being corrected
+- [ ] **GPS** on the air: plugging it in after boot, and JS8's GPS grid,
+  status and battery clock on the radio (done in testing)
 - [ ] **A Bluetooth keyboard** tried with JS8
 - [ ] **Ultra on the air** with desktop JS8Call, and on a busy band
 - [ ] **Show's blank rows** (switching Show All / No HB / Directed): not

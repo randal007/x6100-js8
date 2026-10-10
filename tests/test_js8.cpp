@@ -551,6 +551,31 @@ TEST_CASE("lat/lon to Maidenhead grid", "[js8][ops][aprs]") {
 }
 
 
+TEST_CASE("a stepped system clock is noticed once; ntpd's slewing never", "[js8][timesync]") {
+    ClockStepWatch w;
+    std::int64_t   wall = 1'790'000'000'000, mono = 5'000;
+    CHECK(w.check(wall, mono) == 0); // the first reading only sets the base
+    // ntpd slewing at its fastest, 0.5 ms a second, for an hour of 100 ms blocks.
+    for (int i = 0; i < 36'000; i++) {
+        wall += 100;
+        mono += 100;
+        if (i % 20 == 0) wall += 1; // 0.5 ms/s, rounded to whole ms
+        REQUIRE(w.check(wall, mono) == 0);
+    }
+    // Set from a GPS: the clock was 2.9 s fast.
+    wall += 100 - 2'900;
+    mono += 100;
+    CHECK(w.check(wall, mono) == -2'900);
+    wall += 100;
+    mono += 100;
+    CHECK(w.check(wall, mono) == 0); // reported once
+    // Set by hand in the radio's Settings, 61 s ahead; a small 0.2 s nudge doesn't count.
+    wall += 61'000;
+    CHECK(w.check(wall, mono) == 61'000);
+    wall += 200;
+    CHECK(w.check(wall, mono) == 0);
+}
+
 TEST_CASE("auto time sync: desktop's average, one heartbeat to start", "[js8][timesync]") {
     AutoTimeSync a;
     CHECK_FALSE(a.pass_done(0));
