@@ -572,6 +572,20 @@ store and forward and Winlink all work; only QUERY CALL failed (above).
 
 ## Low priority (after the features)
 
+- [ ] **Decoder threads (ideas, VE7NHW 2026-10-09; after measuring
+  Ultra):** (1) Ultra on its own decode thread, so its 4 s slots never wait
+  behind a Normal/Slow pass (js8core: `legacy_decode()` runs the speeds one
+  after another on one thread; each pass has its own copy of the audio,
+  decoders are `thread_local`, FFTW plan creation is already behind
+  `fftw_mutex`, so threads are safe). Later maybe one thread per speed,
+  events passed on in today's order, at a lower priority than the GUI.
+  (2) Keep the decoder threads off one core (`pthread_setaffinity_np`,
+  set while JS8 is open), not core 0 (busiest: interrupts); leave the GUI
+  free to run anywhere rather than pinning it. Baseline 2026-10-09
+  (research/cpulog/2026-10-09-2345Z, 4 speeds, quiet band, dummy load):
+  decoder avg 25 % of a core, at 95 %+ for 11 s in 10 min in 1-2 s bursts,
+  longest pass 1.5 s, ~2 windows merged a minute; all four cores never
+  over 90 % together; GUI main avg 24 %, never 70 %, 0 ms wait.
 - [ ] Performance: each part's CPU use on the radio, spread over its four
   cores. First measurement and the waterfall fix done (above, "Screen and
   radio"); the GUI thread's remaining ~29 % with no rows is still to look at.
