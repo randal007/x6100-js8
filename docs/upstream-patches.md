@@ -16,14 +16,14 @@ drop our copy.
 
 | # | To | What | Status |
 |---|---|---|---|
-| 1 | gdyuldin/AetherX6100Buildroot | gpsd with a control socket (`-F /var/run/gpsd.sock` in S50gpsd): USB GPS hotplug works (section 1) | ready; send after a test on the radio (boot without the GPS, plug it in) |
+| 1 | gdyuldin/AetherX6100Buildroot | gpsd with a control socket (`-F /var/run/gpsd.sock` in S50gpsd): USB GPS hotplug works (section 1) | **sent 2026-10-10: OpenX6100/AetherX6100Buildroot#2** (gdyuldin's repos moved to the OpenX6100 organization) |
 | 2 | gdyuldin/x6100_gui | USB keyboard hot plug (`src/keyboard.c`), Bluetooth keyboards found and followed (`src/keyboard.c`, `src/usb_devices.cpp`, `src/pubsub_ids.h`), then the other keyboard fixes (section 2) | agreed order with gdyuldin: first PR; waiting for his GitHub organization |
 | 3 | gdyuldin/x6100_gui | js8core + `src/js8` + the JS8 app, map and extras | after 2; licence question (GPLv3 js8core) open with gdyuldin |
 | 4 | JS8Call-improved/Android-port (js8core) | local patches 1-15, e.g. 14 (Ultra decoded on Turbo's schedule) and 15 (Ultra on its own decode thread, a thread-start hook) | listed in [UPSTREAM.md](../third-party/js8core/UPSTREAM.md); bugs already reported in issue #104 |
 | 5 | gdyuldin/x6100_gui | `dialog_rotary` timestamp-based knob speed (as his main knob) | offered to gdyuldin 2026-10-06 |
-| 6 | gdyuldin/AetherX6100Buildroot | uhid in the kernel (`CONFIG_UHID=m`) + `modprobe uhid` in S40bluetoothd: Bluetooth LE keyboards type (section 1) | ready after a test on the radio (pair an LE keyboard, `/dev/uhid` exists, keys reach the GUI) |
-| 7 | gdyuldin/AetherX6100Buildroot | Bluetooth pairings kept across updates: `/var/lib/bluetooth` in S04restore_backup_config's backup (section 1) | after a test: pair, update, the keyboard still connects |
-| 8 | gdyuldin (feedback, not a PR) | for his `ver_1.1` Bluetooth screen: keyboards need the agent's `DisplayPasskey` / `DisplayPinCode` (missing: a keyboard asking you to type a code would fail), a paired keyboard marked Trusted, and pairing the moment a keyboard appears (many accept a pairing only for seconds); the image's `bt-agent --capability=NoInputNoOutput` + always discoverable accepts any pairing without asking, and cancelled ours | send with PRs 2 / 6, with VE7NHW's OK |
+| 6 | gdyuldin/AetherX6100Buildroot | uhid in the kernel (`CONFIG_UHID=m`) + `modprobe uhid` in S40bluetoothd: Bluetooth LE keyboards type (section 1) | **sent 2026-10-10: OpenX6100/AetherX6100Buildroot#3** |
+| 7 | gdyuldin/AetherX6100Buildroot | Bluetooth pairings kept across updates: `/var/lib/bluetooth` in S04restore_backup_config's backup (section 1) | **held (2026-10-10):** myshak1's planned companion PR to #280 has `S39btstate` (pairings in /mnt/bluetooth.tar), more complete; we said so on #280 and won't send ours. Drop our CI step once theirs is merged |
+| 8 | gdyuldin (feedback, not a PR) | for his `ver_1.1` Bluetooth screen: keyboards need the agent's `DisplayPasskey` / `DisplayPinCode` (missing: a keyboard asking you to type a code would fail), a paired keyboard marked Trusted, and pairing the moment a keyboard appears (many accept a pairing only for seconds); the image's `bt-agent --capability=NoInputNoOutput` + always discoverable accepts any pairing without asking, and cancelled ours | **sent 2026-10-10 as a comment on OpenX6100/x6100_gui#280** (myshak1's Bluetooth window; checked against its code: LE filtered out by `Transport=bredr`, `Display*` silent, short pairing window, open pairing; Trusted already done there) |
 
 ## 1. The Linux image (AetherX6100Buildroot), patched in our build
 
