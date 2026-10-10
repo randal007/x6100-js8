@@ -9,7 +9,8 @@
 > 2026-10-09 19:22 PDT); the image with everything (7cb0fe2) is building.
 > **Open:** GPS (a fix outside, clock, JS8 using the GPS grid, Time: Auto
 > vs a clock step), the Bluetooth keyboard, Ultra on the air, Show's blank
-> rows (not reproduced), the APRS NACK (needs a screenshot). Ideas parked
+> rows (not reproduced), the APRS NACK (needs a screenshot), and **issue #3:
+> FT8 can't transmit after JS8 until a restart**. Ideas parked
 > lower down: the map's home colour, POTA / SOTA on the air, the Murus
 > merge, ALC under 1 W. What we carry outside the JS8 app and the PRs to
 > send: [upstream-patches.md](upstream-patches.md).
@@ -17,6 +18,20 @@
 ## VE7NHW's list (2026-10-09)
 
 Each item says what was done, or what's still needed.
+
+- [ ] **Bug, issue #3 (kj7prs, 2026-10-09): FT8 can't transmit after JS8
+  until a restart** (receive fine; also after some SSB in between). A
+  restart fixing it points at state left in the running GUI, not saved
+  settings. Suspects (ours): the shared `tx_player` / `tx_level` (the
+  learned gain offset is shared with FT8: `cfg.ft8.output_gain_offset`,
+  but that's saved, so a restart wouldn't fix it), the radio state JS8
+  sets while open and restores on close (TX filter, RX DSP off, the 5 W
+  cap, USB-D, `radio_speaker_play` / AUDIO_PLAY_ON for beeps,
+  `audio_set_play_vol`), and JS8's transmitter (`js8_tx`) keeping an audio
+  stream or the modem/PTT state after close. To do at the radio: FT8 TX
+  into the dummy load before and after JS8 (console: app log, `pactl`
+  streams if available), then the harness: open/close JS8 and check every
+  radio_* / audio_* call is undone. No reply on GitHub yet (user to OK).
 
 - [ ] **Received APRS messages show a NACK command.** VE7NHW: every
   message coming back from APRS shows NACK, although nothing on the
