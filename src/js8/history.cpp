@@ -5,6 +5,7 @@
  */
 
 #include "history.hpp"
+#include "strutil.hpp"
 
 #include "classify.hpp"
 #include "directed.hpp"
@@ -33,12 +34,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::string trim(const std::string &s) {
-    auto b = s.find_first_not_of(' ');
-    if (b == std::string::npos) return "";
-    return s.substr(b, s.find_last_not_of(' ') - b + 1);
-}
 
 // A sign and up to 3 digits: anyone can send "SNR +9999999999" as free
 // text, and std::stoi throws on it.

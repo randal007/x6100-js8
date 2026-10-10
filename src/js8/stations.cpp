@@ -5,6 +5,7 @@
  */
 
 #include "stations.hpp"
+#include "strutil.hpp"
 
 #include "classify.hpp"
 
@@ -16,13 +17,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::vector<std::string> words(const std::string &s) {
-    std::istringstream       in(s);
-    std::vector<std::string> out;
-    for (std::string w; in >> w;) out.push_back(w);
-    return out;
-}
 
 // A sign and up to 3 digits: anyone can send "SNR +9999999999" as free
 // text, and std::stoi throws on it.

@@ -5,6 +5,7 @@
  */
 
 #include "classify.hpp"
+#include "strutil.hpp"
 
 #include <regex>
 
@@ -20,11 +21,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::string upper(std::string s) {
-    for (auto &c : s) c = (char)std::toupper((unsigned char)c);
-    return s;
-}
 
 bool starts_with(const std::string &s, const char *prefix) {
     return s.rfind(prefix, 0) == 0;

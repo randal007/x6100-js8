@@ -5,6 +5,7 @@
  */
 
 #include "macros.hpp"
+#include "strutil.hpp"
 
 #include "qsolog.hpp" // format_snr(): "+05", "-12", as desktop's Varicode::formatSNR()
 
@@ -14,11 +15,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::string upper(std::string s) {
-    for (auto &c : s) c = (char)std::toupper((unsigned char)c);
-    return s;
-}
 
 /// QString::replace(): every occurrence, left to right, no rescan.
 void replace_all(std::string &s, const std::string &from, const std::string &to) {

@@ -5,6 +5,7 @@
  */
 
 #include "inbox.hpp"
+#include "strutil.hpp"
 
 #include "classify.hpp"
 #include "datafile.hpp"
@@ -29,13 +30,6 @@ std::string one_line(const std::string &s) {
     std::string out = s;
     for (char &c : out)
         if (c == '\t' || c == '\n' || c == '\r') c = ' ';
-    return out;
-}
-
-std::vector<std::string> words(const std::string &s) {
-    std::istringstream       in(s);
-    std::vector<std::string> out;
-    for (std::string w; in >> w;) out.push_back(w);
     return out;
 }
 

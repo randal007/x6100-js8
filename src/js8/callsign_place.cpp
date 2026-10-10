@@ -5,6 +5,7 @@
  */
 
 #include "callsign_place.hpp"
+#include "strutil.hpp"
 
 #include "classify.hpp" // base_callsign()
 
@@ -16,19 +17,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::string upper(std::string_view s) {
-    std::string out(s);
-    for (auto &c : out) c = (char)std::toupper((unsigned char)c);
-    return out;
-}
-
-std::string trim(std::string_view s) {
-    size_t a = 0, b = s.size();
-    while (a < b && std::isspace((unsigned char)s[a])) a++;
-    while (b > a && std::isspace((unsigned char)s[b - 1])) b--;
-    return std::string(s.substr(a, b - a));
-}
 
 /// A region a call area stands for.
 struct Region {

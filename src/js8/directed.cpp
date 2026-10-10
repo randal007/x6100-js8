@@ -5,6 +5,7 @@
  */
 
 #include "directed.hpp"
+#include "strutil.hpp"
 
 #include "js8core/protocol/varicode.hpp"
 
@@ -16,11 +17,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::string upper(std::string s) {
-    for (auto &c : s) c = (char)std::toupper((unsigned char)c);
-    return s;
-}
 
 std::string ltrim(const std::string &s) {
     auto b = s.find_first_not_of(' ');

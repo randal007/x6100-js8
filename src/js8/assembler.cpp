@@ -7,6 +7,7 @@
  */
 
 #include "assembler.hpp"
+#include "strutil.hpp"
 
 #include "render.hpp"
 #include "speeds.hpp"
@@ -21,25 +22,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::string trim(const std::string &s) {
-    auto b = s.find_first_not_of(" \t\r\n");
-    if (b == std::string::npos) return "";
-    auto e = s.find_last_not_of(" \t\r\n");
-    return s.substr(b, e - b + 1);
-}
-
-std::vector<std::string> split_ws(const std::string &s) {
-    std::istringstream       in(s);
-    std::vector<std::string> out;
-    for (std::string t; in >> t;) out.push_back(t);
-    return out;
-}
-
-std::string upper(std::string s) {
-    for (auto &c : s) c = (char)std::toupper((unsigned char)c);
-    return s;
-}
 
 // Data frames split mid-word and carry their own spaces. A directed header
 // can meet its payload flush: a buffered command strips the separator before
@@ -81,13 +63,13 @@ bool callsign_like_strict(const std::string &token) {
 }
 
 bool is_compound_de_helper_frame(const std::string &text) {
-    auto parts = split_ws(text);
+    auto parts = words(text);
     if (parts.size() != 2) return false;
     return callsign_like_strict(parts[0]) && std::regex_match(upper(parts[1]), grid_re());
 }
 
 bool is_directed_compound_header(const std::string &text) {
-    auto tokens = split_ws(text);
+    auto tokens = words(text);
     if (tokens.empty() || !callsign_like_strict(tokens[0])) return false;
     if (tokens.size() == 1) return true;
     std::string tail;

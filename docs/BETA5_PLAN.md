@@ -19,7 +19,7 @@
 > merged; uhid, keyboards open): [upstream-patches.md](upstream-patches.md).
 > **Ultrareview** (three cloud reviews of the whole app, 2026-10-10):
 > [review/ultrareview-2026-10-10.md](review/ultrareview-2026-10-10.md);
-> UR1-UR3 done (UR3 needs NR on over CAT at the radio), UR4 to decide.
+> all done (UR3 needs NR on over CAT at the radio; R10 won't fix).
 
 ## VE7NHW's list (2026-10-09)
 

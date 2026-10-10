@@ -59,8 +59,8 @@ the radio: NR on over CAT with JS8 open.
 
 R9 done: both functions and the `rows` counter that only fed them
 removed (shared widget; FT8 calls none of them; the ring buffer stays).
-R10 won't fix. R8 reviewed (below), to do before the JS8 code goes
-upstream.
+R10 won't fix. R8 reviewed (below), then done the same day (VE7NHW:
+"if it won't break anything").
 
 **R8 review:** 16 copies in 11 files: `upper()` x7 (assembler,
 autoreply, callsign_place, classify, commands, directed, macros; all the
@@ -73,8 +73,12 @@ differ on tabs and line ends, which decoded text never has (the JS8
 alphabet has none) and js8_texts.txt loses at load (`\r` cut); so one
 `trim()` stripping any whitespace changes nothing on the air (a tab at
 the end of an INFO typed on a PC would be trimmed, not sent as a space).
-Plan: header-only `src/js8/strutil.hpp` (`upper`, `trim`, `words`), the
-copies removed; unit tests + full harness run.
+Done: header-only `src/js8/strutil.hpp` (`upper`, `trim`, `words`), the
+16 copies removed (assembler's `split_ws` is `words`). Checked: the old
+copies against the new on a million random strings: `upper`, `words` and
+cty's `trim` identical; the other `trim`s differ only on strings holding
+a tab, CR, LF (or VT/FF for assembler's), never on text made of the JS8
+alphabet and spaces. Unit tests (fast and slow) and the full harness run.
 
 | # | Finding | Where | Verdict |
 |---|---|---|---|

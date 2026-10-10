@@ -5,6 +5,7 @@
  */
 
 #include "autoreply.hpp"
+#include "strutil.hpp"
 
 #include "classify.hpp"
 #include "commands.hpp"
@@ -21,24 +22,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::string upper(std::string s) {
-    for (auto &c : s) c = (char)std::toupper((unsigned char)c);
-    return s;
-}
-
-std::string trim(const std::string &s) {
-    auto b = s.find_first_not_of(' ');
-    if (b == std::string::npos) return "";
-    return s.substr(b, s.find_last_not_of(' ') - b + 1);
-}
-
-std::vector<std::string> words(const std::string &s) {
-    std::istringstream       in(s);
-    std::vector<std::string> out;
-    for (std::string w; in >> w;) out.push_back(w);
-    return out;
-}
 
 std::string join(const std::vector<std::string> &v, const char *sep) {
     std::string out;

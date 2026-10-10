@@ -5,6 +5,7 @@
  */
 
 #include "qsolog.hpp"
+#include "strutil.hpp"
 
 #include "classify.hpp"
 
@@ -18,13 +19,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::vector<std::string> words(const std::string &s) {
-    std::istringstream       in(s);
-    std::vector<std::string> out;
-    for (std::string w; in >> w;) out.push_back(w);
-    return out;
-}
 
 /// Words after "FROM: TO", e.g. {"SNR", "-12"} for "K2XYZ: N0XYZ SNR -12".
 std::vector<std::string> command_words(const std::string &text) {

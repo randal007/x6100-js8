@@ -5,6 +5,7 @@
  */
 
 #include "commands.hpp"
+#include "strutil.hpp"
 
 #include <cctype>
 #include <cmath>
@@ -14,11 +15,6 @@
 namespace x6100::js8 {
 
 namespace {
-
-std::string upper(std::string s) {
-    for (auto &c : s) c = (char)std::toupper((unsigned char)c);
-    return s;
-}
 
 bool offset_free(const std::vector<OffsetActivity> &activity, std::int64_t now_ms, int f, int bw) {
     for (auto &a : activity) {
