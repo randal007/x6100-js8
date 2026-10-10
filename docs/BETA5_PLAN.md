@@ -350,10 +350,22 @@ Each item says what was done, or what's still needed.
   trusted + connected with bluetoothctl as the default agent, but **no keys**:
   the kernel has no uhid, which LE keyboards need. Fixed in the image build
   (`CONFIG_UHID=m` + `modprobe uhid` in S40bluetoothd; a change outside JS8,
-  [upstream-patches.md](upstream-patches.md) PR 6). **Next:** flash that
-  build, pair again (a flash replaces the rootfs, where pairings live), then
-  type in JS8; check a Bluetooth keyboard goes through `src/keyboard.c`'s
-  hot plug like a USB one.
+  [upstream-patches.md](upstream-patches.md) PR 6). **On 2eec73c
+  (2026-10-10):** `/dev/uhid` there, paired again (pairing only works in
+  the keyboard's short advertising window: a script on the radio keeps
+  bluetoothctl scanning and sends `pair` the moment it appears), an
+  `F01-keyboard` input device (event5, `kbd`). **But the GUI never opened
+  it:** it looks only for `/dev/input/by-path/*-kbd` (a Bluetooth keyboard
+  gets no by-path link: virtual uhid device) and only after a USB event.
+  With a by-path link made by hand + a USB event it typed in JS8, but not
+  later in Callsign / QTH (likely the keyboard slept and came back as a new
+  node, unnoticed). **Fix (shared GUI code, `src/keyboard.c`,
+  `src/usb_devices.cpp`, `src/pubsub_ids.h`):** the udev monitor also
+  watches `input` (`MSG_INPUT_DEVICE_CHANGED`), and the search falls back
+  to udev's database (`ID_INPUT_KEYBOARD`, `ID_BUS=bluetooth`) when there's
+  no USB keyboard. `kbd_hotplug_test`: connect, sleep, wake as a new node,
+  USB first, back to Bluetooth (14/14). **Next:** flash, pair again, type
+  in JS8 *and* outside it (Callsign, QTH), leave it to sleep, type again.
 
 VE7NHW's list for beta 5 (2026-10-02), with notes on where each item
 touches the code. **Highest priorities:** time sync, high-SWR protection,

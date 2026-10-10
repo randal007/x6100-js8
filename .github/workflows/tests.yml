@@ -62,7 +62,7 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
           cmake --build build -j"$(nproc)"
 
-      - name: USB keyboard hot plug
+      - name: Keyboard hot plug (USB and Bluetooth)
         working-directory: tools/js8_ui_harness
         run: ./build/kbd_hotplug_test
 

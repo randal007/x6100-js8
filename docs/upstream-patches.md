@@ -14,7 +14,7 @@ drop our copy.
 | # | To | What | Status |
 |---|---|---|---|
 | 1 | gdyuldin/AetherX6100Buildroot | gpsd with a control socket (`-F /var/run/gpsd.sock` in S50gpsd): USB GPS hotplug works (section 1) | ready; send after a test on the radio (boot without the GPS, plug it in) |
-| 2 | gdyuldin/x6100_gui | USB keyboard hot plug (`src/keyboard.c`), then the other keyboard fixes (section 2) | agreed order with gdyuldin: first PR; waiting for his GitHub organization |
+| 2 | gdyuldin/x6100_gui | USB keyboard hot plug (`src/keyboard.c`), Bluetooth keyboards found and followed (`src/keyboard.c`, `src/usb_devices.cpp`, `src/pubsub_ids.h`), then the other keyboard fixes (section 2) | agreed order with gdyuldin: first PR; waiting for his GitHub organization |
 | 3 | gdyuldin/x6100_gui | js8core + `src/js8` + the JS8 app, map and extras | after 2; licence question (GPLv3 js8core) open with gdyuldin |
 | 4 | JS8Call-improved/Android-port (js8core) | local patches 1-15, e.g. 14 (Ultra decoded on Turbo's schedule) and 15 (Ultra on its own decode thread, a thread-start hook) | listed in [UPSTREAM.md](../third-party/js8core/UPSTREAM.md); bugs already reported in issue #104 |
 | 5 | gdyuldin/x6100_gui | `dialog_rotary` timestamp-based knob speed (as his main knob) | offered to gdyuldin 2026-10-06 |
@@ -69,8 +69,14 @@ and reading this list. Not decided yet.
 ':!third-party' ':!docs' ':!tests' ':!tools'` lists them (2026-10-10:
 38 files). The main ones, by what they're for:
 
-- **USB keyboard** (PR candidates, first in the agreed order with
-  gdyuldin): `src/keyboard.c` (hot plug), `src/kbd_rollover.{c,h}` (keys
+- **USB and Bluetooth keyboards** (PR candidates, first in the agreed
+  order with gdyuldin): `src/keyboard.c` (hot plug; since 2026-10-10 also
+  a Bluetooth keyboard: it has no by-path link, so it's found in udev's
+  database, `ID_INPUT_KEYBOARD` + `ID_BUS=bluetooth`, a USB one still
+  first), `src/usb_devices.cpp` + `src/pubsub_ids.h` (the udev monitor
+  also watches `input`, as `MSG_INPUT_DEVICE_CHANGED`: a Bluetooth keyboard
+  connecting, or waking from sleep as a new node, has no USB event),
+  `src/kbd_rollover.{c,h}` (keys
   lost while another is down), `src/textarea_window.c` (a held key leaking
   into the next field), `src/keypad.{c,h}` (hold time while JS8 is open).
 - **JS8's transmit level**: `src/tx_level.{c,h}`, `src/tx_player.{c,h}`

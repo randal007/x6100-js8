@@ -21,14 +21,18 @@
 
 #include <glob.h>
 #include <stdio.h>
+#include <string.h>
+#ifndef KBD_BT_GLOB
+#include <libudev.h>
+#endif
 
 #ifndef KBD_GLOB
 #define KBD_GLOB "/dev/input/by-path/*-kbd" /* tests point it elsewhere */
 #endif
 
-/* After a USB device comes or goes, look for the keyboard this often, this
- * many times: udev's "add" for the USB device comes before the keyboard's
- * /dev/input node and its by-path link exist, so looking once at once
+/* After a USB or input device comes or goes, look for the keyboard this
+ * often, this many times: udev's "add" for the USB device comes before the
+ * keyboard's /dev/input node and its by-path link exist, so looking once at once
  * finds nothing (1.0's USB thread passes the events on without the old
  * half-second pause between them). */
 #define KBD_RESCAN_MS    500
@@ -47,7 +51,7 @@ static int                  rescans_left;
 
 extern int evdev_fd; /* lv_drivers/indev/evdev.c, set by evdev_set_file() */
 
-/* The next key event from the USB keyboard, through xkb (layout, Shift). */
+/* The next key event from the keyboard (USB or Bluetooth), through xkb (layout, Shift). */
 static bool kbd_next(void *ctx, uint16_t *scancode, uint32_t *key, int *value) {
     (void)ctx;
     struct input_event in;
@@ -66,13 +70,59 @@ static void kbd_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
     kbd_rollover_read(&rollover, kbd_next, NULL, data);
 }
 
+static bool glob_first(const char *pattern, char *path, size_t n) {
+    glob_t globbuf;
+    bool   found = glob(pattern, 0, NULL, &globbuf) == 0;
+    if (found) snprintf(path, n, "%s", globbuf.gl_pathv[0]);
+    globfree(&globbuf);
+    return found;
+}
+
+/* A Bluetooth keyboard (HID over GATT through uhid, or classic HID) gets
+ * no by-path link: udev makes those only for devices with a physical path
+ * (USB, platform). Its event node, from udev's database: ID_INPUT_KEYBOARD
+ * is what makes the by-path "-kbd" links too. */
+#ifdef KBD_BT_GLOB /* tests: a folder of their own in place of udev's database */
+static bool search_bt_kbd(char *path, size_t n) {
+    return glob_first(KBD_BT_GLOB, path, n);
+}
+#else
+static bool search_bt_kbd(char *path, size_t n) {
+    struct udev *udev = udev_new();
+    if (!udev) return false;
+    struct udev_enumerate *en = udev_enumerate_new(udev);
+    bool                   found = false;
+    if (en) {
+        udev_enumerate_add_match_subsystem(en, "input");
+        udev_enumerate_add_match_sysname(en, "event*");
+        udev_enumerate_add_match_property(en, "ID_INPUT_KEYBOARD", "1");
+        udev_enumerate_scan_devices(en);
+        struct udev_list_entry *entry;
+        udev_list_entry_foreach(entry, udev_enumerate_get_list_entry(en)) {
+            struct udev_device *dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(entry));
+            if (!dev) continue;
+            const char *bus  = udev_device_get_property_value(dev, "ID_BUS");
+            const char *node = udev_device_get_devnode(dev);
+            if (bus && node && strcmp(bus, "bluetooth") == 0) {
+                snprintf(path, n, "%s", node);
+                found = true;
+            }
+            udev_device_unref(dev);
+            if (found) break;
+        }
+        udev_enumerate_unref(en);
+    }
+    udev_unref(udev);
+    return found;
+}
+#endif
+
+/* A USB keyboard first (as before), else a Bluetooth one. */
 static char* search_kbd_device() {
     static char path[256];
-    glob_t      globbuf;
-    bool        found = glob(KBD_GLOB, 0, NULL, &globbuf) == 0;
-    if (found) snprintf(path, sizeof(path), "%s", globbuf.gl_pathv[0]);
-    globfree(&globbuf);
-    return found ? path : NULL;
+    if (glob_first(KBD_GLOB, path, sizeof(path))) return path;
+    if (search_bt_kbd(path, sizeof(path))) return path;
+    return NULL;
 }
 
 static void setup_kbd(char *path) {
@@ -119,7 +169,9 @@ static void rescan_cb(lv_timer_t *t) {
     }
 }
 
-static void on_usb_device_change(void * s, lv_msg_t * msg) {
+/* A USB device, or an input device (a Bluetooth keyboard connecting, or
+ * coming back from sleep as a new node), came or went. */
+static void on_device_change(void * s, lv_msg_t * msg) {
     (void)s;
     (void)msg;
     check_kbd();
@@ -131,7 +183,8 @@ static void on_usb_device_change(void * s, lv_msg_t * msg) {
 void keyboard_init() {
     keyboard_group = lv_group_create();
 
-    lv_msg_subscribe(MSG_USB_DEVICE_CHANGED, on_usb_device_change, NULL);
+    lv_msg_subscribe(MSG_USB_DEVICE_CHANGED, on_device_change, NULL);
+    lv_msg_subscribe(MSG_INPUT_DEVICE_CHANGED, on_device_change, NULL);
 
     char *path = search_kbd_device();
     if (!path)

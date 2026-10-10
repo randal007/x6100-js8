@@ -998,9 +998,13 @@ Not released yet: on `main` and in test builds, for beta 5
   while there is one, `GPS` in the top line, GPS time saved to the radio's
   battery clock once, and JS8's time kept steady when the radio's clock is
   set (by the GPS or by hand) while JS8 is open.
-- **Bluetooth LE keyboards** can type (being tested): the image's kernel
-  was missing the part they need (uhid), so they paired and connected but
-  no keys arrived. A change to the Linux image, listed in
+- **Bluetooth keyboards** (being tested): the image's kernel was missing
+  the part LE keyboards need (uhid), so they paired and connected but no
+  keys arrived; and the radio's GUI program only looked for USB keyboards.
+  Now it also finds a Bluetooth keyboard, everywhere you type (JS8,
+  Callsign, QTH ...), and picks it up again when it wakes from sleep; a
+  USB keyboard plugged in still comes first. Changes to the Linux image
+  and the GUI program, listed in
   [docs/upstream-patches.md](docs/upstream-patches.md) to offer upstream.
   The radio has no pairing screen yet (it comes with R1CBU's next
   firmware): pair over the USB console with `bluetoothctl`, with WiFi
@@ -1315,8 +1319,9 @@ What's left is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). Next:
 
 - [ ] **GPS** outside: the clock, JS8's GPS grid, status and battery clock
   on the radio (plugging it in after boot works)
-- [ ] **A Bluetooth keyboard** tried with JS8 (LE keyboards such as VE7NHW's
-  pair and connect; the fix that lets them type is in the next test build)
+- [ ] **A Bluetooth keyboard** tried with JS8 and the rest of the radio
+  (pairs, and types once the GUI opens it: that fix is in the next test
+  build)
 - [ ] **Ultra on a busy band** (with desktop JS8Call it works)
 - [ ] **Show's blank rows** (switching Show All / No HB / Directed): not
   reproduced in testing yet; radio screenshots wanted
