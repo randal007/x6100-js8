@@ -1,0 +1,100 @@
+name: Tests
+# The unit tests on every push to main (a few minutes), so a regression shows
+# up here before anyone waits an hour for an image (review I-20). The UI
+# harness runs in real time (an hour or more), so it only runs when started
+# by hand with "harness" ticked.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      harness:
+        description: "Also run the UI harness scenarios (real time, 1-3 hours)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    runs-on: ubuntu-24.04 # js8core needs Boost >= 1.78 (boost/math/ccmath)
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Packages
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libboost-dev libfftw3-dev libsqlite3-dev pkg-config
+
+      # The JS8 and QTH tests. Not upstream's test_cfg and test_ft8_qso: they
+      # link the firmware's LVGL fork (NEON only, doesn't build on a PC) or
+      # X6100Control, which wants the old libgpiod 1.x.
+      - name: Build the tests (ASan/UBSan)
+        run: |
+          cmake -B build_test -DENABLE_TESTING=YES
+          cmake --build build_test -j"$(nproc)" --target test_js8 test_qth
+
+      - name: JS8 tests (the real-time [slow] ones left out)
+        run: build_test/tests/test_js8 "~[slow]" --colour-mode=ansi
+
+      - name: QTH tests
+        run: build_test/tests/test_qth --colour-mode=ansi
+
+  harness:
+    if: github.event_name == 'workflow_dispatch' && inputs.harness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 330
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Packages
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libboost-dev libfftw3-dev libsqlite3-dev pkg-config autoconf automake
+
+      - name: Build the harness (ASan/UBSan)
+        working-directory: tools/js8_ui_harness
+        run: |
+          ./fetch_deps.sh
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+          cmake --build build -j"$(nproc)"
+
+      - name: Keyboard hot plug (USB and Bluetooth)
+        working-directory: tools/js8_ui_harness
+        run: ./build/kbd_hotplug_test
+
+      # Each scenario prints "(want ...)" lines to read; this fails on a crash,
+      # a sanitizer report or a hang. The logs are kept as an artifact.
+      - name: Run the scenarios
+        working-directory: tools/js8_ui_harness
+        run: |
+          mkdir -p out logs
+          fail=0
+          for sc in FULL APRS TXSAFE TEXTS LOG OPERATOR ALERTS KEYS URGENT AUTOCQ LOOKS LOCK SPEED MAP \
+                    HELD RELAY QUERYCALL KNOB FINDER INBOX SMS HBPAUSE MARKS LOGPEND REPLYQ RETUNE COMPOSE TXMARK \
+                    TXBAR STALL NEWSTN PARTIAL BANDS FREQ ROWS BADFILES FREQMARK QSOFREQ DRIFT MODE WFRING WFCALM SWR APRSMORE SAVED STSORT STQRZ ATGATE MAPSTACK HISTORY BOOTHB \
+                    GEN=query GEN=aprs GEN=texts GEN=alerts; do
+            case $sc in
+              FULL) env=() ;;
+              GEN=*) env=(ONLY_GEN=${sc#GEN=}) ;;
+              *) env=(ONLY_$sc=1) ;;
+            esac
+            (cd out && env "${env[@]}" timeout 1800 ../build/js8_ui_harness) > "logs/$sc.log" 2>&1 && rc=0 || rc=$?
+            if [ $rc -ne 0 ] || grep -qE "Sanitizer|runtime error" "logs/$sc.log"; then
+              echo "::error::$sc failed (exit $rc)"; fail=1
+            else
+              echo "$sc ok"
+            fi
+          done
+          exit $fail
+
+      - name: Keep the logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: harness-logs
+          path: tools/js8_ui_harness/logs
+          retention-days: 14
