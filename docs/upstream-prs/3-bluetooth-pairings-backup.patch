@@ -1,0 +1,11 @@
+--- a/br2_external/board/X6100/linux/rootfs-overlay/etc/init.d/S04restore_backup_config
++++ b/br2_external/board/X6100/linux/rootfs-overlay/etc/init.d/S04restore_backup_config
+@@ -12,7 +12,7 @@
+   if [[ ! -d ${BACKUP_DIR} ]] then
+     mkdir -p ${BACKUP_DIR}
+   fi
+-  tar c -avf ${BACKUP_PATH} /etc/NetworkManager/system-connections/* /etc/ssh/*_key* /root/.ssh/*
++  tar c -avf ${BACKUP_PATH} /etc/NetworkManager/system-connections/* /etc/ssh/*_key* /root/.ssh/* $(ls -d /var/lib/bluetooth 2>/dev/null)
+ }
+ 
+ restore() {

@@ -1,0 +1,410 @@
+/* C side of the harness: everything that touches firmware headers. */
+#include "buttons.h"
+#include "dialog.h"
+#include "dialog_js8.h"
+#include "events.h"
+#include "keyboard.h"
+#include "cfg/cfg_api.h"
+#include "cfg/db.h"
+#include "styles.h"
+#include "pubsub_ids.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+extern buttons_page_t *stub_page;
+
+/* The station callsign (APP > Callsign). */
+void ui_set_callsign(const char *call) { param_t_set(cfg.callsign(), call); }
+/* One VOL knob step at the focus (the knob is a keypad). */
+void ui_vol(int dir) {
+    uint32_t key = dir > 0 ? KEY_VOL_RIGHT_EDIT : KEY_VOL_LEFT_EDIT;
+    lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_KEY, &key);
+}
+
+/* JS8's alert switches (cfg.js8.alerts() bits). */
+void ui_set_alerts(unsigned bits) { param_i_set(cfg.js8.alerts(), (int32_t)bits); }
+
+/* What the radio would be told, as the old stand-ins printed it. */
+static void print_dial(Subject *s, void *u) {
+    (void)s, (void)u;
+    printf("[radio] dial %d Hz, mode %d\n", cparam_i_get(cfg.cur.fg_freq()), cparam_i_get(cfg.cur.mode()));
+}
+static void print_filter(Subject *s, void *u) {
+    (void)s, (void)u;
+    printf("[radio] filter %d-%d Hz\n", cparam_i_get(cfg.filter.low()), cparam_i_get(cfg.filter.high()));
+}
+
+/* A new card's settings (the image's params.db, copied for this run), read
+ * by R1CBU 1.0's own settings code: migrations, JS8's step, the defaults. */
+static void settings_open(void) {
+    FILE *in = fopen(HARNESS_DB_DEFAULT, "rb"), *out = fopen(HARNESS_DB, "wb");
+    if (!in || !out) {
+        printf("[harness] FAIL: cannot copy %s\n", HARNESS_DB_DEFAULT);
+        exit(1);
+    }
+    char   buf[65536];
+    size_t n;
+    while ((n = fread(buf, 1, sizeof(buf), in)) > 0) fwrite(buf, 1, n, out);
+    fclose(in);
+    fclose(out);
+    remove(HARNESS_DB "-wal");
+    remove(HARNESS_DB "-shm");
+    if (!cfg_db_open(HARNESS_DB)) {
+        printf("[harness] FAIL: settings database\n");
+        exit(1);
+    }
+    cfg_db_init(cfg_db_get());
+    cfg_api_init(NULL);
+}
+
+void ui_init(void) {
+    EVENT_BAND_UP   = lv_event_register_id(); /* events.c on the radio */
+    EVENT_BAND_DOWN = lv_event_register_id();
+    settings_open();
+    /* HARNESS_THEME=simple|black|flat (the radio's default is Simple). */
+    const char *t     = getenv("HARNESS_THEME");
+    themes_t    theme = t && !strcmp(t, "black") ? THEME_BLACK : t && !strcmp(t, "flat") ? THEME_FLAT : THEME_SIMPLE;
+    param_i_set(cfg.ui.theme(), theme);
+    styles_init(theme);
+    /* The radio draws apps on a see-through plane over its own (black
+     * while JS8 is open: its spectrum and waterfall are off). */
+    lv_obj_set_style_bg_color(lv_scr_act(), lv_color_black(), 0);
+    keyboard_group = lv_group_create();
+    param_t_set(cfg.callsign(), "K2XYZ");
+    param_t_set(cfg.qth(), "FN42AB");
+    param_f_set(cfg.pwr(), 10.0f); /* radio set to 10 W */
+    subject_subscribe((Subject *)cfg.cur.fg_freq(), print_dial, NULL);
+    subject_subscribe((Subject *)cfg.filter.low(), print_filter, NULL);
+    subject_subscribe((Subject *)cfg.filter.high(), print_filter, NULL);
+}
+void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
+
+/* The main screen's spectrum and waterfall redraw the lower plane when the
+ * frequency changes (main.cpp's pump() stands in for that). */
+static bool main_dirty;
+static void main_dirty_cb(Subject *subj, void *user_data) {
+    (void)subj;
+    (void)user_data;
+    main_dirty = true;
+}
+void ui_main_redraw_watch(void) { subject_subscribe((Subject *)cfg.cur.fg_freq(), main_dirty_cb, NULL); }
+bool ui_main_redraw_due(void) {
+    bool d     = main_dirty;
+    main_dirty = false;
+    return d;
+}
+void ui_retune_by(int hz) { cparam_i_set(cfg.cur.fg_freq(), cparam_i_get(cfg.cur.fg_freq()) + hz); }
+
+/* gpsd's reports, once a second as the radio's gps.c announces them, while
+ * HARNESS_GPS gives a position (stubs.c's gps_get_snapshot()). */
+void ui_gps_tick(void) {
+    static uint32_t last;
+    if (!getenv("HARNESS_GPS") || lv_tick_elaps(last) < 1000) return;
+    last = lv_tick_get();
+    lv_msg_send(MSG_GPS, NULL);
+}
+void ui_press(int i) {
+    button_data_t *b = stub_page->items[i];
+    if (!b) {
+        printf("[harness] no button %d on this page\n", i);
+        return;
+    }
+    b->press(b);
+}
+const char *ui_focus_desc(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f) return "nothing";
+    if (lv_obj_check_type(f, &lv_keyboard_class)) return lv_group_get_editing(keyboard_group) ? "keyboard (editing)" : "keyboard";
+    if (lv_obj_check_type(f, &lv_textarea_class)) return "textarea";
+    if (lv_obj_check_type(f, &lv_table_class)) return "message list";
+    if (lv_obj_check_type(f, &lv_btn_class)) return "a list button";
+    return "something else";
+}
+/* Is `text` in any row of the dialog's list? */
+int ui_list_has(const char *text) {
+    lv_obj_t *t = lv_group_get_focused(keyboard_group);
+    if (!t || !lv_obj_check_type(t, &lv_table_class)) return -1;
+    for (uint16_t r = 0; r < lv_table_get_row_cnt(t); r++) {
+        const char *v = lv_table_get_cell_value(t, r, 0);
+        if (v && strstr(v, text)) return 1;
+    }
+    return 0;
+}
+/* How many rows of the dialog's list contain `text`. */
+int ui_list_count(const char *text) {
+    lv_obj_t *t = lv_group_get_focused(keyboard_group);
+    if (!t || !lv_obj_check_type(t, &lv_table_class)) return -1;
+    int n = 0;
+    for (uint16_t r = 0; r < lv_table_get_row_cnt(t); r++) {
+        const char *v = lv_table_get_cell_value(t, r, 0);
+        if (v && strstr(v, text)) n++;
+    }
+    return n;
+}
+/* Text of the focused list item, or "" */
+const char *ui_focused_text(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_list_btn_class)) return "";
+    return lv_list_get_btn_text(lv_obj_get_parent(f), f);
+}
+void ui_rotary(int32_t diff) { dialog_js8->rotary_cb(diff); }
+/* JS8's TX offset (the main knob moves it). */
+int ui_tx_offset(void) { return param_i_get(cfg.js8.tx_freq()); }
+/* Does any item or title in the focused list contain `text`? */
+int ui_popup_has(const char *text) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_list_btn_class)) return -1;
+    lv_obj_t *list = lv_obj_get_parent(f);
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(list); i++) {
+        lv_obj_t  *c = lv_obj_get_child(list, i);
+        lv_obj_t  *l = lv_obj_has_class(c, &lv_label_class) ? c : lv_obj_get_child(c, 0);
+        const char *t = l && lv_obj_has_class(l, &lv_label_class) ? lv_label_get_text(l) : NULL;
+        if (t && strstr(t, text)) return 1;
+    }
+    return 0;
+}
+/* Every line of the focused item's list, '>' on the focused one. */
+void ui_popup_print(const char *tag) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_list_btn_class)) {
+        printf("%s (no list)\n", tag);
+        return;
+    }
+    lv_obj_t *list = lv_obj_get_parent(f);
+    for (uint32_t i = 0; i < lv_obj_get_child_cnt(list); i++) {
+        lv_obj_t   *c = lv_obj_get_child(list, i);
+        lv_obj_t   *l = lv_obj_has_class(c, &lv_label_class) ? c : lv_obj_get_child(c, 0);
+        const char *t = l && lv_obj_has_class(l, &lv_label_class) ? lv_label_get_text(l) : "";
+        printf("%s %s%s\n", tag, c == f ? "> " : "  ", t);
+    }
+}
+/* Long-press of a bottom button. */
+void ui_hold(int i) {
+    button_data_t *b = stub_page->items[i];
+    if (b && b->hold) b->hold(b);
+}
+const char *ui_button_label(int i) {
+    button_data_t *b = stub_page->items[i];
+    if (!b) return "(none)";
+    return b->type == BTN_TEXT_FN ? b->label_fn() : b->label;
+}
+int ui_button_exists(int i) { return stub_page->items[i] != NULL; }
+/* What button i shows (drawn at page load or the last refresh), not what
+ * its label function would say now. */
+extern char stub_shown[BUTTONS][48];
+const char *ui_button_shown(int i) { return stub_shown[i]; }
+/* The radio switched off with auto heartbeats on: params.db still says on. */
+void ui_preset_auto_hb(void) { param_i_set(cfg.js8.hb(), true); }
+int ui_button_marked(int i) {
+    button_data_t *b = stub_page->items[i];
+    return b && b->mark;
+}
+void ui_band_up(void) { lv_event_send(dialog_js8->obj, (lv_event_code_t)EVENT_BAND_UP, NULL); }
+void ui_band_down(void) { lv_event_send(dialog_js8->obj, (lv_event_code_t)EVENT_BAND_DOWN, NULL); }
+void ui_key(uint32_t key) { lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_KEY, &key); }
+int  ui_running(void) { return dialog_js8->run; }
+int  ui_focus_is_table(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    return f && lv_obj_check_type(f, &lv_table_class);
+}
+
+#include "textarea_window.h"
+
+void ui_compose_append(const char *text) {
+    /* textarea_window keeps its pointer after closing: never type into a dead one. */
+    lv_obj_t *t = textarea_window_text();
+    if (t && lv_obj_is_valid(t)) lv_textarea_add_text(t, text);
+    else printf("[driver] ui_compose_append('%s'): no compose window\n", text);
+}
+/* The compose box's placeholder: which editor it opened as. */
+const char *ui_compose_placeholder(void) {
+    lv_obj_t *t = textarea_window_text();
+    return (t && lv_obj_is_valid(t)) ? lv_textarea_get_placeholder_text(t) : "(no compose window)";
+}
+void ui_compose_clear(void) {
+    lv_obj_t *t = textarea_window_text();
+    if (t && lv_obj_is_valid(t)) lv_textarea_set_text(t, "");
+}
+const char *ui_compose_text(void) {
+    /* textarea_window keeps its pointer after closing; don't read a dead one. */
+    lv_obj_t *t = textarea_window_text();
+    return (t && lv_obj_is_valid(t)) ? textarea_window_get() : "(no compose window)";
+}
+void ui_compose_enter(void) {
+    uint32_t  key = LV_KEY_ENTER;
+    lv_obj_t *t   = textarea_window_text();
+    if (!t || !lv_obj_is_valid(t)) { /* closed: its pointer is a dead one */
+        printf("[driver] ui_compose_enter(): no compose window\n");
+        return;
+    }
+    lv_event_send(t, LV_EVENT_KEY, &key);
+}
+/* ESC as the text box sees it (the on-screen keyboard has the focus). */
+void ui_compose_cancel(void) {
+    uint32_t  key = LV_KEY_ESC;
+    lv_obj_t *t   = textarea_window_text();
+    if (!t || !lv_obj_is_valid(t)) {
+        printf("[driver] ui_compose_cancel(): no compose window\n");
+        return;
+    }
+    lv_event_send(t, LV_EVENT_KEY, &key);
+}
+/* Move the selection with MFK steps to the row for `call`, searching down
+ * from the top. Station rows are drawn, not stored in the cell, so ask the
+ * dialog what's selected. */
+bool dialog_js8_selected_call(char *call, unsigned len); /* test hook */
+void ui_select_row_from(const char *call) {
+    for (int i = 0; i < 60; i++) ui_key(LV_KEY_LEFT); /* to the top */
+    for (int i = 0; i < 60; i++) {
+        char sel[32];
+        if (dialog_js8_selected_call(sel, sizeof(sel)) && strcmp(sel, call) == 0) return;
+        ui_key(LV_KEY_RIGHT);
+    }
+    printf("[harness] could not select %s\n", call);
+}
+void ui_click_focused(void) { lv_event_send(lv_group_get_focused(keyboard_group), LV_EVENT_CLICKED, NULL); }
+/* Press the page button until page n ("(JS8 n:4)") is showing. */
+void ui_page(int n) {
+    char want[16];
+    snprintf(want, sizeof(want), "(JS8 %d:", n);
+    for (int i = 0; i < 8; i++) {
+        if (stub_page && stub_page->items[0] && strncmp(stub_page->items[0]->label, want, strlen(want)) == 0) return;
+        ui_press(0);
+    }
+    printf("[harness] could not reach page %d\n", n);
+}
+
+/* Real input devices, as on the radio: the MFK knob is an LVGL encoder
+ * (turn + press) and ESC is the VOL knob's press on a keypad (keypad.c),
+ * both in keyboard_group. Unlike ui_key() these go through LVGL's indev
+ * code, so press and release are separate events, as on the radio. */
+static int32_t  mfk_diff;
+static bool     mfk_down;
+static uint32_t kp_key = LV_KEY_ESC;
+static bool     kp_down;
+
+static void mfk_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+    (void)drv;
+    data->enc_diff = (int16_t)mfk_diff;
+    mfk_diff       = 0;
+    data->state    = mfk_down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+static void kp_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+    (void)drv;
+    data->key   = kp_key;
+    data->state = kp_down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+}
+
+void ui_indevs_init(void) {
+    static lv_indev_drv_t mfk, kp;
+    lv_indev_drv_init(&mfk);
+    mfk.type    = LV_INDEV_TYPE_ENCODER;
+    mfk.read_cb = mfk_read;
+    lv_indev_set_group(lv_indev_drv_register(&mfk), keyboard_group);
+    lv_indev_drv_init(&kp);
+    kp.type            = LV_INDEV_TYPE_KEYPAD;
+    kp.read_cb         = kp_read;
+    kp.long_press_time = 1000; /* keypad.c */
+    lv_indev_set_group(lv_indev_drv_register(&kp), keyboard_group);
+}
+void ui_mfk_turn(int32_t diff) { mfk_diff += diff; }
+void ui_mfk_set(bool down) { mfk_down = down; }
+void ui_keypad_set(uint32_t key, bool down) {
+    kp_key  = key;
+    kp_down = down;
+}
+/* Put the on-screen keyboard's cursor on its OK (tick) key, as turning
+ * MFK would. Returns 0 if there's no keyboard. */
+int ui_kb_select_ok(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_keyboard_class)) return 0;
+    for (uint16_t i = 0; i < 64; i++) {
+        const char *t = lv_btnmatrix_get_btn_text(f, i);
+        if (t && strcmp(t, LV_SYMBOL_OK) == 0) {
+            lv_btnmatrix_set_selected_btn(f, i);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* A USB keyboard through the firmware's kbd_rollover filter, fed from a
+ * script of evdev-like events. */
+#include "kbd_rollover.h"
+
+typedef struct {
+    uint16_t code;
+    uint32_t key;
+    int      value;
+} usb_ev_t;
+static usb_ev_t       usb_q[512];
+static unsigned       usb_head, usb_tail;
+static kbd_rollover_t usb_ro;
+
+static bool usb_next(void *ctx, uint16_t *code, uint32_t *key, int *value) {
+    (void)ctx;
+    if (usb_head == usb_tail) return false;
+    usb_ev_t e = usb_q[usb_head++ % 512];
+    *code      = e.code;
+    *key       = e.key;
+    *value     = e.value;
+    return true;
+}
+static void usb_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
+    (void)drv;
+    if (getenv("USB_NAIVE")) { /* the old evdev_read: every event as it comes */
+        static uint32_t last_key;
+        static bool     last_down;
+        uint16_t        code;
+        uint32_t        key;
+        int             value;
+        if (usb_next(NULL, &code, &key, &value)) {
+            last_key               = key;
+            last_down              = value != 0;
+            data->continue_reading = true;
+        }
+        data->key   = last_key;
+        data->state = last_down ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
+        return;
+    }
+    kbd_rollover_read(&usb_ro, usb_next, NULL, data);
+}
+void ui_usb_init(void) {
+    static lv_indev_drv_t d;
+    lv_indev_drv_init(&d);
+    d.type    = LV_INDEV_TYPE_KEYPAD;
+    d.read_cb = usb_read;
+    lv_indev_set_group(lv_indev_drv_register(&d), keyboard_group);
+}
+/* Queue one event; the scancode is the character itself here. */
+void ui_usb_event(uint32_t key, int value) { usb_q[usb_tail++ % 512] = (usb_ev_t){(uint16_t)key, key, value}; }
+/* The message list's cursor row, and how many objects the knob can reach. */
+const char *ui_cursor_text(void) {
+    lv_obj_t *f = lv_group_get_focused(keyboard_group);
+    if (!f || !lv_obj_check_type(f, &lv_table_class)) return "";
+    uint16_t r = 0, c = 0;
+    lv_table_get_selected_cell(f, &r, &c);
+    if (r == LV_TABLE_CELL_NONE) return "";
+    const char *t = lv_table_get_cell_value(f, r, 0);
+    return t ? t : "";
+}
+int ui_group_count(void) { return (int)lv_group_get_obj_count(keyboard_group); }
+bool dialog_js8_row_marked(unsigned row); /* test hook */
+/* The message rows with the green bar, as "text | text", in `out`. */
+int ui_marked_rows(char *out, unsigned len) {
+    lv_obj_t *t = lv_group_get_focused(keyboard_group);
+    out[0]      = 0;
+    if (!t || !lv_obj_check_type(t, &lv_table_class)) return 0;
+    int n = 0;
+    for (uint16_t r = 0; r < lv_table_get_row_cnt(t); r++) {
+        if (!dialog_js8_row_marked(r)) continue;
+        const char *v = lv_table_get_cell_value(t, r, 0);
+        const char *c = v ? strstr(v, "  ") : NULL;
+        snprintf(out + strlen(out), len - strlen(out), "%s%s", n++ ? " | " : "", v ? v + 17 : "");
+        (void)c;
+    }
+    return n;
+}
