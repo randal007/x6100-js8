@@ -81,6 +81,24 @@ jobs:
         fi
         grep '^DEVICES=' "$f"
 
+    # Bluetooth LE keyboards (HID over GATT): bluetoothd hands their keys to
+    # the kernel through /dev/uhid, and the image's kernel has no uhid, so
+    # an LE keyboard pairs and connects but never types (found 2026-10-10
+    # with VE7NHW's F01-keyboard; docs/upstream-patches.md, to send
+    # upstream). HID is a module here, so uhid is one too, loaded when
+    # bluetoothd starts. Fails the build if S40bluetoothd changed upstream.
+    - name: Enable Bluetooth LE keyboards (uhid)
+      run: |
+        k=AetherX6100Buildroot/br2_external/board/X6100/linux/sun8i-r16-x6100_defconfig
+        grep -q '^CONFIG_UHID=' "$k" || echo "CONFIG_UHID=m" >> "$k"
+        grep '^CONFIG_UHID=' "$k"
+        f=AetherX6100Buildroot/br2_external/board/X6100/linux/rootfs-overlay/etc/init.d/S40bluetoothd
+        if ! grep -q 'modprobe uhid' "$f"; then
+          [ "$(grep -c '^start() {$' "$f")" = 1 ] || { echo "S40bluetoothd changed upstream: check the uhid fix (docs/upstream-patches.md)"; exit 1; }
+          sed -i 's,^start() {$,start() {\n\tmodprobe uhid 2>/dev/null,' "$f"
+        fi
+        grep -n -A1 '^start() {$' "$f"
+
     # Ccache
     - name: Prepare ccache timestamp
       id: ccache_cache_timestamp
@@ -112,6 +130,8 @@ jobs:
         make mpg123
         make libsndfile-dirclean
         make
+        # the uhid step above must have reached the image
+        find target/lib/modules -name 'uhid.ko*' | grep . || { echo "uhid.ko missing from the image"; exit 1; }
 
     - name: Save ccache
       if: always()

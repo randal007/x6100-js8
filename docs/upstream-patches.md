@@ -18,6 +18,7 @@ drop our copy.
 | 3 | gdyuldin/x6100_gui | js8core + `src/js8` + the JS8 app, map and extras | after 2; licence question (GPLv3 js8core) open with gdyuldin |
 | 4 | JS8Call-improved/Android-port (js8core) | local patches 1-15, e.g. 14 (Ultra decoded on Turbo's schedule) and 15 (Ultra on its own decode thread, a thread-start hook) | listed in [UPSTREAM.md](../third-party/js8core/UPSTREAM.md); bugs already reported in issue #104 |
 | 5 | gdyuldin/x6100_gui | `dialog_rotary` timestamp-based knob speed (as his main knob) | offered to gdyuldin 2026-10-06 |
+| 6 | gdyuldin/AetherX6100Buildroot | uhid in the kernel (`CONFIG_UHID=m`) + `modprobe uhid` in S40bluetoothd: Bluetooth LE keyboards type (section 1) | ready after a test on the radio (pair an LE keyboard, `/dev/uhid` exists, keys reach the GUI) |
 
 ## 1. The Linux image (AetherX6100Buildroot), patched in our build
 
@@ -31,10 +32,24 @@ upstream can make one stop applying.
 | *Patch GUI mk* | `x6100_gui.mk`: build our checkout instead of gdyuldin's repo | builds our GUI | no (ours only) |
 | *Enable JS8 dependencies* | `x6100_gui.mk` + `X6100_defconfig`: boost (headers) and fftw-single | js8core needs them | with the JS8 PR |
 | *Enable gpsd hotplug (control socket)* (2026-10-10) | `rootfs-overlay/etc/init.d/S50gpsd`: `DEVICES="-n -F /var/run/gpsd.sock /dev/ttyACM0"` | without `-F`, the gpsd package's hotplug rule (`gpsd.hotplug` → `gpsdctl add`) has no control socket to talk to, so a GPS plugged in after boot (or one that drops off USB and comes back) is never used until a reboot. Found on the radio: `logread` shows `gpsd.hotplug: add /dev/ttyACM0`, the socket refuses connections, `gpspipe` shows `"devices":[]` | **yes: PR to send** |
+| *Enable Bluetooth LE keyboards (uhid)* (2026-10-10) | `board/X6100/linux/sun8i-r16-x6100_defconfig`: `CONFIG_UHID=m`; `rootfs-overlay/etc/init.d/S40bluetoothd`: `modprobe uhid` first thing in `start()`; the Build step fails if `uhid.ko` isn't in the image | an LE keyboard (HID over GATT, e.g. VE7NHW's F01-keyboard, Nordic chip) pairs, bonds and connects, but bluetoothd hands its keys to the kernel through `/dev/uhid`, and the kernel had no uhid (only `BT_HIDP`, for classic keyboards), so it never types. Found on the radio: no `/dev/uhid`, no input device after connecting; bluetoothd itself has HoG built in. HID is a module on this kernel, so uhid is one too | **yes: PR to send** |
 
-The gpsd step **fails the build** if S50gpsd's line isn't what it expects,
-so it can't be lost silently: check upstream's S50gpsd and adjust (or drop
-the step if upstream took the fix).
+**Bluetooth on this radio, for whoever picks this up:** the WiFi and
+Bluetooth chip (RTL8723BU, on USB) is one part with one power pin: the
+GUI's WiFi switch (APP > WiFi, `wifi_power_on()` in `src/wifi.cpp`)
+powers both, so with WiFi off there's no `hci0`. v1.0.2 has no pairing
+screen (gdyuldin's `ver_1.1` branch adds one): pair with `bluetoothctl`
+over the console, as its own default agent (`agent KeyboardDisplay`,
+`default-agent`): the image's `bt-agent --capability=NoInputNoOutput`
+(started by `/usr/bin/bt_start.sh` from a udev rule) cancelled the
+pairing. Pairings live in `/var/lib/bluetooth` on the rootfs, which a
+re-flash replaces; `S04restore_backup_config` backs up WiFi connections
+and SSH keys to DATA at shutdown, not Bluetooth (adding
+`/var/lib/bluetooth` there would keep pairings: an idea, not done).
+
+The gpsd and uhid steps **fail the build** if the line they change isn't
+what they expect, so they can't be lost silently: check upstream's S50gpsd /
+S40bluetoothd and adjust (or drop the step if upstream took the fix).
 
 **PR to send (AetherX6100Buildroot):** "gpsd: start with a control socket
 so USB GPS hotplug works": the one-line change above; the test: boot with

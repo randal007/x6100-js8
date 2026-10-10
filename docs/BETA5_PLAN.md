@@ -11,10 +11,9 @@
 > on the HL2 bench (no problems), SMS both ways, APRS messages without the
 > NACK. **Open:** GPS outside (clock, JS8 using the GPS grid, the battery
 > clock, the APRS position from the GPS, Time: Auto vs a clock step), the
-> Bluetooth keyboard, Ultra on a busy band, Show's blank rows (not
-> reproduced), and **issue #3: FT8 can't transmit after JS8 until a
-> restart**. Ideas parked
-> lower down: the map's home colour, POTA / SOTA on the air, the Murus
+> Bluetooth keyboard (LE keyboards need the image's new uhid: building),
+> Ultra on a busy band, Show's blank rows (not reproduced), and **issue #3:
+> FT8 can't transmit after JS8 until a restart**. Ideas parked lower down: the map's home colour, POTA / SOTA on the air, the Murus
 > merge, ALC under 1 W. What we carry outside the JS8 app and the PRs to
 > send: [upstream-patches.md](upstream-patches.md).
 
@@ -325,6 +324,16 @@ Each item says what was done, or what's still needed.
     catch 1, write catches 2 and 3, test with the harness's HARNESS_GPS.
 - [ ] **A Bluetooth keyboard** with JS8, already the next item (below). v1.0.2 has
   no pairing screen: pair with `bluetoothctl` over the USB console.
+  **2026-10-10, VE7NHW's F01-keyboard (Bluetooth LE):** WiFi must be on
+  (one power pin for the WiFi/BT chip); found by an LE scan
+  (`hcitool lescan`; it pairs at C0:53:A4:C5:A3:CF), paired + bonded +
+  trusted + connected with bluetoothctl as the default agent, but **no keys**:
+  the kernel has no uhid, which LE keyboards need. Fixed in the image build
+  (`CONFIG_UHID=m` + `modprobe uhid` in S40bluetoothd; a change outside JS8,
+  [upstream-patches.md](upstream-patches.md) PR 6). **Next:** flash that
+  build, pair again (a flash replaces the rootfs, where pairings live), then
+  type in JS8; check a Bluetooth keyboard goes through `src/keyboard.c`'s
+  hot plug like a USB one.
 
 VE7NHW's list for beta 5 (2026-10-02), with notes on where each item
 touches the code. **Highest priorities:** time sync, high-SWR protection,
