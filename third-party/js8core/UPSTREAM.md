@@ -126,7 +126,13 @@ Each one is its own commit on top of the pristine import, so
     "decode window merged: the decoder was busy" at Info level: the app
     counts these to show when decoding falls behind.
 
-All thirteen are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
+14. **Ultra (I, desktop's "JS8 60") scheduled as Turbo.** The decode scheduler gave only
+    Turbo (C) its early window (decode once the 79 symbols are in, retry
+    every second); Ultra got the slow modes' one decode a slot. Desktop
+    JS8Call-improved (`mainwindow.cpp`, `turboOrUltra`) treats the two
+    alike, so I now takes C's path.
+
+All fourteen are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 
