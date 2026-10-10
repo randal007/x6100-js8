@@ -59,7 +59,7 @@ struct AutoReply {
     int         deliver_id = 0; ///< a held message this delivers: mark it delivered once sent
     std::string deliver_group_call; ///< a group message: who it's delivered to
     bool        auto_only = false;  ///< desktop answers only with AUTO on (QUERY MSGS, QUERY CALL)
-    bool        allcall   = false;  ///< answers an @ALLCALL: AUTO only, once per station per 15 min
+    bool        allcall   = false;  ///< answers an @ALLCALL: AUTO only, once per station per 55 min
 };
 
 /// What desktop keeps from a message: "MSG" to us or our group goes to the

@@ -18,6 +18,11 @@ void ui_gps_tick(void);
 uint32_t stub_audio_rate(void);
 int      stub_play_rate(void);
 void ui_init(void);
+void ui_radio_dsp_watch(void);
+void ui_set_dsp_cat(int which, bool on);
+int  ui_dsp_setting(int which);
+extern bool stub_dsp_on;
+extern int  stub_dsp_offs;
 void ui_open(void);
 void ui_press(int i);
 void ui_band_up(void);
@@ -484,6 +489,7 @@ int main() {
     harness_plane_cb  = wftime_plane_cb;
 
     ui_init();
+    ui_radio_dsp_watch();
     if (getenv("ONLY_MODE")) stub_mode_setup();
     if (getenv("ONLY_INBOX") || getenv("ONLY_SMS") || getenv("ONLY_REPLYQ")) unlink(JS8_INBOX_PATH); // before the dialog loads it
     if (getenv("ONLY_HELD")) unlink(JS8_HELD_PATH);
@@ -2876,6 +2882,27 @@ int main() {
         ui_press(3); // back to the messages
         pump(300);
         printf("[stsort] messages again: button 2 '%s' (want empty)\n", ui_button_label(1));
+        return 0;
+    }
+    if (getenv("ONLY_DSPHOLD")) {
+        // NR, NB, DNF and DNF auto stay off on the radio while JS8 is open,
+        // even when one is turned on (CAT, on its own thread); the setting
+        // is kept and comes back on close (ultrareview R7).
+        static const char *name[] = {"NR", "NB", "DNF", "DNF auto"};
+        pump(300);
+        printf("[dsphold] open: radio DSP on %d (want 0)\n", stub_dsp_on);
+        for (int i = 0; i < 4; i++) {
+            int offs = stub_dsp_offs;
+            ui_set_dsp_cat(i, true);
+            printf("[dsphold] %s on over CAT: setting %d (want 1), radio DSP on %d (want 0), offs +%d (want 1)\n", name[i],
+                   ui_dsp_setting(i), stub_dsp_on, stub_dsp_offs - offs);
+        }
+        dialog_destruct();
+        pump(300);
+        printf("[dsphold] closed: radio DSP on %d (want 1: the settings)\n", stub_dsp_on);
+        int offs = stub_dsp_offs;
+        for (int i = 0; i < 4; i++) ui_set_dsp_cat(i, false);
+        printf("[dsphold] off again after close: offs +%d (want 0: not held any more)\n", stub_dsp_offs - offs);
         return 0;
     }
     if (getenv("ONLY_STQRZ")) {

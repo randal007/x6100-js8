@@ -267,7 +267,16 @@ void audio_play_wait(void) {
     printf("[audio] drained\n");
 }
 void keypad_set_long_time(uint32_t ms) { printf("[keypad] hold time %u ms\n", (unsigned)ms); }
-void radio_set_rx_dsp_off(bool off) { printf("[radio] NR/NB/notches %s\n", off ? "off" : "back to the settings"); }
+/* What the radio was last told for NR/NB/the notches: driver.c's stand-in
+ * for radio.c's own subscribers sends a setting's new value, this the
+ * app's "off". */
+bool stub_dsp_on    = false;
+int  stub_dsp_offs  = 0;
+void radio_set_rx_dsp_off(bool off) {
+    printf("[radio] NR/NB/notches %s\n", off ? "off" : "back to the settings");
+    stub_dsp_on = !off; /* not held off: the radio follows the settings */
+    if (off) stub_dsp_offs++;
+}
 void radio_speaker_play(bool on) { printf("[radio] speaker play %s\n", on ? "on" : "off"); }
 
 /* js8_clock.h: the PC's clock is never written; the scenario sets whether

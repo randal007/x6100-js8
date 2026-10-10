@@ -681,6 +681,8 @@ static bool        wf_avg_set;
 /* What makes the main screen's spectrum and waterfall redraw their part of
  * the lower plane, over ours (js8_wf_repaint_soon). */
 static Observer *wf_watch[4];
+/* NR, NB and the notches: off while JS8 is open (dsp_held_cb). */
+static Observer *dsp_watch[4];
 
 /* Health in the app log, once a minute and only if it happened: the GUI
  * thread stalling (the waterfall then lags), rows dropped. */
@@ -1898,6 +1900,14 @@ static void wf_watch_cb(Subject *subj, void *user_data) {
     js8_wf_repaint_soon();
 }
 
+/* NR, NB, DNF or DNF auto changed while JS8 is open: on whichever thread
+ * changed it (CAT's own), so radio calls only, nothing on the screen. */
+static void dsp_held_cb(Subject *subj, void *user_data) {
+    (void)subj;
+    (void)user_data;
+    radio_set_rx_dsp_off(true);
+}
+
 /* GUI thread, every tick: a long gap since the last one is a stall. */
 static void health_tick(void) {
     int64_t now = now_mono_ms() * 1000;
@@ -2351,7 +2361,7 @@ static void wf_emit_row(void) {
 
 static void on_audio(const float *samples, unsigned n, void *ctx) {
     (void)ctx;
-    if (!sg) return;
+    if (!sg || !psd) return; /* rx_start couldn't get them: no waterfall rows */
 
     /* One row per WF_ROW_SAMPLES of audio, however the audio is chunked.
      * Exact zeros are the beep guard's silence (real audio never is): the
@@ -2791,8 +2801,10 @@ static bool tx_queue_at(const char *text, int offset_hz, bool automatic) {
 
     /* A directed message you sent yourself starts a QSO. */
     char call[JS8_RX_CALL_LEN];
-    if (!automatic && starts_with_call(text, call, sizeof(call))) auto_cq_stop("replying");
-    if (!automatic && starts_with_call(text, call, sizeof(call))) map_qrz_clear(call);
+    if (!automatic && starts_with_call(text, call, sizeof(call))) {
+        auto_cq_stop("replying");
+        map_qrz_clear(call);
+    }
     /* Anything you send by hand pauses heartbeats, except a heartbeat or a
      * CQ: they carry on while you call CQ, auto CQ too (the user's choice). */
     if (!automatic && strncmp(text, "CQ ", 3) != 0) {
@@ -3325,6 +3337,13 @@ static void construct_cb(lv_obj_t *parent) {
      * DIGI modes too, and they damage JS8's tones (the auto-notch goes for
      * exactly such steady tones). Off while the app is open, radio only. */
     radio_set_rx_dsp_off(true);
+    /* Turned on while JS8 is open (CAT, a front-panel control): off again
+     * at once, the setting itself kept. radio.c's own subscriber sends the
+     * new value first (it subscribed at start-up), this one runs after. */
+    dsp_watch[0] = subject_subscribe((Subject *)cfg.dsp.nr(), dsp_held_cb, NULL);
+    dsp_watch[1] = subject_subscribe((Subject *)cfg.dsp.nb(), dsp_held_cb, NULL);
+    dsp_watch[2] = subject_subscribe((Subject *)cfg.dsp.dnf(), dsp_held_cb, NULL);
+    dsp_watch[3] = subject_subscribe((Subject *)cfg.dsp.dnf_auto(), dsp_held_cb, NULL);
 
     filter_low  = cparam_i_get(cfg.filter.low());
     filter_high = cparam_i_get(cfg.filter.high());
@@ -3583,6 +3602,10 @@ static void destruct_cb(void) {
     waterfall_set_enabled(true);
     spectrum_set_enabled(true);
 
+    for (unsigned i = 0; i < sizeof(dsp_watch) / sizeof(dsp_watch[0]); i++) {
+        if (dsp_watch[i]) param_unsubscribe(dsp_watch[i]);
+        dsp_watch[i] = NULL;
+    }
     /* Your filter back, before the saved band and mode return. */
     if (filter_saved) {
         cparam_i_set(cfg.filter.high(), saved_filter_high);
@@ -6321,13 +6344,13 @@ static void rtc_tick(void) {
         return;
     }
     if (!gps_fix_current() || tx_active || !js8_clock_synced()) return;
-    rtc_done = true;
     atomic_store(&rtc_busy, true);
     pthread_t t;
     if (pthread_create(&t, NULL, rtc_save_thread, NULL) != 0) {
-        atomic_store(&rtc_busy, false);
+        atomic_store(&rtc_busy, false); /* nothing written: tried again in 30 s */
         return;
     }
+    rtc_done = true;
     pthread_detach(t);
 }
 

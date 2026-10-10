@@ -451,7 +451,9 @@ std::optional<Signature> delivered_signature(const std::string &text) {
     // "I'M AWAY FROM HOME" isn't signed by "HOME": desktop also requires a
     // valid callsign.
     if (!js8core::protocol::varicode::is_valid_callsign(s.from, nullptr)) return std::nullopt;
-    if (m[2].matched) s.next_id = std::stoi(m.str(2));
+    // Up to 6 digits, as msg_id_arg(): a longer run (std::stoi would throw)
+    // reads as no next id, as desktop's toInt() gives 0.
+    if (m[2].matched && m[2].length() <= 6) s.next_id = std::stoi(m.str(2));
     return s;
 }
 

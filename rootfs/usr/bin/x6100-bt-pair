@@ -39,7 +39,9 @@ BT=$!
 exec 3>"$IN"
 say() { echo "$1" >&3; }
 finish() { say "scan off"; say quit; sleep 1; exec 3>&-; kill "$BT" 2>/dev/null; rm -f "$IN"; }
-trap finish INT TERM
+# Ctrl-C or kill: tidy up and stop, not back into the wait loop.
+trap 'finish; exit 130' INT
+trap 'finish; exit 143' TERM
 
 sleep 2; say "agent off"; sleep 1; say "agent KeyboardDisplay"; sleep 1; say "default-agent"; sleep 1
 say "scan on"

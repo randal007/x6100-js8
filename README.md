@@ -153,7 +153,8 @@ older firmware would misread them.
    (160 m to 6 m), or GhostNet's, or you can type your own (Settings >
    **Frequencies**). While JS8 is open the receive filter is 200–3000 Hz, the transmit
    filter 160–3000 Hz (the radio's default), noise reduction, the noise
-   blanker and the notch filters are off, and power is capped at 5 W; all
+   blanker and the notch filters are off (even if one is turned on, over
+   CAT for example, while JS8 is open), and power is capped at 5 W; all
    go back when you leave.
 4. **Answer someone:** turn the **MFK** to select their row, then **HW
    CPY?** (page 1) for the usual reply to a CQ, **Reply** (page 2) to type,
@@ -1042,6 +1043,13 @@ Not released yet: on `main` and in test builds, for beta 5
   the Linux image and the GUI program, listed in
   [docs/upstream-patches.md](docs/upstream-patches.md) to offer upstream.
   WiFi must be on (APP > WiFi): one switch powers both.
+- **Fixes from a code review of the whole app** (2026-10-10,
+  [docs/review/ultrareview-2026-10-10.md](docs/review/ultrareview-2026-10-10.md)):
+  a received message with a very long number after `SNR` (or in `NEXT MSG
+  ID`) could close the app; noise reduction, the noise blanker and the
+  notches stay off while JS8 is open even if one is turned on over CAT;
+  the battery clock is tried again if its write couldn't start;
+  `x6100-bt-pair` stops on Ctrl-C.
 
 ## New in beta 4.7
 

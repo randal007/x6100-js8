@@ -17,6 +17,9 @@
 > Then the release. Ideas parked lower down: the map's home colour,
 > POTA / SOTA on the air, the Murus merge, performance. Upstream PRs (gpsd
 > merged; uhid, keyboards open): [upstream-patches.md](upstream-patches.md).
+> **Ultrareview** (three cloud reviews of the whole app, 2026-10-10):
+> [review/ultrareview-2026-10-10.md](review/ultrareview-2026-10-10.md);
+> UR1-UR3 done (UR3 needs NR on over CAT at the radio), UR4 to decide.
 
 ## VE7NHW's list (2026-10-09)
 

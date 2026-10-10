@@ -1302,6 +1302,37 @@ TEST_CASE("station list marks who heard us, with the SNR they reported", "[js8][
     CHECK(list.sorted(t0 + StationList::EXPIRE_MS + 10'000).empty());
 }
 
+// Anyone can send this as free text; std::stoi threw on it (ultrareview R1).
+TEST_CASE("a long number after SNR is no report, and no crash", "[js8][t3]") {
+    // "K2XYZ SNR +9999999999" goes out as "SNR +09 999999999" (a command
+    // carries a small number); with a word before SNR it's free text, the
+    // digits as typed.
+    const std::string huge = "+9999999999";
+    StationList list;
+    list.add(heard("K9ABC", "EN52", "K2XYZ HI SNR " + huge, -15, 10'000'000), "K2XYZ");
+    list.add(heard("W1ABC", "FN42", "K2XYZ HI SNR -9999999999", -15, 10'001'000), "K2XYZ");
+    auto s = list.sorted(10'002'000);
+    REQUIRE(s.size() == 2);
+    CHECK_FALSE(s[0].reported_snr.has_value());
+    CHECK_FALSE(s[1].reported_snr.has_value());
+
+    QsoTracker t;
+    CHECK_FALSE(t.received("N7EAL", "N7EAL: VE7NHW HI SNR " + huge, true, -11, "VE7NHW", 1000));
+    CHECK_FALSE(t.sent("VE7NHW: N7EAL HI SNR " + huge, "VE7NHW", 16000));
+    auto q = t.get("N7EAL", 16000);
+    REQUIRE(q);
+    CHECK_FALSE(q->rcvd_snr.has_value());
+    CHECK_FALSE(q->sent_snr.has_value());
+
+    auto n = x6100::js8::history_note_rx("W1ABC", "W1ABC: K2XYZ SNR " + huge, true, "K2XYZ");
+    REQUIRE(n);
+    CHECK_FALSE(n->reported_snr.has_value());
+    // Three digits still read.
+    auto ok = x6100::js8::history_note_rx("W1ABC", "W1ABC: K2XYZ SNR -100", true, "K2XYZ");
+    REQUIRE(ok);
+    CHECK(ok->reported_snr == -100);
+}
+
 /* ---- T4: auto-reply, heartbeat acks, heartbeat timing ------------------ */
 
 #include "autoreply.hpp"
@@ -3248,6 +3279,11 @@ TEST_CASE("a delivered message's signature, as desktop's inbox reads it", "[js8]
     auto c = delivered_signature("SEE YOU FROM VE7/N0XYZ");
     REQUIRE(c);
     CHECK(c->from == "VE7/N0XYZ");
+    // A long id is no next id (std::stoi threw on it; ultrareview R1).
+    auto d = delivered_signature("HI FROM N0XYZ NEXT MSG ID 99999999999");
+    REQUIRE(d);
+    CHECK(d->from == "N0XYZ");
+    CHECK(d->next_id == 0);
 }
 
 TEST_CASE("js8_process keeps messages and answers them", "[js8][held]") {

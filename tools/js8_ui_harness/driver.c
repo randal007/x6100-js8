@@ -1,4 +1,5 @@
 /* C side of the harness: everything that touches firmware headers. */
+#include <pthread.h>
 #include "buttons.h"
 #include "dialog.h"
 #include "dialog_js8.h"
@@ -80,6 +81,43 @@ void ui_init(void) {
     subject_subscribe((Subject *)cfg.filter.high(), print_filter, NULL);
 }
 void ui_open(void) { dialog_construct(dialog_js8, lv_scr_act()); }
+
+/* radio.c's NR/NB/DNF/DNF auto subscribers, made at start-up (before any
+ * app's): the new value straight to the radio. */
+extern bool stub_dsp_on;
+static void radio_dsp_cb(Subject *subj, void *user_data) {
+    (void)user_data;
+    int on = subject_i_get((SubjectInt *)subj);
+    printf("[radio] %s %s\n", subj == (Subject *)cfg.dsp.nr() ? "NR" : "NB/DNF", on ? "on" : "off");
+    if (on) stub_dsp_on = true;
+}
+void ui_radio_dsp_watch(void) {
+    subject_subscribe((Subject *)cfg.dsp.nr(), radio_dsp_cb, NULL);
+    subject_subscribe((Subject *)cfg.dsp.nb(), radio_dsp_cb, NULL);
+    subject_subscribe((Subject *)cfg.dsp.dnf(), radio_dsp_cb, NULL);
+    subject_subscribe((Subject *)cfg.dsp.dnf_auto(), radio_dsp_cb, NULL);
+}
+
+/* NR (0), NB (1), DNF (2) or DNF auto (3) set from another thread, as CAT
+ * does. */
+static int dsp_which, dsp_on;
+static void *dsp_set_thread(void *arg) {
+    (void)arg;
+    ParamInt *p[] = {cfg.dsp.nr(), cfg.dsp.nb(), cfg.dsp.dnf(), cfg.dsp.dnf_auto()};
+    param_i_set(p[dsp_which], dsp_on);
+    return NULL;
+}
+void ui_set_dsp_cat(int which, bool on) {
+    pthread_t t;
+    dsp_which = which;
+    dsp_on    = on;
+    pthread_create(&t, NULL, dsp_set_thread, NULL);
+    pthread_join(t, NULL);
+}
+int ui_dsp_setting(int which) {
+    ParamInt *p[] = {cfg.dsp.nr(), cfg.dsp.nb(), cfg.dsp.dnf(), cfg.dsp.dnf_auto()};
+    return param_i_get(p[which]);
+}
 
 /* The main screen's spectrum and waterfall redraw the lower plane when the
  * frequency changes (main.cpp's pump() stands in for that). */

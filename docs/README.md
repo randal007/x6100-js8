@@ -15,7 +15,7 @@ This folder holds the plans, research and reviews behind it.
 | [upstream-prs/](upstream-prs/README.md) | **Drafts ready to send upstream**: PR texts + patches (gpsd hotplug, uhid, Bluetooth pairings backup, keyboards) and feedback on gdyuldin's Bluetooth screen; nothing sent yet |
 | [UPSTREAM_README.md](UPSTREAM_README.md) | The upstream firmware's README, plus our rule for merging upstream (stored numbers) |
 | [js8core-bug-reports.md](js8core-bug-reports.md) | Bugs found in the js8core engine, written to send to the JS8Call-improved team |
-| [review/](review/) | The full code review: `bugs.md`, `improvements.md`, `features.md` and `fix-plan.md` (packages WP1–WP8 all done for beta 4; a few "Not now" items left) |
+| [review/](review/) | The full code review: `bugs.md`, `improvements.md`, `features.md` and `fix-plan.md` (packages WP1–WP8 all done for beta 4; a few "Not now" items left), and `ultrareview-2026-10-10.md` (three cloud reviews, packages UR1–UR4) |
 | [releases/](releases/) | Release notes for each beta |
 | [screenshots/](screenshots/) | Pictures used in the README |
 

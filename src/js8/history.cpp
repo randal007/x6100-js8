@@ -40,10 +40,12 @@ std::string trim(const std::string &s) {
     return s.substr(b, s.find_last_not_of(' ') - b + 1);
 }
 
+// A sign and up to 3 digits: anyone can send "SNR +9999999999" as free
+// text, and std::stoi throws on it.
 bool parse_snr(const std::string &text, int *out) {
     std::string w = trim(text);
     if (auto sp = w.find(' '); sp != std::string::npos) w = w.substr(0, sp);
-    if (w.size() < 2 || (w[0] != '+' && w[0] != '-')) return false;
+    if (w.size() < 2 || w.size() > 4 || (w[0] != '+' && w[0] != '-')) return false;
     for (std::size_t i = 1; i < w.size(); i++)
         if (!std::isdigit((unsigned char)w[i])) return false;
     *out = std::stoi(w);
