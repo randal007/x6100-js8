@@ -211,6 +211,7 @@ static ParamInt *cfg_js8_log_activation(void) { return param_ref<ParamInt>(cfg_i
 static ParamInt *cfg_js8_alerts(void) { return param_ref<ParamInt>(cfg_instance().p_js8_alerts); }
 static ParamInt *cfg_js8_speed(void) { return param_ref<ParamInt>(cfg_instance().p_js8_speed); }
 static ParamInt *cfg_js8_rx_all(void) { return param_ref<ParamInt>(cfg_instance().p_js8_rx_all); }
+static ParamInt *cfg_js8_ultra(void) { return param_ref<ParamInt>(cfg_instance().p_js8_ultra); }
 static ParamInt *cfg_js8_ghostnet(void) { return param_ref<ParamInt>(cfg_instance().p_js8_ghostnet); }
 static ParamInt *cfg_js8_custom_on(void) { return param_ref<ParamInt>(cfg_instance().p_js8_custom_on); }
 static ParamInt *cfg_js8_custom_hz(void) { return param_ref<ParamInt>(cfg_instance().p_js8_custom_hz); }
@@ -459,6 +460,7 @@ extern "C" const cfg_refs_t cfg = {
         .alerts = &cfg_js8_alerts,
         .speed = &cfg_js8_speed,
         .rx_all = &cfg_js8_rx_all,
+        .ultra = &cfg_js8_ultra,
         .ghostnet = &cfg_js8_ghostnet,
         .custom_on = &cfg_js8_custom_on,
         .custom_hz = &cfg_js8_custom_hz,

@@ -20,13 +20,13 @@ struct Speed {
     js8_speed_t id;
     const char *name;
     char        letter;
-    int         varicode;         ///< desktop's submode number: 0, 1, 2, 4
+    int         varicode;         ///< desktop's submode number: 0, 1, 2, 4, 8
     int         symbol_samples;   ///< at 12 kHz
     int         period_s;         ///< slot length
     int         start_delay_ms;   ///< frames start this far into a slot
     int         rx_threshold_hz;  ///< offsets this close are the same station
     bool        original_costas;  ///< Normal only; the others use the modified array
-    bool        heartbeats;       ///< desktop sends none in Turbo
+    bool        heartbeats;       ///< desktop sends none in Turbo or Ultra
     int         rx_mask;          ///< JS8_SUBMODE_* bit for the receiver
 
     double symbol_seconds() const { return symbol_samples / 12000.0; }
@@ -41,7 +41,7 @@ struct Speed {
 };
 
 const Speed &speed(js8_speed_t id);
-/// A decode's submode number (0/1/2/4); unknown ones are Normal.
+/// A decode's submode number (0/1/2/4/8); unknown ones are Normal.
 const Speed &speed_from_varicode(int varicode);
 
 } // namespace x6100::js8

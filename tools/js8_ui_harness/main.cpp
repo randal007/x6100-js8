@@ -2452,7 +2452,8 @@ int main() {
         ui_press(2); // -> Fast
         printf("[speed] now: '%s'\n", ui_button_label(2));
         ui_page(3);
-        ui_press(3); // back to messages
+        ui_press(3); // Stations -> Map
+        ui_press(3); // -> Messages (the button cycles through the map now)
         pump(200);
 
         // Send at Fast: 10 s slots, 0.1 s symbols -> 79 x 4410 samples at 44.1 kHz.
@@ -2479,13 +2480,53 @@ int main() {
         ui_click_focused();
         pump(200);
         printf("[speed] decode: '%s' (want Decode: All speeds)\n", ui_focused_text());
+
+        // Ultra (experimental): the next line, off to start; on, it's
+        // decoded and on the Speed button.
+        ui_key(LV_KEY_RIGHT);
+        printf("[speed] next line: '%s' (want Ultra (experimental): Off)\n", ui_focused_text());
+        ui_click_focused();
+        pump(200);
+        printf("[speed] ultra: '%s' / '%s' (want On)\n", ui_focused_text(), stub_last_msg);
         ui_key(LV_KEY_ESC);
         pump(200);
+        feed_speeds({{"KL7QXZ", "BP51", "K2XYZ ULTRA HERE", 2400, -5, JS8_SPEED_ULTRA}});
+        pump(300);
+        screenshot("37bb_ultra_rx.ppm");
+        printf("[speed] ultra row U: %d\n", ui_list_has(" U  KL7QXZ"));
         ui_page(6);
         ui_press(2); // Fast -> Turbo
         ui_press(2); // -> Slow
-        ui_press(2); // -> Normal
-        printf("[speed] back to '%s'\n", ui_button_label(2));
+        ui_press(2); // -> Ultra
+        printf("[speed] with Ultra on: '%s' (want Speed: Ultra)\n", ui_button_label(2));
+        ui_page(1);
+        ui_press(2); // Heartbeat in Ultra: refused
+        pump(200);
+        printf("[speed] heartbeat in Ultra: '%s' (want refused)\n", stub_last_msg);
+        ui_press(1); // CQ at Ultra
+        wait_tx();
+        printf("[speed] Ultra frame: %u samples (want %ld: 79 symbols of 32 ms at %d Hz)\n", stub_tx_samples,
+               79 * std::lround(0.032 * stub_play_rate()), stub_play_rate());
+        printf("[speed] our Ultra row: %d (offset down to Ultra's 2750 limit)\n", ui_list_has("TX 2750 U"));
+        screenshot("37c_speed_ultra.ppm");
+
+        // Ultra off while sending at it: back to Normal, and off the button.
+        ui_page(4);
+        ui_press(4); // Settings
+        pump(200);
+        for (int i = 0; i < 25 && strncmp(ui_focused_text(), "Ultra (", 7) != 0; i++) ui_key(LV_KEY_RIGHT);
+        ui_click_focused();
+        pump(200);
+        printf("[speed] ultra: '%s' / '%s' (want Off)\n", ui_focused_text(), stub_last_msg);
+        ui_key(LV_KEY_ESC);
+        pump(200);
+        ui_page(6);
+        printf("[speed] after Ultra off: '%s' (want Speed: Normal)\n", ui_button_label(2));
+        ui_press(2); // -> Fast
+        ui_press(2); // -> Turbo
+        ui_press(2); // -> Slow
+        ui_press(2); // -> Normal (no Ultra)
+        printf("[speed] back to '%s' (want Normal)\n", ui_button_label(2));
         return 0;
     }
     if (getenv("ONLY_HELD")) {

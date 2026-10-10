@@ -363,10 +363,12 @@ class SettingsManager {
         StorageType::GLOBAL, pending_writes_, &global_params_}; // 0 off, 1 POTA, 2 SOTA
     Parameter<int32_t> p_js8_alerts{"js8_alerts", 7, 0, 31,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // JS8_ALERT_* bits in dialog_js8.c (7: beep, to me, inbox)
-    Parameter<int32_t> p_js8_speed{"js8_speed", 0, 0, 3,
-        StorageType::GLOBAL, pending_writes_, &global_params_}; // js8_speed_t we transmit at (0: Normal)
+    Parameter<int32_t> p_js8_speed{"js8_speed", 0, 0, 4,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // js8_speed_t we transmit at (0: Normal, 4: Ultra)
     Parameter<int32_t> p_js8_rx_all{"js8_rx_all", 1, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // decode every speed (desktop's multi-decoder)
+    Parameter<int32_t> p_js8_ultra{"js8_ultra", 0, 0, 1,
+        StorageType::GLOBAL, pending_writes_, &global_params_}; // Ultra (experimental): decoded, and on the Speed button
     Parameter<int32_t> p_js8_ghostnet{"js8_ghostnet", 0, 0, 1,
         StorageType::GLOBAL, pending_writes_, &global_params_}; // band keys step through GhostNet's frequencies
     Parameter<int32_t> p_js8_custom_on{"js8_custom_on", 0, 0, 1,

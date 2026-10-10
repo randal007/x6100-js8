@@ -35,6 +35,7 @@ enum SubmodeMask : int {
     SUBMODE_FAST   = 1 << 1,
     SUBMODE_TURBO  = 1 << 2,
     SUBMODE_SLOW   = 1 << 3,
+    SUBMODE_ULTRA  = 1 << 4, ///< Ultra
 };
 
 /// JS8 receive pipeline for the X6100.
@@ -60,7 +61,7 @@ public:
     struct SyncMark {
         float freq_hz = 0; ///< audio offset of the lowest tone
         float dt      = 0; ///< s
-        int   submode = 0; ///< desktop numbering: 0 Normal, 1 Fast, 2 Turbo, 4 Slow
+        int   submode = 0; ///< desktop numbering: 0 Normal, 1 Fast, 2 Turbo, 4 Slow, 8 Ultra
         int   sync    = 0; ///< candidate's sync strength (7..); 0 for a decode
         bool  decoded = false;
     };

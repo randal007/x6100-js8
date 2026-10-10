@@ -83,7 +83,7 @@ Receiver::Receiver(const Config &config, Callbacks callbacks)
     js8core::EngineConfig ec;
     ec.sample_rate_hz   = JS8_RATE;
     // Schedules for every speed; set_submodes() below picks what's decoded.
-    ec.submodes         = SUBMODE_NORMAL | SUBMODE_FAST | SUBMODE_TURBO | SUBMODE_SLOW;
+    ec.submodes         = SUBMODE_NORMAL | SUBMODE_FAST | SUBMODE_TURBO | SUBMODE_SLOW | SUBMODE_ULTRA;
     ec.spectrum_enabled = false;
 
     js8core::EngineCallbacks ecb;

@@ -284,6 +284,7 @@ typedef struct {
     ParamInt *(*alerts)(void); /* p_js8_alerts */
     ParamInt *(*speed)(void); /* p_js8_speed */
     ParamInt *(*rx_all)(void); /* p_js8_rx_all */
+    ParamInt *(*ultra)(void); /* p_js8_ultra */
     ParamInt *(*ghostnet)(void); /* p_js8_ghostnet */
     ParamInt *(*custom_on)(void); /* p_js8_custom_on */
     ParamInt *(*custom_hz)(void); /* p_js8_custom_hz */

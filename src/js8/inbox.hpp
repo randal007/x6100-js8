@@ -146,6 +146,11 @@ std::optional<std::pair<std::string, std::string>> msg_to_body(const std::string
 /// "FROM: MYCALL QUERY MSG 3": 3.
 std::optional<int> query_msg_id(const std::string &text);
 
+/// The number in what follows "QUERY MSG": "3", and as people type it from
+/// desktop's "QUERY MSG [ID]" template with the brackets left in: "[3]",
+/// "[ID3]", "[ID 3]", "ID 3". Desktop itself takes only a bare number.
+std::optional<int> msg_id_arg(const std::string &arg);
+
 /// The message in "FROM: MYCALL MSG HELLO THERE" when it's to my_call
 /// (or its base call): "HELLO THERE". Not "MSG TO:" (stored for others).
 std::optional<std::string> msg_body(const std::string &text, const std::string &my_call);

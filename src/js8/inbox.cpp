@@ -381,13 +381,28 @@ std::optional<std::pair<std::string, std::string>> msg_to_body(const std::string
     return std::make_pair(dest, body);
 }
 
+std::optional<int> msg_id_arg(const std::string &arg) {
+    std::string s = arg;
+    for (auto &c : s)
+        if (c == '[' || c == ']') c = ' ';
+    auto w = words(s);
+    if (w.empty()) return std::nullopt;
+    std::size_t i = 0;
+    if (w[0] == "ID") i = 1;
+    else if (w[0].rfind("ID", 0) == 0) w[0] = w[0].substr(2);
+    if (i >= w.size()) return std::nullopt;
+    const auto &n = w[i];
+    if (n.empty() || n.size() > 6 || !std::all_of(n.begin(), n.end(), ::isdigit)) return std::nullopt;
+    return std::stoi(n);
+}
+
 std::optional<int> query_msg_id(const std::string &text) {
     auto w = words(text);
     for (std::size_t i = 0; i + 2 < w.size(); i++) {
         if (w[i] != "QUERY" || w[i + 1] != "MSG") continue;
-        const auto &n = w[i + 2];
-        if (n.empty() || n.size() > 6 || !std::all_of(n.begin(), n.end(), ::isdigit)) return std::nullopt;
-        return std::stoi(n);
+        std::string rest;
+        for (std::size_t k = i + 2; k < w.size(); k++) rest += w[k] + " ";
+        return msg_id_arg(rest);
     }
     return std::nullopt;
 }

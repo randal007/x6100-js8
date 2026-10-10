@@ -67,10 +67,6 @@ bool is_group_call(const std::string &to, const AutoSettings &s) {
     return std::find(s.groups.begin(), s.groups.end(), to) != s.groups.end();
 }
 
-bool is_number(const std::string &s) {
-    return !s.empty() && s.size() <= 6 && std::all_of(s.begin(), s.end(), ::isdigit);
-}
-
 struct Ctx {
     const Incoming           &in;
     const AutoSettings       &s;
@@ -219,8 +215,12 @@ Processed handle(const Directed &d, const std::string &relay_path, const Ctx &c)
     // QUERY MSG n: the held message, "NEXT MSG ID n [+k]" if more wait.
     if (cmd == " QUERY" && !c.allcall) {
         auto w = words(d.text);
-        if (w.size() < 2 || w[0] != "MSG" || !is_number(w[1]) || !c.s.held) return {};
-        int  id = std::stoi(w[1]);
+        if (w.size() < 2 || w[0] != "MSG" || !c.s.held) return {};
+        // A bare number as desktop sends it, or "[3]" / "[ID 3]" with
+        // desktop's template brackets left in (we're kinder than desktop).
+        auto parsed = msg_id_arg(join(std::vector<std::string>(w.begin() + 1, w.end()), " "));
+        if (!parsed) return {};
+        int  id = *parsed;
         auto m  = c.s.held->get(id);
         if (!m || trim(m->text).empty()) return {};
         // A group message is for anyone who asks; others only for their station.

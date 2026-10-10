@@ -321,6 +321,7 @@ static const char *speed_label_getter(void);
 static void        speed_cb(button_data_t *btn);
 static void        speed_hold_cb(button_data_t *btn);
 static void        decode_toggle(void);
+static void        ultra_toggle(void);
 static void        speed_warn(void);
 static const char *act_label_getter(void);
 static void        act_cb(button_data_t *btn);
@@ -943,9 +944,17 @@ static void rebuild_rows(void) {
     follow();
 }
 
+/* Ultra is experimental: only with its Setting on is it decoded and on
+ * the Speed button (desktop decodes it always; the Setting is here until
+ * its CPU cost on the radio is known). */
+static bool speed_offered(js8_speed_t s) {
+    return s != JS8_SPEED_ULTRA || param_i_get(cfg.js8.ultra());
+}
+
 /* The speed we transmit at (page 6). */
 static js8_speed_t cur_speed(void) {
-    return param_i_get(cfg.js8.speed()) < JS8_SPEED_COUNT ? (js8_speed_t)param_i_get(cfg.js8.speed()) : JS8_SPEED_NORMAL;
+    int s = param_i_get(cfg.js8.speed());
+    return s < JS8_SPEED_COUNT && speed_offered((js8_speed_t)s) ? (js8_speed_t)s : JS8_SPEED_NORMAL;
 }
 
 /* What the receiver decodes: every speed (desktop's multi-decoder, the
@@ -953,7 +962,8 @@ static js8_speed_t cur_speed(void) {
 static int rx_speed_mask(void) {
     if (!param_i_get(cfg.js8.rx_all())) return js8_speed_rx_mask(cur_speed());
     int mask = 0;
-    for (int s = 0; s < JS8_SPEED_COUNT; s++) mask |= js8_speed_rx_mask((js8_speed_t)s);
+    for (int s = 0; s < JS8_SPEED_COUNT; s++)
+        if (speed_offered((js8_speed_t)s)) mask |= js8_speed_rx_mask((js8_speed_t)s);
     return mask;
 }
 
@@ -2008,7 +2018,7 @@ static void update_status(void) {
         if (param_i_get(cfg.js8.hb())) {
             char hb[40];
             if (!js8_speed_heartbeats(cur_speed())) {
-                snprintf(hb, sizeof(hb), "HB paused (Turbo)  ");
+                snprintf(hb, sizeof(hb), "HB paused (%s)  ", js8_speed_name(cur_speed()));
             } else if (hb_paused()) {
                 time_t    t = (time_t)(hb_paused_until / 1000);
                 struct tm nt;
@@ -5291,7 +5301,7 @@ static int free_hb_offset(bool heartbeat) {
 
 static bool send_heartbeat(bool automatic) {
     if (!js8_speed_heartbeats(cur_speed())) {
-        if (!automatic) msg_update_text_fmt("No heartbeats in Turbo, as in desktop JS8Call");
+        if (!automatic) msg_update_text_fmt("No heartbeats in %s, as in desktop JS8Call", js8_speed_name(cur_speed()));
         return false;
     }
     char text[48];
@@ -5334,7 +5344,7 @@ static void heartbeat_hold_cb(button_data_t *btn) {
         return;
     }
     if (!js8_speed_heartbeats(cur_speed())) {
-        msg_update_text_fmt("No heartbeats in Turbo, as in desktop JS8Call");
+        msg_update_text_fmt("No heartbeats in %s, as in desktop JS8Call", js8_speed_name(cur_speed()));
         return;
     }
     /* Busy sending: the first one comes an interval from now (as auto CQ).
@@ -6014,7 +6024,7 @@ static void auto_try_send(void) {
         }
         reply_drop(i);
         if (js8_auto_decide(autop, &r, &st, now) != JS8_AUTO_SEND) continue; /* switched off meanwhile */
-        if (r.hb_ack && !js8_speed_heartbeats(cur_speed())) continue;        /* desktop: no HB ACKs in Turbo */
+        if (r.hb_ack && !js8_speed_heartbeats(cur_speed())) continue;        /* desktop: no HB ACKs in Turbo or Ultra */
         int offset = r.hb_ack ? free_hb_offset(false) : param_i_get(cfg.js8.tx_freq());
         LV_LOG_USER("JS8 auto: '%s' at %d Hz", r.text, offset);
         if (!tx_queue_at(r.text, offset, true)) continue;
@@ -6264,7 +6274,10 @@ static const char *hb_label_getter(void) {
     }
     if (!param_i_get(cfg.js8.hb())) return "Heart-\nbeat";
     if (hb_paused()) return "HB auto:\npaused";
-    if (!js8_speed_heartbeats(cur_speed())) return "HB auto:\nnot Turbo";
+    if (!js8_speed_heartbeats(cur_speed())) {
+        snprintf(buf, sizeof(buf), "HB auto:\nnot %s", js8_speed_name(cur_speed()));
+        return buf;
+    }
     if (!hb_next_ms) return "HB auto:\nsoon";
     int secs = (int)((hb_next_ms - now_wall_ms() + 999) / 1000);
     if (secs < 1) return "HB auto:\nnow";
@@ -6406,6 +6419,7 @@ static void texts_close_cb(lv_event_t *e) {
 #define SETTINGS_DECODE   108
 #define SETTINGS_HCLEAR   109 /* clear the station history: press, then again within HCLEAR_MS */
 #define SETTINGS_FREQ     110 /* Frequencies: JS8Call's / GhostNet / custom kHz (page 6's Freq before) */
+#define SETTINGS_ULTRA    111 /* Ultra (experimental) on/off */
 #define HCLEAR_MS         5000
 
 static int64_t   hclear_armed_ms; /* the first press (monotonic), 0: not armed */
@@ -6437,6 +6451,7 @@ static const char *settings_label(int which) {
     case SETTINGS_MILES: return param_i_get(cfg.js8.miles()) ? "Distance: miles" : "Distance: km";
     case SETTINGS_MARKS: return param_i_get(cfg.js8.decode_marks()) ? "Decode marks: On" : "Decode marks: Off";
     case SETTINGS_DECODE: return param_i_get(cfg.js8.rx_all()) ? "Decode: All speeds" : "Decode: My speed";
+    case SETTINGS_ULTRA: return param_i_get(cfg.js8.ultra()) ? "Ultra (experimental): On" : "Ultra (experimental): Off";
     case SETTINGS_FREQ: snprintf(buf, sizeof(buf), "Frequencies: %s", freq_name()); return buf;
     case SETTINGS_HCLEAR:
         if (hclear_armed_ms && now_mono_ms() - hclear_armed_ms < HCLEAR_MS) {
@@ -6515,6 +6530,9 @@ static void texts_item_cb(lv_event_t *e) {
             break;
         case SETTINGS_DECODE:
             decode_toggle();
+            break;
+        case SETTINGS_ULTRA:
+            ultra_toggle();
             break;
         case SETTINGS_FREQ:
             /* Its own list, as page 6's Freq button opened it. */
@@ -6600,6 +6618,7 @@ static void texts_cb(button_data_t *btn) {
     settings_add(settings_label(SETTINGS_MSG_KEEP), SETTINGS_MSG_KEEP);
     settings_add(settings_label(SETTINGS_MILES), SETTINGS_MILES);
     settings_add(settings_label(SETTINGS_DECODE), SETTINGS_DECODE);
+    settings_add(settings_label(SETTINGS_ULTRA), SETTINGS_ULTRA);
     settings_add(settings_label(SETTINGS_MARKS), SETTINGS_MARKS);
     settings_add(settings_label(SETTINGS_WF), SETTINGS_WF);
     hclear_armed_ms = 0;
@@ -8697,8 +8716,9 @@ static void alerts_cb(button_data_t *btn) {
 /* ---- Speeds (T6) ----------------------------------------------------------- */
 
 /* As desktop JS8Call: everything we send goes at one speed (Normal, Fast,
- * Turbo, Slow), and the receiver decodes every speed at once unless
- * Decode is set to My speed. Turbo sends no heartbeats or HB acks. */
+ * Turbo, Slow, and Ultra with its Setting on), and the receiver decodes
+ * every speed at once unless Decode is set to My speed. Turbo and Ultra send
+ * no heartbeats or HB acks. */
 
 /* The selected station's speed (the one Reply and the green bar are for,
  * not the row under the cursor: with a station locked they differ, bug
@@ -8745,7 +8765,7 @@ static void set_speed(js8_speed_t s) {
     finder_sync();
     lv_obj_invalidate(finder);
     if (!param_i_get(cfg.js8.rx_all())) js8_rx_set_submodes(rx, rx_speed_mask());
-    /* A heartbeat that fell due while in Turbo mustn't go out the moment we
+    /* A heartbeat that fell due while in Turbo or Ultra mustn't go out the moment we
      * leave it: start the interval again. */
     hb_next_ms = 0;
     if (btn_speed.disp_btn) buttons_refresh(&btn_speed);
@@ -8765,7 +8785,10 @@ static void speed_cb(button_data_t *btn) {
     (void)btn;
     user_touch();
     if (popup_guard()) return;
-    set_speed((js8_speed_t)((cur_speed() + 1) % JS8_SPEED_COUNT));
+    js8_speed_t next = cur_speed();
+    do next = (js8_speed_t)((next + 1) % JS8_SPEED_COUNT);
+    while (!speed_offered(next));
+    set_speed(next);
 }
 
 /* Hold: the selected station's speed. */
@@ -8782,6 +8805,10 @@ static void speed_hold_cb(button_data_t *btn) {
         msg_update_text_fmt("Already sending %s", js8_speed_name(their));
         return;
     }
+    if (!speed_offered(their)) {
+        msg_update_text_fmt("%s is off: turn it on in Settings first", js8_speed_name(their));
+        return;
+    }
     set_speed(their);
 }
 
@@ -8790,8 +8817,29 @@ static void speed_hold_cb(button_data_t *btn) {
 static void decode_toggle(void) {
     param_i_set(cfg.js8.rx_all(), !param_i_get(cfg.js8.rx_all()));
     js8_rx_set_submodes(rx, rx_speed_mask());
-    if (param_i_get(cfg.js8.rx_all())) msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Slow)");
+    if (param_i_get(cfg.js8.rx_all()))
+        msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Slow%s)",
+                            param_i_get(cfg.js8.ultra()) ? ", Ultra" : "");
     else msg_update_text_fmt("Decoding %s only", js8_speed_name(cur_speed()));
+}
+
+/* Ultra on or off (Settings, experimental). Off while sending it: back to
+ * Normal. */
+static void ultra_toggle(void) {
+    bool on = !param_i_get(cfg.js8.ultra());
+    if (!on && param_i_get(cfg.js8.speed()) == JS8_SPEED_ULTRA) {
+        if (js8_tx_busy(tx)) {
+            msg_update_text_fmt("Not while sending Ultra - Stop TX first");
+            return;
+        }
+        param_i_set(cfg.js8.ultra(), 0);
+        set_speed(JS8_SPEED_NORMAL);
+    }
+    param_i_set(cfg.js8.ultra(), on);
+    js8_rx_set_submodes(rx, rx_speed_mask());
+    if (btn_speed.disp_btn) buttons_refresh(&btn_speed);
+    msg_update_text_fmt(on ? "Ultra on (experimental): decoded, and on the Speed button (page 6)"
+                           : "Ultra off: not decoded, not on the Speed button");
 }
 
 /* ---- Frequency: JS8Call's, GhostNet's, or your own ---------------------- */

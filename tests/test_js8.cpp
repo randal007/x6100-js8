@@ -2178,6 +2178,7 @@ TEST_CASE("the speed table matches desktop JS8Call's JS8Submode.cpp", "[js8][spe
         {JS8_SPEED_FAST, 1, 80, 10, 200, 16, 2920, 10.0, true, false},
         {JS8_SPEED_TURBO, 2, 160, 6, 100, 32, 2840, 20.0, false, false},
         {JS8_SPEED_SLOW, 4, 25, 30, 500, 10, 2975, 3.125, true, false},
+        {JS8_SPEED_ULTRA, 8, 250, 4, 100, 50, 2750, 31.25, false, false}, // desktop's "JS8 60"
     };
     for (auto &w : want) {
         const Speed &sp = speed(w.id);
@@ -2198,8 +2199,12 @@ TEST_CASE("the speed table matches desktop JS8Call's JS8Submode.cpp", "[js8][spe
     }
     CHECK(speed_from_varicode(99).id == JS8_SPEED_NORMAL);
     CHECK(js8_speed_letter(JS8_SPEED_TURBO) == 'T');
+    CHECK(js8_speed_letter(JS8_SPEED_ULTRA) == 'U');
     CHECK(std::string(js8_speed_name(JS8_SPEED_SLOW)) == "Slow");
+    CHECK(std::string(js8_speed_name(JS8_SPEED_TURBO)) == "Turbo");
+    CHECK(std::string(js8_speed_name(JS8_SPEED_ULTRA)) == "Ultra");
     CHECK(js8_speed_rx_mask(JS8_SPEED_SLOW) == JS8_SUBMODE_SLOW);
+    CHECK(js8_speed_rx_mask(JS8_SPEED_ULTRA) == JS8_SUBMODE_ULTRA);
 }
 
 TEST_CASE("each speed starts on its own slot grid", "[js8][speed][tx]") {
@@ -2212,6 +2217,9 @@ TEST_CASE("each speed starts on its own slot grid", "[js8][speed][tx]") {
     CHECK(next_tx_start_ms(minute + 1'000, JS8_SPEED_SLOW) == minute + 30'500);
     CHECK(next_tx_start_ms(minute + 29'999, JS8_SPEED_SLOW) == minute + 30'500);
     CHECK(next_tx_start_ms(minute + 1'000, JS8_SPEED_NORMAL) == minute + 15'500);
+    CHECK(next_tx_start_ms(minute + 50, JS8_SPEED_ULTRA) == minute + 100);
+    CHECK(next_tx_start_ms(minute + 1'000, JS8_SPEED_ULTRA) == minute + 4'100);
+    CHECK(next_tx_start_ms(minute + 4'099, JS8_SPEED_ULTRA) == minute + 4'100);
 }
 
 TEST_CASE("messages plan and preview the same at every speed", "[js8][speed][tx]") {
@@ -2365,7 +2373,7 @@ bool has_message(const Decoded &d, const std::string &text, int mode) {
 
 } // namespace
 
-TEST_CASE("all four speeds decode together from one band", "[js8][speed][receiver][.slow]") {
+TEST_CASE("all five speeds decode together from one band", "[js8][speed][receiver][.slow]") {
     constexpr int RATE = 11025;
     // Multi-frame messages at every speed, spread over the band.
     std::vector<TestStation> band = {
@@ -2373,16 +2381,18 @@ TEST_CASE("all four speeds decode together from one band", "[js8][speed][receive
         {"K9DEF", "EN52", "K2XYZ HELLO AT FAST SPEED", 1100, -5, JS8_SPEED_FAST},
         {"N0XYZ", "EN34", "K2XYZ HELLO AT TURBO SPEED", 1500, -5, JS8_SPEED_TURBO},
         {"VE7ABC", "CN89", "K2XYZ HELLO AT SLOW", 2000, -5, JS8_SPEED_SLOW},
+        {"KL7QXZ", "BP51", "K2XYZ HELLO AT ULTRA", 2400, -5, JS8_SPEED_ULTRA},
     };
     auto audio = make_test_band(band, RATE, 0.02f, 3);
-    int  all   = JS8_SUBMODE_NORMAL | JS8_SUBMODE_FAST | JS8_SUBMODE_TURBO | JS8_SUBMODE_SLOW;
+    int  all   = JS8_SUBMODE_NORMAL | JS8_SUBMODE_FAST | JS8_SUBMODE_TURBO | JS8_SUBMODE_SLOW | JS8_SUBMODE_ULTRA;
     auto d     = decode_all_speeds(audio, RATE, all, 1.5);
     for (auto &m : d.messages) UNSCOPED_INFO("mode " << m.mode << " dt " << m.dt << ": " << m.text);
     CHECK(has_message(d, "W1ABC: K2XYZ HELLO AT NORMAL SPEED", 0));
     CHECK(has_message(d, "K9DEF: K2XYZ HELLO AT FAST SPEED", 1));
     CHECK(has_message(d, "N0XYZ: K2XYZ HELLO AT TURBO SPEED", 2));
     CHECK(has_message(d, "VE7ABC: K2XYZ HELLO AT SLOW", 4));
-    CHECK(d.messages.size() == 4); // no Turbo retry decoded twice into a stray message
+    CHECK(has_message(d, "KL7QXZ: K2XYZ HELLO AT ULTRA", 8));
+    CHECK(d.messages.size() == 5); // no Turbo / Ultra retry decoded twice into a stray message
     // Each multi-frame message showed as it grew (desktop updates the line
     // every decode cycle), under the same id as the final message.
     for (auto &m : d.messages) {
@@ -2493,6 +2503,14 @@ TEST_CASE("MSG TO: and QUERY MSG parse as desktop sends them", "[js8][held]") {
     CHECK(query_msg_id("W1ABC: K2XYZ QUERY MSG 12") == 12);
     CHECK_FALSE(query_msg_id("W1ABC: K2XYZ QUERY MSGS"));
     CHECK_FALSE(query_msg_id("W1ABC: K2XYZ QUERY MSG X"));
+    // Desktop's "QUERY MSG [ID]" template with the brackets left in, as
+    // VE7NHW sent it on the air (2026-10-09): we take it all the same.
+    CHECK(query_msg_id("VA7NHW: VE7NHW QUERY MSG [1]") == 1);
+    CHECK(query_msg_id("VA7NHW: VE7NHW QUERY MSG [ID1]") == 1);
+    CHECK(query_msg_id("VA7NHW: VE7NHW QUERY MSG [ID 1]") == 1);
+    CHECK(query_msg_id("VA7NHW: VE7NHW QUERY MSG ID 12") == 12);
+    CHECK_FALSE(query_msg_id("VA7NHW: VE7NHW QUERY MSG [ID]"));
+    CHECK_FALSE(query_msg_id("VA7NHW: VE7NHW QUERY MSG []"));
 }
 
 TEST_CASE("held messages: stored by base call, next for a station, delivered", "[js8][held]") {
@@ -2560,6 +2578,17 @@ TEST_CASE("store and forward replies follow desktop", "[js8][held]") {
     CHECK_FALSE(build_reply(other, s, {}, ""));
     auto bad = incoming("W1ABC", "K2XYZ QUERY MSG " + std::to_string(id), -5);
     CHECK_FALSE(build_reply(bad, s, {}, ""));
+    // The id typed into desktop's "QUERY MSG [ID]" with the brackets kept.
+    for (std::string arg : {"[" + std::to_string(id) + "]", "[ID" + std::to_string(id) + "]",
+                            "[ID " + std::to_string(id) + "]"}) {
+        auto b        = incoming("W1ABC", "K2XYZ QUERY MSG " + arg, -5);
+        b.checksum_ok = true;
+        auto got      = build_reply(b, s, {}, "");
+        INFO(arg);
+        REQUIRE(got);
+        CHECK(got->text == "W1ABC MSG MEET AT THE PARK FROM N0XYZ");
+        CHECK(got->deliver_id == id);
+    }
     // Asked again: it didn't get there, so AUTO sends it again, as desktop
     // does (it answers every time; QUERY MSGS only with AUTO on).
     {

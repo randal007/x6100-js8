@@ -8,7 +8,7 @@
 > SOTA on the air, the Murus merge, performance) are parked as ideas.
 > **2026-10-09:** VE7NHW's new list is the next section: APRS NACK, Echo
 > test, @ALLCALL QUERY MSGS, the held-message pickup bug, Show's blank
-> rows, a default STATUS, JS8 60, plus GPS and the Bluetooth keyboard
+> rows, a default STATUS, Ultra (done), plus GPS and the Bluetooth keyboard
 > (still wanted for beta 5).
 
 ## VE7NHW's list (2026-10-09)
@@ -60,7 +60,15 @@ Notes only so far: nothing below is changed in the code yet.
   Clear or a band change (`clear_selection()`). Our side already answers
   it as desktop (YES MSG ID n to the asker, never NO to a group). Maybe
   also an easy way to unselect (to decide).
-- [ ] **Bug: a station retrieving a message we hold gets nothing.** When
+- [x] **Bug: a station retrieving a message we hold gets nothing.** **Solved
+  2026-10-09 (radio's js8_history.db):** desktop sent `QUERY MSG [1]`,
+  `QUERY MSG [ID1]` and `QUERY MSG [ID 1]`: its menu fills in
+  `QUERY MSG [ID]` and the brackets were left in. Desktop itself takes only
+  a bare number (`toInt()`), so it wouldn't answer them either. **Fix
+  (user's choice): we take the id with or without the brackets**
+  (`msg_id_arg()`, `src/js8/inbox.cpp`; `[3]`, `[ID3]`, `[ID 3]`, `ID 3`),
+  unit tests with the on-air texts. The other way worked on the air:
+  `QUERY MSG 3` from the X6100, desktop delivered. Earlier notes: When
   someone sends the command to pick up a message stored here, nothing
   happens and we never send it. **Where:** `QUERY MSG n` is handled in
   `src/js8/autoreply.cpp` (~line 220). It answers only from the held
@@ -111,23 +119,26 @@ Notes only so far: nothing below is changed in the code yet.
   same (`delivered` in `js8_held.txt`). No change.
 - [ ] **A default station STATUS for this app** (VE7NHW: details to talk
   over later). Today STATUS is empty until set in Settings.
-- [ ] **JS8 60 "Ultra" speed (experimental).** js8core already has it
-  (`SubmodeId::I`, engine.cpp case 8); our speed table
-  (`src/js8/speeds.cpp`) and Speed button have Slow/Normal/Fast/Turbo
-  only. **Desktop (JS8Call-improved 7fd8ecd, shown since #371 on
-  2026-09-27):** "JS8 60", submode 8, 384 samples a symbol (31.25 baud, so
-  about 250 Hz wide), 4 s slots, start delay 100 ms, modified Costas,
-  decodes down to −18 dB (Turbo −20), rxThreshold 50 Hz, no heartbeats or
-  HB ACKs (as Turbo), decoded once its samples are in (as Turbo), half the
-  late-start allowance (as Turbo). Desktop now also calls Turbo "JS8 40".
-  **Work:** speed table row + `JS8_SUBMODE_ULTRA` bit (mapped to the
-  engine's I); decode Ultra only while the Setting is on (CPU); TX at
-  submode 8 on 4 s slots; Speed button cycles to Ultra only with Settings
-  *JS8 60 (experimental)* on (new param, default off); no HB in Ultra;
-  waterfall finder 250 Hz; unit test TX audio → decode at Ultra, harness
-  ONLY_SPEED. Check on the radio: CPU with five speeds (cpulog), and the
-  clock (4 s slots are less forgiving: Time Auto doesn't learn from Ultra
-  decodes, desktop's Normal + Slow only).
+- [x] **Ultra speed (experimental; desktop's "JS8 60").** **Done
+  2026-10-09 (user's choices: names stay Turbo and Ultra, letters T and U,
+  not desktop's new "JS8 40" / "JS8 60"; a Setting first, decoding always
+  later if the CPU allows).** Desktop JS8Call-improved 7fd8ecd (shown
+  since #371, 2026-09-27): submode 8, 384 samples a symbol (31.25 baud,
+  250 Hz wide), 4 s slots, start delay 100 ms, modified Costas, −18 dB,
+  rxThreshold 50 Hz, no heartbeats or HB ACKs, scheduled as Turbo; desktop
+  decodes every speed every cycle, with no setting. Ours: speed table row
+  `JS8_SPEED_ULTRA` ('U', `JS8_SUBMODE_ULTRA` = js8core's I bit; js8core's
+  Ultra decoder constants match desktop's); js8core local patch 14 (Ultra
+  takes Turbo's decode schedule, UPSTREAM.md); Settings *Ultra
+  (experimental): On / Off* (`js8_ultra`, off to start): on, Ultra is
+  decoded at every speed and the Speed button steps through it; off while
+  on Ultra goes back to Normal; `js8_speed` allows 4. Heartbeat texts name
+  the speed ("No heartbeats in Ultra"). Time: Auto learns only from Normal
+  and Slow, as desktop. Tests: unit speed table, Ultra slots, loopback at
+  every speed incl. Ultra, five speeds on one band; harness ONLY_SPEED
+  (Setting, a `U` row, the button, HB refused, an Ultra frame's length,
+  Setting off → Normal). **To check on the radio:** CPU with Ultra on
+  (x6100-cpulog), and an Ultra QSO with desktop (the HL2 bench).
 - [ ] **GPS** from a USB dongle (time and position), already the next item (below).
 - [ ] **A Bluetooth keyboard** with JS8, already the next item (below). v1.0.2 has
   no pairing screen: pair with `bluetoothctl` over the USB console.

@@ -21,6 +21,7 @@ extern "C" {
 #define JS8_SUBMODE_FAST   (1 << 1)
 #define JS8_SUBMODE_TURBO  (1 << 2)
 #define JS8_SUBMODE_SLOW   (1 << 3)
+#define JS8_SUBMODE_ULTRA  (1 << 4) /* Ultra */
 
 /* Frame-type bits in js8_rx_msg_t.type. */
 #define JS8_FRAME_FIRST 0x1

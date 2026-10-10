@@ -19,6 +19,7 @@ const Speed SPEEDS[JS8_SPEED_COUNT] = {
     {JS8_SPEED_FAST, "Fast", 'F', 1, 1200, 10, 200, 16, false, true, JS8_SUBMODE_FAST},
     {JS8_SPEED_TURBO, "Turbo", 'T', 2, 600, 6, 100, 32, false, false, JS8_SUBMODE_TURBO},
     {JS8_SPEED_SLOW, "Slow", 'S', 4, 3840, 30, 500, 10, false, true, JS8_SUBMODE_SLOW},
+    {JS8_SPEED_ULTRA, "Ultra", 'U', 8, 384, 4, 100, 50, false, false, JS8_SUBMODE_ULTRA},  // desktop calls it "JS8 60"
 };
 
 } // namespace
