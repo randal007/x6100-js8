@@ -1,0 +1,403 @@
+diff --git a/src/kbd_rollover.c b/src/kbd_rollover.c
+new file mode 100644
+index 0000000..39fae3a
+--- /dev/null
++++ b/src/kbd_rollover.c
+@@ -0,0 +1,60 @@
++/*
++ *  SPDX-License-Identifier: LGPL-2.1-or-later
++ *
++ *  Xiegu X6100 LVGL GUI
++ */
++
++#include "kbd_rollover.h"
++
++static void report(lv_indev_data_t *data, uint32_t key, bool pressed) {
++    data->key              = key;
++    data->state            = pressed ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
++    data->continue_reading = true; /* there may be more events queued */
++}
++
++void kbd_rollover_read(kbd_rollover_t *k, kbd_source_t src, void *ctx, lv_indev_data_t *data) {
++    /* The press that arrived while another key was down: its turn now. */
++    if (k->pending) {
++        k->pending   = false;
++        k->held      = true;
++        k->held_code = k->pending_code;
++        k->held_key  = k->pending_key;
++        report(data, k->held_key, true);
++        return;
++    }
++
++    uint16_t code;
++    uint32_t key;
++    int      value;
++    while (src(ctx, &code, &key, &value)) {
++        if (value == 0) {
++            /* Only the held key's release counts; others were released
++             * already, when the next key went down. */
++            if (!k->held || code != k->held_code) continue;
++            k->held = false;
++            report(data, k->held_key, false);
++            return;
++        }
++        if (key == 0) continue;                       /* Shift, Ctrl...: no character */
++        if (k->held && code == k->held_code) continue; /* auto-repeat: LVGL repeats by itself */
++        if (k->held) {
++            /* Rollover: let go of the old key now, press the new one next read. */
++            k->pending      = true;
++            k->pending_code = code;
++            k->pending_key  = key;
++            k->held         = false;
++            report(data, k->held_key, false);
++            return;
++        }
++        k->held      = true;
++        k->held_code = code;
++        k->held_key  = key;
++        report(data, key, true);
++        return;
++    }
++
++    /* Nothing new: the same state as last time. */
++    data->key              = k->held_key;
++    data->state            = k->held ? LV_INDEV_STATE_PRESSED : LV_INDEV_STATE_RELEASED;
++    data->continue_reading = false;
++}
+diff --git a/src/kbd_rollover.h b/src/kbd_rollover.h
+new file mode 100644
+index 0000000..e167efc
+--- /dev/null
++++ b/src/kbd_rollover.h
+@@ -0,0 +1,38 @@
++/*
++ *  SPDX-License-Identifier: LGPL-2.1-or-later
++ *
++ *  Xiegu X6100 LVGL GUI
++ */
++
++#pragma once
++
++#include "lvgl/lvgl.h"
++
++#include <stdbool.h>
++#include <stdint.h>
++
++/* USB keyboard typing for LVGL's keypad input.
++ *
++ * LVGL's keypad only takes a key when the previous one was released, but
++ * fast typing overlaps keys ("a" still down when "s" goes down), and
++ * those keys were lost. This releases the held key first, then presses
++ * the new one, and ignores the late release of a key already let go.
++ * Keys are tracked by scancode, since a key's character can change while
++ * it's held (Shift released first). */
++
++/* One event from the keyboard: false when there's none left. `key` is the
++ * LVGL key or character (0 for Shift and other keys with no character),
++ * `value` is evdev's: 0 up, 1 down, 2 auto-repeat. */
++typedef bool (*kbd_source_t)(void *ctx, uint16_t *scancode, uint32_t *key, int *value);
++
++typedef struct {
++    bool     held;
++    uint16_t held_code;
++    uint32_t held_key;
++    bool     pending; /* a press to report on the next read */
++    uint16_t pending_code;
++    uint32_t pending_key;
++} kbd_rollover_t;
++
++/* An LVGL keypad read_cb body. */
++void kbd_rollover_read(kbd_rollover_t *k, kbd_source_t src, void *ctx, lv_indev_data_t *data);
+diff --git a/src/keyboard.c b/src/keyboard.c
+index ddb6fd0..40a15e9 100644
+--- a/src/keyboard.c
++++ b/src/keyboard.c
+@@ -11,37 +11,133 @@
+ #include "pubsub_ids.h"
+ #include "usb_devices.h"
+ 
++#include "kbd_rollover.h"
+ #include "lv_drivers/indev/evdev.h"
++#include "lv_drivers/indev/xkb.h"
++
++#include <linux/input.h>
++#include <sys/stat.h>
++#include <unistd.h>
+ 
+ #include <glob.h>
++#include <stdio.h>
++#include <string.h>
++#ifndef KBD_BT_GLOB
++#include <libudev.h>
++#endif
++
++#ifndef KBD_GLOB
++#define KBD_GLOB "/dev/input/by-path/*-kbd" /* tests point it elsewhere */
++#endif
++
++/* After a USB or input device comes or goes, look for the keyboard this
++ * often, this many times: udev's "add" for the USB device comes before the
++ * keyboard's /dev/input node and its by-path link exist, so looking once at once
++ * finds nothing (1.0's USB thread passes the events on without the old
++ * half-second pause between them). */
++#define KBD_RESCAN_MS    500
++#define KBD_RESCAN_TIMES 10
+ 
+ 
+ lv_group_t *keyboard_group;
+ 
+ static lv_indev_drv_t       indev_drv_2;
+ static bool                 ready = false;
++static kbd_rollover_t       rollover;
++static dev_t                kbd_rdev;  /* the keyboard opened: a new one (unplugged and back) opens again */
++static ino_t                kbd_ino;
++static lv_timer_t          *rescan_timer;
++static int                  rescans_left;
+ 
+-static char* search_kbd_device() {
+-    glob_t globbuf;
+-    globbuf.gl_offs = 1;
+-    char *path = NULL;
++extern int evdev_fd; /* lv_drivers/indev/evdev.c, set by evdev_set_file() */
+ 
+-    int res = glob("/dev/input/by-path/*-kbd", 0, NULL, &globbuf);
+-    if (res == 0) {
+-        path = globbuf.gl_pathv[0];
++/* The next key event from the keyboard (USB or Bluetooth), through xkb (layout, Shift). */
++static bool kbd_next(void *ctx, uint16_t *scancode, uint32_t *key, int *value) {
++    (void)ctx;
++    struct input_event in;
++    while (read(evdev_fd, &in, sizeof(in)) > 0) {
++        if (in.type != EV_KEY) continue;
++        *scancode = in.code;
++        *value    = in.value;
++        *key      = xkb_process_key(in.code, in.value); /* also keeps Shift state */
++        return true;
+     }
+-    return path;
++    return false;
++}
++
++static void kbd_read(lv_indev_drv_t *drv, lv_indev_data_t *data) {
++    (void)drv;
++    kbd_rollover_read(&rollover, kbd_next, NULL, data);
++}
++
++static bool glob_first(const char *pattern, char *path, size_t n) {
++    glob_t globbuf;
++    bool   found = glob(pattern, 0, NULL, &globbuf) == 0;
++    if (found) snprintf(path, n, "%s", globbuf.gl_pathv[0]);
++    globfree(&globbuf);
++    return found;
++}
++
++/* A Bluetooth keyboard (HID over GATT through uhid, or classic HID) gets
++ * no by-path link: udev makes those only for devices with a physical path
++ * (USB, platform). Its event node, from udev's database: ID_INPUT_KEYBOARD
++ * is what makes the by-path "-kbd" links too. */
++#ifdef KBD_BT_GLOB /* tests: a folder of their own in place of udev's database */
++static bool search_bt_kbd(char *path, size_t n) {
++    return glob_first(KBD_BT_GLOB, path, n);
++}
++#else
++static bool search_bt_kbd(char *path, size_t n) {
++    struct udev *udev = udev_new();
++    if (!udev) return false;
++    struct udev_enumerate *en = udev_enumerate_new(udev);
++    bool                   found = false;
++    if (en) {
++        udev_enumerate_add_match_subsystem(en, "input");
++        udev_enumerate_add_match_sysname(en, "event*");
++        udev_enumerate_add_match_property(en, "ID_INPUT_KEYBOARD", "1");
++        udev_enumerate_scan_devices(en);
++        struct udev_list_entry *entry;
++        udev_list_entry_foreach(entry, udev_enumerate_get_list_entry(en)) {
++            struct udev_device *dev = udev_device_new_from_syspath(udev, udev_list_entry_get_name(entry));
++            if (!dev) continue;
++            const char *bus  = udev_device_get_property_value(dev, "ID_BUS");
++            const char *node = udev_device_get_devnode(dev);
++            if (bus && node && strcmp(bus, "bluetooth") == 0) {
++                snprintf(path, n, "%s", node);
++                found = true;
++            }
++            udev_device_unref(dev);
++            if (found) break;
++        }
++        udev_enumerate_unref(en);
++    }
++    udev_unref(udev);
++    return found;
++}
++#endif
++
++/* A USB keyboard first (as before), else a Bluetooth one. */
++static char* search_kbd_device() {
++    static char path[256];
++    if (glob_first(KBD_GLOB, path, sizeof(path))) return path;
++    if (search_bt_kbd(path, sizeof(path))) return path;
++    return NULL;
+ }
+ 
+ static void setup_kbd(char *path) {
+-    if (!evdev_set_file(path)) {
++    struct stat st;
++    if (stat(path, &st) != 0 || !evdev_set_file(path)) {
+         return;
+     }
++    kbd_rdev = st.st_rdev;
++    kbd_ino  = st.st_ino;
++    rollover = (kbd_rollover_t){0};
+ 
+     if (indev_drv_2.type == LV_INDEV_TYPE_NONE) {
+         lv_indev_drv_init(&indev_drv_2);
+         indev_drv_2.type = LV_INDEV_TYPE_KEYPAD;
+-        indev_drv_2.read_cb = evdev_read;
++        indev_drv_2.read_cb = kbd_read;
+ 
+         lv_indev_t *keyboard_indev = lv_indev_drv_register(&indev_drv_2);
+ 
+@@ -51,20 +147,44 @@ static void setup_kbd(char *path) {
+     ready = true;
+ }
+ 
+-static void on_usb_device_change(void * s, lv_msg_t * msg) {
+-    enum usb_devices_event_t event = (enum usb_devices_event_t)msg->payload;
+-    char *dev_path = search_kbd_device();
+-    if (dev_path && !ready) {
+-        setup_kbd(dev_path);
+-    } else if (!dev_path && ready) {
+-        ready = false;
++/* A keyboard there and not open (or a different one: unplugged and back):
++ * open it; none there: not ready. */
++static void check_kbd(void) {
++    char       *dev_path = search_kbd_device();
++    struct stat st;
++    if (dev_path && stat(dev_path, &st) == 0) {
++        if (!ready || st.st_rdev != kbd_rdev || st.st_ino != kbd_ino) setup_kbd(dev_path);
++        return;
+     }
++    ready = false;
++}
++
++/* All the checks, also once one finds it: an unplugged keyboard's link can
++ * outlive the "remove" for a moment. */
++static void rescan_cb(lv_timer_t *t) {
++    check_kbd();
++    if (--rescans_left <= 0) {
++        lv_timer_del(t);
++        rescan_timer = NULL;
++    }
++}
++
++/* A USB device, or an input device (a Bluetooth keyboard connecting, or
++ * coming back from sleep as a new node), came or went. */
++static void on_device_change(void * s, lv_msg_t * msg) {
++    (void)s;
++    (void)msg;
++    check_kbd();
++    /* Look again for a few seconds: the keyboard's node comes later. */
++    rescans_left = KBD_RESCAN_TIMES;
++    if (!rescan_timer) rescan_timer = lv_timer_create(rescan_cb, KBD_RESCAN_MS, NULL);
+ }
+ 
+ void keyboard_init() {
+     keyboard_group = lv_group_create();
+ 
+-    lv_msg_subscribe(MSG_USB_DEVICE_CHANGED, on_usb_device_change, NULL);
++    lv_msg_subscribe(MSG_USB_DEVICE_CHANGED, on_device_change, NULL);
++    lv_msg_subscribe(MSG_INPUT_DEVICE_CHANGED, on_device_change, NULL);
+ 
+     char *path = search_kbd_device();
+     if (!path)
+diff --git a/src/pubsub_ids.h b/src/pubsub_ids.h
+index f0440e4..dd76d9f 100644
+--- a/src/pubsub_ids.h
++++ b/src/pubsub_ids.h
+@@ -34,4 +34,6 @@ enum msg_t {
+ 
+     MSG_PANEL_SHOW,
+     MSG_PANEL_HIDE,
++
++    MSG_INPUT_DEVICE_CHANGED, /* an input device came or went (a Bluetooth keyboard connecting or waking) */
+ };
+diff --git a/src/textarea_window.c b/src/textarea_window.c
+index 4f995d0..e47f060 100644
+--- a/src/textarea_window.c
++++ b/src/textarea_window.c
+@@ -20,7 +20,18 @@ static lv_obj_t             *keyboard = NULL;
+ static textarea_window_cb_t ok_cb = NULL;
+ static textarea_window_cb_t cancel_cb = NULL;
+ 
++/* The key that closes the window is usually still held. Closing deletes
++ * the focused object, which resets LVGL's keypad state with a press time
++ * of 0 (boot), so the held key counts as a long press and repeats into
++ * whatever has the focus next: one ESC here closed the whole app. Ignore
++ * that key until it's released. */
++static void swallow_key() {
++    lv_indev_t *indev = lv_indev_get_act();
++    if (indev) lv_indev_wait_release(indev);
++}
++
+ static void ok() {
++    swallow_key();
+     if (ok_cb) {
+         if(ok_cb()) {
+             ok_cb = NULL;
+@@ -30,6 +41,7 @@ static void ok() {
+  }
+ 
+ static void cancel() {
++    swallow_key();
+     if (cancel_cb) {
+         cancel_cb();
+         cancel_cb = NULL;
+diff --git a/src/usb_devices.cpp b/src/usb_devices.cpp
+index 0fa7f60..50c0c19 100644
+--- a/src/usb_devices.cpp
++++ b/src/usb_devices.cpp
+@@ -26,6 +26,9 @@ static void notify_device_added(void *) {
+ static void notify_device_removed(void *) {
+     lv_msg_send(MSG_USB_DEVICE_CHANGED, (void *)USB_DEV_REMOVED);
+ }
++static void notify_input_changed(void *) {
++    lv_msg_send(MSG_INPUT_DEVICE_CHANGED, NULL);
++}
+ 
+ static void *wait_new_device(void *) {
+     while (app_is_running) {
+@@ -41,8 +44,13 @@ static void *wait_new_device(void *) {
+         if (ret > 0 && FD_ISSET(fd, &fds)) {
+             struct udev_device *dev = udev_monitor_receive_device(mon);
+             if (dev) {
+-                const char *action = udev_device_get_action(dev);
+-                if (action && strcmp(action, "add") == 0) {
++                const char *action    = udev_device_get_action(dev);
++                const char *subsystem = udev_device_get_subsystem(dev);
++                if (subsystem && strcmp(subsystem, "input") == 0) {
++                    /* A Bluetooth keyboard has no USB event of its own */
++                    if (action && (strcmp(action, "add") == 0 || strcmp(action, "remove") == 0))
++                        scheduler_put_noargs(notify_input_changed);
++                } else if (action && strcmp(action, "add") == 0) {
+                     scheduler_put_noargs(notify_device_added);
+                 } else if (action && strcmp(action, "remove") == 0) {
+                     scheduler_put_noargs(notify_device_removed);
+@@ -71,6 +79,7 @@ void usb_devices_monitor_init() {
+     }
+ 
+     udev_monitor_filter_add_match_subsystem_devtype(mon, "usb", NULL);
++    udev_monitor_filter_add_match_subsystem_devtype(mon, "input", NULL);
+     udev_monitor_enable_receiving(mon);
+     fd = udev_monitor_get_fd(mon);
+ 
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -17,7 +17,7 @@ target_sources(${PROJECT_NAME} PUBLIC
+     main.c main_screen.c
+     styles.c spectrum.c radio.c dsp.cpp util.cpp
+     app_ports.cpp
+-    waterfall.c rotary.cpp keyboard.c encoder.c
++    waterfall.c rotary.cpp keyboard.c kbd_rollover.c encoder.c
+     events.c msg.c msg_tiny.c keypad.c
+     hkey.c clock.c
+     meter.c band_info.cpp tx_info.c

@@ -8,6 +8,9 @@ that help everyone upstream as PRs, so they stop being ours to carry.
 
 ## PRs to send (the queue)
 
+Ready-to-send texts and patches (checked against gdyuldin's current code):
+[upstream-prs/](upstream-prs/README.md).
+
 Everything here is outside our JS8 app. Tick it when the PR is merged and
 drop our copy.
 
