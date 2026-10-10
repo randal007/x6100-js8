@@ -39,6 +39,10 @@ typedef enum {
     ACTION_APP_QTH,
     ACTION_APP_CALLSIGN,
     ACTION_APP_WIFI,
+    /* Stored in each card's settings, so these keep their numbers: 109 and
+     * 110 were the Murus team's WeFax and NavTex (they come back when their
+     * fork is on 1.0.2), JS8 has been 111 since its first beta. */
+    ACTION_APP_JS8 = 111,
 } press_action_t;
 
 typedef enum {

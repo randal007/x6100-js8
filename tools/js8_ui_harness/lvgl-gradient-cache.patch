@@ -1,0 +1,70 @@
+# The radio's LVGL fork (gdyuldin/lvgl 71daed9 + ad032d8): the gradient
+# cache's overlapping memcpy and wrong hits. R1CBU 1.0's themes draw
+# gradients at start, which hits it on stock v8.3.11. Applied by fetch_deps.sh.
+diff --git a/src/draw/sw/lv_draw_sw_gradient.c b/src/draw/sw/lv_draw_sw_gradient.c
+index efa158c..6e9b312 100644
+--- a/src/draw/sw/lv_draw_sw_gradient.c
++++ b/src/draw/sw/lv_draw_sw_gradient.c
+@@ -57,16 +57,38 @@ static uint8_t * grad_cache_end = 0;
+ /**********************
+  *   STATIC FUNCTIONS
+  **********************/
+-union void_cast {
+-    const void * ptr;
+-    const uint32_t value;
+-};
++static uint32_t grad_key_mix(uint32_t h, uint32_t v)
++{
++    /* FNV-1a style mix */
++    return (h ^ v) * 16777619u;
++}
+ 
+ static uint32_t compute_key(const lv_grad_dsc_t * g, lv_coord_t size, lv_coord_t w)
+ {
+-    union void_cast v;
+-    v.ptr = g;
+-    return (v.value ^ size ^ (w >> 1)); /*Yes, this is correct, it's like a hash that changes if the width changes*/
++    uint32_t h = 2166136261u; /* FNV-1a offset basis */
++
++    /* The map content is a pure function of the used stops and `size`.
++     * `dir` is deliberately not hashed: for HOR, size == w; for VER an
++     * identical map of the same length is shared across any width. */
++    h = grad_key_mix(h, (uint32_t)size);
++    h = grad_key_mix(h, (uint32_t)g->stops_count);
++    h = grad_key_mix(h, (uint32_t)g->dither);
++    for(uint8_t i = 0; i < g->stops_count; i++) {
++        /* only stops [0, stops_count) are ever read by lv_gradient_calculate() */
++        h = grad_key_mix(h, lv_color_to32(g->stops[i].color));
++        h = grad_key_mix(h, g->stops[i].frac);
++    }
++
++#if _DITHER_GRADIENT
++    /* Dithering writes row scratch into item->map (and error_acc[0..w-1]),
++     * sized by the rectangle that first allocated this cache item — so there
++     * the item's usable state, not its colors, depends on the width. */
++    h = grad_key_mix(h, (uint32_t)w);
++#else
++    LV_UNUSED(w); /* a dither-less map is width-agnostic */
++#endif
++
++    return h;
+ }
+ 
+ static size_t get_cache_item_size(lv_grad_t * c)
+@@ -121,7 +143,7 @@ static void free_item(lv_grad_t * c)
+     grad_cache_end -= size;
+     if(next_items_size) {
+         uint8_t * old = (uint8_t *)c;
+-        lv_memcpy(c, ((uint8_t *)c) + size, next_items_size);
++        memmove(c, ((uint8_t *)c) + size, next_items_size);
+         /* Then need to fix all internal pointers too */
+         while((uint8_t *)c != grad_cache_end) {
+             c->map = (lv_color_t *)(((uint8_t *)c->map) - size);
+@@ -259,7 +281,6 @@ lv_grad_t * lv_gradient_get(const lv_grad_dsc_t * g, lv_coord_t w, lv_coord_t h)
+         lv_gradient_set_cache_size(LV_GRAD_CACHE_DEF_SIZE);
+         inited = true;
+     }
+-
+     /* Step 1: Search cache for the given key */
+     lv_coord_t size = g->dir == LV_GRAD_DIR_HOR ? w : h;
+     uint32_t key = compute_key(g, size, w);
