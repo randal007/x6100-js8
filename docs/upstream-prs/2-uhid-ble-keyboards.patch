@@ -1,0 +1,17 @@
+--- a/br2_external/board/X6100/linux/sun8i-r16-x6100_defconfig
++++ b/br2_external/board/X6100/linux/sun8i-r16-x6100_defconfig
+@@ -443,3 +443,4 @@
+ CONFIG_MAGIC_SYSRQ_SERIAL_SEQUENCE="B"
+ CONFIG_DEBUG_FS=y
+ # CONFIG_FTRACE is not set
++CONFIG_UHID=m
+--- a/br2_external/board/X6100/linux/rootfs-overlay/etc/init.d/S40bluetoothd
++++ b/br2_external/board/X6100/linux/rootfs-overlay/etc/init.d/S40bluetoothd
+@@ -9,6 +9,7 @@
+ [ -r "/etc/default/$DAEMON" ] && . "/etc/default/$DAEMON"
+ 
+ start() {
++	modprobe uhid 2>/dev/null
+ 	printf 'Starting %s: ' "$DAEMON"
+ 	# shellcheck disable=SC2086 # we need the word splitting
+ 	start-stop-daemon -S -q -m -b -p "$PIDFILE" -x "/usr/libexec/bluetooth/$DAEMON" \
