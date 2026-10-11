@@ -3694,6 +3694,9 @@ TEST_CASE("our frames are desktop JS8Call's, bit for bit", "[js8][desktop]") {
 // (Varicode::packCmd); js8core kept only 2 bits of the number, so an SNR -03
 // to KG4UHM/6 went out as -31 (seen on the air 2026-10-11). Frames from
 // desktop's Varicode::buildMessageFrames() built with Qt (js8-android 1f8d390a).
+// From a compound call the command rides in the same kind of frame: our old
+// packing showed KG4UHM/6's heartbeat ACKs ("VE7NHW HEARTBEAT SNR -17") as
+// "HW CPY?", "FB" and "RR", and the auto-reply answered a question never asked.
 TEST_CASE("frames to and from compound and portable calls are desktop's, bit for bit", "[js8][desktop]") {
     struct Case {
         const char *mycall;
@@ -3715,6 +3718,20 @@ TEST_CASE("frames to and from compound and portable calls are desktop's, bit for
              {"VE7NHW", 0, "KG4UHM/6 QSL?", "Bu7hI9zNOrMu 1 IXXfezaRO+M0 2"},
              {"VE7NHW", 0, "KG4UHM/6 GOOD AFTERNOON JUST DOING SOME TESTING", "Bu7hI9zNOrMu 1 IXXfezaRO+N8 0 zqEFWNc6oxjV 0 +aBrSYV+++++ 2"},
              {"VE7NHW", 0, "W1ABC/P SNR -12", "UeWdy+APb1bJ 3"},
+             {"KG4UHM/6", 0, "KJ7PRS RR", "AXXfezaROrMu 1 IYAexYQ7O+Lu 2"},
+             {"KG4UHM/6", 0, "KJ7PRS HEARTBEAT SNR -08", "AXXfezaROrMu 1 IYAexYQ7O+k8 2"},
+             {"KG4UHM/6", 0, "KJ7PRS SNR -03", "AXXfezaROrMu 1 IYAexYQ7O+cm 2"},
+             {"KG4UHM/6", 0, "VE7NHW HW CPY?", "AXXfezaROrMu 1 Ju7hI9zNO+Le 2"},
+             {"KG4UHM/6", 0, "VE7NHW FB", "AXXfezaROrMu 1 Ju7hI9zNO+LW 2"},
+             {"KG4UHM/6", 0, "@ALLCALL CQ CQ CQ", "2XXfezaRP++u 3"},
+             {"KG4UHM/6", 0, "KJ7PRS 73", "AXXfezaROrMu 1 IYAexYQ7O+Mm 2"},
+             {"KG4UHM/6", 1, "KJ7PRS RR", "AXXfezaROrMu 1 IYAexYQ7O+Lu 2"},
+             {"KG4UHM/6", 1, "KJ7PRS HEARTBEAT SNR -08", "AXXfezaROrMu 1 IYAexYQ7O+k8 2"},
+             {"KG4UHM/6", 1, "KJ7PRS SNR -03", "AXXfezaROrMu 1 IYAexYQ7O+cm 2"},
+             {"KG4UHM/6", 1, "VE7NHW HW CPY?", "AXXfezaROrMu 1 Ju7hI9zNO+Le 2"},
+             {"KG4UHM/6", 1, "VE7NHW FB", "AXXfezaROrMu 1 Ju7hI9zNO+LW 2"},
+             {"KG4UHM/6", 1, "@ALLCALL CQ CQ CQ", "2XXfezaRP++u 3"},
+             {"KG4UHM/6", 1, "KJ7PRS 73", "AXXfezaROrMu 1 IYAexYQ7O+Mm 2"},
              {"VE7NHW/P", 0, "N0XYZ SNR -03", "UeWdy-ytVbcS 3"},
              {"VE7NHW/P", 0, "N0XYZ HW CPY?", "UeWdy-ytVbE0 3"},
              {"VE7NHW/P", 0, "N0XYZ RR", "UeWdy-ytVbM0 3"},
@@ -3752,9 +3769,11 @@ TEST_CASE("frames to and from compound and portable calls are desktop's, bit for
 // reads them (Varicode::unpackCompoundMessage).
 TEST_CASE("desktop's frames to a compound call read back with their command and SNR", "[js8][desktop]") {
     struct Case {
-        const char *frame, *cmd, *num;
+        const char *frame, *cmd, *num, *call = "KG4UHM/6";
     };
     for (auto c : std::vector<Case>{
+             // KG4UHM/6 acking our heartbeat: the old code showed "HW CPY?"
+             {"Ju7hI9zNO+j0", " HEARTBEAT SNR", "-17", "VE7NHW"},
              {"IXXfezaRO+cm", " SNR", "-03"},
              {"IXXfezaRO+dm", " SNR", "+05"},
              {"IXXfezaRO+a8", " SNR", "-24"},
@@ -3771,7 +3790,7 @@ TEST_CASE("desktop's frames to a compound call read back with their command and 
         auto parts = vc::unpack_compound_message(c.frame, &type, nullptr, nullptr);
         // As desktop's: callsign, "" (no grid), command, number.
         REQUIRE(parts.size() >= 3);
-        CHECK(parts[0] == "KG4UHM/6");
+        CHECK(parts[0] == c.call);
         CHECK(parts[2] == c.cmd);
         if (*c.num) {
             REQUIRE(parts.size() >= 4);
