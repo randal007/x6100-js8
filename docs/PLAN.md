@@ -14,7 +14,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 ## Now
 
-- [ ] **Kris's Bluetooth window** (OpenX6100/x6100_gui#280 +
+- [x] **Kris's Bluetooth window** (OpenX6100/x6100_gui#280 +
   AetherX6100Buildroot#4): test with VE7NHW's LE keyboard and report on
   #280 with `/mnt/bt_pair.log`. Test image: *Build test image* run
   38106197476 (his branches merged with OpenX6100 main; no JS8 in it, so
@@ -22,8 +22,10 @@ by gdyuldin or myshak1, never merged by us alone.
   Forget), Scan, the keyboard listed as `[kbd]`, Connect after its pairing
   key, the passkey if asked, types in Callsign and FT8, hidden after 3
   minutes (a phone can't see the radio), still paired after a normal
-  power-off and on. When Buildroot#4 is merged, drop our pairings-backup
-  step from *Build image*.
+  power-off and on. **Done 2026-10-11: everything worked first try**
+  (paired in 9 s, hidden after 3 min, saved at power-off and reconnected);
+  report with the log posted on #280. Still to do: **when Buildroot#4 is
+  merged, drop our pairings-backup step from *Build image*.**
 - [ ] **App numbers** settled in OpenX6100/x6100_gui discussion 283
   (proposal: JS8 → 112). Then JS8's number changes here, with a one-time
   conversion of our testers' key bindings from 111.
