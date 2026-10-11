@@ -26,6 +26,15 @@ by gdyuldin or myshak1, never merged by us alone.
   (paired in 9 s, hidden after 3 min, saved at power-off and reconnected);
   report with the log posted on #280. Still to do: **when Buildroot#4 is
   merged, drop our pairings-backup step from *Build image*.**
+- [ ] **Kris's Bluetooth window into our build:** wait until he merges
+  #280 (and AetherX6100Buildroot#4) in OpenX6100, then take it with
+  OpenX6100's code (VE7NHW 2026-10-11: "do it proper"). A trial merge had
+  three small conflicts (JS8's and Bluetooth's app button in
+  settings_types.h, buttons.cpp, main_screen.c: keep both, Bluetooth
+  number 116 as proposed in #283); it also brings headset audio, the
+  phone serial link, FT8 over UDP and changes to the shared audio and
+  volume code, so test JS8's receive, transmit and beeps on the radio
+  with it. Then drop our pairings-backup step and `x6100-bt-pair`.
 - [ ] **App numbers** settled in OpenX6100/x6100_gui discussion 283
   (proposal: JS8 → 112). Then JS8's number changes here, with a one-time
   conversion of our testers' key bindings from 111.

@@ -632,6 +632,11 @@ A USB GPS dongle in the radio's **HOST** USB port (one that shows up as
   (ntpd, through gpsd) a few minutes after the first fix, to within about
   a millisecond. With the clock right, [Time: Auto](#time) has almost
   nothing to correct.
+- **GPS and WiFi together:** the radio's clock program (ntpd) uses both
+  the GPS and internet time servers when WiFi is connected, and follows
+  whichever is best at the moment: the GPS while it has a fix (it's the
+  most accurate), the internet servers when it doesn't (indoors, say).
+  Without WiFi it's the GPS alone.
 - **The battery clock:** once the clock is set from the GPS, JS8 saves
   it to the radio's battery-backed clock once (*Battery clock set from GPS
   time* in the list), so the time stays right after you unplug the GPS.
