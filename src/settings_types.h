@@ -39,10 +39,12 @@ typedef enum {
     ACTION_APP_QTH,
     ACTION_APP_CALLSIGN,
     ACTION_APP_WIFI,
-    /* Stored in each card's settings, so these keep their numbers: 109 and
-     * 110 were the Murus team's WeFax and NavTex (they come back when their
-     * fork is on 1.0.2), JS8 has been 111 since its first beta. */
-    ACTION_APP_JS8 = 111,
+    /* Opened from the APP menu only, not offered as a long-press action
+     * (OpenX6100/x6100_gui discussion 283), so never stored on a card and
+     * free to take whatever number it gets. Up to beta 5 it was 111 and
+     * could be put on a key; such a key now does nothing until another
+     * action is picked for it. */
+    ACTION_APP_JS8,
 } press_action_t;
 
 typedef enum {

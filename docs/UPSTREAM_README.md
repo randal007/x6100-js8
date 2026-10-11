@@ -75,10 +75,12 @@ upstream (gdyuldin/x6100_gui), keep these as they are:
   upstream's `MODE_RTTY` = 7, is stored in every JS8 QSO (worked-before
   marks, ADIF export). A mode upstream adds gets 9 or later; renumbering
   JS8 would mean updating the QSO database on every card.
-- **Long-press actions** (`src/settings_types.h`): `ACTION_APP_JS8` = 111,
-  stored in the long-press settings. 109 and 110 stay free for the Murus
-  team's WeFax and NavTex (their fork, merged again once it's on 1.0);
-  their SSTV, also 111 in their build, takes 112 here.
+- **Long-press actions** (`src/settings_types.h`): JS8 is no longer one
+  (2026-10-11, as gdyuldin suggested in OpenX6100/x6100_gui discussion 283
+  and myshak1 did for his four apps): it opens from the APP menu only, so
+  `ACTION_APP_JS8` is never stored and simply goes at the end of
+  `press_action_t`, whatever number that gives. Up to beta 5 it was 111
+  and could be put on a key.
 - **`digital_modes.type`** (`src/cfg/digital_modes.h`): `CFG_DIG_TYPE_JS8`
   = 2 and `_GHOSTNET` = 3, after upstream's FT8 and FT4.
 

@@ -35,9 +35,14 @@ by gdyuldin or myshak1, never merged by us alone.
   phone serial link, FT8 over UDP and changes to the shared audio and
   volume code, so test JS8's receive, transmit and beeps on the radio
   with it. Then drop our pairings-backup step and `x6100-bt-pair`.
-- [ ] **App numbers** settled in OpenX6100/x6100_gui discussion 283
-  (proposal: JS8 → 112). Then JS8's number changes here, with a one-time
-  conversion of our testers' key bindings from 111.
+- [x] **App numbers** (OpenX6100/x6100_gui discussion 283): gdyuldin
+  suggested leaving apps out of the long-press list so their numbers are
+  never stored; myshak1 did that for his four apps. **Done 2026-10-11:**
+  JS8 is no longer a long-press action (opens from the APP menu only),
+  so there's no number to change and nothing to convert. A tester whose
+  key was set to JS8 finds it does nothing: say so in the next release
+  notes. Still to post on #283: JS8's two other stored numbers
+  (`MODE_JS8` = 8, `CFG_DIG_TYPE_JS8` 2 / 3) stay as they are.
 - [ ] **JS8 into OpenX6100**, four pull requests one at a time
   ([upstream-patches.md](upstream-patches.md#js8-into-openx6100-the-plan)):
   groundwork, engine (with the licence note), library + tests, app. The

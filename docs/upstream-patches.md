@@ -51,15 +51,16 @@ Not sent: the UI harness (`tools/js8_ui_harness`, 6,700 lines; later if
 they want it), our docs and research, `x6100-bt-pair` (myshak1's Bluetooth
 window replaces it).
 
-**Before PR 1: app IDs.** `press_action_t` values are saved on the card
-(key bindings), so every app needs a number nobody else uses. Today:
-Murus 1KO125 (0.34 betas 6-8, 1.0.2 beta 1): WeFax 109, NavTex 110,
-SSTV 111; ours: JS8 111 (since beta 1); myshak1's open PRs: WSPR (#271),
-PSK31 (#272), Olivia (#274), Bluetooth (#280) are all appended after WiFi,
-so each takes 109. Settle them in an OpenX6100 discussion first
-(**posted: OpenX6100/x6100_gui discussion 283**, 2026-10-11; text:
-[upstream-prs/7-app-ids-discussion.md](upstream-prs/5-app-ids-discussion.md)).
-Other numbers stored on the card, for the same discussion: `MODE_JS8` = 8
+**Before PR 1: app IDs (settled 2026-10-11).** `press_action_t` values are
+saved on the card only when an app is offered as a long-press action. In
+OpenX6100/x6100_gui discussion 283 (our post, text in
+[upstream-prs/7-app-ids-discussion.md](upstream-prs/7-app-ids-discussion.md))
+gdyuldin suggested appending new apps at the end and leaving them out of
+the long-press list, so nothing is stored and nothing can clash. myshak1
+took that for his apps (no long-press entries; explicit values kept anyway:
+WSPR 113, PSK31 114, Olivia 115, Bluetooth 116), and so did we: JS8 opens
+from the APP menu only since 2026-10-11 and `ACTION_APP_JS8` has no fixed
+number. Other numbers stored on the card, for the same discussion: `MODE_JS8` = 8
 in `qso_log.db` (upstream ends at RTTY = 7), digital-mode types
 `CFG_DIG_TYPE_JS8` = 2 / `CFG_DIG_TYPE_JS8_GHOSTNET` = 3. JS8 doesn't use
 upstream's migration numbers (its `js8_db` table marks what it did).
