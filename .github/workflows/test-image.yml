@@ -1,0 +1,140 @@
+name: Build test image (other branches)
+# Started by hand (about an hour): an SD card image of any x6100_gui branch
+# with any AetherX6100Buildroot branch, as OpenX6100 builds them (none of
+# our JS8 steps), e.g. someone's open PRs to try on the radio before they
+# are merged. The image is an artifact; x6100-flash <run id> writes it.
+on:
+  workflow_dispatch:
+    inputs:
+      gui_repo:
+        description: x6100_gui repository
+        default: OpenX6100/x6100_gui
+      gui_ref:
+        description: its branch, tag or commit
+        default: main
+      buildroot_repo:
+        description: AetherX6100Buildroot repository
+        default: OpenX6100/AetherX6100Buildroot
+      buildroot_ref:
+        description: its branch, tag or commit
+        default: master
+      merge_upstream:
+        description: merge OpenX6100's current main/master into both first (an open PR as it would be once merged)
+        type: boolean
+        default: true
+      name:
+        description: a short name for the image file (sdcard.test-<name>.img.zip)
+        default: upstream
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+    - name: Free Disk Space (Ubuntu)
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: false
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: false
+        docker-images: true
+        swap-storage: true
+
+    - name: Checkout GUI
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+        repository: ${{ inputs.gui_repo }}
+        ref: ${{ inputs.gui_ref }}
+        fetch-depth: 0
+        path: x6100_gui
+
+    - name: Checkout buildroot
+      uses: actions/checkout@v4
+      with:
+        submodules: true
+        repository: ${{ inputs.buildroot_repo }}
+        ref: ${{ inputs.buildroot_ref }}
+        fetch-depth: 0
+        path: AetherX6100Buildroot
+
+    - name: Merge OpenX6100's current code
+      if: inputs.merge_upstream
+      run: |
+        git config --global user.name ci; git config --global user.email ci@localhost
+        git -C x6100_gui fetch https://github.com/OpenX6100/x6100_gui main
+        git -C x6100_gui merge --no-edit FETCH_HEAD
+        git -C x6100_gui submodule update --init --recursive
+        git -C AetherX6100Buildroot fetch https://github.com/OpenX6100/AetherX6100Buildroot master
+        git -C AetherX6100Buildroot merge --no-edit FETCH_HEAD
+        git -C AetherX6100Buildroot submodule update --init --recursive
+
+    - name: What is being built
+      run: |
+        echo "GUI:       ${{ inputs.gui_repo }} ${{ inputs.gui_ref }} (merged with OpenX6100: ${{ inputs.merge_upstream }})"
+        git -C x6100_gui log --oneline -6
+        echo "Buildroot: ${{ inputs.buildroot_repo }} ${{ inputs.buildroot_ref }} (merged with OpenX6100: ${{ inputs.merge_upstream }})"
+        git -C AetherX6100Buildroot log --oneline -6
+
+    - name: Patch GUI mk
+      run: |
+        sed -i "s,https://github.com/gdyuldin/x6100_gui,${GITHUB_WORKSPACE}/x6100_gui,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
+        sed -i "s,^X6100_GUI_SITE_METHOD = git,X6100_GUI_SITE_METHOD = local,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
+        sed -i "s,^X6100_GUI_GIT_SUBMODULES,# X6100_GUI_GIT_SUBMODULES,g" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
+        grep -q "SITE_METHOD = local" AetherX6100Buildroot/br2_external/package/x6100-gui/x6100_gui.mk
+
+    - name: Prepare ccache timestamp
+      id: ccache_cache_timestamp
+      shell: cmake -P {0}
+      run: |
+        string(TIMESTAMP current_date "%Y-%m-%d-%H;%M;%S" UTC)
+        file(APPEND "$ENV{GITHUB_OUTPUT}" "timestamp=${current_date}")
+
+    - name: Restore ccache
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.buildroot-ccache
+        key: ${{ runner.os }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
+        restore-keys: |
+          ${{ runner.os }}-ccache-
+
+    - name: Configure
+      run: |
+        cd AetherX6100Buildroot && bash ./br_config.sh
+
+    - name: Build
+      run: |
+        cd AetherX6100Buildroot/build
+        make lame
+        make mpg123
+        make libsndfile-dirclean
+        make
+
+    - name: Save ccache
+      if: always()
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.buildroot-ccache
+        key: ${{ runner.os }}-ccache-${{ steps.ccache_cache_timestamp.outputs.timestamp }}
+
+    - name: Replace u-boot
+      run: |
+        dd if=x6100_gui/u-boot/u-boot-sunxi-with-spl.bin of=AetherX6100Buildroot/build/images/sdcard.img seek=8K bs=1 conv=notrunc
+
+    - name: Compress image
+      run: |
+        cd AetherX6100Buildroot/build/images
+        mv sdcard.img sdcard.test-${{ inputs.name }}.img
+        zip sdcard.test-${{ inputs.name }}.img.zip sdcard.test-${{ inputs.name }}.img
+
+    - name: Upload image
+      uses: actions/upload-artifact@v4
+      with:
+        name: sdcard.test-${{ inputs.name }}.img.zip
+        path: AetherX6100Buildroot/build/images/sdcard.test-${{ inputs.name }}.img.zip
+        retention-days: 30
