@@ -18,12 +18,50 @@ drop our copy.
 |---|---|---|---|
 | 1 | gdyuldin/AetherX6100Buildroot | gpsd with a control socket (`-F /var/run/gpsd.sock` in S50gpsd): USB GPS hotplug works (section 1) | **MERGED 2026-10-10: OpenX6100/AetherX6100Buildroot#2** (gdyuldin's repos moved to the OpenX6100 organization). Our CI step now skips itself (it checks for `-F` first); remove it when convenient |
 | 2 | gdyuldin/x6100_gui | USB keyboard hot plug (`src/keyboard.c`), Bluetooth keyboards found and followed (`src/keyboard.c`, `src/usb_devices.cpp`, `src/pubsub_ids.h`), then the other keyboard fixes (section 2) | **MERGED 2026-10-10: OpenX6100/x6100_gui#281** (myshak1 approved and merged, 0e6662e; with the Callsign lowercase fix). Our copy goes when we next merge upstream |
-| 3 | gdyuldin/x6100_gui | js8core + `src/js8` + the JS8 app, map and extras | after 2; licence question (GPLv3 js8core) open with gdyuldin |
+| 3 | OpenX6100/x6100_gui | JS8 itself, in four PRs: see [JS8 into OpenX6100](#js8-into-openx6100-the-plan) below | planned (2026-10-11); first the app-ID discussion |
 | 4 | JS8Call-improved/Android-port (js8core) | local patches 1-15, e.g. 14 (Ultra decoded on Turbo's schedule) and 15 (Ultra on its own decode thread, a thread-start hook) | listed in [UPSTREAM.md](../third-party/js8core/UPSTREAM.md); bugs already reported in issue #104 |
 | 5 | gdyuldin/x6100_gui | `dialog_rotary` timestamp-based knob speed (as his main knob) | offered to gdyuldin 2026-10-06 |
 | 6 | gdyuldin/AetherX6100Buildroot | uhid in the kernel (`CONFIG_UHID=m`) + `modprobe uhid` in S40bluetoothd: Bluetooth LE keyboards type (section 1) | **MERGED 2026-10-10: OpenX6100/AetherX6100Buildroot#3** (myshak1, f1447e0). Our CI step skips itself (it checks for `CONFIG_UHID` / `modprobe uhid` first); remove it when convenient |
 | 7 | gdyuldin/AetherX6100Buildroot | Bluetooth pairings kept across updates: `/var/lib/bluetooth` in S04restore_backup_config's backup (section 1) | **not sent:** myshak1's **OpenX6100/AetherX6100Buildroot#4** (open, 2026-10-10) has `S39btstate` (pairings in /mnt/bluetooth.tar), more complete. **Drop our CI step when #4 is merged**, or both would save and restore the pairings |
 | 8 | gdyuldin (feedback, not a PR) | for his `ver_1.1` Bluetooth screen: keyboards need the agent's `DisplayPasskey` / `DisplayPinCode` (missing: a keyboard asking you to type a code would fail), a paired keyboard marked Trusted, and pairing the moment a keyboard appears (many accept a pairing only for seconds); the image's `bt-agent --capability=NoInputNoOutput` + always discoverable accepts any pairing without asking, and cancelled ours | **sent 2026-10-10 as a comment on OpenX6100/x6100_gui#280; ALL addressed by myshak1 the same day (e38637e on that branch):** LE keyboards listed (filter `auto`, input devices only), passkey/PIN shown in the window, Pair() sent the moment the keyboard appears, discoverable and pairable only 3 min after Scan, agent re-claims default. He has no keyboard and asked us to test on his branch |
+
+## JS8 into OpenX6100: the plan
+
+Agreed with VE7NHW 2026-10-11. VE7NHW is a maintainer of OpenX6100
+(team *Maintainers*, with myshak1; gdyuldin is the owner), so the branches
+go **in OpenX6100/x6100_gui itself** (no fork), one PR each, **reviewed
+and merged by gdyuldin or myshak1**, never merged by us alone. One PR at
+a time: the next once the previous is merged.
+
+Sizes against OpenX6100 main (0e6662e, with #281), 2026-10-11:
+
+| PR | Branch | What | Size |
+|---|---|---|---|
+| 1 | `js8-groundwork` | The shared GUI changes JS8 needs: radio helpers (TX filter, RX DSP off, speaker play), tx_level / tx_player hooks, keypad hold time, JS8's settings and its `js8_db` (outside upstream's migrations), the lv_waterfall ring buffer (FT8 scrolls faster too), the app button and its ID, `MODE_JS8` in the QSO log, the digital-mode types and frequency rows, CAT, ADIF. Nothing a user sees on its own; the only PR that can affect other apps, so it's small enough to read every line | ~700 lines, 25 files |
+| 2 | `js8-engine` | `third-party/js8core` (JS8Call-improved/Android-port + our patches, listed in its UPSTREAM.md). **The licence note goes here** (GPL-3.0 engine; combines with the GUI's LGPL-2.1-or-later, the image as a whole is then GPL-3.0; or JS8 as a build option off by default: their call) | 8,000 lines own code; 150,000 vendored (Eigen, CRCpp); 524,000 generated JSC tables |
+| 3 | `js8-library` | `src/js8` (messages, inbox, relays, stations, history, ...) and its unit tests (`tests/test_js8*.cpp`), with a CI job to run them | ~10,000 + 4,700 lines |
+| 4 | `js8-app` | `src/dialog_js8.c`, `src/js8_*` (waterfall, clock), the font, cty.dat and the map: after this one JS8 is in the firmware | ~14,000 lines |
+
+Why four: one PR would be unreviewable (gdyuldin asked for small PRs);
+the map stays in PR 4 because it is woven through `dialog_js8.c` and a
+map-less app would be a version never used on the air. Each PR builds and
+works on its own and needs only the ones before it.
+
+Not sent: the UI harness (`tools/js8_ui_harness`, 6,700 lines; later if
+they want it), our docs and research, `x6100-bt-pair` (myshak1's Bluetooth
+window replaces it).
+
+**Before PR 1: app IDs.** `press_action_t` values are saved on the card
+(key bindings), so every app needs a number nobody else uses. Today:
+Murus 1KO125 (0.34 betas 6-8, 1.0.2 beta 1): WeFax 109, NavTex 110,
+SSTV 111; ours: JS8 111 (since beta 1); myshak1's open PRs: WSPR (#271),
+PSK31 (#272), Olivia (#274), Bluetooth (#280) are all appended after WiFi,
+so each takes 109. Settle them in an OpenX6100 discussion first (draft:
+[upstream-prs/7-app-ids-discussion.md](upstream-prs/5-app-ids-discussion.md)).
+Other numbers stored on the card, for the same discussion: `MODE_JS8` = 8
+in `qso_log.db` (upstream ends at RTTY = 7), digital-mode types
+`CFG_DIG_TYPE_JS8` = 2 / `CFG_DIG_TYPE_JS8_GHOSTNET` = 3. JS8 doesn't use
+upstream's migration numbers (its `js8_db` table marks what it did).
 
 ## 1. The Linux image (AetherX6100Buildroot), patched in our build
 
