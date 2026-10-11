@@ -1,12 +1,12 @@
-**Where:** OpenX6100/x6100_gui discussion 23 (JS8call), a new comment once 1/4 is open.
+**Posted 2026-10-11** on OpenX6100/x6100_gui discussion 23: https://github.com/OpenX6100/x6100_gui/discussions/23#discussioncomment-18866649
 
 ---
 
-The JS8 series has started: **#xxx JS8 (1/4): groundwork in shared code.**
+The JS8 series has started: **#290 JS8 (1/4): groundwork in shared code.**
 
 JS8 comes in four pull requests, one at a time:
 
-1. Groundwork in shared code (#xxx, open now)
+1. Groundwork in shared code (#290, open now)
 2. The JS8 engine from JS8Call-improved (GPL-3.0)
 3. The JS8 library and its unit tests
 4. The app itself, with its map and the APP button

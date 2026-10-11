@@ -22,8 +22,8 @@ GUI files compile for the radio (ARM) with it.
 | 6 | Bluetooth window feedback | none | sent 2026-10-10 on OpenX6100/x6100_gui#280; myshak1 fixed all six points (e38637e); tested on VE7NHW's radio 2026-10-11, all worked; #280 and AetherX6100Buildroot#4 approved by gdyuldin and VE7NHW 2026-10-11 |
 | 7 | OpenX6100/x6100_gui (discussion) | [7-app-ids-discussion.md](7-app-ids-discussion.md) | **posted 2026-10-11: OpenX6100/x6100_gui discussion 283** (app IDs, QSO-log modes, digital-mode types) |
 | 8 | OpenX6100/x6100_gui (discussion) | [8-app-ids-reply.md](8-app-ids-reply.md) | **posted 2026-10-11** on discussion 283: JS8 out of the long-press list like myshak1's apps; keep `MODE_JS8` = 8 and `CFG_DIG_TYPE_JS8` 2 / 3 |
-| 9 | OpenX6100/x6100_gui (PR) | [9-js8-1-groundwork-pr-body.md](9-js8-1-groundwork-pr-body.md) | **draft**: JS8 (1/4), branch `js8-groundwork` (183ffdf: one commit, with tests/test_js8_db.cpp) pushed to OpenX6100 2026-10-11, PR not opened yet |
-| 10 | OpenX6100/x6100_gui (discussion 23) | [10-js8-series-note.md](10-js8-series-note.md) | **draft**: "the JS8 series has started", to post when 1/4 is open |
+| 9 | OpenX6100/x6100_gui (PR) | [9-js8-1-groundwork-pr-body.md](9-js8-1-groundwork-pr-body.md) | **opened 2026-10-11: OpenX6100/x6100_gui#290** JS8 (1/4), branch `js8-groundwork` (3252bde, one commit with tests/test_js8_db.cpp; image build 38152673163) |
+| 10 | OpenX6100/x6100_gui (discussion 23) | [10-js8-series-note.md](10-js8-series-note.md) | **posted 2026-10-11** on discussion 23 (the series, #290, the licence question to gdyuldin) |
 | 11 | OpenX6100/x6100_gui (PR) | [11-adif-ssb-fix-pr-body.md](11-adif-ssb-fix-pr-body.md) | **opened 2026-10-11: OpenX6100/x6100_gui#289** (ADIF export wrote SSB as AM; split out of JS8 1/4) |
 
 From now on PRs go from branches inside OpenX6100's own repos (VE7NHW

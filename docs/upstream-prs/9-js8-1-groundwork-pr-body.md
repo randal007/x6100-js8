@@ -1,6 +1,4 @@
-**Title:** JS8 (1/4): groundwork in shared code
-
-**Branch:** `js8-groundwork` in OpenX6100/x6100_gui (183ffdf, on main d0d0509)
+**Opened 2026-10-11: OpenX6100/x6100_gui#290** (branch `js8-groundwork`, 3252bde on main cae2982), reviewers gdyuldin + myshak1. Text as sent:
 
 ---
 
@@ -40,12 +38,13 @@ Everything in this PR is LGPL-2.1-or-later like the rest of the GUI. The engine 
 
 ### Testing
 
-(The SSB-written-as-AM fix in the ADIF export I found on the way is its own PR: #289.)
-
-
-- Builds into a full image, merged with today's main: (CI run link)
+- Builds into a full image: https://github.com/randal007/x6100-js8/actions/runs/38152673163 (on main d0d0509; OpenX6100 has no build on PRs, so I used our test-image workflow). #273 was merged while it ran: the branch is now on top of it, and the files both touch compile for the radio.
 - `test_js8_db` passes (82 checks). `test_cfg` I couldn't run: it needs the ARM LVGL, so it doesn't build on a PC. The same settings code has run on testers' radios for weeks.
-- Merged on its own with each open PR (#271, #272, #273, #274, #275, #276, #280, #284, #285, #286), it goes in cleanly with every one of them.
+- Merged on its own with each open PR (#271, #272, #274, #275, #276, #280, #284, #285, #286, #289), it goes in cleanly with every one of them.
 - The same code has been on testers' radios since beta 4.1 (2 October), including cards carried over from betas 1-4.
 
+The SSB-written-as-AM bug in the ADIF export that I found on the way is its own PR: #289.
+
 73, Randal VE7NHW
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
