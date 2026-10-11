@@ -4,11 +4,15 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Beta 5** is the current release: the **Ultra** speed (desktop's
-> "JS8 60") decoded on its own processor core, a **USB GPS** for the
-> clock and your grid, **Bluetooth keyboards**, *Anyone have messages?*,
-> desktop's default STATUS, and fixes from a full review of the app's
-> code ([New in beta 5](#new-in-beta-5)). In daily use on the air since
+> **Beta 5.1** is the current release: a **Bluetooth window** to pair
+> keyboards on the radio itself, and a fix for messages to and from
+> stations with a "/" and a number in their call (KG4UHM/6), which were
+> packed and read differently from desktop JS8Call
+> ([New in beta 5.1](#new-in-beta-51)). Beta 5 brought the **Ultra** speed
+> (desktop's "JS8 60") decoded on its own processor core, a **USB GPS** for
+> the clock and your grid, **Bluetooth keyboards**, *Anyone have
+> messages?*, desktop's default STATUS, and fixes from a full review of the
+> app's code ([New in beta 5](#new-in-beta-5)). In daily use on the air since
 > beta 1: heartbeats acknowledged, queries answered, QSOs and messages
 > with desktop JS8Call stations, all speeds decoding, two-way SMS through
 > APRS. Beta 4.5 to 4.7 brought a **station History**, automatic time
@@ -47,14 +51,14 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
-- [New since beta 5 (in the next beta)](#new-since-beta-5-in-the-next-beta)
+- [New in beta 5.1](#new-in-beta-51)
 - [New in beta 5](#new-in-beta-5)
 - [New in beta 4.7](#new-in-beta-47)
 - [New in beta 4.6](#new-in-beta-46)
 - [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
-- [Known issues in beta 5](#known-issues-in-beta-5)
+- [Known issues in beta 5.1](#known-issues-in-beta-51)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -107,7 +111,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta5.img.zip` from the Assets.
+   download `sdcard.js8-beta5.1.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works; a
    name-brand 8–32 GB card (SanDisk, Samsung) from a trusted seller is best.
@@ -993,17 +997,22 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
-## New since beta 5 (in the next beta)
+## New in beta 5.1
 
+Released 2026-10-12 ([release notes](docs/releases/js8-beta5.1.md)).
+
+- **Fixed: messages to and from stations with a "/" and a number in
+  their call** (like KG4UHM/6). Ours went out with the wrong command (an
+  SNR of -03 arrived as -31), and theirs were misread (a heartbeat ACK
+  showed as "HW CPY?", "FB" or "RR", and the auto-reply could answer a
+  question never asked). Both ways now match desktop JS8Call bit for bit.
+  Calls like W1ABC/P were never affected.
 - **The Bluetooth window** (APP, page 3): pair a keyboard on the radio
   itself, no console needed; see [Using a Bluetooth keyboard](#using-a-bluetooth-keyboard).
   From OpenX6100 (Kris SP2KMO). The console command `x6100-bt-pair` is gone.
 - **From OpenX6100's latest firmware:** FT8/FT4 shows each station's country
   next to the distance, sends WSJT-X-style UDP for logging programs, and has
   a *Decoder text* Setting (Large or Compact) in Settings > Interface.
-- **Fixed: messages to stations with a "/" in their call** (like
-  KG4UHM/6) went out with the wrong command, and an SNR as -31 whatever it
-  was. Ours now match desktop JS8Call's bit for bit, both ways.
 - **Fixed in the log export:** SSB contacts were written as AM (our fix,
   merged in OpenX6100 as #289).
 - **JS8 is no longer a long-press action** (Settings > Interface > GEN /
@@ -1090,7 +1099,7 @@ Released 2026-10-05, a quick fix to beta 4.5:
 
 Released 2026-10-04. Most of it is in daily use on the air; what hasn't
 been tried on the air yet is listed in
-[Known issues](#known-issues-in-beta-5).
+[Known issues](#known-issues-in-beta-51).
 
 New:
 
@@ -1330,7 +1339,7 @@ with every change.
 ([Installing](#installing)) and put them back: beta 4 reads them as they
 are, and its new settings start at their defaults.
 
-## Known issues in beta 5
+## Known issues in beta 5.1
 
 - **WeFax, NavTex, SSTV and the broadcast channel list are not
   included.** They're the Murus team's (1KO125), whose fork is still on
