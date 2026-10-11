@@ -1001,6 +1001,9 @@ messages or settings are in it, readable on a PC.
 - **From OpenX6100's latest firmware:** FT8/FT4 shows each station's country
   next to the distance, sends WSJT-X-style UDP for logging programs, and has
   a *Decoder text* Setting (Large or Compact) in Settings > Interface.
+- **Fixed: messages to stations with a "/" in their call** (like
+  KG4UHM/6) went out with the wrong command, and an SNR as -31 whatever it
+  was. Ours now match desktop JS8Call's bit for bit, both ways.
 - **Fixed in the log export:** SSB contacts were written as AM (our fix,
   merged in OpenX6100 as #289).
 - **JS8 is no longer a long-press action** (Settings > Interface > GEN /
