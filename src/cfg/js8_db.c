@@ -3,20 +3,23 @@
  *
  *  Xiegu X6100 LVGL GUI - JS8's part of params.db
  *
- *  JS8's betas 1-4 (on R1CBU 0.34) numbered their two migrations 4 and 5:
+ *  The JS8 test builds (randal007/x6100-js8, betas 1-4 on R1CBU 0.34)
+ *  numbered their two migrations 4 and 5:
  *  4 added JS8Call's frequency list, 5 GhostNet's. R1CBU 1.0 has its own
  *  migration 4, which converts settings stored as scaled integers into real
  *  numbers (pwr 4 -> 0.4 W, output_gain / 5, dac_offset / 10 ...). A card
- *  from our betas has version 5 and would skip it, and read pwr 4 as 4 W.
+ *  from those builds has version 5 and would skip it, and read pwr 4 as
+ *  4 W.
  *
- *  So upstream's numbering is followed exactly from 1.0 on, and the
- *  frequency lists no longer take a number:
- *  - before upstream's migrations, a card at version 4 or 5 that has JS8's
- *    rows ran our betas (stock R1CBU never adds them): it goes back to 3,
+ *  So JS8 follows the GUI's migration numbering exactly from 1.0 on, and
+ *  its frequency lists take no number:
+ *  - before the migrations, a card at version 4 or 5 that has JS8's
+ *    rows ran those builds (nothing else adds them): it goes back to 3,
  *    so the conversion runs. The js8_db table records that this was done,
  *    so it never happens twice (the params table stores whole numbers as
  *    INTEGER, so a second conversion would divide the user's 5 W by 10);
  *  - after them, the two lists are inserted where missing, every start.
+ *  On any other card the first part only creates the js8_db table.
  */
 
 #include "js8_db.h"
@@ -28,9 +31,11 @@
 
 static int scalar(sqlite3 *db, const char *sql, int *out) {
     sqlite3_stmt *stmt;
-    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK) return 1;
+    if (sqlite3_prepare_v2(db, sql, -1, &stmt, NULL) != SQLITE_OK)
+        return 1;
     int rc = sqlite3_step(stmt);
-    if (rc == SQLITE_ROW) *out = sqlite3_column_int(stmt, 0);
+    if (rc == SQLITE_ROW)
+        *out = sqlite3_column_int(stmt, 0);
     sqlite3_finalize(stmt);
     return rc == SQLITE_ROW ? 0 : 1;
 }
@@ -41,7 +46,8 @@ int js8_db_before_migrations(sqlite3 *db) {
         printf("JS8 db: cannot read the schema: %s\n", sqlite3_errmsg(db));
         return 1;
     }
-    if (done) return 0;
+    if (done)
+        return 0;
 
     int ver = -1, js8_rows = 0;
     scalar(db, "SELECT id FROM version", &ver); /* no table or row: a new card */
@@ -63,7 +69,8 @@ int js8_db_before_migrations(sqlite3 *db) {
         sqlite3_exec(db, "ROLLBACK", NULL, NULL, NULL);
         return 1;
     }
-    if (from_beta) printf("JS8 db: card from a JS8 beta (version %d): back to 3 for R1CBU 1.0's migrations\n", ver);
+    if (from_beta)
+        printf("JS8 db: card from a JS8 beta (version %d): back to 3 for R1CBU 1.0's migrations\n", ver);
     return 0;
 }
 

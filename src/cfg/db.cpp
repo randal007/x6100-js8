@@ -898,8 +898,9 @@ extern "C" bool cfg_db_open(const char *path) {
         return false;
     }
 
-    // JS8: a card from our betas is realigned first, or 1.0's settings
-    // conversion would be skipped (js8_db.c).
+    // JS8: a card from the JS8 test builds (betas 1-4, on 0.34) is realigned
+    // first, or 1.0's settings conversion would be skipped (js8_db.c). Any
+    // other card is left as it is.
     if (js8_db_before_migrations(g_db) != 0 || migrations_apply() != 0) {
         LV_LOG_ERROR("Can't apply DB migrations");
         sqlite3_close(g_db);

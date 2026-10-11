@@ -1,6 +1,6 @@
 // params.db across the move to R1CBU 1.0 (src/cfg/js8_db.c): every kind of
-// card gets 1.0's settings conversion exactly once. Run against copies of the
-// real cards' databases too (docs/upgrade-1.0.2): this keeps the rule.
+// card gets 1.0's settings conversion exactly once, and JS8's frequency lists.
+// Also checked against copies of testers' real cards before it went in.
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -57,7 +57,7 @@ void start_ours() {
 } // namespace
 
 TEST_CASE("every card gets R1CBU 1.0's settings conversion exactly once", "[js8][db]") {
-    SECTION("a card from our betas 2-4 (version 5): converted, never twice") {
+    SECTION("a card from the JS8 test builds 2-4 (version 5): converted, never twice") {
         make_card(5, true);
         exec("INSERT INTO params VALUES('pwr', 3), ('output_gain', 44), ('js8_speed', 2);"
              "INSERT INTO band_params VALUES(1, 'dac_offset', -52);");
@@ -71,7 +71,7 @@ TEST_CASE("every card gets R1CBU 1.0's settings conversion exactly once", "[js8]
         start_ours();
         CHECK(pwr() == 5.0);
     }
-    SECTION("a card from our beta 1 (version 4, JS8's list only)") {
+    SECTION("a card from JS8 test build 1 (version 4, JS8's list only)") {
         make_card(4, true);
         exec("INSERT INTO params VALUES('pwr', 50)");
         start_ours();

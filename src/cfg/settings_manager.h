@@ -324,7 +324,7 @@ class SettingsManager {
     Parameter<std::string> p_ft8_cq_modifier{"ft8_cq_modifier", "", {},
         StorageType::GLOBAL, pending_writes_, {}, &global_params_};
 
-    // JS8 (the names are the ones beta 1-4 stored in params.db: values carry over)
+    // JS8 (the names the JS8 test builds stored in params.db: values carry over)
     Parameter<int32_t> p_js8_tx_freq{"js8_tx_freq", 1500, {},
         StorageType::GLOBAL, pending_writes_, {}, &global_params_}; // TX offset in the passband, Hz
     Parameter<int32_t> p_js8_hold_offset{"js8_hold_offset", 0, 0, 1,
