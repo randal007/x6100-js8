@@ -85,3 +85,19 @@ alphabet and spaces. Unit tests (fast and slow) and the full harness run.
 | R8 | `upper()` / `trim()` / `words()` copied into about 12 files under `src/js8`; the copies differ (`trim()` strips spaces in some, all whitespace in `callsign_place.cpp`). | `src/js8/*.cpp` | **Later** (M): one `strutil.hpp`; check each caller's whitespace before merging the `trim()`s |
 | R9 | `lv_waterfall_get_rows()` / `lv_waterfall_fill_rect()` (ours, from 2402951) have no callers; `js8_wf.c` does the same. | `src/widgets/lv_waterfall.c/.h` | **Fix, small**: remove them (keeps the shared widget closer to upstream) |
 | R10 | Hand-written Kaiser polyphase resampler instead of liquid-dsp's `resamp_rrrf`. | `src/js8/resampler.cpp` | **Won't fix**: it's tested (length, in-band tones, image rejection) and decodes on the air; swapping the DSP risks decode regressions for no user gain |
+
+## Branches (removed 2026-10-11)
+
+The review PRs #5-#7 were closed after the fixes; their branches were
+deleted, with the old `port-1.0.2` (merged into main as beta 4.1) and
+`measure-wf` (one measurement-only commit). Their last commits, should
+one be needed again (`git fetch origin <sha>` works while GitHub keeps
+them; the PRs keep theirs):
+
+| Branch | Commit |
+|---|---|
+| review-1 / review-1-base | afd225e / 828a652 |
+| review-2 / review-2-base | 59267f4 / 95f30b3 |
+| review-3 / review-3-base | 9e49f90 / 4e11b69 |
+| port-1.0.2 | aa1270d |
+| measure-wf | a964664 |

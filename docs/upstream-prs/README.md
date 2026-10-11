@@ -2,8 +2,10 @@
 
 Ready-to-send texts for the fixes we carry outside the JS8 app (the queue
 and the background: [../upstream-patches.md](../upstream-patches.md)).
-**Nothing here has been sent.** Each needs VE7NHW's OK, and the ones marked
-*after a test* need that test on the radio first.
+**Where they stand (2026-10-11):** 1, 2 and 4 are merged in OpenX6100
+(gdyuldin's repos moved there; VE7NHW is a maintainer); 3 isn't needed
+(myshak1's Buildroot#4 does it); 6 was sent and all taken up; 7 is posted.
+The texts below are kept as sent.
 
 Each patch applies cleanly to gdyuldin's current code (checked
 2026-10-10: AetherX6100Buildroot 07a8d25, x6100_gui main 02f5240), and the
@@ -11,18 +13,18 @@ GUI files compile for the radio (ARM) with it.
 
 | # | To | Patch | Status |
 |---|---|---|---|
-| 1 | AetherX6100Buildroot | [1-gpsd-hotplug.patch](1-gpsd-hotplug.patch) | tested on the radio 2026-10-10: ready |
-| 2 | AetherX6100Buildroot | [2-uhid-ble-keyboards.patch](2-uhid-ble-keyboards.patch) | after a test: an LE keyboard types |
-| 3 | AetherX6100Buildroot | [3-bluetooth-pairings-backup.patch](3-bluetooth-pairings-backup.patch) | after a test: still paired after an update |
-| 4 | x6100_gui | [4-gui-keyboards.patch](4-gui-keyboards.patch) | after a test: Bluetooth keyboard everywhere; first in the order agreed with gdyuldin |
+| 1 | AetherX6100Buildroot | [1-gpsd-hotplug.patch](1-gpsd-hotplug.patch) | **merged** 2026-10-10: OpenX6100/AetherX6100Buildroot#2 |
+| 2 | AetherX6100Buildroot | [2-uhid-ble-keyboards.patch](2-uhid-ble-keyboards.patch) | **merged** 2026-10-10: OpenX6100/AetherX6100Buildroot#3 |
+| 3 | AetherX6100Buildroot | [3-bluetooth-pairings-backup.patch](3-bluetooth-pairings-backup.patch) | not sent: myshak1's OpenX6100/AetherX6100Buildroot#4 (S39btstate) covers it |
+| 4 | x6100_gui | [4-gui-keyboards.patch](4-gui-keyboards.patch) | **merged** 2026-10-10: OpenX6100/x6100_gui#281 |
 | 5 | x6100_gui | none yet | idea offered 2026-10-06 (knob speed in dialog_rotary), no code written |
-| 6 | gdyuldin (feedback) | none | send with 2 and 4 |
+| 6 | Bluetooth window feedback | none | sent 2026-10-10 on OpenX6100/x6100_gui#280; myshak1 fixed all six points (e38637e); our test of it is next |
 | 7 | OpenX6100/x6100_gui (discussion) | [7-app-ids-discussion.md](7-app-ids-discussion.md) | **posted 2026-10-11: OpenX6100/x6100_gui discussion 283** (app IDs, QSO-log modes, digital-mode types) |
 
-Sending a Buildroot PR needs a fork of gdyuldin/AetherX6100Buildroot under
-randal007 (none yet): fork, branch, `git apply` the patch, commit, PR with
-the text below. PR 4 goes from a branch on gdyuldin/x6100_gui's fork
-(randal007/x6100-js8 is one) based on his `main`.
+From now on PRs go from branches inside OpenX6100's own repos (VE7NHW
+has push access), reviewed and merged by gdyuldin or myshak1; the forks
+randal007/AetherX6100Buildroot and randal007/x6100_gui were used for 1, 2
+and 4.
 
 ---
 
