@@ -1,8 +1,8 @@
 # Beta 5: plan
 
 > **Beta 5 released 2026-10-11** (tag `js8-beta5`, notes
-> [releases/js8-beta5.md](releases/js8-beta5.md)). Still open from this
-> list: Ultra on a busy band, the GPS outside, Show's blank rows.
+> [releases/js8-beta5.md](releases/js8-beta5.md)). **This list is closed:**
+> every item is done or decided; what's next is in [PLAN.md](PLAN.md).
 >
 > **Where it stands (2026-10-10, end of day):** latest release beta 4.7
 > (2026-10-05). On `main` since then, for beta 5 (README "In main since
@@ -29,7 +29,8 @@
 
 Each item says what was done, or what's still needed.
 
-- [ ] **Bug, issue #3 (kj7prs, 2026-10-09): FT8 can't transmit after JS8
+- [x] **Bug, issue #3 (kj7prs, 2026-10-09): FT8 can't transmit after JS8
+  **Closed 2026-10-11: not reproduced by VE7NHW or kj7prs.**
   until a restart** (receive fine; also after some SSB in between). A
   restart fixing it points at state left in the running GUI, not saved
   settings. Suspects (ours): the shared `tx_player` / `tx_level` (the
@@ -151,7 +152,8 @@ Each item says what was done, or what's still needed.
   `js8_history.db` (the exact text decoded from desktop), `js8_held.txt`
   (the message and its id) and `app_logs` ("JS8 auto: ..." lines), plus
   the calls used on each side and the id it gave.
-- [ ] **Show (All / Directed / No HB): blank rows after switching.**
+- [x] **Show (All / Directed / No HB): blank rows after switching.**
+  **Won't do (VE7NHW 2026-10-11): seen once, never reproduced; only if someone sends screenshots.**
   **Not reproduced yet (2026-10-09):** harness ONLY_SHOWSCROLL (64 rows,
   21 after the switch, more than a screenful; hooks
   `dialog_js8_test_message`, `dialog_js8_list_overscroll`) ends exactly at
@@ -235,7 +237,8 @@ Each item says what was done, or what's still needed.
   and forth with desktop at Ultra: worked fine, nothing wrong found.
   **Still to check:** a busy band on the antenna; with an amp, Ultra keys
   it every 4 s (2.5 s on, 1.5 s off).
-- [ ] **GPS** from a USB dongle (time and position). The user has the dongle;
+- [x] **GPS** from a USB dongle (time and position). The user has the dongle;
+  **Done in beta 5; the outside check is in PLAN.md.**
   work on it **at the radio** (it must be plugged into the radio's HOST
   port). **Findings 2026-10-09 (code + AetherX6100Buildroot aca5e53):**
   - **How it reaches the GUI:** gpsd (`localhost:2947`); `src/gps.c`
@@ -352,7 +355,8 @@ Each item says what was done, or what's still needed.
     `gpspipe -w -n 5` (if installed) or APP > GPS, `ntpq -p` (GPS refid,
     offset, `*` once selected), `date -u` against the PC. Then decide on
     catch 1, write catches 2 and 3, test with the harness's HARNESS_GPS.
-- [ ] **A Bluetooth keyboard** with JS8, already the next item (below). v1.0.2 has
+- [x] **A Bluetooth keyboard** with JS8, already the next item (below). v1.0.2 has
+  **Done in beta 5 (kept paired across an update); the pairing window is Kris's, in PLAN.md.**
   no pairing screen: pair with `bluetoothctl` over the USB console.
   **2026-10-10, VE7NHW's F01-keyboard (Bluetooth LE):** WiFi must be on
   (one power pin for the WiFi/BT chip); found by an LE scan
@@ -454,7 +458,8 @@ moved into the README's "New in ..." as they land.
   now). **Studied:** [upgrade-1.0.2/](upgrade-1.0.2/README.md) (trial
   merge, every upstream commit, the power trap in the settings
   migrations, the order of work, decisions for the user).
-- [ ] **Merge the Murus team's SSTV release** (custom-r1cbu
+- [x] **Merge the Murus team's SSTV release** (custom-r1cbu
+  **Won't do here (VE7NHW 2026-10-11): their apps come through OpenX6100.**
   [releases](https://github.com/TheMurusTeam/custom-r1cbu/releases)):
   the list said beta 7; **beta 8 came out 2026-10-02** (SSTV transmit
   added). **After the 1.0.2 move:** the Murus team is bringing their fork
@@ -818,8 +823,10 @@ heard paused them; [docs/review](review/)).
 On the air with beta 4 (VE7NHW, up to 2026-10-02): relays, messaging,
 store and forward and Winlink all work; only QUERY CALL failed (above).
 
-- [ ] On-air tests still to do: POTA and SOTA spots through the gateways.
-- [ ] Show Map: polish from use on the air ([MAP_PLAN.md](MAP_PLAN.md)).
+- [x] On-air tests still to do: POTA and SOTA spots through the gateways.
+  **Moved to PLAN.md (to try when portable).**
+- [x] Show Map: polish from use on the air ([MAP_PLAN.md](MAP_PLAN.md)).
+  **Won't do as a task: too vague; new map wishes become their own items.**
   (A Setting for your own square's colour: dropped 2026-10-10, VE7NHW:
   it stays orange.)
 
@@ -854,7 +861,8 @@ store and forward and Winlink all work; only QUERY CALL failed (above).
   CPU logs agree: the GUI never waited, Ultra ~10 % of a core).**
   cores. First measurement and the waterfall fix done (above, "Screen and
   radio"); the GUI thread's remaining ~29 % with no rows is still to look at.
-- [ ] Leftovers in the [fix plan](review/fix-plan.md) ("Not now": I-02,
+- [x] Leftovers in the [fix plan](review/fix-plan.md) ("Not now": I-02,
+  **Won't do (VE7NHW 2026-10-11): they work; only if a real problem shows up.**
   I-04, I-10 with B-11).
 
 ## Merge notes (checked 2026-10-02)

@@ -8,7 +8,7 @@ For a new beta (or any image that goes out to testers).
    (`IDLE <MYIDLE> VERSION <MYVERSION>`) answers every STATUS? with it.
    Beta 4.5 went out still saying "beta 5" because this was missed.
 2. **The README is the manual:** "New in ...", "Known issues in ...",
-   "Coming next" (from [BETA5_PLAN.md](../BETA5_PLAN.md) or its successor),
+   "Coming next" (from [PLAN.md](../PLAN.md)),
    and the summary at the top.
 3. **Release notes:** `docs/releases/js8-<name>.md` (new features first,
    then bug fixes).

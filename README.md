@@ -1340,8 +1340,6 @@ are, and its new settings start at their defaults.
   exchanged messages with, not every station heard.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
-- **Switching Show** (All / No HB / Directed) was once seen leaving blank
-  rows; not reproduced since. Radio screenshots very welcome.
 - If the radio loses power, or you switch it off by holding POWER, while
   JS8 is open, the USB-D receive filter stays at 200–3000 Hz, which suits
   digital modes; set yours back by hand if it was different. Leaving the
@@ -1350,20 +1348,14 @@ are, and its new settings start at their defaults.
 
 ## Coming next
 
+The work list is [docs/PLAN.md](docs/PLAN.md).
+
 - [ ] **A Bluetooth pairing window** on the radio, through OpenX6100 (being
   tested now)
 - [ ] **WeFax, NavTex and SSTV** from the Murus team, through OpenX6100
+- [ ] **JS8 in the OpenX6100 firmware** itself, offered as four pull
+  requests once the app numbers are agreed
 - [ ] **Ultra on a busy band** and the **GPS** outside (grid, battery clock)
-- [ ] **Show's blank rows** (switching Show All / No HB / Directed): not
-  reproduced yet; radio screenshots wanted
-
-Ideas for later (not planned now):
-
-- Performance: one decoder thread per speed if needed (Ultra has its own
-  already, and the decoders stay off the screen's core)
-- The same lower-layer drawing for the FT8 app's waterfall (that's
-  upstream's code: an idea to offer them)
-- Decode marks: an option to hide the dim ones (faint maybes, mostly noise)
 
 ## Bug reports and feature requests
 
@@ -1419,10 +1411,20 @@ JS8 app by VE7NHW.
   harness scenarios too (real time, 1-3 hours).
 - **Testers' tools:** [tools/windows](tools/windows) (read-only
   diagnostics over the radio's USB console, PowerShell).
+- **How we work:** small fixes and docs go straight on `main`; anything
+  bigger (a feature, a refactor, anything to try on the radio first) gets
+  its own short-lived branch, a test image built from it, and goes into
+  `main` by a pull request once it works on the radio, then the branch is
+  deleted. One or two such branches at a time at most. Releases are tags
+  on `main`. Changes for the shared firmware go to
+  [OpenX6100](https://github.com/OpenX6100) as branches and pull requests
+  reviewed by its other maintainers. The work list is
+  [docs/PLAN.md](docs/PLAN.md).
 - **Building:** GitHub Actions builds the SD image with
-  [AetherX6100Buildroot](https://github.com/gdyuldin/AetherX6100Buildroot)
-  (about an hour): run *Build image* on `main` for a test image (an
-  artifact), or on a tag to publish a release with the image attached
+  [AetherX6100Buildroot](https://github.com/OpenX6100/AetherX6100Buildroot)
+  (about an hour): run *Build image* on `main` or a branch for a test image (an
+  artifact), *Build test image (other branches)* for anyone's
+  x6100_gui / AetherX6100Buildroot branches (e.g. a pull request to try), or on a tag to publish a release with the image attached
   (pushing a tag doesn't start it); the steps for a release, the version
   string first, are in [docs/releases/CHECKLIST.md](docs/releases/CHECKLIST.md);
   upstream notes in
