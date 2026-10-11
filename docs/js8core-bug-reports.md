@@ -119,6 +119,18 @@ Fast, 100 Turbo): signals 1.5 s late give -1000. We added
 without `<functional>` / `<cstring>`; fine with Android's libc++, not with
 GCC's libstdc++.
 
+### 11. Compound frames' command and SNR packed differently from desktop
+
+`pack_cmd()` returns `(cmd & 0x1F) << 2 | (num & 0x03)` and `unpack_cmd()`
+the reverse. Desktop's `Varicode::packCmd()` / `unpackCmd()` use
+`[1][type][6-bit number]` for SNR commands (type 1 = HEARTBEAT SNR) and the
+7-bit command value otherwise. Every command in a compound-directed frame
+(to a call like KG4UHM/6) therefore differs from desktop's, and an SNR keeps
+2 bits of its number: "KG4UHM/6 SNR -03" is sent as SNR -31, and desktop's
+own compound frames read back with the wrong command. Found on the air
+2026-10-11; fixed here as local patch 16 (desktop's two functions, checked
+bit for bit against desktop's `buildMessageFrames()`).
+
 ## How we checked against desktop
 
 Desktop's `Varicode.cpp` and `JS8_JSC` build on their own with Qt 6
