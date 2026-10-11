@@ -17,7 +17,7 @@ GUI files compile for the radio (ARM) with it.
 | 4 | x6100_gui | [4-gui-keyboards.patch](4-gui-keyboards.patch) | after a test: Bluetooth keyboard everywhere; first in the order agreed with gdyuldin |
 | 5 | x6100_gui | none yet | idea offered 2026-10-06 (knob speed in dialog_rotary), no code written |
 | 6 | gdyuldin (feedback) | none | send with 2 and 4 |
-| 7 | OpenX6100/x6100_gui (discussion) | [7-app-ids-discussion.md](7-app-ids-discussion.md) | draft 2026-10-11: app IDs (and QSO-log modes, digital-mode types) settled before the JS8 PRs |
+| 7 | OpenX6100/x6100_gui (discussion) | [7-app-ids-discussion.md](7-app-ids-discussion.md) | **posted 2026-10-11: OpenX6100/x6100_gui discussion 283** (app IDs, QSO-log modes, digital-mode types) |
 
 Sending a Buildroot PR needs a fork of gdyuldin/AetherX6100Buildroot under
 randal007 (none yet): fork, branch, `git apply` the patch, commit, PR with

@@ -18,7 +18,7 @@ drop our copy.
 |---|---|---|---|
 | 1 | gdyuldin/AetherX6100Buildroot | gpsd with a control socket (`-F /var/run/gpsd.sock` in S50gpsd): USB GPS hotplug works (section 1) | **MERGED 2026-10-10: OpenX6100/AetherX6100Buildroot#2** (gdyuldin's repos moved to the OpenX6100 organization). Our CI step now skips itself (it checks for `-F` first); remove it when convenient |
 | 2 | gdyuldin/x6100_gui | USB keyboard hot plug (`src/keyboard.c`), Bluetooth keyboards found and followed (`src/keyboard.c`, `src/usb_devices.cpp`, `src/pubsub_ids.h`), then the other keyboard fixes (section 2) | **MERGED 2026-10-10: OpenX6100/x6100_gui#281** (myshak1 approved and merged, 0e6662e; with the Callsign lowercase fix). Our copy goes when we next merge upstream |
-| 3 | OpenX6100/x6100_gui | JS8 itself, in four PRs: see [JS8 into OpenX6100](#js8-into-openx6100-the-plan) below | planned (2026-10-11); first the app-ID discussion |
+| 3 | OpenX6100/x6100_gui | JS8 itself, in four PRs: see [JS8 into OpenX6100](#js8-into-openx6100-the-plan) below | planned (2026-10-11); first the app-ID discussion (OpenX6100/x6100_gui discussion 283). The licence talk is in discussion 23 (gdyuldin, 2026-10-06: "need to read more"; no answer since) |
 | 4 | JS8Call-improved/Android-port (js8core) | local patches 1-15, e.g. 14 (Ultra decoded on Turbo's schedule) and 15 (Ultra on its own decode thread, a thread-start hook) | listed in [UPSTREAM.md](../third-party/js8core/UPSTREAM.md); bugs already reported in issue #104 |
 | 5 | gdyuldin/x6100_gui | `dialog_rotary` timestamp-based knob speed (as his main knob) | offered to gdyuldin 2026-10-06 |
 | 6 | gdyuldin/AetherX6100Buildroot | uhid in the kernel (`CONFIG_UHID=m`) + `modprobe uhid` in S40bluetoothd: Bluetooth LE keyboards type (section 1) | **MERGED 2026-10-10: OpenX6100/AetherX6100Buildroot#3** (myshak1, f1447e0). Our CI step skips itself (it checks for `CONFIG_UHID` / `modprobe uhid` first); remove it when convenient |
@@ -56,7 +56,8 @@ window replaces it).
 Murus 1KO125 (0.34 betas 6-8, 1.0.2 beta 1): WeFax 109, NavTex 110,
 SSTV 111; ours: JS8 111 (since beta 1); myshak1's open PRs: WSPR (#271),
 PSK31 (#272), Olivia (#274), Bluetooth (#280) are all appended after WiFi,
-so each takes 109. Settle them in an OpenX6100 discussion first (draft:
+so each takes 109. Settle them in an OpenX6100 discussion first
+(**posted: OpenX6100/x6100_gui discussion 283**, 2026-10-11; text:
 [upstream-prs/7-app-ids-discussion.md](upstream-prs/5-app-ids-discussion.md)).
 Other numbers stored on the card, for the same discussion: `MODE_JS8` = 8
 in `qso_log.db` (upstream ends at RTTY = 7), digital-mode types

@@ -1,6 +1,6 @@
-# Draft: OpenX6100 discussion on app IDs
+# OpenX6100 discussion on app IDs
 
-Not posted yet. For OpenX6100/x6100_gui → Discussions (category: Ideas or
+**Posted 2026-10-11 as https://github.com/OpenX6100/x6100_gui/discussions/283** (General; JS8 → 112 as proposed, VE7NHW sends the link to the Murus team on Facebook). Was:
 General). Title:
 
 **Numbers for new apps (and other values saved on the card), so our PRs don't clash**
