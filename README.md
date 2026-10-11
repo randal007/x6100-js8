@@ -4,30 +4,20 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Beta 4.7** is the current release: beta 4.5 with a transmit level
-> that holds steady for an amplifier and finds its place within the first
-> transmission or two, and "JS8 Custom" for a custom frequency
-> ([New in beta 4.7](#new-in-beta-47), [4.6](#new-in-beta-46)). In daily use on the air since
+> **Beta 5** is the current release: the **Ultra** speed (desktop's
+> "JS8 60") decoded on its own processor core, a **USB GPS** for the
+> clock and your grid, **Bluetooth keyboards**, *Anyone have messages?*,
+> desktop's default STATUS, and fixes from a full review of the app's
+> code ([New in beta 5](#new-in-beta-5)). In daily use on the air since
 > beta 1: heartbeats acknowledged, queries answered, QSOs and messages
-> with desktop JS8Call stations, all four speeds decoding, two-way SMS
-> through APRS. Beta 4.5 brought a **station History** (everyone you've exchanged
-> messages with, their INFO, STATUS and QSO texts, an all-time list and map
-> per band), automatic time sync from every decode, saved messages with
-> desktop's macros, Sort (QSO too), QRZ and an `@` for two-way APRS gateways
-> in the Stations view, a count on stacked map squares, high-SWR
-> protection, an APRS services list, a lighter and calmer
-> waterfall, and a USB keyboard that works when plugged in while the radio
-> is on ([New in beta 4.5](#new-in-beta-45)). Beta 4.1 moved JS8 onto the
-> latest R1CBU firmware (gdyuldin v1.0.2), and beta 4 added the map and
-> decode marks. Nothing transmits by itself when the app opens; automatic
-> replies and heartbeats are switches you turn on.
->
-> **On `main` since 4.7, for beta 5** (test builds only so far): the
-> **Ultra** speed (desktop's "JS8 60") decoded on its own processor core,
-> *Anyone have messages?* to everyone, desktop's default STATUS, message
-> pick-ups that work with desktop's `[ID]` brackets left in, and a USB GPS
-> that's found when plugged in after the radio is on
-> ([In main since beta 4.7](#in-main-since-beta-47)).
+> with desktop JS8Call stations, all speeds decoding, two-way SMS through
+> APRS. Beta 4.5 to 4.7 brought a **station History**, automatic time
+> sync from every decode, saved messages with desktop's macros, high-SWR
+> protection, a calmer waterfall and a transmit level that holds steady
+> for an amplifier; beta 4.1 moved JS8 onto the latest R1CBU firmware
+> (gdyuldin v1.0.2), and beta 4 added the map and decode marks. Nothing
+> transmits by itself when the app opens; automatic replies and
+> heartbeats are switches you turn on.
 
 ![JS8 on the X6100](docs/screenshots/01_main.png)
 
@@ -57,13 +47,13 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
-- [In main since beta 4.7](#in-main-since-beta-47)
+- [New in beta 5](#new-in-beta-5)
 - [New in beta 4.7](#new-in-beta-47)
 - [New in beta 4.6](#new-in-beta-46)
 - [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
-- [Known issues in beta 4.7](#known-issues-in-beta-47)
+- [Known issues in beta 5](#known-issues-in-beta-5)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -116,7 +106,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta4.7.img.zip` from the Assets.
+   download `sdcard.js8-beta5.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works; a
    name-brand 8–32 GB card (SanDisk, Samsung) from a trusted seller is best.
@@ -667,9 +657,8 @@ plugged in as well, the USB one is used.
 
 - **WiFi must be on** (APP > WiFi): one switch powers the radio's WiFi and
   Bluetooth chip. It doesn't need to join a network.
-- **Pairing, once:** the radio has no pairing screen yet (one is coming
-  with R1CBU's next firmware), so it's done with one command over the
-  radio's USB console (DEV port, 115200 baud, login `root` / `123`) or
+- **Pairing, once:** the radio has no pairing screen yet, so it's done
+  with one command over the radio's USB console (DEV port, 115200 baud, login `root` / `123`) or
   over SSH:
 
   ```
@@ -1000,10 +989,9 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
-## In main since beta 4.7
+## New in beta 5
 
-Not released yet: on `main` and in test builds, for beta 5
-([docs/BETA5_PLAN.md](docs/BETA5_PLAN.md)).
+Released 2026-10-11 ([release notes](docs/releases/js8-beta5.md)).
 
 - **Ultra speed** (desktop JS8Call-improved's "JS8 60": 4 s slots, 250 Hz
   wide, `U` in the lists): always decoded, as desktop does, on its own
@@ -1078,7 +1066,7 @@ Released 2026-10-05, a quick fix to beta 4.5:
 
 Released 2026-10-04. Most of it is in daily use on the air; what hasn't
 been tried on the air yet is listed in
-[Known issues](#known-issues-in-beta-47).
+[Known issues](#known-issues-in-beta-5).
 
 New:
 
@@ -1318,11 +1306,19 @@ with every change.
 ([Installing](#installing)) and put them back: beta 4 reads them as they
 are, and its new settings start at their defaults.
 
-## Known issues in beta 4.7
+## Known issues in beta 5
 
-- **WeFax, NavTex and the broadcast channel list are not included:** they
-  came from the Murus team's (1KO125) fork, which is still on the older
-  firmware. They come back once their fork is on R1CBU 1.0.
+- **WeFax, NavTex, SSTV and the broadcast channel list are not
+  included.** They're the Murus team's (1KO125), whose fork is still on
+  the older firmware. Rather than merge them into this fork, we're waiting
+  for them to come through **OpenX6100**, the new shared home of the X6100
+  firmware (gdyuldin's, with other app authors as maintainers), so every
+  app ends up in one firmware.
+- **Bluetooth keyboards are paired over the USB console** for now
+  (`x6100-bt-pair`, see [Using a Bluetooth keyboard](#using-a-bluetooth-keyboard)).
+  A Bluetooth window that pairs keyboards on the radio itself is being
+  tested with the OpenX6100 group (Kris SP2KMO's, with our keyboard fixes
+  already merged there).
 - **A slight flicker in the waterfall while it scrolls** (not when it's
   still, e.g. while you transmit): each new row moves the whole waterfall
   by a pixel, and the screen's pixels darken faster than they brighten.
@@ -1335,17 +1331,17 @@ are, and its new settings start at their defaults.
   Settings (General: *Hour, Min, Sec*).
 - **Not tried on the air yet:** the high-SWR protection, the APRS
   More services list, POTA and SOTA spots, position messages and email
-  through the gateways, a **Bluetooth keyboard**. Relays, store and
-  forward, messaging, the grid spot, two-way SMS and Winlink all work on
-  the air.
+  through the gateways, Ultra on a busy band, and the GPS grid outside.
+  Relays, store and forward, messaging, the grid spot, two-way SMS,
+  Winlink and a Bluetooth keyboard (kept paired across an update) all
+  work.
 - **The [History](#history) starts empty** (QSOs from before beta 4.5
   aren't brought in), and its All-time list holds the stations you've
   exchanged messages with, not every station heard.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
-- The `<MYVERSION>` [macro](#saved-messages) says `X6100 JS8 beta 5` in
-  this release (built before the name 4.5 was settled); it only goes out
-  if you put it in a message, INFO or STATUS.
+- **Switching Show** (All / No HB / Directed) was once seen leaving blank
+  rows; not reproduced since. Radio screenshots very welcome.
 - If the radio loses power, or you switch it off by holding POWER, while
   JS8 is open, the USB-D receive filter stays at 200–3000 Hz, which suits
   digital modes; set yours back by hand if it was different. Leaving the
@@ -1354,20 +1350,15 @@ are, and its new settings start at their defaults.
 
 ## Coming next
 
-What's left is in [docs/BETA5_PLAN.md](docs/BETA5_PLAN.md). Next:
-
-- [ ] **GPS** outside: the clock, JS8's GPS grid, status and battery clock
-  on the radio (plugging it in after boot works)
-- [ ] **A Bluetooth keyboard** tried with JS8 and the rest of the radio
-  (pairs, and types once the GUI opens it: that fix is in the next test
-  build)
-- [ ] **Ultra on a busy band** (with desktop JS8Call it works)
+- [ ] **A Bluetooth pairing window** on the radio, through OpenX6100 (being
+  tested now)
+- [ ] **WeFax, NavTex and SSTV** from the Murus team, through OpenX6100
+- [ ] **Ultra on a busy band** and the **GPS** outside (grid, battery clock)
 - [ ] **Show's blank rows** (switching Show All / No HB / Directed): not
-  reproduced in testing yet; radio screenshots wanted
+  reproduced yet; radio screenshots wanted
 
 Ideas for later (not planned now):
 
-- The Murus team's WeFax, NavTex and SSTV, once their fork is on R1CBU 1.0
 - Performance: one decoder thread per speed if needed (Ultra has its own
   already, and the decoders stay off the screen's core)
 - The same lower-layer drawing for the FT8 app's waterfall (that's
@@ -1399,7 +1390,7 @@ This is a beta: reports from testing are very welcome.
 | Layer | Project |
 |---|---|
 | Firmware GUI | [gdyuldin/x6100_gui](https://github.com/gdyuldin/x6100_gui) v1.0.2: R1CBU firmware by Oleg Belousov R1CBU, maintained by Georgy Dyuldin R2RFE |
-| SWL additions | [TheMurusTeam/custom-r1cbu](https://github.com/TheMurusTeam/custom-r1cbu) by Hany El Imam 1KO125 (WeFax, NavTex, the channel list, SSTV): in betas 1–4 (their 0.34.2 beta 6); back once their fork is on 1.0.2 |
+| SWL additions | [TheMurusTeam/custom-r1cbu](https://github.com/TheMurusTeam/custom-r1cbu) by Hany El Imam 1KO125 (WeFax, NavTex, the channel list, SSTV): in betas 1–4 (their 0.34.2 beta 6); expected back through OpenX6100 |
 | JS8 engine | `core/` of [JS8Call-improved/Android-port](https://github.com/JS8Call-improved/Android-port), a C++ port of [JS8Call](https://github.com/js8call/js8call) by Jordan Sherer KN4CRD and contributors |
 
 JS8 app by VE7NHW.

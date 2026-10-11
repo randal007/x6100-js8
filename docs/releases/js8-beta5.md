@@ -27,7 +27,10 @@ Plug a USB GPS into the HOST port, before or after switching on:
 
 ### Bluetooth keyboards
 
-A Bluetooth keyboard now types everywhere a USB one does: JS8, Callsign, QTH and the rest. Pair it once with `x6100-bt-pair` over the radio's USB console and it reconnects by itself, even after sleep or an update. WiFi must be on (one switch powers WiFi and Bluetooth).
+A Bluetooth keyboard now types everywhere a USB one does: JS8, Callsign, QTH and the rest. It reconnects by itself, even after sleep or an update. WiFi must be on (one switch powers WiFi and Bluetooth).
+
+> [!NOTE]
+> **Pairing is done over the radio's USB console for now:** log in (`root` / `123`), run `x6100-bt-pair`, and press the keyboard's pairing key. You only do it once. A Bluetooth window that pairs keyboards on the radio itself is being tested with the OpenX6100 group right now.
 
 [Using a Bluetooth keyboard](https://github.com/randal007/x6100-js8#using-a-bluetooth-keyboard) in the manual.
 
@@ -89,10 +92,10 @@ A Bluetooth keyboard now types everywhere a USB one does: JS8, Callsign, QTH and
 
 ## Known issues
 
-- **WeFax, NavTex and the broadcast channel list** aren't included yet: they come from the Murus team's fork, which is still on the older firmware
+- **WeFax, NavTex, SSTV and the broadcast channel list** aren't included. They're the Murus team's, whose fork is still on the older firmware. Rather than merge them into this fork, we're waiting for them to come through **OpenX6100**, the new shared home of the X6100 firmware, so every app ends up in one place
 - **A slight waterfall flicker** while it scrolls; *Waterfall: Light* (the default) or *Calm* in Settings make it much smaller. It doesn't affect decoding
 - **Without a GPS** the radio's clock drifts a few seconds a week. Time: Auto follows it; if nothing decodes, hold **Time**
-- **Bluetooth pairing** is done over the console until R1CBU's next firmware adds a pairing screen. It's saved for the next update when you switch the radio off normally (pulling the power skips that)
+- **Bluetooth keyboards are paired over the USB console** until the pairing window arrives through OpenX6100. The pairing is saved for the next update when you switch the radio off normally (pulling the power skips that)
 - **Not tried on the air yet:** high-SWR protection, APRS More services, POTA/SOTA spots, Ultra on a busy band, and the GPS grid outside
 - If the power goes off while JS8 is open, the USB-D receive filter stays at 200–3000 Hz; leaving JS8 first (ESC) puts yours back
 

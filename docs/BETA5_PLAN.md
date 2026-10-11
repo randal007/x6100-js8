@@ -1,5 +1,9 @@
 # Beta 5: plan
 
+> **Beta 5 released 2026-10-11** (tag `js8-beta5`, notes
+> [releases/js8-beta5.md](releases/js8-beta5.md)). Still open from this
+> list: Ultra on a busy band, the GPS outside, Show's blank rows.
+>
 > **Where it stands (2026-10-10, end of day):** latest release beta 4.7
 > (2026-10-05). On `main` since then, for beta 5 (README "In main since
 > beta 4.7"): Ultra, decoders kept off one core, *Anyone have messages?*,
