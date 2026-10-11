@@ -47,6 +47,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
+- [New since beta 5 (in the next beta)](#new-since-beta-5-in-the-next-beta)
 - [New in beta 5](#new-in-beta-5)
 - [New in beta 4.7](#new-in-beta-47)
 - [New in beta 4.6](#new-in-beta-46)
@@ -656,34 +657,32 @@ A USB GPS dongle in the radio's **HOST** USB port (one that shows up as
 
 ## Using a Bluetooth keyboard
 
-New in beta 5. A Bluetooth keyboard types everywhere a USB
-one does: JS8, Callsign, QTH and the other text boxes. If a USB keyboard is
-plugged in as well, the USB one is used.
+A Bluetooth keyboard types everywhere a USB one does: JS8, Callsign, QTH
+and the other text boxes. If a USB keyboard is plugged in as well, the USB
+one is used.
 
 - **WiFi must be on** (APP > WiFi): one switch powers the radio's WiFi and
   Bluetooth chip. It doesn't need to join a network.
-- **Pairing, once:** the radio has no pairing screen yet, so it's done
-  with one command over the radio's USB console (DEV port, 115200 baud, login `root` / `123`) or
-  over SSH:
-
-  ```
-  x6100-bt-pair            pairs the first keyboard that shows up
-  x6100-bt-pair F01        only one whose name contains F01
-  ```
-
-  Run it, then press the keyboard's pairing key: many keyboards accept a
-  pairing only for a few seconds after that, so it keeps looking and
-  pairs the moment the keyboard appears. If the keyboard wants a number
-  typed, it shows it: type it on the keyboard and press Enter.
+- **Pairing, once,** in the radio's **Bluetooth** window (APP, page 3; Kris
+  SP2KMO's, from OpenX6100):
+  1. Press **Scan**. For the next 3 minutes the radio can be paired with;
+     the rest of the time it's hidden.
+  2. Press the keyboard's pairing key. It shows up in the list marked
+     `[kbd]`.
+  3. Select it and press **Connect**. If the keyboard wants a number typed,
+     the window shows it: type it on the keyboard and press Enter.
+  4. To remove a pairing, select it and hold **Forget**.
 - **After that** the keyboard connects by itself when you press a key,
   also after it has slept or the radio has been off (the first key press
   may only wake it).
-- **Updates keep the pairing** (from beta 5): it's saved to the SD card's
-  DATA partition when the radio is switched off normally, and put back at
-  the next start. Pulling the power instead of switching off skips that
+- **Updates keep the pairing:** it's saved to the SD card's DATA partition
+  (`bluetooth.tar`) when the radio is switched off normally, and put back
+  after an update. Pulling the power instead of switching off skips that
   save.
 - Tested with a Bluetooth LE keyboard (VE7NHW's F01). Classic Bluetooth
   keyboards should work the same way; reports welcome.
+- The same window also connects Bluetooth headphones for listening and a
+  phone's serial link; those are Kris's features, not tried with JS8 yet.
 
 ## Speeds
 
@@ -993,6 +992,23 @@ version or the new one; a `.tmp` left behind is
 picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
+
+## New since beta 5 (in the next beta)
+
+- **The Bluetooth window** (APP, page 3): pair a keyboard on the radio
+  itself, no console needed; see [Using a Bluetooth keyboard](#using-a-bluetooth-keyboard).
+  From OpenX6100 (Kris SP2KMO). The console command `x6100-bt-pair` is gone.
+- **From OpenX6100's latest firmware:** FT8/FT4 shows each station's country
+  next to the distance, sends WSJT-X-style UDP for logging programs, and has
+  a *Decoder text* Setting (Large or Compact) in Settings > Interface.
+- **Fixed in the log export:** SSB contacts were written as AM (our fix,
+  merged in OpenX6100 as #289).
+- **JS8 is no longer a long-press action** (Settings > Interface > GEN /
+  APP / KEY / ... long press): open it from the APP menu. A key that was set
+  to JS8 does nothing now until you pick something else for it.
+- **One country file** for FT8 and JS8's map (AD1C's Big CTY, September
+  2026). A newer `cty.dat` put on the SD card's DATA partition is used by
+  both.
 
 ## New in beta 5
 
@@ -1319,11 +1335,9 @@ are, and its new settings start at their defaults.
   for them to come through **OpenX6100**, the new shared home of the X6100
   firmware (gdyuldin's, with other app authors as maintainers), so every
   app ends up in one firmware.
-- **Bluetooth keyboards are paired over the USB console** for now
-  (`x6100-bt-pair`, see [Using a Bluetooth keyboard](#using-a-bluetooth-keyboard)).
-  A Bluetooth window that pairs keyboards on the radio itself is being
-  tested with the OpenX6100 group (Kris SP2KMO's, with our keyboard fixes
-  already merged there).
+- **Bluetooth headphones while JS8 is open:** while you listen on
+  headphones the radio's speaker is turned down, so JS8's alert beeps
+  (played on the speaker) may not be heard. Not tried yet.
 - **A slight flicker in the waterfall while it scrolls** (not when it's
   still, e.g. while you transmit): each new row moves the whole waterfall
   by a pixel, and the screen's pixels darken faster than they brighten.
@@ -1355,11 +1369,9 @@ are, and its new settings start at their defaults.
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
-- [ ] **A Bluetooth pairing window** on the radio, through OpenX6100 (being
-  tested now)
 - [ ] **WeFax, NavTex and SSTV** from the Murus team, through OpenX6100
-- [ ] **JS8 in the OpenX6100 firmware** itself, offered as four pull
-  requests once the app numbers are agreed
+- [ ] **JS8 in the OpenX6100 firmware** itself, in four pull requests:
+  part 1 is [OpenX6100/x6100_gui#290](https://github.com/OpenX6100/x6100_gui/pull/290)
 - [ ] **Ultra on a busy band** and the **GPS** outside (grid, battery clock)
 
 ## Bug reports and feature requests

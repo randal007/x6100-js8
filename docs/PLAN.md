@@ -26,9 +26,15 @@ by gdyuldin or myshak1, never merged by us alone.
   (paired in 9 s, hidden after 3 min, saved at power-off and reconnected);
   report with the log posted on #280. Still to do: **when Buildroot#4 is
   merged, drop our pairings-backup step from *Build image*.**
-- [ ] **Kris's Bluetooth window into our build:** **unblocked: #280 and
-  AetherX6100Buildroot#4 were merged in OpenX6100 on 2026-10-11** (approved
-  by gdyuldin and VE7NHW). Take it by merging OpenX6100's main into ours, then take it with
+- [ ] **Kris's Bluetooth window into our build:** #280 and
+  AetherX6100Buildroot#4 were merged in OpenX6100 on 2026-10-11. **On
+  branch `openx6100-bluetooth` (2026-10-11):** OpenX6100's main merged into
+  ours (Bluetooth window, FT8 country, WSJT-X UDP, Decoder text, SSB fix),
+  APP page 3 = WiFi, Bluetooth, (free), JS8 in its usual last place; one
+  cty.dat (our Big CTY at /usr/share/x6100/cty.dat, /mnt/cty.dat wins, for
+  FT8 and JS8); our gpsd / uhid / pairings-backup build steps and
+  `x6100-bt-pair` removed. To do: test image, radio test, PR into main.
+  Notes from the trial merge: then take it with
   OpenX6100's code (VE7NHW 2026-10-11: "do it proper"). A trial merge had
   three small conflicts (JS8's and Bluetooth's app button in
   settings_types.h, buttons.cpp, main_screen.c: keep both, Bluetooth

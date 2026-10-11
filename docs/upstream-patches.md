@@ -74,11 +74,11 @@ upstream can make one stop applying.
 
 | Step in main.yml | What it changes | Why | Upstream? |
 |---|---|---|---|
-| *Patch GUI mk* | `x6100_gui.mk`: build our checkout instead of gdyuldin's repo | builds our GUI | no (ours only) |
+| *Patch GUI mk* | `x6100_gui.mk`: build our checkout instead of OpenX6100's repo (Buildroot checked out from OpenX6100/AetherX6100Buildroot since 2026-10-11) | builds our GUI | no (ours only) |
 | *Enable JS8 dependencies* | `x6100_gui.mk` + `X6100_defconfig`: boost (headers) and fftw-single | js8core needs them | with the JS8 PR |
-| *Enable gpsd hotplug (control socket)* (2026-10-10) | `rootfs-overlay/etc/init.d/S50gpsd`: `DEVICES="-n -F /var/run/gpsd.sock /dev/ttyACM0"` | without `-F`, the gpsd package's hotplug rule (`gpsd.hotplug` → `gpsdctl add`) has no control socket to talk to, so a GPS plugged in after boot (or one that drops off USB and comes back) is never used until a reboot. Found on the radio: `logread` shows `gpsd.hotplug: add /dev/ttyACM0`, the socket refuses connections, `gpspipe` shows `"devices":[]` | **yes: PR to send** |
-| *Enable Bluetooth LE keyboards (uhid)* (2026-10-10) | `board/X6100/linux/sun8i-r16-x6100_defconfig`: `CONFIG_UHID=m`; `rootfs-overlay/etc/init.d/S40bluetoothd`: `modprobe uhid` first thing in `start()`; the Build step fails if `uhid.ko` isn't in the image | an LE keyboard (HID over GATT, e.g. VE7NHW's F01-keyboard, Nordic chip) pairs, bonds and connects, but bluetoothd hands its keys to the kernel through `/dev/uhid`, and the kernel had no uhid (only `BT_HIDP`, for classic keyboards), so it never types. Found on the radio: no `/dev/uhid`, no input device after connecting; bluetoothd itself has HoG built in. HID is a module on this kernel, so uhid is one too | **yes: PR to send** |
-| *Keep Bluetooth pairings across updates* (2026-10-10) | `rootfs-overlay/etc/init.d/S04restore_backup_config`: `$(ls -d /var/lib/bluetooth 2>/dev/null)` added to the `tar c` line of `backup()` | pairings live in `/var/lib/bluetooth` on the rootfs, which every flash replaces; the script already saves WiFi connections and SSH keys to DATA at shutdown and restores them at boot (S04, before S40bluetoothd). Only if the folder exists: the script runs with `set -e`, so a missing path would fail the whole backup, WiFi included | **yes: PR to send** |
+| ~~*Enable gpsd hotplug (control socket)*~~ | `S50gpsd`: gpsd with `-F` | a GPS plugged in after boot | **merged: AetherX6100Buildroot#2; step removed 2026-10-11** |
+| ~~*Enable Bluetooth LE keyboards (uhid)*~~ | kernel `CONFIG_UHID=m`, `modprobe uhid` | LE keyboards type | **merged: AetherX6100Buildroot#3; step removed 2026-10-11** |
+| ~~*Keep Bluetooth pairings across updates*~~ | `/var/lib/bluetooth` in S04's backup | pairings across updates | **replaced by myshak1's S39btstate (`/mnt/bluetooth.tar`), AetherX6100Buildroot#4; step removed 2026-10-11** (old cards' `backup.tgz` still holds a pairing; S39btstate then sees `/var/lib/bluetooth` and leaves it) |
 
 **Bluetooth on this radio, for whoever picks this up:** the WiFi and
 Bluetooth chip (RTL8723BU, on USB) is one part with one power pin: the
