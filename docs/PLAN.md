@@ -27,7 +27,8 @@ by gdyuldin or myshak1, never merged by us alone.
   report with the log posted on #280. Still to do: **when Buildroot#4 is
   merged, drop our pairings-backup step from *Build image*.**
 - [ ] **Kris's Bluetooth window into our build:** wait until he merges
-  #280 (and AetherX6100Buildroot#4) in OpenX6100, then take it with
+  #280 (and AetherX6100Buildroot#4) in OpenX6100 (both approved by
+  gdyuldin and VE7NHW 2026-10-11), then take it with
   OpenX6100's code (VE7NHW 2026-10-11: "do it proper"). A trial merge had
   three small conflicts (JS8's and Bluetooth's app button in
   settings_types.h, buttons.cpp, main_screen.c: keep both, Bluetooth
@@ -41,8 +42,9 @@ by gdyuldin or myshak1, never merged by us alone.
   JS8 is no longer a long-press action (opens from the APP menu only),
   so there's no number to change and nothing to convert. A tester whose
   key was set to JS8 finds it does nothing: say so in the next release
-  notes. Still to post on #283: JS8's two other stored numbers
-  (`MODE_JS8` = 8, `CFG_DIG_TYPE_JS8` 2 / 3) stay as they are.
+  notes. Asked on #283 the same day (reply posted): JS8's two other
+  stored numbers (`MODE_JS8` = 8, `CFG_DIG_TYPE_JS8` 2 / 3) stay as they
+  are, so new log modes start at 9 and digital types at 4.
 - [ ] **JS8 into OpenX6100**, four pull requests one at a time
   ([upstream-patches.md](upstream-patches.md#js8-into-openx6100-the-plan)):
   groundwork, engine (with the licence note), library + tests, app. The
