@@ -26,9 +26,9 @@ by gdyuldin or myshak1, never merged by us alone.
   (paired in 9 s, hidden after 3 min, saved at power-off and reconnected);
   report with the log posted on #280. Still to do: **when Buildroot#4 is
   merged, drop our pairings-backup step from *Build image*.**
-- [ ] **Kris's Bluetooth window into our build:** wait until he merges
-  #280 (and AetherX6100Buildroot#4) in OpenX6100 (both approved by
-  gdyuldin and VE7NHW 2026-10-11), then take it with
+- [ ] **Kris's Bluetooth window into our build:** **unblocked: #280 and
+  AetherX6100Buildroot#4 were merged in OpenX6100 on 2026-10-11** (approved
+  by gdyuldin and VE7NHW). Take it by merging OpenX6100's main into ours, then take it with
   OpenX6100's code (VE7NHW 2026-10-11: "do it proper"). A trial merge had
   three small conflicts (JS8's and Bluetooth's app button in
   settings_types.h, buttons.cpp, main_screen.c: keep both, Bluetooth
@@ -49,9 +49,11 @@ by gdyuldin or myshak1, never merged by us alone.
   ([upstream-patches.md](upstream-patches.md#js8-into-openx6100-the-plan)):
   groundwork, engine (with the licence note), library + tests, app. The
   licence question waits on gdyuldin in discussion 23. **1/4 opened
-  2026-10-11: OpenX6100/x6100_gui#290** (merges cleanly with every open
-  PR of myshak1's; note posted on discussion 23). Also opened: #289, the
-  ADIF SSB-written-as-AM fix. Next: 2/4 once #290 is merged and gdyuldin
+  2026-10-11: OpenX6100/x6100_gui#290**, approved by myshak1 (his
+  review: test_js8_db to expect the last migration, since FT2 #288 adds
+  migration 5: done in 8479839, JS8's stored numbers written out too);
+  tested on VE7NHW's radio (FT8 QSO logged right); waiting for gdyuldin.
+  #289 (ADIF SSB-written-as-AM) merged the same day. Next: 2/4 once #290 is merged and gdyuldin
   has answered the licence question. Before 4/4: a 4th APP
   page agreed with myshak1, and one cty.dat (JS8 reads #282's).
 
