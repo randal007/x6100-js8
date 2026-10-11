@@ -78,9 +78,10 @@ upstream (gdyuldin/x6100_gui), keep these as they are:
 - **Long-press actions** (`src/settings_types.h`): JS8 is no longer one
   (2026-10-11, as gdyuldin suggested in OpenX6100/x6100_gui discussion 283
   and myshak1 did for his four apps): it opens from the APP menu only, so
-  `ACTION_APP_JS8` is never stored and simply goes at the end of
-  `press_action_t`, whatever number that gives. Up to beta 5 it was 111
-  and could be put on a key.
+  `ACTION_APP_JS8` is never stored. It is still written out as 112, the
+  number agreed in #283: OpenX6100 gives every app a fixed number (109-111
+  Murus, 113-116 myshak1), and an unnumbered entry could land on one of
+  them. Up to beta 5 it was 111 and could be put on a key.
 - **`digital_modes.type`** (`src/cfg/digital_modes.h`): `CFG_DIG_TYPE_JS8`
   = 2 and `_GHOSTNET` = 3, after upstream's FT8 and FT4.
 

@@ -39,12 +39,13 @@ typedef enum {
     ACTION_APP_QTH,
     ACTION_APP_CALLSIGN,
     ACTION_APP_WIFI,
-    /* Opened from the APP menu only, not offered as a long-press action
-     * (OpenX6100/x6100_gui discussion 283), so never stored on a card and
-     * free to take whatever number it gets. Up to beta 5 it was 111 and
-     * could be put on a key; such a key now does nothing until another
-     * action is picked for it. */
-    ACTION_APP_JS8,
+    /* 112 as agreed in OpenX6100/x6100_gui discussion 283 (OpenX6100 gives
+     * every app a fixed number: 109-111 the Murus team's, 113-116
+     * myshak1's). JS8 is opened from the APP menu only, not offered as a
+     * long-press action, so the number is never stored on a card. Up to
+     * beta 5 it was 111 and could be put on a key; such a key now does
+     * nothing until another action is picked for it. */
+    ACTION_APP_JS8 = 112,
 } press_action_t;
 
 typedef enum {
