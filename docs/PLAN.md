@@ -48,7 +48,11 @@ by gdyuldin or myshak1, never merged by us alone.
 - [ ] **JS8 into OpenX6100**, four pull requests one at a time
   ([upstream-patches.md](upstream-patches.md#js8-into-openx6100-the-plan)):
   groundwork, engine (with the licence note), library + tests, app. The
-  licence question waits on gdyuldin in discussion 23.
+  licence question waits on gdyuldin in discussion 23. **1/4 built
+  2026-10-11** (branch `js8-groundwork` in OpenX6100, 74b6dfb; merges
+  cleanly with every open PR of myshak1's); PR text and the discussion 23
+  note drafted in docs/upstream-prs/ 9 and 10. Before 4/4: a 4th APP
+  page agreed with myshak1, and one cty.dat (JS8 reads #282's).
 
 ## To try on the radio (no programming)
 
