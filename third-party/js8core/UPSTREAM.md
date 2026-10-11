@@ -145,7 +145,20 @@ Each one is its own commit on top of the pristine import, so
     thread as it starts, for the host's CPU affinity and priority. Off by
     default: one thread, as before.
 
-All fifteen are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
+16. **Compound frames' commands and SNR, as desktop.** `pack_cmd()` /
+    `unpack_cmd()` packed a compound-directed frame's command as
+    `(cmd & 0x1F) << 2 | (num & 0x03)`; desktop's `Varicode::packCmd()`
+    packs an SNR command as `[1][type][6-bit number]` (type 1 = HEARTBEAT
+    SNR) and any other command as its 7-bit value. So every command to or
+    from a compound call (KG4UHM/6, a prefix/call) differed from desktop's,
+    and an SNR kept only 2 bits: VE7NHW's reply "KG4UHM/6 SNR -03" went out
+    as -31 (seen on the air 2026-10-11). Now desktop's layout;
+    `tests/test_js8.cpp` checks 24 messages to and from compound and
+    portable calls against desktop's own `buildMessageFrames()` (built with
+    Qt, js8-android 1f8d390a) bit for bit, and desktop's compound frames
+    reading back with their command and SNR.
+
+All sixteen are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
 

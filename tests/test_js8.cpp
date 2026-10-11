@@ -3689,6 +3689,97 @@ TEST_CASE("our frames are desktop JS8Call's, bit for bit", "[js8][desktop]") {
     }
 }
 
+// Compound callsigns (a "/" and a number, as KG4UHM/6) go in their own frame,
+// whose command and SNR packing desktop does as [1][type][6-bit number]
+// (Varicode::packCmd); js8core kept only 2 bits of the number, so an SNR -03
+// to KG4UHM/6 went out as -31 (seen on the air 2026-10-11). Frames from
+// desktop's Varicode::buildMessageFrames() built with Qt (js8-android 1f8d390a).
+TEST_CASE("frames to and from compound and portable calls are desktop's, bit for bit", "[js8][desktop]") {
+    struct Case {
+        const char *mycall;
+        int         submode;
+        const char *text, *frames;
+    };
+    for (auto c : std::vector<Case>{
+             {"VE7NHW", 0, "KG4UHM/6 SNR -03", "Bu7hI9zNOrMu 1 IXXfezaRO+cm 2"},
+             {"VE7NHW", 0, "KG4UHM/6 SNR +05", "Bu7hI9zNOrMu 1 IXXfezaRO+dm 2"},
+             {"VE7NHW", 0, "KG4UHM/6 SNR -24", "Bu7hI9zNOrMu 1 IXXfezaRO+a8 2"},
+             {"VE7NHW", 0, "KG4UHM/6 HW CPY?", "Bu7hI9zNOrMu 1 IXXfezaRO+Le 2"},
+             {"VE7NHW", 0, "KG4UHM/6 RR", "Bu7hI9zNOrMu 1 IXXfezaRO+Lu 2"},
+             {"VE7NHW", 0, "KG4UHM/6 73", "Bu7hI9zNOrMu 1 IXXfezaRO+Mm 2"},
+             {"VE7NHW", 0, "KG4UHM/6 ACK", "Bu7hI9zNOrMu 1 IXXfezaRO+L0 2"},
+             {"VE7NHW", 0, "KG4UHM/6 HEARTBEAT SNR -08", "Bu7hI9zNOrMu 1 IXXfezaRO+k8 2"},
+             {"VE7NHW", 0, "KG4UHM/6 SNR?", "Bu7hI9zNOrMu 1 IXXfezaRO+JG 2"},
+             {"VE7NHW", 0, "KG4UHM/6 GRID?", "Bu7hI9zNOrMu 1 IXXfezaRO+Jm 2"},
+             {"VE7NHW", 0, "KG4UHM/6 FB", "Bu7hI9zNOrMu 1 IXXfezaRO+LW 2"},
+             {"VE7NHW", 0, "KG4UHM/6 QSL?", "Bu7hI9zNOrMu 1 IXXfezaRO+M0 2"},
+             {"VE7NHW", 0, "KG4UHM/6 GOOD AFTERNOON JUST DOING SOME TESTING", "Bu7hI9zNOrMu 1 IXXfezaRO+N8 0 zqEFWNc6oxjV 0 +aBrSYV+++++ 2"},
+             {"VE7NHW", 0, "W1ABC/P SNR -12", "UeWdy+APb1bJ 3"},
+             {"VE7NHW/P", 0, "N0XYZ SNR -03", "UeWdy-ytVbcS 3"},
+             {"VE7NHW/P", 0, "N0XYZ HW CPY?", "UeWdy-ytVbE0 3"},
+             {"VE7NHW/P", 0, "N0XYZ RR", "UeWdy-ytVbM0 3"},
+             {"VE7NHW/P", 0, "N0XYZ HEARTBEAT SNR -08", "UeWdy-ytVbsN 3"},
+             {"VE7NHW/P", 0, "@ALLCALL CQ CQ CQ CN89", "3u7hIAGPnrMu 3"},
+             {"VE7NHW", 1, "KG4UHM/6 SNR -03", "Bu7hI9zNOrMu 1 IXXfezaRO+cm 2"},
+             {"VE7NHW", 1, "KG4UHM/6 SNR +05", "Bu7hI9zNOrMu 1 IXXfezaRO+dm 2"},
+             {"VE7NHW", 1, "KG4UHM/6 SNR -24", "Bu7hI9zNOrMu 1 IXXfezaRO+a8 2"},
+             {"VE7NHW", 1, "KG4UHM/6 HW CPY?", "Bu7hI9zNOrMu 1 IXXfezaRO+Le 2"},
+             {"VE7NHW", 1, "KG4UHM/6 RR", "Bu7hI9zNOrMu 1 IXXfezaRO+Lu 2"},
+             {"VE7NHW", 1, "KG4UHM/6 73", "Bu7hI9zNOrMu 1 IXXfezaRO+Mm 2"},
+             {"VE7NHW", 1, "KG4UHM/6 ACK", "Bu7hI9zNOrMu 1 IXXfezaRO+L0 2"},
+             {"VE7NHW", 1, "KG4UHM/6 HEARTBEAT SNR -08", "Bu7hI9zNOrMu 1 IXXfezaRO+k8 2"},
+             {"VE7NHW", 1, "KG4UHM/6 SNR?", "Bu7hI9zNOrMu 1 IXXfezaRO+JG 2"},
+             {"VE7NHW", 1, "KG4UHM/6 GRID?", "Bu7hI9zNOrMu 1 IXXfezaRO+Jm 2"},
+             {"VE7NHW", 1, "KG4UHM/6 FB", "Bu7hI9zNOrMu 1 IXXfezaRO+LW 2"},
+             {"VE7NHW", 1, "KG4UHM/6 QSL?", "Bu7hI9zNOrMu 1 IXXfezaRO+M0 2"},
+             {"VE7NHW", 1, "KG4UHM/6 GOOD AFTERNOON JUST DOING SOME TESTING", "Bu7hI9zNOrMu 1 IXXfezaRO+N8 0 tGu-1UORBkr+ 4 -GlLo9++++++ 6"},
+             {"VE7NHW", 1, "W1ABC/P SNR -12", "UeWdy+APb1bJ 3"},
+             {"VE7NHW/P", 1, "N0XYZ SNR -03", "UeWdy-ytVbcS 3"},
+             {"VE7NHW/P", 1, "N0XYZ HW CPY?", "UeWdy-ytVbE0 3"},
+             {"VE7NHW/P", 1, "N0XYZ RR", "UeWdy-ytVbM0 3"},
+             {"VE7NHW/P", 1, "N0XYZ HEARTBEAT SNR -08", "UeWdy-ytVbsN 3"},
+             {"VE7NHW/P", 1, "@ALLCALL CQ CQ CQ CN89", "3u7hIAGPnrMu 3"},
+         }) {
+        INFO(c.text << " from " << c.mycall << " at submode " << c.submode);
+        std::string got;
+        for (auto &[frame, bits] : vc::build_message_frames(c.mycall, "CN89", "", c.text, false, false, c.submode))
+            got += (got.empty() ? "" : " ") + frame + " " + std::to_string(bits);
+        CHECK(got == c.frames);
+    }
+}
+
+// The other way: desktop's compound frames (above) read back as desktop
+// reads them (Varicode::unpackCompoundMessage).
+TEST_CASE("desktop's frames to a compound call read back with their command and SNR", "[js8][desktop]") {
+    struct Case {
+        const char *frame, *cmd, *num;
+    };
+    for (auto c : std::vector<Case>{
+             {"IXXfezaRO+cm", " SNR", "-03"},
+             {"IXXfezaRO+dm", " SNR", "+05"},
+             {"IXXfezaRO+a8", " SNR", "-24"},
+             {"IXXfezaRO+k8", " HEARTBEAT SNR", "-08"},
+             {"IXXfezaRO+Le", " HW CPY?", ""},
+             {"IXXfezaRO+Lu", " RR", ""},
+             {"IXXfezaRO+Mm", " 73", ""},
+             {"IXXfezaRO+L0", " ACK", ""},
+             {"IXXfezaRO+JG", " SNR?", ""},
+             {"IXXfezaRO+Jm", " GRID?", ""},
+         }) {
+        INFO(c.frame);
+        std::uint8_t type = 0;
+        auto parts = vc::unpack_compound_message(c.frame, &type, nullptr, nullptr);
+        // As desktop's: callsign, "" (no grid), command, number.
+        REQUIRE(parts.size() >= 3);
+        CHECK(parts[0] == "KG4UHM/6");
+        CHECK(parts[2] == c.cmd);
+        if (*c.num) {
+            REQUIRE(parts.size() >= 4);
+            CHECK(parts[3] == c.num);
+        }
+    }
+}
+
 TEST_CASE("an APRS gateway's reply (no checksum, as desktop sends it) reaches the inbox", "[js8][held]") {
     // Desktop's AprsInboundRelay: "@APRSIS MSG to:<DEST> <MESSAGE> DE <SENDER>",
     // sent without a checksum; e.g. an SMS reply from the SMS gateway.
