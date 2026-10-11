@@ -41,25 +41,35 @@ A Bluetooth keyboard now types everywhere a USB one does: JS8, Callsign, QTH and
 - **Noise reduction, the noise blanker and the notches stay off** while JS8 is open, even if one is turned on over CAT
 - **The decoders leave one processor core free**, so the screen and waterfall always keep up
 
-## Fixes
+## Bug fixes since beta 4
 
 - A received message with a very long number after `SNR` could close the app
-- `QUERY MSG [3]` (desktop's template leaves the brackets in) is now answered like `QUERY MSG 3`
+- **The transmit level see-sawed at low power** (0.3 W into an amplifier swung between 18 and 35 W); it now holds steady and finds the right level within the first transmission or two
+- QUERY CALL adds the `?` that desktop stations need to answer
+- `QUERY MSG [3]` (desktop's template leaves the brackets in) is answered like `QUERY MSG 3`
+- A USB keyboard plugged in while the radio is on works (for the whole radio)
 - Lowercase typed in the Callsign box comes out as capitals instead of being dropped
+- A GPS plugged in after the radio is on is found
+- Bluetooth LE keyboards connected but couldn't type (the kernel was missing uhid)
+- Winlink messages got two ACKs
+- Distances over 10,000 km wrapped in the Stations view
+- The Heartbeat button showed the wrong label the first time JS8 opened
+- A small waterfall stutter while the MFK scrolls the list
+- A fast turn of the main knob moves 5 or 10 Hz a click and doesn't make the waterfall lag
+- The battery clock is tried again if saving it didn't start
 - The APRS Echo test is gone: relay stations don't bring its answer back over JS8
-- Smaller fixes from the code review
 
 <details>
-<summary><b>Coming from beta 4? Everything from betas 4.1 to 4.7 is in here too</b></summary>
+<summary><b>Coming from beta 4? Everything new in betas 4.1 to 4.7 is in here too</b></summary>
 
 **Underneath**
 - The latest R1CBU firmware (gdyuldin v1.0.2): Simple, Black and Flat themes, and more room for the waterfall, list and map
 
 **Operating**
-- **Station History:** everyone you exchange messages with, kept for good, per band: their INFO, STATUS and every QSO's text. Page 3 → **Show History**; a short MFK press on a station opens its page
+- **Station History:** everyone you exchange messages with, kept for good, per band: their INFO, STATUS and every QSO's text. Page 3 → **Show History** lists them and shows them on the map; a short MFK press on a station opens its page
 - **Time: Auto** follows every station decoded, as desktop's *Automatic Time Drift*; **hold Time** to search when the clock is far off
 - **Saved messages** (Query → Saved messages): ten of your own with desktop's macros (`<CALL>`, `<SNR>`, `<MYGRID4>` …)
-- **Heartbeat works like CQ:** press for one, hold for auto (5–30 min); it pauses for 10 minutes when someone calls you or you send something
+- **Heartbeat works like CQ:** press for one, hold for auto (5–30 min). Heartbeats keep going while you call CQ, and pause for 10 minutes when someone calls you or you send something
 - **Can anyone reach…?** (`@ALLCALL QUERY CALL`) in the Query list
 
 **Screen and map**
@@ -67,17 +77,16 @@ A Bluetooth keyboard now types everywhere a USB one does: JS8, Callsign, QTH and
 - Stations view: **Sort** (Heard you, SNR, Time, Distance, QSO), **QRZ** for who called you, **`@`** for two-way APRS gateways
 - A count on the map where several stations share a square
 - The waterfall is drawn straight onto the display's lower layer, with **Sharp / Light / Medium / Calm** smoothing in Settings
-- A custom frequency shows as "JS8 Custom"
+- *Decode* and *Frequencies* are Settings lines now, **Hold** is on page 6, and a custom frequency shows as "JS8 Custom"
 
 **Transmitting**
-- A steady transmit level for an amplifier: right within the first transmission or two, no see-saw at low power
 - High-SWR protection: over 3:1 turns automatic sending off, with three beeps
 
 **APRS**
 - More services: weather, sunrise, repeaters, ISS passes, nearest hospital/fuel/water, email your position, callsign lookup
 
-**Fixes**
-- QUERY CALL adds the `?` desktop stations need; a fast turn of the main knob moves 5 or 10 Hz a click; a USB keyboard plugged in with the radio on works; Winlink gets one ACK, not two; distances over 10,000 km no longer wrap
+**Bug reports**
+- Health lines in the app log (decoder load, missing audio, screen stalls, time changes)
 
 </details>
 
