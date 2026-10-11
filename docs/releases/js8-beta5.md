@@ -92,7 +92,7 @@ A Bluetooth keyboard now types everywhere a USB one does: JS8, Callsign, QTH and
 - **WeFax, NavTex and the broadcast channel list** aren't included yet: they come from the Murus team's fork, which is still on the older firmware
 - **A slight waterfall flicker** while it scrolls; *Waterfall: Light* (the default) or *Calm* in Settings make it much smaller. It doesn't affect decoding
 - **Without a GPS** the radio's clock drifts a few seconds a week. Time: Auto follows it; if nothing decodes, hold **Time**
-- **Bluetooth pairing** is done over the console until R1CBU's next firmware adds a pairing screen. It's saved for the next update when you switch the radio off normally (pulling the power skips that); keeping it across an update hasn't been tried yet
+- **Bluetooth pairing** is done over the console until R1CBU's next firmware adds a pairing screen. It's saved for the next update when you switch the radio off normally (pulling the power skips that)
 - **Not tried on the air yet:** high-SWR protection, APRS More services, POTA/SOTA spots, Ultra on a busy band, and the GPS grid outside
 - If the power goes off while JS8 is open, the USB-D receive filter stays at 200–3000 Hz; leaving JS8 first (ESC) puts yours back
 
