@@ -26,22 +26,34 @@ by gdyuldin or myshak1, never merged by us alone.
   (paired in 9 s, hidden after 3 min, saved at power-off and reconnected);
   report with the log posted on #280. Still to do: **when Buildroot#4 is
   merged, drop our pairings-backup step from *Build image*.**
-- [ ] **Kris's Bluetooth window into our build:** #280 and
-  AetherX6100Buildroot#4 were merged in OpenX6100 on 2026-10-11. **On
-  branch `openx6100-bluetooth` (2026-10-11):** OpenX6100's main merged into
-  ours (Bluetooth window, FT8 country, WSJT-X UDP, Decoder text, SSB fix),
-  APP page 3 = WiFi, Bluetooth, (free), JS8 in its usual last place; one
-  cty.dat (our Big CTY at /usr/share/x6100/cty.dat, /mnt/cty.dat wins, for
-  FT8 and JS8); our gpsd / uhid / pairings-backup build steps and
-  `x6100-bt-pair` removed. To do: test image, radio test, PR into main.
-  Notes from the trial merge: then take it with
-  OpenX6100's code (VE7NHW 2026-10-11: "do it proper"). A trial merge had
-  three small conflicts (JS8's and Bluetooth's app button in
-  settings_types.h, buttons.cpp, main_screen.c: keep both, Bluetooth
-  number 116 as proposed in #283); it also brings headset audio, the
-  phone serial link, FT8 over UDP and changes to the shared audio and
-  volume code, so test JS8's receive, transmit and beeps on the radio
-  with it. Then drop our pairings-backup step and `x6100-bt-pair`.
+- [ ] **Beta 5.1 (the Bluetooth window + the compound-call fix), on
+  branch `openx6100-bluetooth`** (2026-10-11): OpenX6100's main merged in
+  (Bluetooth window, FT8 country, WSJT-X UDP, Decoder text, SSB fix), APP
+  page 3 = WiFi, Bluetooth, (free), JS8 last; one cty.dat (Big CTY,
+  /usr/share/x6100/cty.dat, /mnt/cty.dat wins) for FT8 and JS8; our gpsd /
+  uhid / pairings-backup build steps and `x6100-bt-pair` removed (all in
+  OpenX6100's Buildroot now); version string, README and
+  docs/releases/js8-beta5.1.md ready. **First test image had a bug from
+  the merge:** a lost `break` made JS8's button open Bluetooth on top of a
+  still-running JS8 (orphaned JS8: screen glitches, JS8 wouldn't reopen,
+  typing didn't work). Fixed in f00dd74; a merge review found nothing
+  else. **Next:** flash image run 38188374332 (the release candidate),
+  check the full harness run 38189126031, radio test (Bluetooth window
+  pairing + typing in Callsign and JS8, JS8 RX / TX / beeps, FT8), then
+  PR into main, tag `js8-beta5.1`, release (docs/releases/CHECKLIST.md),
+  a "please use beta 5.1" banner on beta 5's page, Facebook post. If
+  typing still fails on the fixed build: the keyboard does send keys
+  (event5, hid-apple driver after a hid-generic swap) and the GUI has it
+  open: dig into keyboard.c / the group focus with the console.
+- [x] **Compound callsigns (KG4UHM/6) packed and read as desktop**
+  (2026-10-11, a3553bc, js8core local patch 16): js8core's pack_cmd kept
+  2 bits of the SNR and shifted every command, so "SNR -03" went out as
+  -31, our queries arrived as CMD / unknown, and desktop's heartbeat ACKs
+  showed as "HW CPY?", "FB" or "RR" (the auto-reply answered a question
+  never asked). Tests against desktop's own buildMessageFrames() built
+  with Qt, both ways. **Still to do:** report it upstream to
+  JS8Call-improved (docs/js8core-bug-reports.md #11), as #104 was; retest
+  on the air with a "/number" station.
 - [x] **App numbers** (OpenX6100/x6100_gui discussion 283): gdyuldin
   suggested leaving apps out of the long-press list so their numbers are
   never stored; myshak1 did that for his four apps. **Done 2026-10-11:**
@@ -60,7 +72,12 @@ by gdyuldin or myshak1, never merged by us alone.
   migration 5: done in 8479839, JS8's stored numbers written out too);
   tested on VE7NHW's radio (FT8 QSO logged right); waiting for gdyuldin.
   #289 (ADIF SSB-written-as-AM) merged the same day. Next: 2/4 once #290 is merged and gdyuldin
-  has answered the licence question. Before 4/4: a 4th APP
+  has answered the licence question. 2/4 carries local patch 16 (the
+  compound-call fix).
+- [ ] **OpenX6100 reviews:** approved #288 (FT2) and #274 (Olivia);
+  on #271 (WSPR) asked for two fixes (the beacon period survives closing
+  the window, so reopening resumes beaconing; the worker thread's
+  `thread_running` race on a quick close). Approve when Kris pushes them. Before 4/4: a 4th APP
   page agreed with myshak1, and one cty.dat (JS8 reads #282's).
 
 ## To try on the radio (no programming)
