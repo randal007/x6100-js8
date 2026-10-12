@@ -838,11 +838,66 @@ static bool wait_keyboard(const char *name, const char *addr, char *out,
     return false;
 }
 
+/* After a keyboard paired at a new address: its old pairings under the
+ * same name go. Pressing the pairing key made the keyboard drop them, so
+ * they can never connect again, and Connect on one only waited a minute
+ * for "Connect failed". One that is connected stays (a second keyboard of
+ * the same model). */
+static void forget_old_keyboards(const char *name, const char *keep)
+{
+    GVariant     *r;
+    GVariantIter *objs = NULL;
+    const char   *path;
+    GVariant     *ifaces;
+
+    if (name[0] == '\0') {
+        return;
+    }
+    r = call("/", "org.freedesktop.DBus.ObjectManager", "GetManagedObjects",
+             NULL, G_VARIANT_TYPE("(a{oa{sa{sv}}})"), CALL_TIMEOUT_MS, NULL, 0);
+    if (r == NULL) {
+        return;
+    }
+    g_variant_get(r, "(a{oa{sa{sv}}})", &objs);
+    while (g_variant_iter_next(objs, "{&o@a{sa{sv}}}", &path, &ifaces)) {
+        GVariant   *dev = g_variant_lookup_value(ifaces, "org.bluez.Device1",
+                                                 G_VARIANT_TYPE("a{sv}"));
+        const char *a = NULL;
+        const char *n = NULL;
+        gboolean    paired = FALSE;
+        gboolean    connected = FALSE;
+
+        if (dev != NULL) {
+            g_variant_lookup(dev, "Address", "&s", &a);
+            g_variant_lookup(dev, "Name", "&s", &n);
+            g_variant_lookup(dev, "Paired", "b", &paired);
+            g_variant_lookup(dev, "Connected", "b", &connected);
+            if (a != NULL && addr_ok(a) && g_ascii_strcasecmp(a, keep) != 0 &&
+                paired && !connected && n != NULL && strcmp(n, name) == 0 &&
+                props_input(dev)) {
+                GVariant *rr = call(ADAPTER_PATH, "org.bluez.Adapter1", "RemoveDevice",
+                                    g_variant_new("(o)", path), NULL,
+                                    CALL_TIMEOUT_MS, NULL, 0);
+
+                plog("keyboard: old pairing %s forgotten: %s", a, rr != NULL ? "ok" : "failed");
+                if (rr != NULL) {
+                    g_variant_unref(rr);
+                }
+            }
+            g_variant_unref(dev);
+        }
+        g_variant_unref(ifaces);
+    }
+    g_variant_iter_free(objs);
+    g_variant_unref(r);
+}
+
 static pair_result_t do_pair_connect(const char *addr)
 {
     char      path[64];
     char      en[96];
     char      kbd_addr[18];
+    char      name[64] = "";
     GVariant *r;
     bool      scanned = false;
     bool      input;
@@ -853,7 +908,6 @@ static pair_result_t do_pair_connect(const char *addr)
 
     input = device_known(addr) && path_is_input(bus(), path);
     if (input) {
-        char        name[64] = "";
         GVariant   *props = dev_props(bus(), path);
         const char *n = NULL;
 
@@ -919,6 +973,9 @@ static pair_result_t do_pair_connect(const char *addr)
     if (r != NULL) {
         g_variant_unref(r);
         plog("Pair: ok");
+        if (input) {
+            forget_old_keyboards(name, addr);
+        }
     } else if (strstr(en, "AlreadyExists") != NULL) {
         plog("Pair: already paired");
     } else {
@@ -1139,6 +1196,18 @@ static void do_forget(const char *addr)
     set_activity("");
 }
 
+/* Worker thread: Connect, Disconnect or Forget is waiting. (The timer's
+ * refreshes are not posted while a Scan runs.) */
+static bool cmd_waiting(void)
+{
+    bool w;
+
+    pthread_mutex_lock(&S.lock);
+    w = S.cmd != CMD_NONE && S.cmd != CMD_REFRESH;
+    pthread_mutex_unlock(&S.lock);
+    return w;
+}
+
 static void do_scan(void)
 {
     int i;
@@ -1155,14 +1224,24 @@ static void do_scan(void)
      * pairing key was pressed before Scan or during it. A classic turn is
      * long enough for an inquiry to reach a headset. The list is refreshed
      * after every turn so devices appear as they are found. */
-    for (i = 0; i < SCAN_ROUNDS * 2; i++) {
+    /* Connect pressed during the Scan ends it at once: a keyboard may
+     * advertise for a few seconds only, and the worker does one thing at
+     * a time. */
+    for (i = 0; i < SCAN_ROUNDS * 2 && !cmd_waiting(); i++) {
         bool le = (i % 2) == 0;
 
         if (discovery(true, le ? "le" : "bredr")) {
-            sleep(le ? SCAN_LE_S : SCAN_BREDR_S);
+            int q;
+
+            for (q = 0; q < (le ? SCAN_LE_S : SCAN_BREDR_S) * 4 && !cmd_waiting(); q++) {
+                usleep(250000);
+            }
             discovery(false, NULL);
         }
         do_refresh();
+    }
+    if (cmd_waiting()) {
+        plog("scan: ended early for the next command");
     }
 
     pthread_mutex_lock(&S.lock);

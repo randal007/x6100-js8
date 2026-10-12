@@ -42,6 +42,17 @@ by gdyuldin or myshak1, never merged by us alone.
   takes turns, LE 3 s / classic 5 s twice (the chip hears no LE during an
   inquiry); **C** Connect on a keyboard waits for it by name, LE only (it
   takes a new address at every pairing-key press: D7, D8, ... DD).
+  From a read-through of the whole Bluetooth code, four more: **1** a
+  keyboard paired at a new address makes the window forget its old
+  pairings under the same name (Connect on one hung a minute); **2**
+  Connect during Scan ends the Scan at once; **3** the window's highlight
+  follows the device, not the row number (the list re-sorts during a
+  Scan); **4** WiFi off/on is noticed (a new hci0, not only a missing
+  one) and Bluetooth set up again without a power cycle, and bt_down.sh
+  is never run against a chip that lost power.
+  Reported, not fixed by us (OpenX6100 issue): CAT over Bluetooth needs
+  no pairing; visible and pairable to anyone from boot until the window
+  is opened; the headset PTT button is accepted from any device.
   **Next:** test image, radio test (pair several times with WiFi on the
   home network; headset and phone still found by Scan; keyboard still
   reconnects after power off/on), then pull requests to OpenX6100:
