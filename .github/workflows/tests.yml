@@ -53,7 +53,7 @@ jobs:
           submodules: true
 
       - name: Packages
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libboost-dev libfftw3-dev libsqlite3-dev pkg-config autoconf automake
+        run: sudo apt-get update && sudo apt-get install -y cmake g++ libboost-dev libfftw3-dev libsqlite3-dev libpulse-dev pkg-config autoconf automake
 
       - name: Build the harness (ASan/UBSan)
         working-directory: tools/js8_ui_harness
