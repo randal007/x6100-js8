@@ -57,6 +57,14 @@ by gdyuldin or myshak1, never merged by us alone.
   (A, the kernel patch) and x6100_gui#291 (B, C, 1-4, from branch
   bt-keyboard-pairing in OpenX6100's repo); both say the radio test of
   the image is still to come. Test image: *Build image* run 38205360614.
+  **Radio test 2026-10-12: works** (flashed c2eec93, backup
+  sd-backup-2026-10-12-000900): 5-6 pairings in a row with WiFi on,
+  typing, Connect during Scan, reconnect after restart without opening the
+  window, WiFi off/on; results posted on #291 and Buildroot #5. Seen, for
+  a follow-up: Connect on a keyboard's old pairing still ties the worker
+  up ~1 min (Forget waits behind it); one pairing cancelled while the old
+  bond was still saved. **Next:** reviews of #291 / Buildroot #5; then
+  beta 5.1 (below) with this in.
   **Next:** test image, radio test (pair several times with WiFi on the
   home network; headset and phone still found by Scan; keyboard still
   reconnects after power off/on), then pull requests to OpenX6100:
