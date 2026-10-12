@@ -1,3 +1,5 @@
+> ⚠️ **Please use [beta 5.1](https://github.com/randal007/x6100-js8/releases/tag/js8-beta5.1) instead.** It fixes messages to and from stations with a "/" and a number in their call (like KG4UHM/6), which beta 5 packs and reads differently from desktop JS8Call, and Bluetooth keyboards that failed to pair at random. Everything else in these notes is in 5.1 too.
+
 **JS8 on the Xiegu X6100, running on the radio itself.** No PC, phone or tablet needed: R1CBU's X6100 firmware (gdyuldin v1.0.2) with a JS8 app next to FT8 and RTTY.
 
 Beta 5 adds the **Ultra** speed, a **USB GPS** for the time and your grid, and **Bluetooth keyboards**, plus fixes from a full review of the app's code.

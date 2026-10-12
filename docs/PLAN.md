@@ -75,7 +75,7 @@ by gdyuldin or myshak1, never merged by us alone.
   AetherX6100Buildroot (A, with the btmon evidence) and x6100_gui (B + C,
   Kris tagged). Also for Kris: switching Bluetooth off and on with WiFi
   running leaves the chip deaf to LE during inquiry until a reboot.
-- [ ] **Beta 5.1 release, last steps** (tag `js8-beta5.1` on 02c8682,
+- [x] **Beta 5.1 release, last steps** (done 2026-10-12: titled, notes, prerelease, banner on beta 5, sha256 e7ea6dc2 checked, local copy in releases/js8-beta5.1) (tag `js8-beta5.1` on 02c8682,
   *Build image* run 38218854490 started 2026-10-12 07:38 UTC): once it
   has published, `gh release edit js8-beta5.1 --title "X6100 JS8 beta
   5.1" --notes-file docs/releases/js8-beta5.1.md --prerelease`, a
