@@ -26,7 +26,54 @@ by gdyuldin or myshak1, never merged by us alone.
   (paired in 9 s, hidden after 3 min, saved at power-off and reconnected);
   report with the log posted on #280. Still to do: **when Buildroot#4 is
   merged, drop our pairings-backup step from *Build image*.**
-- [ ] **Beta 5.1 (the Bluetooth window + the compound-call fix), on
+- [x] **Bluetooth keyboards pair every time** (2026-10-11, branch
+  `openx6100-bluetooth`): on the beta 5.1 release candidate the window's
+  pairing failed 4 times out of 4 with VE7NHW's F01 keyboard. btmon on the
+  radio: the keyboard's SMP keys reached Linux 0.3 ms *before* the chip's
+  Encryption Change event (events and data come over two USB endpoints,
+  and WiFi shares the same USB device), so the kernel dropped them
+  ("unexpected SMP command 0x06") and the pairing timed out. A race, not a
+  code change: the same error on 10-10 with x6100-bt-pair, a retry
+  "worked"; Kris's first-time pairing was luck. With btusb's
+  force_poll_sync switched on by hand it paired and bonded first time.
+  Three fixes: **A** kernel patch 9002 (poll sync on from probe, the hold
+  at least one whole jiffy, the event before the worker), in
+  `buildroot/patches/linux/` and copied in by *Build image*; **B** Scan
+  takes turns, LE 3 s / classic 5 s twice (the chip hears no LE during an
+  inquiry); **C** Connect on a keyboard waits for it by name, LE only (it
+  takes a new address at every pairing-key press: D7, D8, ... DD).
+  From a read-through of the whole Bluetooth code, four more: **1** a
+  keyboard paired at a new address makes the window forget its old
+  pairings under the same name (Connect on one hung a minute); **2**
+  Connect during Scan ends the Scan at once; **3** the window's highlight
+  follows the device, not the row number (the list re-sorts during a
+  Scan); **4** WiFi off/on is noticed (a new hci0, not only a missing
+  one) and Bluetooth set up again without a power cycle, and bt_down.sh
+  is never run against a chip that lost power.
+  Reported, not fixed by us (OpenX6100/x6100_gui#292): CAT over
+  Bluetooth needs no pairing; visible and pairable to anyone from boot
+  until the window is opened; the headset PTT button is accepted from any
+  device. **Pull requests opened 2026-10-11:** AetherX6100Buildroot#5
+  (A, the kernel patch) and x6100_gui#291 (B, C, 1-4, from branch
+  bt-keyboard-pairing in OpenX6100's repo); both say the radio test of
+  the image is still to come. Test image: *Build image* run 38205360614.
+  **Radio test 2026-10-12: works** (flashed c2eec93, backup
+  sd-backup-2026-10-12-000900): 5-6 pairings in a row with WiFi on,
+  typing, Connect during Scan, reconnect after restart without opening the
+  window, WiFi off/on; results posted on #291 and Buildroot #5. Seen, for
+  a follow-up: Connect on a keyboard's old pairing still ties the worker
+  up ~1 min (Forget waits behind it); one pairing cancelled while the old
+  bond was still saved. **Next:** reviews of #291 / Buildroot #5; then
+  beta 5.1 (below) with this in. **Released in beta 5.1** (2026-10-12);
+  still to do: reviews of #291 / Buildroot #5 / #292, and the follow-up
+  above.
+  **Next:** test image, radio test (pair several times with WiFi on the
+  home network; headset and phone still found by Scan; keyboard still
+  reconnects after power off/on), then pull requests to OpenX6100:
+  AetherX6100Buildroot (A, with the btmon evidence) and x6100_gui (B + C,
+  Kris tagged). Also for Kris: switching Bluetooth off and on with WiFi
+  running leaves the chip deaf to LE during inquiry until a reboot.
+- [x] **Beta 5.1 (the Bluetooth window + the compound-call fix), on
   branch `openx6100-bluetooth`** (2026-10-11): OpenX6100's main merged in
   (Bluetooth window, FT8 country, WSJT-X UDP, Decoder text, SSB fix), APP
   page 3 = WiFi, Bluetooth, (free), JS8 last; one cty.dat (Big CTY,

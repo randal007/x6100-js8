@@ -24,16 +24,20 @@ target_sources(${PROJECT_NAME} PUBLIC
     audio.c mfk.cpp cw.cpp panel.cpp
     rtty.c screenshot.c display.cpp gps.c
     dialog.c dialog_swrscan.c
+    dxcc.c
     dialog_ft8.c dialog_freq.c dialog_gps.c dialog_msg_cw.c
     dialog_js8.c js8_wf.c js8_clock.c
     tx_player.c tx_level.c
     ft8_ui/table_view.c
+    ft8_udp.c
     dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c
     textarea_window.c cw_encoder.c buttons.cpp vol.cpp recorder.c
     voice.cpp cw_tune_ui.c adif.c qso_log.c scheduler.cpp
     format.c msg_cw_store.c
     dialog_wifi.c wifi.cpp controls.cpp usb_devices.cpp
+    bt_audio.c
     knobs.cpp lock_manager.c indicators.cpp freq_info.cpp
+    dialog_bt.c bt_ctl.c bt_dev.c bt_spp.c
 )
 
 add_subdirectory(fonts)

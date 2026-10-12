@@ -325,6 +325,7 @@ static button_data_t btn_settings = make_app_btn("Settings", ACTION_APP_SETTINGS
 
 static button_data_t  btn_wifi   = make_app_btn("WiFi", ACTION_APP_WIFI);
 static button_data_t  btn_js8    = make_app_btn("JS8", ACTION_APP_JS8);
+static button_data_t  btn_bt     = make_app_btn("Bluetooth", ACTION_APP_BT);
 
 /* RTTY */
 static button_data_t btn_rtty_p1 = {
@@ -455,9 +456,8 @@ static buttons_page_t page_app_2 = {
     {&btn_app_p2, &btn_rec, &btn_qth, &btn_callsign, &btn_settings}
 };
 static buttons_page_t page_app_3 = {
-    /* JS8 keeps its place: the two empty buttons are the Murus team's WeFax
-     * and NavTex, which come back when their fork is on 1.0.2. */
-    {&btn_app_p3, &btn_wifi, NULL, NULL, &btn_js8}
+    /* JS8 keeps the place its testers know (the last button). */
+    {&btn_app_p3, &btn_wifi, &btn_bt, NULL, &btn_js8}
 };
 
 /* RTTY */

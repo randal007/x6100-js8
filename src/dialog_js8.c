@@ -98,7 +98,7 @@
 #define SAVED_N          10     /* saved messages (Query > Saved messages >) */
 /* <MYVERSION> and the default STATUS send this: set it to the release's
  * name for every release (docs/releases/CHECKLIST.md, step 1). */
-#define JS8_APP_VERSION  "X6100 JS8 beta 5" /* desktop's is its version number */
+#define JS8_APP_VERSION  "X6100 JS8 beta 5.1" /* desktop's is its version number */
 #ifndef JS8_LOG_PATH
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
@@ -106,8 +106,9 @@
 #define JS8_MAP_DATA_PATH "/usr/share/x6100/js8/js8_map.bin" /* tools/map_data */
 #endif
 #ifndef JS8_CTY_PATH
-#define JS8_CTY_PATH     "/usr/share/x6100/js8/cty.dat" /* third-party/cty */
+#define JS8_CTY_PATH     "/usr/share/x6100/cty.dat" /* third-party/cty, the same file FT8's countries use (dxcc.c) */
 #endif
+#define JS8_CTY_SD_PATH  "/mnt/cty.dat" /* a newer list put on the card wins, as for FT8 */
 #ifndef JS8_HISTORY_PATH
 #define JS8_HISTORY_PATH "/mnt/js8_history.db" /* every station exchanged with: INFO, STATUS, QSO texts */
 #endif
@@ -4105,7 +4106,8 @@ static bool map_ensure(void) {
         return false;
     }
     if (!map_data) map_data = js8_map_data_load(JS8_MAP_DATA_PATH);
-    if (!js8_map_countries_loaded()) js8_map_load_countries(JS8_CTY_PATH);
+    if (!js8_map_countries_loaded() && !js8_map_load_countries(JS8_CTY_SD_PATH))
+        js8_map_load_countries(JS8_CTY_PATH);
     if (!map_data) LV_LOG_USER("JS8 map: no map data at %s", JS8_MAP_DATA_PATH);
 
     /* An opaque box, as the waterfall's: LVGL starts drawing there and

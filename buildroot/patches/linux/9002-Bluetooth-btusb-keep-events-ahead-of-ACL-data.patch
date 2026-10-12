@@ -1,0 +1,91 @@
+From: X6100 firmware project
+Subject: [PATCH] Bluetooth: btusb: keep events ahead of ACL data (poll sync on)
+
+USB carries HCI events on the interrupt endpoint and ACL data on the bulk
+endpoint, so the host can see them in a different order than the
+controller sent them. On the Xiegu X6100 (RTL8723BU, Bluetooth and WiFi
+on one USB device, sun8i musb host) this breaks LE pairing: the
+peripheral's SMP key distribution arrives before the HCI Encryption
+Change event, smp.c drops it ("unexpected SMP command 0x06 from ...")
+and the pairing times out. btmon of a failed pairing with a BLE
+keyboard (legacy Just Works, bonding):
+
+  < LE Start Encryption
+  > ACL  SMP: Encryption Information (0x06)     01.877710
+  > HCI  Encryption Change: enabled             01.878009
+  > ACL  SMP: Central Identification (0x07)     01.878133
+  > ACL  SMP: Identity Information (0x08)
+  > ACL  SMP: Identity Address Information (0x09)
+  kernel: Bluetooth: hci0: unexpected SMP command 0x06 ... 0x09
+
+It fails or works at random, more often while WiFi is busy on the same
+USB device. btusb already has the remedy, force_poll_sync (commit
+800fe5ec302e "Bluetooth: btusb: Add support for queuing during polling
+interval"), off by default and switchable only while the adapter is
+down, which on this system means a power cycle after boot. So:
+
+- poll_sync is on from probe (still switchable in debugfs);
+- the ACL delay is one jiffy longer than the interval: a delay of one
+  jiffy may expire at the very next tick, and with HZ=100 that left
+  the data held for anything from 0 to 10 ms, not one interval;
+- btusb_recv_event() hands the event to the core before it wakes the
+  worker that releases held ACL data, so that data can no longer get
+  ahead of the event (as in "Bluetooth: btusb: Preserve event and ACL
+  packet ordering", bluetooth-next 2026).
+
+With force_poll_sync on, the same keyboard paired and bonded first time
+(Encryption Change, then all four keys 13 ms later) and types. Incoming
+ACL data waits 10-20 ms longer; SCO/ISO audio is not affected.
+
+---
+--- a/drivers/bluetooth/btusb.c
++++ b/drivers/bluetooth/btusb.c
+@@ -929,12 +929,20 @@
+ 
+ static int btusb_recv_event(struct btusb_data *data, struct sk_buff *skb)
+ {
++	int err;
++
++	/* Hand the event to the core first, then release the ACL data held
++	 * back: the other way round the worker can deliver that data ahead
++	 * of the event it was waiting for.
++	 */
++	err = data->recv_event(data->hdev, skb);
++
+ 	if (data->intr_interval) {
+ 		/* Trigger dequeue immediatelly if an event is received */
+ 		schedule_delayed_work(&data->rx_work, 0);
+ 	}
+ 
+-	return data->recv_event(data->hdev, skb);
++	return err;
+ }
+ 
+ static int btusb_recv_intr(struct btusb_data *data, void *buffer, int count)
+@@ -1002,7 +1010,11 @@
+ 		return data->recv_acl(data->hdev, skb);
+ 
+ 	skb_queue_tail(&data->acl_q, skb);
+-	schedule_delayed_work(&data->rx_work, data->intr_interval);
++	/* One jiffy more than the interval: a delay of N jiffies may expire
++	 * at the very next tick, so this holds the data at least one whole
++	 * interval (with HZ=100 and a 1 ms interval: 10 to 20 ms, not 0).
++	 */
++	schedule_delayed_work(&data->rx_work, data->intr_interval + 1);
+ 
+ 	return 0;
+ }
+@@ -3844,6 +3856,13 @@
+ 
+ 	skb_queue_head_init(&data->acl_q);
+ 
++	/* Events (interrupt endpoint) and ACL data (bulk endpoint) can reach
++	 * the host out of order. force_poll_sync holds ACL data back for an
++	 * interrupt interval so that an event sent before it is handled
++	 * first. On by default here; still switchable in debugfs.
++	 */
++	data->poll_sync = true;
++
+ 	init_usb_anchor(&data->deferred);
+ 	init_usb_anchor(&data->tx_anchor);
+ 	spin_lock_init(&data->txlock);
