@@ -50,9 +50,13 @@ by gdyuldin or myshak1, never merged by us alone.
   Scan); **4** WiFi off/on is noticed (a new hci0, not only a missing
   one) and Bluetooth set up again without a power cycle, and bt_down.sh
   is never run against a chip that lost power.
-  Reported, not fixed by us (OpenX6100 issue): CAT over Bluetooth needs
-  no pairing; visible and pairable to anyone from boot until the window
-  is opened; the headset PTT button is accepted from any device.
+  Reported, not fixed by us (OpenX6100/x6100_gui#292): CAT over
+  Bluetooth needs no pairing; visible and pairable to anyone from boot
+  until the window is opened; the headset PTT button is accepted from any
+  device. **Pull requests opened 2026-10-11:** AetherX6100Buildroot#5
+  (A, the kernel patch) and x6100_gui#291 (B, C, 1-4, from branch
+  bt-keyboard-pairing in OpenX6100's repo); both say the radio test of
+  the image is still to come. Test image: *Build image* run 38205360614.
   **Next:** test image, radio test (pair several times with WiFi on the
   home network; headset and phone still found by Scan; keyboard still
   reconnects after power off/on), then pull requests to OpenX6100:
