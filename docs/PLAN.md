@@ -134,10 +134,17 @@ by gdyuldin or myshak1, never merged by us alone.
   with GPL v3 himself but would need every author to agree; he suggests
   JS8 as a standalone add-on instead (a .so the user downloads onto the
   SD card and an init.d script installs at boot, or from a separate
-  GitHub repo). **VE7NHW is thinking it over; no reply posted yet.** The
-  add-on would mean: the JS8 app + library + engine built as one GPL
-  add-on in our repo, and a small neutral "load an add-on from the card"
-  hook plus the APP entry in OpenX6100; #290 (groundwork) stays useful.
+  GitHub repo). VE7NHW read it as a misunderstanding (gdyuldin thought
+  the whole project would have to become GPL v3). **Reply posted
+  2026-10-12** ([text](upstream-prs/12-licence-reply.md),
+  discussioncomment-18887731): every GUI file stays LGPL-2.1-or-later,
+  only `third-party/js8core` is GPL v3, and only an image built with JS8
+  is GPL v3 as a whole (LGPL 2.1 section 3 allows it without asking the
+  authors); or JS8 as a build option off by default (`WITH_JS8`, not
+  written yet: would go in 2/4). Asked him: always built in, or an
+  option? **Waiting for gdyuldin.** Fallback if he still says no: his
+  add-on idea (JS8 as one GPL add-on from our repo, a small "load an
+  add-on from the card" hook in OpenX6100).
 - [ ] **OpenX6100 reviews:** approved #288 (FT2) and #274 (Olivia);
   on #271 (WSPR) asked for two fixes (the beacon period survives closing
   the window, so reopening resumes beaconing; the worker thread's
