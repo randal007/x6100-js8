@@ -71,6 +71,14 @@ jobs:
     # pairings backup were patched in here until OpenX6100 took them
     # (AetherX6100Buildroot #2, #3 and #4, merged 2026-10-10/11).
 
+    # Kernel patches not in OpenX6100's Buildroot yet, put next to its own
+    # until it takes them (same name: a merged one is just overwritten).
+    # 9002: btusb keeps HCI events ahead of ACL data, so Bluetooth LE
+    # keyboards pair every time. Buildroot stops if a patch doesn't apply.
+    - name: Kernel patches not yet in OpenX6100
+      run: |
+        cp -v x6100_gui/buildroot/patches/linux/*.patch AetherX6100Buildroot/br2_external/board/X6100/patches/linux/
+
     # Ccache
     - name: Prepare ccache timestamp
       id: ccache_cache_timestamp

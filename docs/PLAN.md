@@ -26,6 +26,28 @@ by gdyuldin or myshak1, never merged by us alone.
   (paired in 9 s, hidden after 3 min, saved at power-off and reconnected);
   report with the log posted on #280. Still to do: **when Buildroot#4 is
   merged, drop our pairings-backup step from *Build image*.**
+- [ ] **Bluetooth keyboards pair every time** (2026-10-11, branch
+  `openx6100-bluetooth`): on the beta 5.1 release candidate the window's
+  pairing failed 4 times out of 4 with VE7NHW's F01 keyboard. btmon on the
+  radio: the keyboard's SMP keys reached Linux 0.3 ms *before* the chip's
+  Encryption Change event (events and data come over two USB endpoints,
+  and WiFi shares the same USB device), so the kernel dropped them
+  ("unexpected SMP command 0x06") and the pairing timed out. A race, not a
+  code change: the same error on 10-10 with x6100-bt-pair, a retry
+  "worked"; Kris's first-time pairing was luck. With btusb's
+  force_poll_sync switched on by hand it paired and bonded first time.
+  Three fixes: **A** kernel patch 9002 (poll sync on from probe, the hold
+  at least one whole jiffy, the event before the worker), in
+  `buildroot/patches/linux/` and copied in by *Build image*; **B** Scan
+  takes turns, LE 3 s / classic 5 s twice (the chip hears no LE during an
+  inquiry); **C** Connect on a keyboard waits for it by name, LE only (it
+  takes a new address at every pairing-key press: D7, D8, ... DD).
+  **Next:** test image, radio test (pair several times with WiFi on the
+  home network; headset and phone still found by Scan; keyboard still
+  reconnects after power off/on), then pull requests to OpenX6100:
+  AetherX6100Buildroot (A, with the btmon evidence) and x6100_gui (B + C,
+  Kris tagged). Also for Kris: switching Bluetooth off and on with WiFi
+  running leaves the chip deaf to LE during inquiry until a reboot.
 - [ ] **Beta 5.1 (the Bluetooth window + the compound-call fix), on
   branch `openx6100-bluetooth`** (2026-10-11): OpenX6100's main merged in
   (Bluetooth window, FT8 country, WSJT-X UDP, Decoder text, SSB fix), APP
