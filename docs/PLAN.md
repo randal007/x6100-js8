@@ -145,10 +145,23 @@ by gdyuldin or myshak1, never merged by us alone.
   option? **Waiting for gdyuldin.** Fallback if he still says no: his
   add-on idea (JS8 as one GPL add-on from our repo, a small "load an
   add-on from the card" hook in OpenX6100).
+- [ ] **Bluetooth security, #292 points 1 + 2** (2026-10-12; Kris takes
+  3, the headset PTT, in bt_audio.c). Branch `bt-security` in both
+  OpenX6100 repos: x6100_gui 1d5452e (CAT's RFCOMM socket
+  BT_SECURITY_MEDIUM: bonded devices only, shared GUI code) and
+  AetherX6100Buildroot 8a58909 (bt_start.sh: hidden, not pairable, no
+  bt-agent at boot). Test image with JS8: our branch `bt-security-js8`
+  (main + the CAT commit + a TEST-ONLY Buildroot ref in main.yml: never
+  merge it), *Build image* run 38305954241. Radio test: FT8CN CAT from
+  the phone (already paired; then a fresh pairing via Scan), an unpaired
+  device refused, keyboard and headset reconnect, WiFi off/on, radio
+  hidden in a phone's scan. Then the two PRs (linked, "Fixes part of
+  #292"), release-note line "Bluetooth CAT: pair the phone once in the
+  Bluetooth window", delete `bt-security-js8`. Open question:
+  `JustWorksRepairing = always` (Kris's 9d5af79) kept or back to default.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2) and #274 (Olivia);
-  on #271 (WSPR) asked for two fixes (the beacon period survives closing
-  the window, so reopening resumes beaconing; the worker thread's
-  `thread_running` race on a quick close). Approve when Kris pushes them. Before 4/4: a 4th APP
+  #271 (WSPR): Kris pushed both fixes asked for (beacon off on close,
+  worker always joined), **approved 2026-10-12**. Before 4/4: a 4th APP
   page agreed with myshak1, and one cty.dat (JS8 reads #282's).
   2026-10-12, gdyuldin's three: approved #293 (DNF mark drawn at the auto
   flag; asked why lv_async_call) and #294 (100 kHz lower limit; asked
