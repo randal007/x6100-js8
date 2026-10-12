@@ -56,3 +56,6 @@ images/*.png
 _build/
 build/
 build_test/
+
+# Claude: machine-specific notes
+CLAUDE.local.md
