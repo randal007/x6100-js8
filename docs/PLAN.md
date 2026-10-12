@@ -162,6 +162,11 @@ by gdyuldin or myshak1, never merged by us alone.
 - [ ] POTA / SOTA spots through the gateways, when out portable anyway.
 - [ ] Screenshots for the beta 5 page and the Facebook post: `GPS` in the
   top line, an Ultra row.
+- [ ] Pictures for the beta 5.1 Facebook post (offered 2026-10-12, not
+  taken yet): the Bluetooth window with the keyboard connected (`*`,
+  `[kbd]`, page 2 buttons), FT8 showing a country, JS8 with text typed
+  on the Bluetooth keyboard. `~/Work/bin/x6100-screenshot` while
+  VE7NHW opens each screen; into ~/Pictures/x6100-js8-beta5.1-facebook/.
 
 ## Decided: not doing
 
