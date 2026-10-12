@@ -1,6 +1,6 @@
 **JS8 on the Xiegu X6100, running on the radio itself.** No PC, phone or tablet needed: the X6100 firmware (OpenX6100, gdyuldin's) with a JS8 app next to FT8 and RTTY.
 
-Beta 5.1 brings a **Bluetooth window** to pair keyboards on the radio itself, and an important fix: **messages to and from stations with a "/" and a number in their call** (like KG4UHM/6) were packed and read differently from desktop JS8Call. Please update if you work JS8 on the air.
+Beta 5.1 brings a **Bluetooth window** to pair keyboards on the radio itself, now pairing first time, every time, and an important fix: **messages to and from stations with a "/" and a number in their call** (like KG4UHM/6) were packed and read differently from desktop JS8Call. Please update if you work JS8 on the air.
 
 > [!IMPORTANT]
 > Writing the image replaces the whole SD card. **Copy your files off the DATA partition first** (`params.db`, `qso_log.db`, `*.adi`, `js8_*.txt`, `js8_history.db`, `bluetooth.tar`) and copy them back after the first start.
@@ -18,7 +18,17 @@ Both directions now match desktop JS8Call bit for bit, checked against desktop's
 
 ### The Bluetooth window
 
-**APP, page 3 → Bluetooth** (Kris SP2KMO's, from OpenX6100): press **Scan**, press the keyboard's pairing key, select it and press **Connect**. If the keyboard wants a number typed, the window shows it. Hold **Forget** to remove a pairing. The radio can only be paired with for 3 minutes after Scan; the rest of the time it's hidden. Pairings are kept across updates when you switch off normally. The console command `x6100-bt-pair` is gone. WiFi must be on (one switch powers WiFi and Bluetooth).
+**APP, page 3 → Bluetooth** (Kris SP2KMO's, from OpenX6100): press the keyboard's pairing key and **Scan**, select the keyboard and press **Connect**. If the keyboard wants a number typed, the window shows it. Hold **Forget** to remove a pairing. The radio can only be paired with for 3 minutes after Scan; the rest of the time it's hidden. Pairings are kept across updates when you switch off normally. The console command `x6100-bt-pair` is gone. WiFi must be on (one switch powers WiFi and Bluetooth).
+
+**Keyboards now pair every time.** Before, pairing failed at random: the keyboard's security keys could reach the radio's Linux a fraction of a millisecond before the Bluetooth chip said encryption was on, and were thrown away. It happened more often while WiFi was busy. A small change in the radio's Bluetooth driver keeps them in order, and a test keyboard that failed 4 times out of 4 then paired 6 times in a row. The window also got better at finding keyboards:
+
+- Scan listens for keyboards and headsets in turns, so a keyboard is found quickly
+- The keyboard is found again after its pairing key gives it a new address, and its old entry goes away by itself
+- Pressing Connect while Scan is running stops the Scan at once
+- The highlight stays on the device you picked while the list updates
+- After WiFi is switched off and on, Bluetooth comes back by itself
+
+These are sent to OpenX6100 too (AetherX6100Buildroot#5, x6100_gui#291).
 
 [Using a Bluetooth keyboard](https://github.com/randal007/x6100-js8#using-a-bluetooth-keyboard) in the manual.
 
@@ -32,6 +42,7 @@ Both directions now match desktop JS8Call bit for bit, checked against desktop's
 ## Bug fixes since beta 5
 
 - Messages to and from "/number" calls: command and SNR packed and read as desktop does (above)
+- Bluetooth keyboards failing to pair at random, and the Bluetooth window not finding them (above)
 - The log export wrote SSB contacts as AM (our fix, merged in OpenX6100)
 - CAT on the 6 m band (from OpenX6100)
 
@@ -52,6 +63,8 @@ Both directions now match desktop JS8Call bit for bit, checked against desktop's
 
 - **WeFax, NavTex, SSTV and the broadcast channel list** aren't included. They're the Murus team's and are coming through **OpenX6100**, so every app ends up in one firmware
 - **Bluetooth headphones while JS8 is open:** while you listen on headphones the radio's speaker is turned down, so JS8's alert beeps may not be heard. Not tried yet
+- **Connect on a keyboard's old entry** keeps the Bluetooth window busy for up to a minute; Connect the new entry instead (the old one goes by itself)
+- **Bluetooth after power-on:** until the Bluetooth window has been opened once, the radio can be seen and paired with by anyone nearby, and CAT over Bluetooth needs no pairing. Reported to OpenX6100 (x6100_gui#292); opening the window once hides the radio
 - **A slight waterfall flicker** while it scrolls; *Waterfall: Light* (the default) or *Calm* in Settings make it much smaller. It doesn't affect decoding
 - **Without a GPS** the radio's clock drifts a few seconds a week. Time: Auto follows it; if nothing decodes, hold **Time**
 - **Not tried on the air yet:** high-SWR protection, APRS More services, POTA/SOTA spots, Ultra on a busy band, and the GPS grid outside

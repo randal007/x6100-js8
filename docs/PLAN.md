@@ -26,7 +26,7 @@ by gdyuldin or myshak1, never merged by us alone.
   (paired in 9 s, hidden after 3 min, saved at power-off and reconnected);
   report with the log posted on #280. Still to do: **when Buildroot#4 is
   merged, drop our pairings-backup step from *Build image*.**
-- [ ] **Bluetooth keyboards pair every time** (2026-10-11, branch
+- [x] **Bluetooth keyboards pair every time** (2026-10-11, branch
   `openx6100-bluetooth`): on the beta 5.1 release candidate the window's
   pairing failed 4 times out of 4 with VE7NHW's F01 keyboard. btmon on the
   radio: the keyboard's SMP keys reached Linux 0.3 ms *before* the chip's
@@ -64,14 +64,16 @@ by gdyuldin or myshak1, never merged by us alone.
   a follow-up: Connect on a keyboard's old pairing still ties the worker
   up ~1 min (Forget waits behind it); one pairing cancelled while the old
   bond was still saved. **Next:** reviews of #291 / Buildroot #5; then
-  beta 5.1 (below) with this in.
+  beta 5.1 (below) with this in. **Released in beta 5.1** (2026-10-12);
+  still to do: reviews of #291 / Buildroot #5 / #292, and the follow-up
+  above.
   **Next:** test image, radio test (pair several times with WiFi on the
   home network; headset and phone still found by Scan; keyboard still
   reconnects after power off/on), then pull requests to OpenX6100:
   AetherX6100Buildroot (A, with the btmon evidence) and x6100_gui (B + C,
   Kris tagged). Also for Kris: switching Bluetooth off and on with WiFi
   running leaves the chip deaf to LE during inquiry until a reboot.
-- [ ] **Beta 5.1 (the Bluetooth window + the compound-call fix), on
+- [x] **Beta 5.1 (the Bluetooth window + the compound-call fix), on
   branch `openx6100-bluetooth`** (2026-10-11): OpenX6100's main merged in
   (Bluetooth window, FT8 country, WSJT-X UDP, Decoder text, SSB fix), APP
   page 3 = WiFi, Bluetooth, (free), JS8 last; one cty.dat (Big CTY,

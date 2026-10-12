@@ -5,7 +5,8 @@ tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
 > **Beta 5.1** is the current release: a **Bluetooth window** to pair
-> keyboards on the radio itself, and a fix for messages to and from
+> keyboards on the radio itself (now pairing first time, every time), and a
+> fix for messages to and from
 > stations with a "/" and a number in their call (KG4UHM/6), which were
 > packed and read differently from desktop JS8Call
 > ([New in beta 5.1](#new-in-beta-51)). Beta 5 brought the **Ultra** speed
@@ -669,12 +670,16 @@ one is used.
   Bluetooth chip. It doesn't need to join a network.
 - **Pairing, once,** in the radio's **Bluetooth** window (APP, page 3; Kris
   SP2KMO's, from OpenX6100):
-  1. Press **Scan**. For the next 3 minutes the radio can be paired with;
-     the rest of the time it's hidden.
-  2. Press the keyboard's pairing key. It shows up in the list marked
-     `[kbd]`.
-  3. Select it and press **Connect**. If the keyboard wants a number typed,
-     the window shows it: type it on the keyboard and press Enter.
+  1. Press the keyboard's pairing key, then **Scan** (either order). For
+     the next 3 minutes the radio can be paired with; the rest of the time
+     it's hidden.
+  2. The keyboard shows up in the list marked `[kbd]`. Select it and press
+     **Connect** (also fine while Scan is still running). If the keyboard
+     wants a number typed, the window shows it: type it on the keyboard
+     and press Enter.
+  3. Many keyboards take a new address each time their pairing key is
+     pressed. The window finds it anyway, and once it's paired the
+     keyboard's old entry goes away by itself.
   4. To remove a pairing, select it and hold **Forget**.
 - **After that** the keyboard connects by itself when you press a key,
   also after it has slept or the radio has been off (the first key press
@@ -1010,6 +1015,17 @@ Released 2026-10-12 ([release notes](docs/releases/js8-beta5.1.md)).
 - **The Bluetooth window** (APP, page 3): pair a keyboard on the radio
   itself, no console needed; see [Using a Bluetooth keyboard](#using-a-bluetooth-keyboard).
   From OpenX6100 (Kris SP2KMO). The console command `x6100-bt-pair` is gone.
+- **Fixed: Bluetooth keyboards failing to pair at random.** The
+  keyboard's security keys could reach the radio's Linux a fraction of a
+  millisecond before the Bluetooth chip said encryption was on, and were
+  thrown away (more often while WiFi was busy). A small change in the
+  radio's Bluetooth driver keeps them in order. The window also finds
+  keyboards reliably now (Scan listens for keyboards and headsets in
+  turns), finds the keyboard again after its pairing key gives it a new
+  address, removes its old pairing by itself, stops a Scan when you press
+  Connect, keeps the highlight on the device you picked, and brings
+  Bluetooth back by itself after WiFi is switched off and on. Sent to
+  OpenX6100 as AetherX6100Buildroot#5 and x6100_gui#291.
 - **From OpenX6100's latest firmware:** FT8/FT4 shows each station's country
   next to the distance, sends WSJT-X-style UDP for logging programs, and has
   a *Decoder text* Setting (Large or Compact) in Settings > Interface.
@@ -1350,6 +1366,15 @@ are, and its new settings start at their defaults.
 - **Bluetooth headphones while JS8 is open:** while you listen on
   headphones the radio's speaker is turned down, so JS8's alert beeps
   (played on the speaker) may not be heard. Not tried yet.
+- **Connect on a keyboard's old entry** (after its pairing key gave it a
+  new address) keeps the Bluetooth window busy for up to a minute, and
+  Forget waits until it's done. Connect the new entry instead; the old one
+  goes away by itself once that's paired.
+- **Bluetooth after power-on:** until the Bluetooth window has been opened
+  once, the radio can be seen and paired with by anyone nearby, and CAT
+  over Bluetooth needs no pairing. That's in OpenX6100's shared firmware;
+  reported there (x6100_gui#292). Opening the Bluetooth window once hides
+  the radio again.
 - **A slight flicker in the waterfall while it scrolls** (not when it's
   still, e.g. while you transmit): each new row moves the whole waterfall
   by a pixel, and the screen's pixels darken faster than they brighten.
