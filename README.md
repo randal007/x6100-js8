@@ -1385,8 +1385,10 @@ are, and its new settings start at their defaults.
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
-- [ ] **JS8 in the OpenX6100 firmware** itself, in four pull requests:
-  part 1 is [OpenX6100/x6100_gui#290](https://github.com/OpenX6100/x6100_gui/pull/290)
+- [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is
+  [OpenX6100/x6100_gui#290](https://github.com/OpenX6100/x6100_gui/pull/290);
+  how the rest goes in (in the firmware or as an add-on you put on the SD
+  card) is being worked out with OpenX6100
 - [ ] **Ultra on a busy band** and the **GPS** outside (grid, battery clock)
 
 ## Bug reports and feature requests

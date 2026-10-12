@@ -75,6 +75,14 @@ by gdyuldin or myshak1, never merged by us alone.
   AetherX6100Buildroot (A, with the btmon evidence) and x6100_gui (B + C,
   Kris tagged). Also for Kris: switching Bluetooth off and on with WiFi
   running leaves the chip deaf to LE during inquiry until a reboot.
+- [ ] **Beta 5.1 release, last steps** (tag `js8-beta5.1` on 02c8682,
+  *Build image* run 38218854490 started 2026-10-12 07:38 UTC): once it
+  has published, `gh release edit js8-beta5.1 --title "X6100 JS8 beta
+  5.1" --notes-file docs/releases/js8-beta5.1.md --prerelease`, a
+  "Please use beta 5.1" banner on beta 5's page and in
+  docs/releases/js8-beta5.md (beta 5 has the /number bug), check the
+  asset's sha256 against GitHub's digest, then tell VE7NHW; the Facebook
+  post is ready in ~/Pictures/x6100-js8-beta5.1-facebook/post.txt.
 - [x] **Beta 5.1 (the Bluetooth window + the compound-call fix), on
   branch `openx6100-bluetooth`** (2026-10-11): OpenX6100's main merged in
   (Bluetooth window, FT8 country, WSJT-X UDP, Decoder text, SSB fix), APP
@@ -122,12 +130,27 @@ by gdyuldin or myshak1, never merged by us alone.
   tested on VE7NHW's radio (FT8 QSO logged right); waiting for gdyuldin.
   #289 (ADIF SSB-written-as-AM) merged the same day. Next: 2/4 once #290 is merged and gdyuldin
   has answered the licence question. 2/4 carries local patch 16 (the
-  compound-call fix).
+  compound-call fix). **gdyuldin answered on D#23 (2026-10-12):** fine
+  with GPL v3 himself but would need every author to agree; he suggests
+  JS8 as a standalone add-on instead (a .so the user downloads onto the
+  SD card and an init.d script installs at boot, or from a separate
+  GitHub repo). **VE7NHW is thinking it over; no reply posted yet.** The
+  add-on would mean: the JS8 app + library + engine built as one GPL
+  add-on in our repo, and a small neutral "load an add-on from the card"
+  hook plus the APP entry in OpenX6100; #290 (groundwork) stays useful.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2) and #274 (Olivia);
   on #271 (WSPR) asked for two fixes (the beacon period survives closing
   the window, so reopening resumes beaconing; the worker thread's
   `thread_running` race on a quick close). Approve when Kris pushes them. Before 4/4: a 4th APP
   page agreed with myshak1, and one cty.dat (JS8 reads #282's).
+  2026-10-12, gdyuldin's three: approved #293 (DNF mark drawn at the auto
+  flag; asked why lv_async_call) and #294 (100 kHz lower limit; asked
+  whether TX is refused below 500 kHz, 630 m / 2200 m), changes requested
+  on #295 (repo links: Buildroot's x6100_gui.mk still says gdyuldin, so
+  its sed would match nothing; suggested `[^/]*`, which our own CI uses
+  since bf39b8c; plus leftover links). Not reviewed by us: #287 (world
+  map, YunongDai2005) and Kris's #284-#286 (#285/#286 say "apply with"
+  themselves: ask which PR they mean).
 
 ## To try on the radio (no programming)
 
