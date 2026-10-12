@@ -201,6 +201,8 @@ void main_screen_start_app(press_action_t app_action) {
         case ACTION_APP_JS8:
             dialog_construct(dialog_js8, obj);
             voice_say_text_fmt("JS8 window");
+            break;
+
         case ACTION_APP_BT:
             dialog_construct(dialog_bt, obj);
             voice_say_text_fmt("Bluetooth window");
