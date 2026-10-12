@@ -61,14 +61,10 @@ These are sent to OpenX6100 too (AetherX6100Buildroot#5, x6100_gui#291).
 
 ## Known issues
 
-- **WeFax, NavTex, SSTV and the broadcast channel list** aren't included. They're the Murus team's and are coming through **OpenX6100**, so every app ends up in one firmware
 - **Bluetooth headphones while JS8 is open:** while you listen on headphones the radio's speaker is turned down, so JS8's alert beeps may not be heard. Not tried yet
 - **Connect on a keyboard's old entry** keeps the Bluetooth window busy for up to a minute; Connect the new entry instead (the old one goes by itself)
 - **Bluetooth after power-on:** until the Bluetooth window has been opened once, the radio can be seen and paired with by anyone nearby, and CAT over Bluetooth needs no pairing. Reported to OpenX6100 (x6100_gui#292); opening the window once hides the radio
-- **A slight waterfall flicker** while it scrolls; *Waterfall: Light* (the default) or *Calm* in Settings make it much smaller. It doesn't affect decoding
-- **Without a GPS** the radio's clock drifts a few seconds a week. Time: Auto follows it; if nothing decodes, hold **Time**
 - **Not tried on the air yet:** high-SWR protection, APRS More services, POTA/SOTA spots, Ultra on a busy band, and the GPS grid outside
-- If the power goes off while JS8 is open, the USB-D receive filter stays at 200–3000 Hz; leaving JS8 first (ESC) puts yours back
 
 ## Questions and bug reports
 

@@ -1357,12 +1357,6 @@ are, and its new settings start at their defaults.
 
 ## Known issues in beta 5.1
 
-- **WeFax, NavTex, SSTV and the broadcast channel list are not
-  included.** They're the Murus team's (1KO125), whose fork is still on
-  the older firmware. Rather than merge them into this fork, we're waiting
-  for them to come through **OpenX6100**, the new shared home of the X6100
-  firmware (gdyuldin's, with other app authors as maintainers), so every
-  app ends up in one firmware.
 - **Bluetooth headphones while JS8 is open:** while you listen on
   headphones the radio's speaker is turned down, so JS8's alert beeps
   (played on the speaker) may not be heard. Not tried yet.
@@ -1375,16 +1369,6 @@ are, and its new settings start at their defaults.
   over Bluetooth needs no pairing. That's in OpenX6100's shared firmware;
   reported there (x6100_gui#292). Opening the Bluetooth window once hides
   the radio again.
-- **A slight flicker in the waterfall while it scrolls** (not when it's
-  still, e.g. while you transmit): each new row moves the whole waterfall
-  by a pixel, and the screen's pixels darken faster than they brighten.
-  Much reduced by the *Waterfall* levels in Settings (*Light*, the default,
-  about 2 times less change at each step; *Calm* about 4 times less). It
-  doesn't affect decoding.
-- **The radio's clock** has no network time and gains a few seconds a
-  week. [Time: Auto](#time) follows every decode; at 2.5 s or more off
-  nothing decodes: hold **Time** to search, or set the clock in the radio's
-  Settings (General: *Hour, Min, Sec*).
 - **Not tried on the air yet:** the high-SWR protection, the APRS
   More services list, POTA and SOTA spots, position messages and email
   through the gateways, Ultra on a busy band, and the GPS grid outside.
@@ -1396,17 +1380,11 @@ are, and its new settings start at their defaults.
   exchanged messages with, not every station heard.
 - Long messages have been seen arriving live, but not yet watched all the
   way to the end.
-- If the radio loses power, or you switch it off by holding POWER, while
-  JS8 is open, the USB-D receive filter stays at 200–3000 Hz, which suits
-  digital modes; set yours back by hand if it was different. Leaving the
-  app first (ESC) puts it back. Not planned to change (the power-off path
-  is shared with the whole radio).
 
 ## Coming next
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
-- [ ] **WeFax, NavTex and SSTV** from the Murus team, through OpenX6100
 - [ ] **JS8 in the OpenX6100 firmware** itself, in four pull requests:
   part 1 is [OpenX6100/x6100_gui#290](https://github.com/OpenX6100/x6100_gui/pull/290)
 - [ ] **Ultra on a busy band** and the **GPS** outside (grid, battery clock)
