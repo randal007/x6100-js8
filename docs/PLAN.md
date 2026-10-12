@@ -66,8 +66,9 @@ by gdyuldin or myshak1, never merged by us alone.
   bond was still saved. **Next:** reviews of #291 / Buildroot #5; then
   beta 5.1 (below) with this in. **Released in beta 5.1** (2026-10-12).
   #291 and Buildroot #5 approved by gdyuldin; **Buildroot #5 merged**
-  2026-10-12 (our copy of patch 9002 and its CI step dropped). Still to
-  do: merge #291, answers on #292, and the follow-up above.
+  2026-10-12 (our copy of patch 9002 and its CI step dropped); **#291
+  merged** 2026-10-12 (OpenX6100's Bluetooth files now identical to ours).
+  Still to do: answers on #292, and the follow-up above.
   **Next:** test image, radio test (pair several times with WiFi on the
   home network; headset and phone still found by Scan; keyboard still
   reconnects after power off/on), then pull requests to OpenX6100:
