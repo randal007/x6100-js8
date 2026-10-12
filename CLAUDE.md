@@ -69,8 +69,43 @@ prerelease betas (`js8-beta5`, ...) with an SD card image on GitHub.
 - **Releases:** follow [docs/releases/CHECKLIST.md](docs/releases/CHECKLIST.md).
   Step 1 is the version string `JS8_APP_VERSION` at the top of
   `src/dialog_js8.c`: it goes out on the air in every STATUS answer.
-- **End of a session:** README, GitHub, PLAN.md (and Claude's memory)
-  brought up to date. Randal asks for this.
+- **End of a session:** when Randal says **"offload"**, "closing down
+  the session" or similar, run the checklist in
+  [Closing a session](#closing-a-session-offload) below, all of it,
+  without asking each step.
+
+## Closing a session ("offload")
+
+Randal's word for it is **offload** (or "closing down the session"). Do
+every step, then report. Nothing may live only in this conversation.
+
+1. **Running work:** check every CI run, background job and test started
+   this session. Finish what can be finished now (e.g. a release whose
+   build just published: its CHECKLIST steps). What can't, goes into
+   docs/PLAN.md as a "Next" with the run ID and the exact command.
+2. **docs/PLAN.md:** tick what's done, update each item touched this
+   session (state, decisions Randal made, what's waiting on whom), and
+   new items for anything found or promised. "Decided: not doing" for
+   anything Randal dropped.
+3. **README (the manual):** the summary at the top, "New in ...",
+   "Known issues in ..." (drop the ones no longer true), "Coming next"
+   (mirrors PLAN.md), and any section whose behaviour changed.
+4. **Other docs:** release notes in docs/releases/ if a release is in
+   progress; docs/upstream-patches.md for every OpenX6100 PR or issue
+   opened, merged or answered; docs/js8core-bug-reports.md and
+   third-party/js8core/UPSTREAM.md for engine changes.
+5. **GitHub:** everything committed and pushed (`git status` clean on
+   every branch used); results posted on our open PRs and issues;
+   branches merged or deleted as agreed. Say which branch is current.
+6. **The radio:** say what's on the SD card (build, commit) and the
+   newest DATA backup folder; nothing left running on it that matters
+   (a btmon in /tmp dies at the next restart, fine).
+7. **Claude's memory** (on this PC): the project's current state, a
+   session entry in the history log, and any new lesson or preference of
+   Randal's; keep the MEMORY.md index line current.
+8. **Report to Randal** in plain words: what was done, what's still
+   running or waiting (and on whom), and anything he has to do himself
+   (e.g. a merge or a post Claude isn't allowed to make).
 
 ## Code map
 
