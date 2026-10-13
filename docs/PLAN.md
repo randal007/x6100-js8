@@ -25,8 +25,11 @@ by gdyuldin or myshak1, never merged by us alone.
   3. **Build image gets a `buildroot_ref` input** (main.yml, default
      master), so test images never need a TEST-ONLY commit; then
      `bt-security-js8`'s hack isn't needed again.
-  4. **Back up `CLAUDE.local.md`** (not in git, only on this PC): ask
-     VE7NHW where (a private gist, or a copy kept with the SD backups).
+  4. **Back up `CLAUDE.local.md`** (not in git, only on this PC). **Not
+     on GitHub, not even a gist** (VE7NHW, 2026-10-13): it has the radio's
+     login, the card serial and Bluetooth address. Decide where together:
+     options are a copy on one of the PC's other disks (two 5.5 TB drives
+     sda/sdc are attached), a USB stick, or alongside sd-backups/.
   5. Then the radio test of run 38428904715 (frame count thread).
   Working style from now on: shorter sessions, one topic each, offload
   at the end of each.
