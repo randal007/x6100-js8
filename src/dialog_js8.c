@@ -80,7 +80,9 @@
 #define WF_VISIBLE       55     /* waterfall rows left uncovered by the list */
 #define TX_BAR_H         30     /* TX status line between waterfall and list */
 #define TX_BAR_IDLE      0x000000 /* its background when idle, half see-through */
-#define TX_TEXT_MAX      160    /* longest message the compose window takes */
+#define TX_TEXT_MAX      500    /* longest message the compose window takes: past 20 frames
+                                   (~345-425 characters), so the frame limit is what stops you,
+                                   as on desktop, whose box has no limit */
 #define OFFER_MS         (5 * 60 * 1000) /* how long an offered reply stays on Reply */
 #define TEXT_MAX         64     /* INFO / STATUS */
 #ifndef JS8_TEXTS_PATH
