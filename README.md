@@ -1385,11 +1385,18 @@ are, and its new settings start at their defaults.
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
+- [ ] **Typing and logging** (in testing): no more freezes typing a long
+  message, messages up to 20 frames as on desktop (the box stopped at
+  about 10), long messages from desktop stations no longer cut short, and
+  a name or comment typed in Log QSO during a QSO kept for the log at the
+  end
+- [ ] **Bluetooth security** (with OpenX6100): CAT over Bluetooth only
+  for paired devices, the radio hidden until you Scan, the headset button
+  only from the headset
 - [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is
   [OpenX6100/x6100_gui#290](https://github.com/OpenX6100/x6100_gui/pull/290);
-  how the rest goes in (in the firmware or as an add-on you put on the SD
-  card) is being worked out with OpenX6100
-- [ ] **Ultra on a busy band** and the **GPS** outside (grid, battery clock)
+  the licence is agreed (JS8 in the normal build), the engine comes next
+- [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests
 

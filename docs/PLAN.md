@@ -121,95 +121,73 @@ by gdyuldin or myshak1, never merged by us alone.
   are, so new log modes start at 9 and digital types at 4.
 - [ ] **JS8 into OpenX6100**, four pull requests one at a time
   ([upstream-patches.md](upstream-patches.md#js8-into-openx6100-the-plan)):
-  groundwork, engine (with the licence note), library + tests, app. The
-  licence question waits on gdyuldin in discussion 23. **1/4 opened
+  groundwork, engine (with the licence note), library + tests, app.
+  **1/4 opened
   2026-10-11: OpenX6100/x6100_gui#290**, approved by myshak1 (his
   review: test_js8_db to expect the last migration, since FT2 #288 adds
   migration 5: done in 8479839, JS8's stored numbers written out too);
   tested on VE7NHW's radio (FT8 QSO logged right); waiting for gdyuldin.
-  #289 (ADIF SSB-written-as-AM) merged the same day. Next: 2/4 once #290 is merged and gdyuldin
-  has answered the licence question. 2/4 carries local patch 16 (the
-  compound-call fix). **gdyuldin answered on D#23 (2026-10-12):** fine
-  with GPL v3 himself but would need every author to agree; he suggests
-  JS8 as a standalone add-on instead (a .so the user downloads onto the
-  SD card and an init.d script installs at boot, or from a separate
-  GitHub repo). VE7NHW read it as a misunderstanding (gdyuldin thought
-  the whole project would have to become GPL v3). **Reply posted
-  2026-10-12** ([text](upstream-prs/12-licence-reply.md),
-  discussioncomment-18887731): every GUI file stays LGPL-2.1-or-later,
-  only `third-party/js8core` is GPL v3, and only an image built with JS8
-  is GPL v3 as a whole (LGPL 2.1 section 3 allows it without asking the
-  authors); or JS8 as a build option off by default (`WITH_JS8`, not
-  written yet: would go in 2/4). Asked him: always built in, or an
-  option? **Waiting for gdyuldin.** Fallback if he still says no: his
-  add-on idea (JS8 as one GPL add-on from our repo, a small "load an
-  add-on from the card" hook in OpenX6100).
-- [ ] **Typing a long message froze the screen** (VE7NHW on the air,
-  2026-10-12 ~04:13Z: GUI stall 23 s, scheduler queue overflow; bogs
-  past ~8 frames when typing fast). Cause: every key re-planned the whole
-  message for the "N frames, N s" count (PC, ASan: 4 ms at 20 chars, 26 ms
-  at 140; many times that on the radio). Fix on branch `typing-lag`
-  (c344509's twin on bt-security-js8): counted 350 ms after the last key,
-  as desktop (100 ms there). Harness KEYS + SAVED pass. Test image (with
-  the Bluetooth changes) run 38346620195, cancelled for run 38350883296
-  (also has the held log fields below). Radio test: type a long message
-  fast, no freeze, count appears after a pause; then PR into main.
-- [ ] **Messages up to 20 frames, as desktop** (VE7NHW, 2026-10-13: the box
-  "locks out" at ~10 frames). The box stopped at 160 characters; desktop's
-  has no limit. On `typing-lag` (35f34de): box 500 characters (20 frames
-  carry ~345-425), and JS8_RX_TEXT_LEN 256 -> 640: received long messages
-  from desktop stations, the preview, TX bar, History and Inbox all cut
-  at 255 before. Unit test (425 chars = 20 frames, whole; one more
-  refused) + harness KEYS SAVED COMPOSE TEXTS ROWS LOGHOLD pass. Test image
-  run 38415791480 (everything on typing-lag + Bluetooth), **flashed
-  2026-10-13 (61831d2, backup sd-backup-2026-10-13-085455)**. Radio test: type
-  past 10 frames up to 20; the count on a pause near 20 frames may take a
-  moment on the radio (planning ~400 chars): watch for a stall then.
-- [ ] **Log fields held during a QSO** (VE7NHW, 2026-10-12: a name typed
-  mid-QSO meant saving halfway, two QSOs in the log, or losing it). On
-  `typing-lag` (bdaa212): Name, Note and a typed Grid kept per station when
-  the Log popup is cancelled, the Log at 73 opens with them; forgotten on
-  Save or 30 min after the QSO; memory only. Also Cancel no longer clears
-  another station's ended-QSO reminder. Harness LOGHOLD (new), LOG,
-  LOGPEND pass; reviewed by a second session (2 fixes applied). README
-  Logging updated. Test image run 38350883296 (with the typing fix and
-  Bluetooth), **flashed 2026-10-13 (ea813ba, backup
-  sd-backup-2026-10-13-070605)**. Radio test: name mid-QSO, Cancel, 73, one entry with it.
-- [ ] **Bluetooth security, #292 points 1 + 2** (2026-10-12; Kris takes
-  3, the headset PTT, in bt_audio.c). Branch `bt-security` in both
-  OpenX6100 repos: x6100_gui 1d5452e (CAT's RFCOMM socket
-  BT_SECURITY_MEDIUM: bonded devices only, shared GUI code) and
-  AetherX6100Buildroot 8a58909 (bt_start.sh: hidden, not pairable, no
-  bt-agent at boot). Test image with JS8: our branch `bt-security-js8`
-  (main + the CAT commit + a TEST-ONLY Buildroot ref in main.yml: never
-  merge it), *Build image* run 38305954241. Radio test: FT8CN CAT from
-  the phone (already paired; then a fresh pairing via Scan), an unpaired
-  device refused, keyboard and headset reconnect, WiFi off/on, radio
-  hidden in a phone's scan. Then the two PRs (linked, "Fixes part of
-  #292"), release-note line "Bluetooth CAT: pair the phone once in the
-  Bluetooth window", delete `bt-security-js8`. `JustWorksRepairing =
-  always` (Kris's 9d5af79) **stays on** (VE7NHW, 2026-10-12; Kris had
-  suggested the default and our #292 reply said so): pairing is only
-  possible during the window's 3-minute Scan now, and it saves the
-  "wrong PIN" trap. Say so in the Buildroot PR.
-  The two leftovers from the keyboard tests are closed (2026-10-12):
-  Bluetooth off/on with WiFi on works now (VE7NHW); Connect on an old
-  keyboard entry waiting ~1 min was a pre-#291 entry (forget_old_keyboards
-  removes them now), and ~1 min (2 x 30 s CONN_TIMEOUT_MS) for a device
-  that's off is normal Bluetooth: nothing to do.
-- [ ] **OpenX6100 reviews:** approved #288 (FT2) and #274 (Olivia);
-  #271 (WSPR): Kris pushed both fixes asked for (beacon off on close,
-  worker always joined), **approved 2026-10-12**. Before 4/4: a 4th APP
-  page agreed with myshak1, and one cty.dat (JS8 reads #282's).
-  2026-10-12, gdyuldin's three: approved #293 (DNF mark drawn at the auto
-  flag; asked why lv_async_call) and #294 (100 kHz lower limit; asked
-  whether TX is refused below 500 kHz, 630 m / 2200 m), changes requested
-  on #295 (repo links: Buildroot's x6100_gui.mk still says gdyuldin, so
-  its sed would match nothing; suggested `[^/]*`, which our own CI uses
-  since bf39b8c; plus leftover links). Not reviewed by us: #287 (world
-  map, YunongDai2005) and Kris's #284-#286 (#285/#286 say "apply with"
-  themselves: ask which PR they mean).
-
+  #289 (ADIF SSB-written-as-AM) merged the same day. **Licence settled 2026-10-13 (D#23):** gdyuldin agreed: every existing
+  file stays LGPL-2.1-or-later, `third-party/js8core` with its own GPLv3
+  LICENSE, an image with JS8 is GPLv3 as a whole, **JS8 in the default
+  build**. He asks for a README / build-docs note on the image's licence
+  and where its corresponding source is: **goes in 2/4** (our reply said
+  so). The add-on idea is off. **Next:** 2/4 (js8-engine, with that note
+  and local patch 16) once #290 is merged; 3/4 will carry
+  JS8_RX_TEXT_LEN 640 (typing-lag).
+- [ ] **JS8 typing and logging, branch `typing-lag`** (5 commits on main; all JS8 app / library, nothing shared). Radio-tested
+  by VE7NHW 2026-10-13 on test image 61831d2 unless noted:
+  - **Typing a long message froze the screen** (on the air 2026-10-12
+    ~04:13Z: GUI stall 23 s; bogs past ~8 frames typing fast). Every key
+    re-planned the whole message for the "N frames, N s" count. f192baf:
+    counted 350 ms after the last key, as desktop (100 ms there).
+    **Works: pretty smooth.**
+  - **Messages up to 20 frames, as desktop** (the box stopped at 160
+    characters, ~10 frames). 35f34de: box 500 characters (20 frames carry
+    ~345-425) and JS8_RX_TEXT_LEN 256 -> 640 (received long messages,
+    preview, TX bar, History, Inbox were all cut at 255). Unit test +
+    harness. **Works**, but the count on a pause near 20 frames stopped the
+    waterfall 1-2 s.
+  - -> ab567f1: **the count on its own thread** (js8-count, nice 10, off
+    the GUI's core like the decoders, newest request wins). Harness KEYS
+    SAVED COMPOSE LOGHOLD pass. **Not radio-tested yet:** test image
+    *Build image* run **38428904715** (branch bt-security-js8, fb8769c);
+    check: pause near 20 frames, the waterfall keeps running; decodes
+    unaffected while counting.
+  - **Log fields held during a QSO** (bdaa212): Name, Note, a typed Grid
+    kept per station when the Log popup is cancelled; the Log at 73 opens
+    with them; forgotten on Save or 30 min after the QSO; memory only.
+    Cancel no longer clears another station's ended-QSO reminder. Harness
+    LOGHOLD; reviewed by a second session. **Works.**
+  **Next:** flash run 38428904715, check the waterfall at 20 frames, then
+  PR `typing-lag` into main (self-merge OK), delete it. README already
+  describes all of it on the branch (Send…, Logging).
+- [ ] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
+  Kris did point 3 (headset PTT only from the headset's own link):
+  **x6100_gui#296, approved by VE7NHW 2026-10-13**. Ours, points 1 + 2,
+  **opened 2026-10-13: x6100_gui #297** (CAT RFCOMM BT_SECURITY_MEDIUM,
+  branch `bt-security`, 1d5452e) and **AetherX6100Buildroot #6**
+  (bt_start.sh hidden, not pairable, no bt-agent; branch `bt-security`,
+  8a58909), reviewers gdyuldin + myshak1. `JustWorksRepairing = always`
+  kept (VE7NHW; explained in #6). **Tested:** keyboard pair, forget,
+  re-pair, reconnect; phone + FT8CN over Bluetooth CAT changing frequency
+  with the keyboard connected; from the unpaired PC the radio is
+  invisible to a scan and CAT gets "Connection refused". **Next:**
+  reviews; when both are merged, delete our test branch `bt-security-js8`
+  (its main.yml has a TEST-ONLY Buildroot ref: never merge it) and add
+  the release-note line "Bluetooth CAT: pair the phone once in the
+  Bluetooth window". Phone apps: FT8TW (danleetw/FT8TW, on Google Play)
+  is the FT8CN fork most use; FT8AF is newer, dev builds only.
+- [ ] **OpenX6100 reviews:** approved #288 (FT2), #274 (Olivia), #271
+  (WSPR, 2026-10-12, after Kris's two fixes), #296 (headset PTT,
+  2026-10-13). #293 and #294 merged by gdyuldin 2026-10-12 (he answered
+  the lv_async_call question; **our #294 question, is TX refused below
+  500 kHz (630 m / 2200 m), still unanswered**). #295 (repo links):
+  changes requested by us, no answer yet. #284-#286 closed by Kris (in
+  #271/#272/#274). Not reviewed by us: #287 (world map). #253 (FT8 CQ
+  modifier broken, not ours): gdyuldin asked the reporter for params.db;
+  VE7NHW: leave it to others. Before 4/4: a 4th APP page agreed with
+  myshak1, and one cty.dat (JS8 reads #282's).
 ## To try on the radio (no programming)
 
 - [x] GPS outside: JS8's grid from the fix, the top line, *Battery clock
