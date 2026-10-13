@@ -19,7 +19,8 @@ by gdyuldin or myshak1, never merged by us alone.
 2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
-5. Waiting on others: #290 (gdyuldin), #300 FT8 knob, Android-port#108 (js8core), discussion #299 answered. Unexplained TX at power-up: FT8CN suspected.
+5. **First next session: prepare JS8 part 2/4 (`js8-engine`)**: our #290 nudge (2026-10-13) said it's ready to open once #290 merges, but the branch doesn't exist yet.
+6. Waiting on others: #290 (gdyuldin, nudged 2026-10-13), #300 FT8 knob, Android-port#108 (js8core), discussion #299 answered. Unexplained TX at power-up: FT8CN suspected.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
@@ -60,7 +61,7 @@ by gdyuldin or myshak1, never merged by us alone.
   LICENSE, an image with JS8 is GPLv3 as a whole, **JS8 in the default
   build**. He asks for a README / build-docs note on the image's licence
   and where its corresponding source is: **goes in 2/4** (our reply said
-  so). The add-on idea is off. **Next:** 2/4 (js8-engine, with that note
+  so). The add-on idea is off. **Nudged on #290 2026-10-13 22:4xZ** (asked gdyuldin if anything is left; said 2/4 is ready to follow). **Next:** prepare 2/4 now, before #290 merges (js8-engine, with that note
   and local patch 16) once #290 is merged; 3/4 will carry
   JS8_RX_TEXT_LEN 640 (typing-lag).
 - [ ] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
