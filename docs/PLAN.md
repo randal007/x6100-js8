@@ -92,9 +92,8 @@ by gdyuldin or myshak1, never merged by us alone.
   stutter at 20 frames; the count fine up to 36-38 frames, where sending
   is refused as "too long", as desktop). **PR #9** opened, unit tests
   pass; **merge waits for VE7NHW** (Claude isn't allowed to merge
-  unreviewed), then delete `typing-lag`. Was:
-  PR `typing-lag` into main (self-merge OK), delete it. README already
-  describes all of it on the branch (Send…, Logging).
+  unreviewed), then delete `typing-lag` and change README *Coming next*'s
+  "(in testing)" (the README already describes it all: Send…, Logging).
 - [ ] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
   Kris did point 3 (headset PTT only from the headset's own link):
   **x6100_gui#296, approved by VE7NHW 2026-10-13**. Ours, points 1 + 2,
