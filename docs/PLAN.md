@@ -179,7 +179,8 @@ by gdyuldin or myshak1, never merged by us alone.
     with them; forgotten on Save or 30 min after the QSO; memory only.
     Cancel no longer clears another station's ended-QSO reminder. Harness
     LOGHOLD; reviewed by a second session. **Works.**
-  **Next:** flash run 38428904715, check the waterfall at 20 frames, then
+  **On the card 2026-10-13** (fb8769c, backup sd-backup-2026-10-13-113101).
+  **Next:** check the waterfall at 20 frames, then
   PR `typing-lag` into main (self-merge OK), delete it. README already
   describes all of it on the branch (Send…, Logging).
 - [ ] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
