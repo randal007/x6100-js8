@@ -14,6 +14,23 @@ by gdyuldin or myshak1, never merged by us alone.
 
 ## Now
 
+- [ ] **Next session, first (VE7NHW agreed 2026-10-13, from Claude's
+  feedback):**
+  1. **One source of truth:** PLAN.md is the only "where are we"
+     document. Claude's memory keeps lessons and pointers only (no copy
+     of the status); README *Coming next* stays a short mirror.
+  2. **Trim PLAN.md:** ticked items move to a `docs/PLAN_DONE.md`
+     archive at each offload; a 5-line summary at the top of *Now*. Add
+     both to CLAUDE.md's offload checklist.
+  3. **Build image gets a `buildroot_ref` input** (main.yml, default
+     master), so test images never need a TEST-ONLY commit; then
+     `bt-security-js8`'s hack isn't needed again.
+  4. **Back up `CLAUDE.local.md`** (not in git, only on this PC): ask
+     VE7NHW where (a private gist, or a copy kept with the SD backups).
+  5. Then the radio test of run 38428904715 (frame count thread).
+  Working style from now on: shorter sessions, one topic each, offload
+  at the end of each.
+
 - [x] **Kris's Bluetooth window** (OpenX6100/x6100_gui#280 +
   AetherX6100Buildroot#4): test with VE7NHW's LE keyboard and report on
   #280 with `/mnt/bt_pair.log`. Test image: *Build test image* run
