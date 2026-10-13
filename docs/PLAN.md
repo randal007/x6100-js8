@@ -151,8 +151,18 @@ by gdyuldin or myshak1, never merged by us alone.
   at 140; many times that on the radio). Fix on branch `typing-lag`
   (c344509's twin on bt-security-js8): counted 350 ms after the last key,
   as desktop (100 ms there). Harness KEYS + SAVED pass. Test image (with
-  the Bluetooth changes) run 38346620195. Radio test: type a long message
+  the Bluetooth changes) run 38346620195, cancelled for run 38350883296
+  (also has the held log fields below). Radio test: type a long message
   fast, no freeze, count appears after a pause; then PR into main.
+- [ ] **Log fields held during a QSO** (VE7NHW, 2026-10-12: a name typed
+  mid-QSO meant saving halfway, two QSOs in the log, or losing it). On
+  `typing-lag` (bdaa212): Name, Note and a typed Grid kept per station when
+  the Log popup is cancelled, the Log at 73 opens with them; forgotten on
+  Save or 30 min after the QSO; memory only. Also Cancel no longer clears
+  another station's ended-QSO reminder. Harness LOGHOLD (new), LOG,
+  LOGPEND pass; reviewed by a second session (2 fixes applied). README
+  Logging updated. Test image run 38350883296 (with the typing fix and
+  Bluetooth). Radio test: name mid-QSO, Cancel, 73, one entry with it.
 - [ ] **Bluetooth security, #292 points 1 + 2** (2026-10-12; Kris takes
   3, the headset PTT, in bt_audio.c). Branch `bt-security` in both
   OpenX6100 repos: x6100_gui 1d5452e (CAT's RFCOMM socket
