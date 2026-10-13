@@ -16,7 +16,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. Typing-lag done: merged into main 2026-10-13 (PR #9), goes out in the next beta.
-2. Bluetooth security: #297 + Buildroot #6 approved by Kris pending our radio retest; test image run 38462204666.
+2. Bluetooth security: #297 + Buildroot #6 approved by Kris pending our radio retest; on the card now (bt-ft2-test d94d92b, run 38462549776).
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
 5. Ticked items move to [PLAN_DONE.md](PLAN_DONE.md) at each offload.
@@ -180,8 +180,9 @@ by gdyuldin or myshak1, never merged by us alone.
   `bt-ft2-test`** = `bt-security-js8` + Kris's FT2 (OpenX6100 #288,
   myshak1:ft2 76d98ce), merge d94d92b (conflicts in digital_modes.h /
   qso_log.h: both numbers kept, JS8 2/3 + 8, FT2 4 + 9). *Build image*
-  run **38462549776** (`buildroot_ref=bt-security`), unit tests run
-  38462556518. Going back to a build without FT2 is safe: migration 5
+  run **38462549776** (`buildroot_ref=bt-security`, Buildroot 9a70644),
+  unit tests run 38462556518 pass. **On the card 2026-10-13** (d94d92b,
+  backup sd-backup-2026-10-13-143217): also the Bluetooth retest image. Going back to a build without FT2 is safe: migration 5
   stays recorded (older builds skip versions above theirs), the FT2
   frequency rows are type 4 (ignored by FT8/FT4/JS8), a saved
   `ft8_protocol` 2 is clamped on load. Never merge `bt-ft2-test`; delete
