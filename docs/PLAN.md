@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. Typing-lag radio-tested OK (2026-10-13): PR #9 waits for VE7NHW's merge click.
+1. Typing-lag done: merged into main 2026-10-13 (PR #9), goes out in the next beta.
 2. Bluetooth security: #297 approved; Buildroot #6 review fixes pushed 2026-10-13; test image run 38448410652 building, then a radio retest.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
@@ -63,7 +63,7 @@ by gdyuldin or myshak1, never merged by us alone.
   so). The add-on idea is off. **Next:** 2/4 (js8-engine, with that note
   and local patch 16) once #290 is merged; 3/4 will carry
   JS8_RX_TEXT_LEN 640 (typing-lag).
-- [ ] **JS8 typing and logging, branch `typing-lag`** (5 commits on main; all JS8 app / library, nothing shared). Radio-tested
+- [x] **JS8 typing and logging, branch `typing-lag`** (**merged into main 2026-10-13, PR #9 = 08fc7f6; branch deleted**; 5 commits; all JS8 app / library, nothing shared). Radio-tested
   by VE7NHW 2026-10-13 on test image 61831d2 unless noted:
   - **Typing a long message froze the screen** (on the air 2026-10-12
     ~04:13Z: GUI stall 23 s; bogs past ~8 frames typing fast). Every key
@@ -91,9 +91,8 @@ by gdyuldin or myshak1, never merged by us alone.
   **Radio-tested 2026-10-13: works perfectly** (VE7NHW: no waterfall
   stutter at 20 frames; the count fine up to 36-38 frames, where sending
   is refused as "too long", as desktop). **PR #9** opened, unit tests
-  pass; **merge waits for VE7NHW** (Claude isn't allowed to merge
-  unreviewed), then delete `typing-lag` and change README *Coming next*'s
-  "(in testing)" (the README already describes it all: Send…, Logging).
+  pass; merged 2026-10-13. README describes it all (Send…, Logging);
+  *Coming next* ticked.
 - [ ] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
   Kris did point 3 (headset PTT only from the headset's own link):
   **x6100_gui#296, approved by VE7NHW 2026-10-13**. Ours, points 1 + 2,

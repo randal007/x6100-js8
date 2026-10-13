@@ -1394,7 +1394,7 @@ are, and its new settings start at their defaults.
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
-- [ ] **Typing and logging** (in testing): no more freezes typing a long
+- [x] **Typing and logging** (done, in the next beta): no more freezes typing a long
   message, messages up to 20 frames as on desktop (the box stopped at
   about 10), long messages from desktop stations no longer cut short, and
   a name or comment typed in Log QSO during a QSO kept for the log at the
