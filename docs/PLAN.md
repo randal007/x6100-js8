@@ -154,6 +154,16 @@ by gdyuldin or myshak1, never merged by us alone.
   the Bluetooth changes) run 38346620195, cancelled for run 38350883296
   (also has the held log fields below). Radio test: type a long message
   fast, no freeze, count appears after a pause; then PR into main.
+- [ ] **Messages up to 20 frames, as desktop** (VE7NHW, 2026-10-13: the box
+  "locks out" at ~10 frames). The box stopped at 160 characters; desktop's
+  has no limit. On `typing-lag` (35f34de): box 500 characters (20 frames
+  carry ~345-425), and JS8_RX_TEXT_LEN 256 -> 640: received long messages
+  from desktop stations, the preview, TX bar, History and Inbox all cut
+  at 255 before. Unit test (425 chars = 20 frames, whole; one more
+  refused) + harness KEYS SAVED COMPOSE TEXTS ROWS LOGHOLD pass. Test image
+  run 38415791480 (everything on typing-lag + Bluetooth). Radio test: type
+  past 10 frames up to 20; the count on a pause near 20 frames may take a
+  moment on the radio (planning ~400 chars): watch for a stall then.
 - [ ] **Log fields held during a QSO** (VE7NHW, 2026-10-12: a name typed
   mid-QSO meant saving halfway, two QSOs in the log, or losing it). On
   `typing-lag` (bdaa212): Name, Note and a typed Grid kept per station when
