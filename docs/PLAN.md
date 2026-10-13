@@ -162,7 +162,8 @@ by gdyuldin or myshak1, never merged by us alone.
   another station's ended-QSO reminder. Harness LOGHOLD (new), LOG,
   LOGPEND pass; reviewed by a second session (2 fixes applied). README
   Logging updated. Test image run 38350883296 (with the typing fix and
-  Bluetooth). Radio test: name mid-QSO, Cancel, 73, one entry with it.
+  Bluetooth), **flashed 2026-10-13 (ea813ba, backup
+  sd-backup-2026-10-13-070605)**. Radio test: name mid-QSO, Cancel, 73, one entry with it.
 - [ ] **Bluetooth security, #292 points 1 + 2** (2026-10-12; Kris takes
   3, the headset PTT, in bt_audio.c). Branch `bt-security` in both
   OpenX6100 repos: x6100_gui 1d5452e (CAT's RFCOMM socket
