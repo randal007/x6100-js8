@@ -16,7 +16,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. Typing-lag done: merged into main 2026-10-13 (PR #9), goes out in the next beta.
-2. Bluetooth security: #297 + Buildroot #6 approved by Kris pending our radio retest; on the card now (bt-ft2-test d94d92b, run 38462549776).
+2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
 5. Ticked items move to [PLAN_DONE.md](PLAN_DONE.md) at each offload.
@@ -124,8 +124,17 @@ by gdyuldin or myshak1, never merged by us alone.
   Serial Port record added only once, stale udev remove rule dropped;
   the 20 s udev hold left as is). Test image: *Build image* run
   **38462204666** (`buildroot_ref=bt-security`; the earlier run
-  38448410652 lacks 9a70644). **Next:** flash it, radio retest (also: the
-  Serial Port record once in `sdptool browse local`, after WiFi off/on too) (keyboard
+  38448410652 lacks 9a70644). **Radio retest 2026-10-13 passed** (on
+  bt-ft2-test d94d92b): hidden at boot, keyboard, confirm re-pair
+  refused outside / accepted inside Scan, phone finds and pairs, Scan
+  twice, closes on time, FT8CN CAT, WiFi off/on, one Serial Port record.
+  **Found during it, fixed in Buildroot af4c2ae:** the udev rule
+  `KERNEL=="hci*"` also matched every connection (`hci0:<handle>`,
+  DEVTYPE link), so bt_start.sh ran on each connect: it hid the radio a
+  second after a phone connected during Scan (before #6: made it visible
+  with a new bt-agent) and added a Serial Port record each time (the
+  duplicates). Now `ENV{DEVTYPE}=="host"`; tried in place on the radio.
+  Results posted on #6 and #297. **Next:** Kris merges both (keyboard
   pair; a phone that forgot the radio re-pairs from Scan; Scan twice,
   still pairable after the first 3 min; from the unpaired PC hidden right
   after power-on; FT8CN CAT), post the results on #6; when both are
@@ -188,6 +197,22 @@ by gdyuldin or myshak1, never merged by us alone.
   `ft8_protocol` 2 is clamped on load. Never merge `bt-ft2-test`; delete
   it once FT2 has been tried (FT2 comes in properly when OpenX6100
   merges #288).
+
+- [ ] **Unexplained transmit at power-up (2026-10-13, VE7NHW)**: first
+  boot of bt-ft2-test d94d92b (21:37 UTC): a waterfall "glitch" a couple
+  of seconds after start, then TX (red light, zero power) until he
+  restarted; not seen on the next boot. The GUI did not crash (no
+  app_logs file; x6100_daemon saves one on every exit); the app log was
+  lost at the reboot; the USB console wasn't connected. Two suspects:
+  (1) FT8CN in the background on the phone, still in TX after our audio
+  test, reconnected over Bluetooth CAT and keyed PTT (CI-V 0x1C keys
+  from the mic input: zero power fits); (2) the FT8 window was opened on
+  that boot in FT2 with ft8_auto = 1 (FT2 starts a pending TX before the
+  last decode). **Next:** if it happens again, keep the USB console
+  connected; consider a temporary boot script copying
+  /tmp/x6100_log.txt to /mnt (VE7NHW to decide). Idea for gdyuldin
+  (shared CAT code): ignore CAT PTT for a few seconds after start or
+  after a Bluetooth CAT client connects; CAT PTT isn't logged at all.
 
 ## To try on the radio (no programming)
 
