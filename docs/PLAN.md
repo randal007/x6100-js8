@@ -166,8 +166,11 @@ by gdyuldin or myshak1, never merged by us alone.
   device refused, keyboard and headset reconnect, WiFi off/on, radio
   hidden in a phone's scan. Then the two PRs (linked, "Fixes part of
   #292"), release-note line "Bluetooth CAT: pair the phone once in the
-  Bluetooth window", delete `bt-security-js8`. Open question:
-  `JustWorksRepairing = always` (Kris's 9d5af79) kept or back to default.
+  Bluetooth window", delete `bt-security-js8`. `JustWorksRepairing =
+  always` (Kris's 9d5af79) **stays on** (VE7NHW, 2026-10-12; Kris had
+  suggested the default and our #292 reply said so): pairing is only
+  possible during the window's 3-minute Scan now, and it saves the
+  "wrong PIN" trap. Say so in the Buildroot PR.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2) and #274 (Olivia);
   #271 (WSPR): Kris pushed both fixes asked for (beacon off on close,
   worker always joined), **approved 2026-10-12**. Before 4/4: a 4th APP
