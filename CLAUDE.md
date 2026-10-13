@@ -168,6 +168,13 @@ rename).
 - The base board loops app audio played on the speaker back into capture:
   JS8 is fed silence then (beep_guard).
 - GitHub forks can have a tag and a branch with the same name: pass SHAs.
+- Two ways to key the transmitter: `radio_set_ptt()` (CAT PTT, CI-V 0x1C)
+  takes the radio's mic/line input; `radio_set_modem()` takes the codec,
+  where app audio goes (FT8, JS8, voice messages, the BT headset).
+- Bluetooth state on the radio: `/mnt/bt_*.log` survive a reboot; to see
+  who changes the adapter, `btmon -w` + `dbus-monitor --system` on the
+  console. A udev `KERNEL=="hci*"` rule also matches every connection
+  (`hci0:<handle>`): use `ENV{DEVTYPE}=="host"`.
 
 ## More
 
