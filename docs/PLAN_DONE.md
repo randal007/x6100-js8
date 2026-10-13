@@ -6,6 +6,49 @@ list stays short. Newest at the top. Beta 5's list is
 
 ## Moved 2026-10-13
 
+- [x] **JS8 typing and logging, branch `typing-lag`** (**merged into main 2026-10-13, PR #9 = 08fc7f6; branch deleted**; 5 commits; all JS8 app / library, nothing shared). Radio-tested
+  by VE7NHW 2026-10-13 on test image 61831d2 unless noted:
+  - **Typing a long message froze the screen** (on the air 2026-10-12
+    ~04:13Z: GUI stall 23 s; bogs past ~8 frames typing fast). Every key
+    re-planned the whole message for the "N frames, N s" count. f192baf:
+    counted 350 ms after the last key, as desktop (100 ms there).
+    **Works: pretty smooth.**
+  - **Messages up to 20 frames, as desktop** (the box stopped at 160
+    characters, ~10 frames). 35f34de: box 500 characters (20 frames carry
+    ~345-425) and JS8_RX_TEXT_LEN 256 -> 640 (received long messages,
+    preview, TX bar, History, Inbox were all cut at 255). Unit test +
+    harness. **Works**, but the count on a pause near 20 frames stopped the
+    waterfall 1-2 s.
+  - -> ab567f1: **the count on its own thread** (js8-count, nice 10, off
+    the GUI's core like the decoders, newest request wins). Harness KEYS
+    SAVED COMPOSE LOGHOLD pass. **Not radio-tested yet:** test image
+    *Build image* run **38428904715** (branch bt-security-js8, fb8769c);
+    check: pause near 20 frames, the waterfall keeps running; decodes
+    unaffected while counting.
+  - **Log fields held during a QSO** (bdaa212): Name, Note, a typed Grid
+    kept per station when the Log popup is cancelled; the Log at 73 opens
+    with them; forgotten on Save or 30 min after the QSO; memory only.
+    Cancel no longer clears another station's ended-QSO reminder. Harness
+    LOGHOLD; reviewed by a second session. **Works.**
+  **On the card 2026-10-13** (fb8769c, backup sd-backup-2026-10-13-113101).
+  **Radio-tested 2026-10-13: works perfectly** (VE7NHW: no waterfall
+  stutter at 20 frames; the count fine up to 36-38 frames, where sending
+  is refused as "too long", as desktop). **PR #9** opened, unit tests
+  pass; merged 2026-10-13. README describes it all (Send…, Logging);
+  *Coming next* ticked.
+- [x] **FT2 to play with (VE7NHW, 2026-10-13; tried, branch deleted the same day), throwaway branch
+  `bt-ft2-test`** = `bt-security-js8` + Kris's FT2 (OpenX6100 #288,
+  myshak1:ft2 76d98ce), merge d94d92b (conflicts in digital_modes.h /
+  qso_log.h: both numbers kept, JS8 2/3 + 8, FT2 4 + 9). *Build image*
+  run **38462549776** (`buildroot_ref=bt-security`, Buildroot 9a70644),
+  unit tests run 38462556518 pass. **On the card 2026-10-13** (d94d92b,
+  backup sd-backup-2026-10-13-143217): also the Bluetooth retest image. Going back to a build without FT2 is safe: migration 5
+  stays recorded (older builds skip versions above theirs), the FT2
+  frequency rows are type 4 (ignored by FT8/FT4/JS8), a saved
+  `ft8_protocol` 2 is clamped on load. Never merge `bt-ft2-test`; delete
+  it once FT2 has been tried (FT2 comes in properly when OpenX6100
+  merges #288).
+
 - [x] **Kris's Bluetooth window** (OpenX6100/x6100_gui#280 +
   AetherX6100Buildroot#4): test with VE7NHW's LE keyboard and report on
   #280 with `/mnt/bt_pair.log`. Test image: *Build test image* run

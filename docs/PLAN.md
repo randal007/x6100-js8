@@ -15,11 +15,11 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. Typing-lag done: merged into main 2026-10-13 (PR #9), goes out in the next beta.
+1. Next flash: test image run 38478388820 (Bluetooth incl. udev fix af4c2ae + FT8 knob fix, no FT2); the card has d94d92b (FT2 test).
 2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
-5. Ticked items move to [PLAN_DONE.md](PLAN_DONE.md) at each offload.
+5. Waiting on others: #290 (gdyuldin), #300 FT8 knob, Android-port#108 (js8core), discussion #299 answered. Unexplained TX at power-up: FT8CN suspected.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
@@ -63,36 +63,6 @@ by gdyuldin or myshak1, never merged by us alone.
   so). The add-on idea is off. **Next:** 2/4 (js8-engine, with that note
   and local patch 16) once #290 is merged; 3/4 will carry
   JS8_RX_TEXT_LEN 640 (typing-lag).
-- [x] **JS8 typing and logging, branch `typing-lag`** (**merged into main 2026-10-13, PR #9 = 08fc7f6; branch deleted**; 5 commits; all JS8 app / library, nothing shared). Radio-tested
-  by VE7NHW 2026-10-13 on test image 61831d2 unless noted:
-  - **Typing a long message froze the screen** (on the air 2026-10-12
-    ~04:13Z: GUI stall 23 s; bogs past ~8 frames typing fast). Every key
-    re-planned the whole message for the "N frames, N s" count. f192baf:
-    counted 350 ms after the last key, as desktop (100 ms there).
-    **Works: pretty smooth.**
-  - **Messages up to 20 frames, as desktop** (the box stopped at 160
-    characters, ~10 frames). 35f34de: box 500 characters (20 frames carry
-    ~345-425) and JS8_RX_TEXT_LEN 256 -> 640 (received long messages,
-    preview, TX bar, History, Inbox were all cut at 255). Unit test +
-    harness. **Works**, but the count on a pause near 20 frames stopped the
-    waterfall 1-2 s.
-  - -> ab567f1: **the count on its own thread** (js8-count, nice 10, off
-    the GUI's core like the decoders, newest request wins). Harness KEYS
-    SAVED COMPOSE LOGHOLD pass. **Not radio-tested yet:** test image
-    *Build image* run **38428904715** (branch bt-security-js8, fb8769c);
-    check: pause near 20 frames, the waterfall keeps running; decodes
-    unaffected while counting.
-  - **Log fields held during a QSO** (bdaa212): Name, Note, a typed Grid
-    kept per station when the Log popup is cancelled; the Log at 73 opens
-    with them; forgotten on Save or 30 min after the QSO; memory only.
-    Cancel no longer clears another station's ended-QSO reminder. Harness
-    LOGHOLD; reviewed by a second session. **Works.**
-  **On the card 2026-10-13** (fb8769c, backup sd-backup-2026-10-13-113101).
-  **Radio-tested 2026-10-13: works perfectly** (VE7NHW: no waterfall
-  stutter at 20 frames; the count fine up to 36-38 frames, where sending
-  is refused as "too long", as desktop). **PR #9** opened, unit tests
-  pass; merged 2026-10-13. README describes it all (Send…, Logging);
-  *Coming next* ticked.
 - [ ] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
   Kris did point 3 (headset PTT only from the headset's own link):
   **x6100_gui#296, approved by VE7NHW 2026-10-13**. Ours, points 1 + 2,
@@ -134,11 +104,13 @@ by gdyuldin or myshak1, never merged by us alone.
   second after a phone connected during Scan (before #6: made it visible
   with a new bt-agent) and added a Serial Port record each time (the
   duplicates). Now `ENV{DEVTYPE}=="host"`; tried in place on the radio.
-  Results posted on #6 and #297. **Next:** Kris merges both (keyboard
-  pair; a phone that forgot the radio re-pairs from Scan; Scan twice,
-  still pairable after the first 3 min; from the unpaired PC hidden right
-  after power-on; FT8CN CAT), post the results on #6; when both are
-  merged, delete `bt-security-js8` and add
+  Results posted on #6 and #297. New test image with af4c2ae built in
+  (and the FT8 knob fix, no FT2): *Build image* run **38478388820**
+  (bt-security-js8 3385886, `buildroot_ref=bt-security`). **Next:**
+  flash it (`~/Work/bin/x6100-flash` 38478388820, see CLAUDE.local.md)
+  and check a phone connecting during Scan leaves the radio visible;
+  Kris merges #6 + #297; when both are merged, delete `bt-security-js8`
+  and add
   the release-note line "Bluetooth CAT: pair the phone once in the
   Bluetooth window". Phone apps: FT8TW (danleetw/FT8TW, on Google Play)
   is the FT8CN fork most use; FT8AF is newer, dev builds only.
@@ -185,19 +157,6 @@ by gdyuldin or myshak1, never merged by us alone.
   Bluetooth; a btmon from an X6200 owner would settle it; fallback: WiFi
   with Icom's network protocol (FT8CN speaks it, IC-705), a big job.
 
-- [ ] **FT2 to play with (VE7NHW, 2026-10-13), throwaway branch
-  `bt-ft2-test`** = `bt-security-js8` + Kris's FT2 (OpenX6100 #288,
-  myshak1:ft2 76d98ce), merge d94d92b (conflicts in digital_modes.h /
-  qso_log.h: both numbers kept, JS8 2/3 + 8, FT2 4 + 9). *Build image*
-  run **38462549776** (`buildroot_ref=bt-security`, Buildroot 9a70644),
-  unit tests run 38462556518 pass. **On the card 2026-10-13** (d94d92b,
-  backup sd-backup-2026-10-13-143217): also the Bluetooth retest image. Going back to a build without FT2 is safe: migration 5
-  stays recorded (older builds skip versions above theirs), the FT2
-  frequency rows are type 4 (ignored by FT8/FT4/JS8), a saved
-  `ft8_protocol` 2 is clamped on load. Never merge `bt-ft2-test`; delete
-  it once FT2 has been tried (FT2 comes in properly when OpenX6100
-  merges #288).
-
 - [ ] **Unexplained transmit at power-up (2026-10-13, VE7NHW)**: first
   boot of bt-ft2-test d94d92b (21:37 UTC): a waterfall "glitch" a couple
   of seconds after start, then TX (red light, zero power) until he
@@ -213,6 +172,21 @@ by gdyuldin or myshak1, never merged by us alone.
   /tmp/x6100_log.txt to /mnt (VE7NHW to decide). Idea for gdyuldin
   (shared CAT code): ignore CAT PTT for a few seconds after start or
   after a Bluetooth CAT client connects; CAT PTT isn't logged at all.
+
+- [ ] **FT8 window: the knob moves the TX frequency 1 Hz a click
+  however fast it turns** (VE7NHW, 2026-10-13; shared code, OpenX6100's
+  FT8 app). Same cause as JS8's 10fdf95 (1.0 hands over every click on
+  its own, so the 5x/10x on a single diff never triggers). **PR
+  OpenX6100/x6100_gui#300** (branch `ft8-knob-speed`, counts clicks per
+  30 ms with lv_tick; reviewers gdyuldin + myshak1). Also in test image
+  run 38478388820. **Next:** try it on the radio, report on #300.
+- [ ] **Start-up glitch, old** (VE7NHW, 2026-10-13: seen on earlier
+  versions too, "sometimes"): right after boot no waterfall and the
+  S-meter at full scale, then relays click and it comes right. Guess: a
+  race between the GUI's first settings and the base board starting
+  (lost settings, re-sent later). Nothing in the app log. **Next, in its
+  own session:** time the GUI's first base-board messages over several
+  boots; then an OpenX6100 issue for gdyuldin. Shared code, not JS8.
 
 ## To try on the radio (no programming)
 
