@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. Card: test image fb8769c (typing-lag + frame count thread): radio test, then PR `typing-lag` into main.
+1. Typing-lag radio-tested OK (2026-10-13): PR #9 waits for VE7NHW's merge click.
 2. Bluetooth security: #297 approved; Buildroot #6 review fixes pushed 2026-10-13; test image run 38448410652 building, then a radio retest.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
@@ -39,9 +39,14 @@ by gdyuldin or myshak1, never merged by us alone.
     options are a copy on one of the PC's other disks (two 5.5 TB drives
     sda/sdc are attached), a USB stick, or alongside sd-backups/.
 - [ ] **Compound callsigns, leftovers** (the fix is in beta 5.1, see
-  [PLAN_DONE.md](PLAN_DONE.md)): report it to JS8Call-improved
-  ([js8core-bug-reports.md](js8core-bug-reports.md) #11, draft for
-  VE7NHW first), and retest on the air with a "/number" station.
+  [PLAN_DONE.md](PLAN_DONE.md)). **Sent upstream 2026-10-13 (VE7NHW asked):
+  JS8Call-improved/Android-port#108** (from randal007/Android-port,
+  branch compound-cmd-desktop): the compound fix, Ultra on Turbo's
+  schedule (patch 14) and the GCC includes (patch 1); the rest of our
+  engine bug fixes were already in their master (#105); our other local
+  patches are features, not sent. Not built in their tree (Claude may not
+  build downloaded code here); the new checks pass against our copy.
+  **Next:** their review; retest on the air with a "/number" station.
 - [ ] **JS8 into OpenX6100**, four pull requests one at a time
   ([upstream-patches.md](upstream-patches.md#js8-into-openx6100-the-plan)):
   groundwork, engine (with the licence note), library + tests, app.
@@ -83,7 +88,11 @@ by gdyuldin or myshak1, never merged by us alone.
     Cancel no longer clears another station's ended-QSO reminder. Harness
     LOGHOLD; reviewed by a second session. **Works.**
   **On the card 2026-10-13** (fb8769c, backup sd-backup-2026-10-13-113101).
-  **Next:** check the waterfall at 20 frames, then
+  **Radio-tested 2026-10-13: works perfectly** (VE7NHW: no waterfall
+  stutter at 20 frames; the count fine up to 36-38 frames, where sending
+  is refused as "too long", as desktop). **PR #9** opened, unit tests
+  pass; **merge waits for VE7NHW** (Claude isn't allowed to merge
+  unreviewed), then delete `typing-lag`. Was:
   PR `typing-lag` into main (self-merge OK), delete it. README already
   describes all of it on the branch (Send…, Logging).
 - [ ] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
