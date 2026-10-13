@@ -137,6 +137,30 @@ by gdyuldin or myshak1, never merged by us alone.
   modifier broken, not ours): gdyuldin asked the reporter for params.db;
   VE7NHW: leave it to others. Before 4/4: a 4th APP page agreed with
   myshak1, and one cty.dat (JS8 reads #282's).
+- [ ] **Idea, to rethink: phone digital modes (FT8CN) with audio over
+  Bluetooth** (VE7NHW, 2026-10-13; shared GUI code, Kris's bt_audio.c,
+  not JS8). The X6200 does it (two-way audio + CAT with FT8CN). Tried by
+  hand on the console with VE7NHW's S24 Ultra, then put back:
+  - The phone connects for media only (A2DP: its music *into* the radio).
+    The radio does offer the HSP headset role; `pactl set-card-profile
+    <card> headset_audio_gateway` opened the call link (8 kHz mono). The
+    radio can't switch back to a2dp_source itself (the phone must).
+  - module-bluetooth-policy's automatic loopbacks went phone -> phone,
+    since module-switch-on-connect made the phone the default sink *and*
+    source. Hand-made loopbacks (alsa_input -> bluez_sink, bluez_source
+    -> alsa_output) fixed the routing.
+  - **RX:** audio reached the phone, weak even at +18 dB, and FT8CN showed
+    **no FT8 signals** (suspect: the phone's call processing, noise
+    suppression on the SCO microphone path; not confirmed).
+  - **TX:** no audio reached the transmitter: CAT PTT (CI-V 0x1C) calls
+    `radio_set_ptt()`, which keys from the radio's mic/line input, not
+    the codec; it would need `radio_set_modem()` while a phone audio link
+    is up, as Kris's headset PTT does.
+  - Also seen: the radio's SDP list has the Serial Port record ~8 times
+    (bt_start.sh's `sdptool add SP` runs on every hci0 add); tell Kris.
+  Before trying again: find out how the X6200 does it, and whether FT8CN
+  can take its audio without the phone's call processing. Or WiFi audio.
+
 ## To try on the radio (no programming)
 
 - [ ] Ultra on a busy band. Busy bands fine on Fast (VE7NHW, 2026-10-12);
