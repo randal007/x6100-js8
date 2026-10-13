@@ -161,7 +161,8 @@ by gdyuldin or myshak1, never merged by us alone.
   from desktop stations, the preview, TX bar, History and Inbox all cut
   at 255 before. Unit test (425 chars = 20 frames, whole; one more
   refused) + harness KEYS SAVED COMPOSE TEXTS ROWS LOGHOLD pass. Test image
-  run 38415791480 (everything on typing-lag + Bluetooth). Radio test: type
+  run 38415791480 (everything on typing-lag + Bluetooth), **flashed
+  2026-10-13 (61831d2, backup sd-backup-2026-10-13-085455)**. Radio test: type
   past 10 frames up to 20; the count on a pause near 20 frames may take a
   moment on the radio (planning ~400 chars): watch for a stall then.
 - [ ] **Log fields held during a QSO** (VE7NHW, 2026-10-12: a name typed
