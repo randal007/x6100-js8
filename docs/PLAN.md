@@ -16,7 +16,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. Typing-lag done: merged into main 2026-10-13 (PR #9), goes out in the next beta.
-2. Bluetooth security: #297 approved; Buildroot #6 review fixes pushed 2026-10-13; test image run 38448410652 building, then a radio retest.
+2. Bluetooth security: #297 + Buildroot #6 approved by Kris pending our radio retest; test image run 38462204666.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
 5. Ticked items move to [PLAN_DONE.md](PLAN_DONE.md) at each offload.
@@ -118,8 +118,14 @@ by gdyuldin or myshak1, never merged by us alone.
   also PairableTimeout set on every Scan, since bluez restarts that timer
   only then); replies posted on #6 and #297. Test branch
   `bt-security-js8` rebuilt as typing-lag + main + #297 (b0d6183, no
-  TEST-ONLY commit any more): *Build image* run **38448410652** with
-  `buildroot_ref=bt-security`. **Next:** flash it, radio retest (keyboard
+  TEST-ONLY commit any more). **Kris approved #6 2026-10-13 19:57Z**
+  ("approving both once your retest is in", he merges #6 + #297
+  together); his non-blocking leftovers done in Buildroot 9a70644 (CAT
+  Serial Port record added only once, stale udev remove rule dropped;
+  the 20 s udev hold left as is). Test image: *Build image* run
+  **38462204666** (`buildroot_ref=bt-security`; the earlier run
+  38448410652 lacks 9a70644). **Next:** flash it, radio retest (also: the
+  Serial Port record once in `sdptool browse local`, after WiFi off/on too) (keyboard
   pair; a phone that forgot the radio re-pairs from Scan; Scan twice,
   still pairable after the first 3 min; from the unpaired PC hidden right
   after power-on; FT8CN CAT), post the results on #6; when both are
@@ -160,8 +166,15 @@ by gdyuldin or myshak1, never merged by us alone.
     (bt_start.sh's `sdptool add SP` runs on every hci0 add); tell Kris.
   Before trying again: find out how the X6200 does it, and whether FT8CN
   can take its audio without the phone's call processing. Or WiFi audio.
-  **Asked Kris 2026-10-13: OpenX6100/x6100_gui discussion #299** (Ideas),
-  with these findings; waiting for his answer.
+  **Asked Kris 2026-10-13: OpenX6100/x6100_gui discussion #299** (Ideas).
+  Kris (same day): not his plan (CAT over Bluetooth is gdyuldin's; his
+  window is for HamLogBridge, WSJT-X UDP to online logs); TX looks easy
+  (route the phone's A2DP to the codec, `radio_set_modem()` on CAT PTT
+  while a phone audio link is up; he'd review); RX is the open question
+  (Android's call processing on SCO; A2DP and SCO may fight); the X6200
+  guide says Call Audio off, and its author saw RX go over the air, not
+  Bluetooth; a btmon from an X6200 owner would settle it; fallback: WiFi
+  with Icom's network protocol (FT8CN speaks it, IC-705), a big job.
 
 ## To try on the radio (no programming)
 
