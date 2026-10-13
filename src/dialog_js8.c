@@ -57,6 +57,9 @@
 #include <fcntl.h>
 #include <math.h>
 #include <pthread.h>
+#include <sched.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdatomic.h>
@@ -2920,29 +2923,115 @@ static void rotary_cb(int32_t diff) {
  * few tenths of a second once it is past ~8 frames: done on every key,
  * fast typing piled the keys up and froze the screen for 20 s. So it is
  * counted once typing pauses, as desktop does (m_txTextDirtyDebounce,
- * 100 ms there; longer here for the slower processor). */
-#define COMPOSE_COUNT_MS 350
-static lv_timer_t *compose_count_timer;
+ * 100 ms there; longer here for the slower processor), and on a thread
+ * of its own: near 20 frames a plan takes a second or two on the radio,
+ * and on the GUI thread the waterfall stopped for it (VE7NHW,
+ * 2026-10-13). The newest request wins; the thread stays for the
+ * program's life, idle between counts. */
+#define COMPOSE_COUNT_MS      350
+#define COMPOSE_COUNT_POLL_MS 50
+static lv_timer_t *compose_count_timer; /* the pause */
+static lv_timer_t *compose_poll_timer;  /* waits for the count */
+
+static struct {
+    pthread_mutex_t  mu;
+    pthread_cond_t   cv;
+    bool             started;
+    unsigned         want; /* the newest request */
+    unsigned         done; /* the request `pv` answers */
+    char             call[32], grid[16], text[TX_TEXT_MAX * 2];
+    js8_speed_t      speed;
+    bool             blank; /* nothing typed: no "too long" either */
+    js8_tx_preview_t pv;
+} counter = {.mu = PTHREAD_MUTEX_INITIALIZER, .cv = PTHREAD_COND_INITIALIZER};
+
+static void *count_thread(void *arg) {
+    (void)arg;
+    pthread_setname_np(pthread_self(), "js8-count");
+    /* Behind the decoders (nice 0) on the cores they share, and off the
+     * last core, the GUI's, as they are (cpu_fence.cpp): a long count
+     * waits rather than delaying a decode or the waterfall. */
+    setpriority(PRIO_PROCESS, (id_t)syscall(SYS_gettid), 10);
+    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
+    if (ncpu >= 3 && ncpu <= CPU_SETSIZE) {
+        cpu_set_t set;
+        CPU_ZERO(&set);
+        for (long c = 0; c < ncpu - 1; c++) CPU_SET(c, &set);
+        pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
+    }
+    static char      call[sizeof(counter.call)], grid[sizeof(counter.grid)], text[sizeof(counter.text)];
+    js8_tx_preview_t pv;
+    pthread_mutex_lock(&counter.mu);
+    for (;;) {
+        while (counter.done == counter.want) pthread_cond_wait(&counter.cv, &counter.mu);
+        unsigned    n     = counter.want;
+        js8_speed_t speed = counter.speed;
+        memcpy(call, counter.call, sizeof(call));
+        memcpy(grid, counter.grid, sizeof(grid));
+        memcpy(text, counter.text, sizeof(text));
+        pthread_mutex_unlock(&counter.mu);
+        js8_tx_preview(call, grid, text, speed, &pv);
+        pthread_mutex_lock(&counter.mu);
+        if (n == counter.want) counter.pv = pv; /* else typed on meanwhile: count again */
+        counter.done = n;
+    }
+    return NULL;
+}
 
 static void compose_count_cancel(void) {
     if (compose_count_timer) {
         lv_timer_del(compose_count_timer);
         compose_count_timer = NULL;
     }
+    if (compose_poll_timer) { /* a count still running is just never shown */
+        lv_timer_del(compose_poll_timer);
+        compose_poll_timer = NULL;
+    }
+}
+
+static void compose_poll_cb(lv_timer_t *t) {
+    (void)t;
+    js8_tx_preview_t pv;
+    bool             blank;
+    pthread_mutex_lock(&counter.mu);
+    bool ready = counter.done == counter.want;
+    if (ready) pv = counter.pv, blank = counter.blank;
+    pthread_mutex_unlock(&counter.mu);
+    if (!ready) return;
+    lv_timer_del(compose_poll_timer);
+    compose_poll_timer = NULL;
+    if (!composing) return;
+    if (pv.ok) msg_update_text_fmt("%d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
+    /* Why it can't go ("too long: 21 frames (max 20)"), as you type, not
+     * the last good count frozen until Enter (B-23). */
+    else if (!blank) msg_update_text_fmt("JS8: %s", pv.error);
 }
 
 static void compose_count_cb(lv_timer_t *t) {
     (void)t;
     compose_count_timer = NULL; /* a one-shot: LVGL deletes it after this */
     if (!composing) return;
-    js8_tx_preview_t pv;
-    char        typed[TX_TEXT_MAX * 2];
+    char typed[TX_TEXT_MAX * 2];
     macros_fill(textarea_window_get(), false, typed, sizeof(typed)); /* counted as it goes out */
-    js8_tx_preview(my_call(), my_grid(), typed, cur_speed(), &pv);
-    if (pv.ok) msg_update_text_fmt("%d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
-    /* Why it can't go ("too long: 21 frames (max 20)"), as you type, not
-     * the last good count frozen until Enter (B-23). */
-    else if (typed[strspn(typed, " ")]) msg_update_text_fmt("JS8: %s", pv.error);
+    pthread_mutex_lock(&counter.mu);
+    snprintf(counter.call, sizeof(counter.call), "%s", my_call());
+    snprintf(counter.grid, sizeof(counter.grid), "%s", my_grid());
+    snprintf(counter.text, sizeof(counter.text), "%s", typed);
+    counter.speed = cur_speed();
+    counter.blank = !typed[strspn(typed, " ")];
+    counter.want++;
+    if (!counter.started) {
+        pthread_t th;
+        if (pthread_create(&th, NULL, count_thread, NULL) == 0) {
+            pthread_detach(th);
+            counter.started = true;
+        }
+    }
+    pthread_cond_signal(&counter.cv);
+    bool started = counter.started;
+    pthread_mutex_unlock(&counter.mu);
+    if (!started) return; /* no thread: no count, typing still works */
+    if (!compose_poll_timer) compose_poll_timer = lv_timer_create(compose_poll_cb, COMPOSE_COUNT_POLL_MS, NULL);
 }
 
 static void compose_changed_cb(lv_event_t *e) {
