@@ -57,6 +57,9 @@
 #include <fcntl.h>
 #include <math.h>
 #include <pthread.h>
+#include <sched.h>
+#include <sys/resource.h>
+#include <sys/syscall.h>
 #include <stdarg.h>
 #include <stddef.h>
 #include <stdatomic.h>
@@ -80,7 +83,9 @@
 #define WF_VISIBLE       55     /* waterfall rows left uncovered by the list */
 #define TX_BAR_H         30     /* TX status line between waterfall and list */
 #define TX_BAR_IDLE      0x000000 /* its background when idle, half see-through */
-#define TX_TEXT_MAX      160    /* longest message the compose window takes */
+#define TX_TEXT_MAX      500    /* longest message the compose window takes: past 20 frames
+                                   (~345-425 characters), so the frame limit is what stops you,
+                                   as on desktop, whose box has no limit */
 #define OFFER_MS         (5 * 60 * 1000) /* how long an offered reply stays on Reply */
 #define TEXT_MAX         64     /* INFO / STATUS */
 #ifndef JS8_TEXTS_PATH
@@ -2914,16 +2919,129 @@ static void rotary_cb(int32_t diff) {
 
 /* ---- Compose window --------------------------------------------------- */
 
-static void compose_changed_cb(lv_event_t *e) {
-    (void)e;
+/* The frame count plans the whole message, which on the radio takes a
+ * few tenths of a second once it is past ~8 frames: done on every key,
+ * fast typing piled the keys up and froze the screen for 20 s. So it is
+ * counted once typing pauses, as desktop does (m_txTextDirtyDebounce,
+ * 100 ms there; longer here for the slower processor), and on a thread
+ * of its own: near 20 frames a plan takes a second or two on the radio,
+ * and on the GUI thread the waterfall stopped for it (VE7NHW,
+ * 2026-10-13). The newest request wins; the thread stays for the
+ * program's life, idle between counts. */
+#define COMPOSE_COUNT_MS      350
+#define COMPOSE_COUNT_POLL_MS 50
+static lv_timer_t *compose_count_timer; /* the pause */
+static lv_timer_t *compose_poll_timer;  /* waits for the count */
+
+static struct {
+    pthread_mutex_t  mu;
+    pthread_cond_t   cv;
+    bool             started;
+    unsigned         want; /* the newest request */
+    unsigned         done; /* the request `pv` answers */
+    char             call[32], grid[16], text[TX_TEXT_MAX * 2];
+    js8_speed_t      speed;
+    bool             blank; /* nothing typed: no "too long" either */
     js8_tx_preview_t pv;
-    char        typed[TX_TEXT_MAX * 2];
-    macros_fill(textarea_window_get(), false, typed, sizeof(typed)); /* counted as it goes out */
-    js8_tx_preview(my_call(), my_grid(), typed, cur_speed(), &pv);
+} counter = {.mu = PTHREAD_MUTEX_INITIALIZER, .cv = PTHREAD_COND_INITIALIZER};
+
+static void *count_thread(void *arg) {
+    (void)arg;
+    pthread_setname_np(pthread_self(), "js8-count");
+    /* Behind the decoders (nice 0) on the cores they share, and off the
+     * last core, the GUI's, as they are (cpu_fence.cpp): a long count
+     * waits rather than delaying a decode or the waterfall. */
+    setpriority(PRIO_PROCESS, (id_t)syscall(SYS_gettid), 10);
+    long ncpu = sysconf(_SC_NPROCESSORS_ONLN);
+    if (ncpu >= 3 && ncpu <= CPU_SETSIZE) {
+        cpu_set_t set;
+        CPU_ZERO(&set);
+        for (long c = 0; c < ncpu - 1; c++) CPU_SET(c, &set);
+        pthread_setaffinity_np(pthread_self(), sizeof(set), &set);
+    }
+    static char      call[sizeof(counter.call)], grid[sizeof(counter.grid)], text[sizeof(counter.text)];
+    js8_tx_preview_t pv;
+    pthread_mutex_lock(&counter.mu);
+    for (;;) {
+        while (counter.done == counter.want) pthread_cond_wait(&counter.cv, &counter.mu);
+        unsigned    n     = counter.want;
+        js8_speed_t speed = counter.speed;
+        memcpy(call, counter.call, sizeof(call));
+        memcpy(grid, counter.grid, sizeof(grid));
+        memcpy(text, counter.text, sizeof(text));
+        pthread_mutex_unlock(&counter.mu);
+        js8_tx_preview(call, grid, text, speed, &pv);
+        pthread_mutex_lock(&counter.mu);
+        if (n == counter.want) counter.pv = pv; /* else typed on meanwhile: count again */
+        counter.done = n;
+    }
+    return NULL;
+}
+
+static void compose_count_cancel(void) {
+    if (compose_count_timer) {
+        lv_timer_del(compose_count_timer);
+        compose_count_timer = NULL;
+    }
+    if (compose_poll_timer) { /* a count still running is just never shown */
+        lv_timer_del(compose_poll_timer);
+        compose_poll_timer = NULL;
+    }
+}
+
+static void compose_poll_cb(lv_timer_t *t) {
+    (void)t;
+    js8_tx_preview_t pv;
+    bool             blank;
+    pthread_mutex_lock(&counter.mu);
+    bool ready = counter.done == counter.want;
+    if (ready) pv = counter.pv, blank = counter.blank;
+    pthread_mutex_unlock(&counter.mu);
+    if (!ready) return;
+    lv_timer_del(compose_poll_timer);
+    compose_poll_timer = NULL;
+    if (!composing) return;
     if (pv.ok) msg_update_text_fmt("%d frame%s, %.0f s", pv.frames, pv.frames == 1 ? "" : "s", pv.seconds);
     /* Why it can't go ("too long: 21 frames (max 20)"), as you type, not
      * the last good count frozen until Enter (B-23). */
-    else if (typed[strspn(typed, " ")]) msg_update_text_fmt("JS8: %s", pv.error);
+    else if (!blank) msg_update_text_fmt("JS8: %s", pv.error);
+}
+
+static void compose_count_cb(lv_timer_t *t) {
+    (void)t;
+    compose_count_timer = NULL; /* a one-shot: LVGL deletes it after this */
+    if (!composing) return;
+    char typed[TX_TEXT_MAX * 2];
+    macros_fill(textarea_window_get(), false, typed, sizeof(typed)); /* counted as it goes out */
+    pthread_mutex_lock(&counter.mu);
+    snprintf(counter.call, sizeof(counter.call), "%s", my_call());
+    snprintf(counter.grid, sizeof(counter.grid), "%s", my_grid());
+    snprintf(counter.text, sizeof(counter.text), "%s", typed);
+    counter.speed = cur_speed();
+    counter.blank = !typed[strspn(typed, " ")];
+    counter.want++;
+    if (!counter.started) {
+        pthread_t th;
+        if (pthread_create(&th, NULL, count_thread, NULL) == 0) {
+            pthread_detach(th);
+            counter.started = true;
+        }
+    }
+    pthread_cond_signal(&counter.cv);
+    bool started = counter.started;
+    pthread_mutex_unlock(&counter.mu);
+    if (!started) return; /* no thread: no count, typing still works */
+    if (!compose_poll_timer) compose_poll_timer = lv_timer_create(compose_poll_cb, COMPOSE_COUNT_POLL_MS, NULL);
+}
+
+static void compose_changed_cb(lv_event_t *e) {
+    (void)e;
+    if (compose_count_timer) {
+        lv_timer_reset(compose_count_timer);
+        return;
+    }
+    compose_count_timer = lv_timer_create(compose_count_cb, COMPOSE_COUNT_MS, NULL);
+    lv_timer_set_repeat_count(compose_count_timer, 1);
 }
 
 /* JS8 is capitals only: take lowercase (a USB keyboard without Caps Lock,
@@ -2964,6 +3082,7 @@ static void compose_layout(bool typing) {
 
 static void compose_close(void) {
     if (!composing) return;
+    compose_count_cancel();
     textarea_window_close();
     composing = false;
     compose_layout(false);
@@ -7739,6 +7858,75 @@ static void log_reports_fill(const js8_qso_t *q, const js8_station_t *st) {
     else if (st && st->has_reported_snr) snprintf(rcvd, sizeof(log_entry.rst_rcvd), "%+03d", st->reported_snr);
 }
 
+/* What you typed in the Log popup during a QSO (Name, Note, a Grid you
+ * typed), held for that station: Cancel now, and the Log at the end opens
+ * with it, so the QSO is logged once with everything in. Forgotten on Save,
+ * or with the QSO (30 min without it). Memory only. */
+#define LOG_HELD_N       4
+#define LOG_HELD_KEEP_MS (30 * 60 * 1000)
+static struct {
+    char    call[JS8_RX_CALL_LEN];
+    char    grid[sizeof(log_entry.grid)]; /* "": not typed */
+    char    name[sizeof(log_entry.name)];
+    char    comment[sizeof(log_entry.comment)];
+    int64_t ms; /* last typed */
+} log_held[LOG_HELD_N];
+
+static int log_held_find(const char *call) {
+    for (int i = 0; i < LOG_HELD_N; i++)
+        if (log_held[i].call[0] && strcasecmp(log_held[i].call, call) == 0) return i;
+    return -1;
+}
+
+static void log_unhold(const char *call) {
+    int i = log_held_find(call);
+    if (i >= 0) memset(&log_held[i], 0, sizeof(log_held[i]));
+}
+
+/* After a field was typed: keep the popup's typed fields for its station;
+ * false when none is filled in (nothing held). */
+static bool log_hold(void) {
+    if (!log_entry.call[0]) return false;
+    if (!log_entry.name[0] && !log_entry.comment[0] && !log_grid_typed) {
+        log_unhold(log_entry.call);
+        return false;
+    }
+    int i = log_held_find(log_entry.call);
+    if (i < 0) { /* a free slot, else the oldest */
+        i = 0;
+        for (int k = 0; k < LOG_HELD_N; k++) {
+            if (!log_held[k].call[0]) {
+                i = k;
+                break;
+            }
+            if (log_held[k].ms < log_held[i].ms) i = k;
+        }
+    }
+    snprintf(log_held[i].call, sizeof(log_held[i].call), "%s", log_entry.call);
+    snprintf(log_held[i].grid, sizeof(log_held[i].grid), "%s", log_grid_typed ? log_entry.grid : "");
+    snprintf(log_held[i].name, sizeof(log_held[i].name), "%s", log_entry.name);
+    snprintf(log_held[i].comment, sizeof(log_held[i].comment), "%s", log_entry.comment);
+    log_held[i].ms = now_wall_ms();
+    return true;
+}
+
+/* Into a freshly prepared entry: what was held for its station, unless both
+ * the QSO and the typing are older than 30 min. */
+static void log_restore(bool have_q, int64_t now) {
+    int i = log_held_find(log_entry.call);
+    if (i < 0) return;
+    if (!have_q && now - log_held[i].ms > LOG_HELD_KEEP_MS) {
+        memset(&log_held[i], 0, sizeof(log_held[i]));
+        return;
+    }
+    if (log_held[i].grid[0]) {
+        snprintf(log_entry.grid, sizeof(log_entry.grid), "%s", log_held[i].grid);
+        log_grid_typed = true;
+    }
+    snprintf(log_entry.name, sizeof(log_entry.name), "%s", log_held[i].name);
+    snprintf(log_entry.comment, sizeof(log_entry.comment), "%s", log_held[i].comment);
+}
+
 static void log_prepare(const char *call) {
     int64_t       now = now_wall_ms();
     js8_qso_t     q;
@@ -7763,6 +7951,7 @@ static void log_prepare(const char *call) {
     log_entry.tx_pwr_w = pwr > TX_PLAYER_MAX_PWR_W ? TX_PLAYER_MAX_PWR_W : pwr;
     if (param_i_get(cfg.js8.log_activation()) == 1) snprintf(log_entry.pota_ref, sizeof(log_entry.pota_ref), "%s", last_pota);
     if (param_i_get(cfg.js8.log_activation()) == 2) snprintf(log_entry.sota_ref, sizeof(log_entry.sota_ref), "%s", last_sota);
+    log_restore(have_q, now);
 }
 
 static void log_close(void) {
@@ -7798,6 +7987,7 @@ static void log_save(void) {
     worked_forget();
     js8_map_worked_add(log_entry.call, log_entry.grid); /* no more NEW outline on the map */
 
+    log_unhold(log_entry.call);
     js8_qsos_logged(qsos, log_entry.call);
     js8_history_logged(history_db, log_entry.call, log_entry.freq_hz, now_wall_ms());
     if (strcmp(log_pending, log_entry.call) == 0) log_pending[0] = '\0';
@@ -7813,7 +8003,7 @@ static void log_item_cb(lv_event_t *e) {
     log_item_t item = (log_item_t)(intptr_t)lv_event_get_user_data(e);
     if (item == LOG_SAVE || item == LOG_CANCEL) {
         if (item == LOG_SAVE) log_save();
-        else log_pending[0] = '\0';
+        else if (strcmp(log_pending, log_entry.call) == 0) log_pending[0] = '\0'; /* not another station's */
         log_close();
         return;
     }
@@ -7991,7 +8181,11 @@ static void log_edit_done(const char *text) {
         return;
     }
     /* Back on the field just edited: Save is a separate, deliberate step. */
+    bool held = log_hold();
     log_list_open(target == EDIT_LOG_GRID ? LOG_GRID : target == EDIT_LOG_NAME ? LOG_NAME : LOG_NOTE);
+    /* Not once the QSO has ended (their 73 while typing): Save now. */
+    if (held && value && strcmp(log_pending, log_entry.call) != 0)
+        msg_update_text_fmt("Kept for %s: Cancel for now, Save at the end of the QSO", log_entry.call);
 }
 
 static void log_cb(button_data_t *btn) {

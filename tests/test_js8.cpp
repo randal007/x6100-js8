@@ -1035,6 +1035,26 @@ struct FakeClock : Transmitter::Clock {
 };
 } // namespace
 
+TEST_CASE("a 20-frame message isn't cut anywhere", "[js8][tx]") {
+    // Up to ~425 characters fit 20 frames (a repeated phrase packs best);
+    // the C structs cut them at 255 before (VE7NHW, 2026-10-13).
+    std::string text;
+    while (text.size() < 425) text += "THANKS FOR THE QSO ";
+    text.resize(425);
+    js8_tx_preview_t pv;
+    js8_tx_preview("VE7NHW", "CN89", text.c_str(), JS8_SPEED_FAST, &pv);
+    REQUIRE(pv.ok);
+    CHECK(pv.frames == 20);
+    CHECK(std::strlen(pv.preview) >= 400);
+    CHECK(std::string(pv.preview).find("THANKS FOR THE QSO THANKS") != std::string::npos);
+    // Received, with the sender in front, it still fits.
+    CHECK(text.size() + std::strlen("VE7NHW: ") < JS8_RX_TEXT_LEN);
+    // One frame more is refused, not cut.
+    text += " AND MORE TEXT HERE";
+    js8_tx_preview("VE7NHW", "CN89", text.c_str(), JS8_SPEED_FAST, &pv);
+    CHECK_FALSE(pv.ok);
+}
+
 TEST_CASE("Transmitter sends frames in consecutive slots", "[js8][tx]") {
     FakeClock clock;
     struct Keyed {

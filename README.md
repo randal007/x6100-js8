@@ -418,7 +418,7 @@ to go back a page. In JS8 a hold is half a second.
 | 1 | **HW CPY?** | Sends `CALL HW CPY?` ("how do you copy?") to the selected station. |
 | 2 | **Show: No HB / Directed / All** | Filter the list. *No HB* (the default): everything except heartbeats and SNR reports (mostly answers to heartbeats), unless they are to you. *Directed*: messages to you or to groups, plus everything on the selected station's frequency (in a long QSO the other side often drops your call). In the Stations view, the first press goes back to the messages. On [the map](#the-map): **All heard / Heard me**. |
 | 2 | **Reply** | Keyboard with the selected station's call filled in. If they asked you something with AUTO off, the answer is ready instead (each station its own, for 5 minutes). |
-| 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. |
+| 2 | **Send…** | Keyboard, empty: `@ALLCALL …`, a call and a message, or free text. Up to 20 frames, as on desktop (about 350–420 characters); the frames and seconds show when you pause typing. |
 | 2 | **Clear** | Clear the list and this frequency's Stations list. |
 | 3 | **Sort: Heard you / SNR / Time / Distance / QSO** | In the Stations view: the order of the stations, or *QSO*: only those you've had a QSO with ([The screen](#the-screen)). |
 | 3 | **Map: Auto / Close-in / World** | The same button while [the map](#the-map) shows: which part of the world it shows. **Hold: Follow** the selected station (you and them framed, the long path too); press to stop. Over the messages it's blank. |
@@ -834,6 +834,15 @@ SK) is filled in for you: call, band, start and end, reports, frequency,
 power, their grid and yours (from GPS if one is plugged in). Add a name or
 comment, then **Save to log**. Nothing is logged without Save.
 
+**Name, grid or comment during a QSO:** when they send their name
+mid-QSO, open **Log QSO**, type it in, and press **Cancel**. It's kept
+for that station ("Kept for ..."), and the Log at the end of the QSO opens
+with it filled in: **Save** once, and the QSO is one entry with its whole
+start-to-end time. Saving halfway would log the QSO there and start a new
+one for the rest. What you typed is kept until you Save, or 30 minutes
+after the QSO is forgotten; it's lost if JS8 is closed or the radio turned
+off before then.
+
 A QSO ends when 73, SK or RR73 comes among the last three words of a
 message ("TNX QSO 73", "73 GL"), not anywhere ("73 DEGREES HERE" isn't an
 end). ESC on the prompt means *not now*: **Log QSO** then logs whoever is
@@ -940,7 +949,7 @@ goes as an APRS position report with your message as its comment, shown
 with your position on aprs.fi. The position is rounded to about 185 m,
 which keeps it short: one or two words (`MADE IT`, `ARRIVED SAFE`) take 4
 frames, about 20 letters 5. The line above the keyboard shows the frame
-count as you type. (JS8's `GRID` command can't carry a message, so this
+count when you pause typing. (JS8's `GRID` command can't carry a message, so this
 one goes as a raw APRS packet through `CMD`.) ESC sends nothing.
 
 Confirmed on the air so far: the plain **Spot my grid**, **SMS** (both

@@ -14,7 +14,9 @@ extern "C" {
 #endif
 
 #define JS8_RX_CALL_LEN 16
-#define JS8_RX_TEXT_LEN 256
+/* A whole message: 20 frames carry up to ~425 characters (desktop sends
+ * them; 256 cut them short), plus "CALL: " in front. */
+#define JS8_RX_TEXT_LEN 640
 
 /* Submode bits for js8_rx_create(). */
 #define JS8_SUBMODE_NORMAL (1 << 0)
