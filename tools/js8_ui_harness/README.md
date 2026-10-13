@@ -56,6 +56,7 @@ instead (each prints `[tag] ... (want ...)` lines to compare):
 | `LOCK` | hold MFK to lock a station; turning only scrolls |
 | `LOG` | a QSO to 73, the Log popup, ADIF |
 | `LOGPEND` | ESC on the log prompt, then Log QSO takes the selected station; a typed grid checked |
+| `LOGHOLD` | a name typed in Log QSO mid-QSO and cancelled is held: the prompt at 73 has it, one entry in the ADIF |
 | `LOOKS` | coloured commands, end marks, relay "via" stations, bearing, km/miles, Settings lines |
 | `MARKS` | decode marks (see below) |
 | `MAP` | Show Map: Messages → Stations → Map, stations by grid and by prefix, paths, the MFK selection in red, Show *Heard me*, the view button (Auto / Close-in / World), a DX station switching Auto to the world with its 8 s pop-up, Time Sync first in Settings, back to Messages (`90_map.ppm` ... `96_back_to_messages.ppm`); the TX outline and red paths (`97`-`99`); from a test QSO log it writes (`js8_qso_log.db` in the build dir): NEW GRID / NEW DXCC pop-ups and white outlines, a weak CQ caller's small square and CQ tag (its Stations row green, `89_stations_cq.ppm`), the stats line, and the squares faded half an hour on (`9a_map_faded.ppm`); other stations' QSOs and a relay as grey lines, the last-two-messages strip (`9b_map_talk.ppm`), the dots (yours moving toward the station you send to, incoming ones counted), Follow on JA1ABC by holding Map: (`9c_map_follow.ppm`) |

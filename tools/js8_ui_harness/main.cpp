@@ -1849,6 +1849,94 @@ int main() {
         printf("[log] closed with the log open: running=%d\n", ui_running());
         return 0;
     }
+    if (getenv("ONLY_LOGHOLD")) {
+        // A name typed mid-QSO and cancelled is held for that station: the
+        // Log at the end opens with it, one QSO in the file.
+        auto wait_tx = [&]() {
+            int b = stub_tx_frames;
+            for (int i = 0; i < 200 && stub_tx_frames == b; i++) pump(100);
+            int last;
+            do {
+                last = stub_tx_frames;
+                for (int i = 0; i < 170 && stub_tx_frames == last; i++) pump(100);
+            } while (stub_tx_frames != last);
+            pump(500);
+        };
+        auto log_entries = [&]() {
+            FILE *f = fopen(JS8_LOG_PATH, "r");
+            int   n = 0;
+            if (!f) return 0;
+            char line[1024];
+            while (fgets(line, sizeof(line), f)) {
+                if (strstr(line, "<call:")) n++;
+                printf("[loghold file] %s", line);
+            }
+            fclose(f);
+            return n;
+        };
+        unlink(JS8_LOG_PATH);
+        pump(300);
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO NAME IS PAT", 1320, 0.05f}});
+        ui_page(2);
+        ui_press(3); // Send...
+        pump(200);
+        ui_compose_append("N0XYZ SNR -10");
+        ui_compose_enter();
+        wait_tx();
+
+        // Mid-QSO: Log QSO, Name PAT, Cancel.
+        ui_select_row_from("N0XYZ");
+        ui_page(5);
+        ui_press(2); // Log QSO
+        pump(300);
+        ui_key(LV_KEY_RIGHT);
+        ui_key(LV_KEY_RIGHT);
+        printf("[loghold] on '%s' (want Name: (none))\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        ui_compose_append("PAT");
+        ui_compose_enter();
+        pump(300);
+        printf("[loghold] typed: '%s', message '%s' (want Kept for N0XYZ: ...)\n", ui_focused_text(), stub_last_msg);
+        ui_key(LV_KEY_RIGHT);
+        ui_key(LV_KEY_RIGHT);
+        printf("[loghold] on '%s' (want Cancel)\n", ui_focused_text());
+        ui_click_focused();
+        pump(300);
+        printf("[loghold] cancelled: popup %d (want -1), entries %d (want 0)\n", ui_popup_has("Save"), log_entries());
+
+        // Reopened by hand: the name is there.
+        ui_press(2);
+        pump(300);
+        printf("[loghold] reopened: Name: PAT %d (want >= 0)\n", ui_popup_has("Name: PAT"));
+        ui_press(2); // Log QSO again closes it
+        pump(300);
+
+        // The QSO goes on and ends: the prompt has the name, Save logs once.
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ SNR -08 TNX", 1320, 0.05f}});
+        ui_page(2);
+        ui_press(3); // Send...
+        pump(200);
+        ui_compose_append("N0XYZ TU 73");
+        ui_compose_enter();
+        wait_tx();
+        printf("[loghold] prompt focused '%s' (want Save to log), Name: PAT %d (want >= 0)\n", ui_focused_text(),
+               ui_popup_has("Name: PAT"));
+        ui_click_focused(); // Save to log
+        pump(300);
+        int n = log_entries();
+        printf("[loghold] entries %d (want 1)\n", n);
+
+        // Logged: nothing held any more.
+        ui_select_row_from("N0XYZ");
+        ui_page(5);
+        ui_press(2);
+        pump(300);
+        printf("[loghold] after Save: Name: (none) %d (want >= 0)\n", ui_popup_has("Name: (none)"));
+        ui_press(2);
+        pump(300);
+        return 0;
+    }
     if (getenv("ONLY_INBOX")) {
         auto wait_tx = [&]() {
             int b = stub_tx_frames;

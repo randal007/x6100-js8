@@ -834,6 +834,15 @@ SK) is filled in for you: call, band, start and end, reports, frequency,
 power, their grid and yours (from GPS if one is plugged in). Add a name or
 comment, then **Save to log**. Nothing is logged without Save.
 
+**Name, grid or comment during a QSO:** when they send their name
+mid-QSO, open **Log QSO**, type it in, and press **Cancel**. It's kept
+for that station ("Kept for ..."), and the Log at the end of the QSO opens
+with it filled in: **Save** once, and the QSO is one entry with its whole
+start-to-end time. Saving halfway would log the QSO there and start a new
+one for the rest. What you typed is kept until you Save, or 30 minutes
+after the QSO is forgotten; it's lost if JS8 is closed or the radio turned
+off before then.
+
 A QSO ends when 73, SK or RR73 comes among the last three words of a
 message ("TNX QSO 73", "73 GL"), not anywhere ("73 DEGREES HERE" isn't an
 end). ESC on the prompt means *not now*: **Log QSO** then logs whoever is

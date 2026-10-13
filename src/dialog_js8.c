@@ -7767,6 +7767,75 @@ static void log_reports_fill(const js8_qso_t *q, const js8_station_t *st) {
     else if (st && st->has_reported_snr) snprintf(rcvd, sizeof(log_entry.rst_rcvd), "%+03d", st->reported_snr);
 }
 
+/* What you typed in the Log popup during a QSO (Name, Note, a Grid you
+ * typed), held for that station: Cancel now, and the Log at the end opens
+ * with it, so the QSO is logged once with everything in. Forgotten on Save,
+ * or with the QSO (30 min without it). Memory only. */
+#define LOG_HELD_N       4
+#define LOG_HELD_KEEP_MS (30 * 60 * 1000)
+static struct {
+    char    call[JS8_RX_CALL_LEN];
+    char    grid[sizeof(log_entry.grid)]; /* "": not typed */
+    char    name[sizeof(log_entry.name)];
+    char    comment[sizeof(log_entry.comment)];
+    int64_t ms; /* last typed */
+} log_held[LOG_HELD_N];
+
+static int log_held_find(const char *call) {
+    for (int i = 0; i < LOG_HELD_N; i++)
+        if (log_held[i].call[0] && strcasecmp(log_held[i].call, call) == 0) return i;
+    return -1;
+}
+
+static void log_unhold(const char *call) {
+    int i = log_held_find(call);
+    if (i >= 0) memset(&log_held[i], 0, sizeof(log_held[i]));
+}
+
+/* After a field was typed: keep the popup's typed fields for its station;
+ * false when none is filled in (nothing held). */
+static bool log_hold(void) {
+    if (!log_entry.call[0]) return false;
+    if (!log_entry.name[0] && !log_entry.comment[0] && !log_grid_typed) {
+        log_unhold(log_entry.call);
+        return false;
+    }
+    int i = log_held_find(log_entry.call);
+    if (i < 0) { /* a free slot, else the oldest */
+        i = 0;
+        for (int k = 0; k < LOG_HELD_N; k++) {
+            if (!log_held[k].call[0]) {
+                i = k;
+                break;
+            }
+            if (log_held[k].ms < log_held[i].ms) i = k;
+        }
+    }
+    snprintf(log_held[i].call, sizeof(log_held[i].call), "%s", log_entry.call);
+    snprintf(log_held[i].grid, sizeof(log_held[i].grid), "%s", log_grid_typed ? log_entry.grid : "");
+    snprintf(log_held[i].name, sizeof(log_held[i].name), "%s", log_entry.name);
+    snprintf(log_held[i].comment, sizeof(log_held[i].comment), "%s", log_entry.comment);
+    log_held[i].ms = now_wall_ms();
+    return true;
+}
+
+/* Into a freshly prepared entry: what was held for its station, unless both
+ * the QSO and the typing are older than 30 min. */
+static void log_restore(bool have_q, int64_t now) {
+    int i = log_held_find(log_entry.call);
+    if (i < 0) return;
+    if (!have_q && now - log_held[i].ms > LOG_HELD_KEEP_MS) {
+        memset(&log_held[i], 0, sizeof(log_held[i]));
+        return;
+    }
+    if (log_held[i].grid[0]) {
+        snprintf(log_entry.grid, sizeof(log_entry.grid), "%s", log_held[i].grid);
+        log_grid_typed = true;
+    }
+    snprintf(log_entry.name, sizeof(log_entry.name), "%s", log_held[i].name);
+    snprintf(log_entry.comment, sizeof(log_entry.comment), "%s", log_held[i].comment);
+}
+
 static void log_prepare(const char *call) {
     int64_t       now = now_wall_ms();
     js8_qso_t     q;
@@ -7791,6 +7860,7 @@ static void log_prepare(const char *call) {
     log_entry.tx_pwr_w = pwr > TX_PLAYER_MAX_PWR_W ? TX_PLAYER_MAX_PWR_W : pwr;
     if (param_i_get(cfg.js8.log_activation()) == 1) snprintf(log_entry.pota_ref, sizeof(log_entry.pota_ref), "%s", last_pota);
     if (param_i_get(cfg.js8.log_activation()) == 2) snprintf(log_entry.sota_ref, sizeof(log_entry.sota_ref), "%s", last_sota);
+    log_restore(have_q, now);
 }
 
 static void log_close(void) {
@@ -7826,6 +7896,7 @@ static void log_save(void) {
     worked_forget();
     js8_map_worked_add(log_entry.call, log_entry.grid); /* no more NEW outline on the map */
 
+    log_unhold(log_entry.call);
     js8_qsos_logged(qsos, log_entry.call);
     js8_history_logged(history_db, log_entry.call, log_entry.freq_hz, now_wall_ms());
     if (strcmp(log_pending, log_entry.call) == 0) log_pending[0] = '\0';
@@ -7841,7 +7912,7 @@ static void log_item_cb(lv_event_t *e) {
     log_item_t item = (log_item_t)(intptr_t)lv_event_get_user_data(e);
     if (item == LOG_SAVE || item == LOG_CANCEL) {
         if (item == LOG_SAVE) log_save();
-        else log_pending[0] = '\0';
+        else if (strcmp(log_pending, log_entry.call) == 0) log_pending[0] = '\0'; /* not another station's */
         log_close();
         return;
     }
@@ -8019,7 +8090,11 @@ static void log_edit_done(const char *text) {
         return;
     }
     /* Back on the field just edited: Save is a separate, deliberate step. */
+    bool held = log_hold();
     log_list_open(target == EDIT_LOG_GRID ? LOG_GRID : target == EDIT_LOG_NAME ? LOG_NAME : LOG_NOTE);
+    /* Not once the QSO has ended (their 73 while typing): Save now. */
+    if (held && value && strcmp(log_pending, log_entry.call) != 0)
+        msg_update_text_fmt("Kept for %s: Cancel for now, Save at the end of the QSO", log_entry.call);
 }
 
 static void log_cb(button_data_t *btn) {
