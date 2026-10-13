@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. Next flash: test image run 38478388820 (Bluetooth incl. udev fix af4c2ae + FT8 knob fix, no FT2); the card has d94d92b (FT2 test).
+1. Card: test image 3385886 (run 38478388820: Bluetooth incl. udev fix af4c2ae + FT8 knob fix, no FT2), flashed 2026-10-13, backup sd-backup-2026-10-13-162408. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible.
 2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
@@ -107,9 +107,9 @@ by gdyuldin or myshak1, never merged by us alone.
   duplicates). Now `ENV{DEVTYPE}=="host"`; tried in place on the radio.
   Results posted on #6 and #297. New test image with af4c2ae built in
   (and the FT8 knob fix, no FT2): *Build image* run **38478388820**
-  (bt-security-js8 3385886, `buildroot_ref=bt-security`). **Next:**
-  flash it (`~/Work/bin/x6100-flash` 38478388820, see CLAUDE.local.md)
-  and check a phone connecting during Scan leaves the radio visible;
+  (bt-security-js8 3385886, `buildroot_ref=bt-security`), **on the card
+  2026-10-13** (backup sd-backup-2026-10-13-162408). **Next:** check a
+  phone connecting during Scan leaves the radio visible;
   Kris merges #6 + #297; when both are merged, delete `bt-security-js8`
   and add
   the release-note line "Bluetooth CAT: pair the phone once in the
