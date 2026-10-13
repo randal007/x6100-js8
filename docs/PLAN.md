@@ -185,9 +185,26 @@ by gdyuldin or myshak1, never merged by us alone.
   versions too, "sometimes"): right after boot no waterfall and the
   S-meter at full scale, then relays click and it comes right. Guess: a
   race between the GUI's first settings and the base board starting
-  (lost settings, re-sent later). Nothing in the app log. **Next, in its
+  (lost settings, re-sent later). Nothing in the app log, **but dmesg
+  shows `i2c i2c-0: sendbytes: NAK bailout` / `error -110` each time the
+  GUI starts** (26 s after boot, and again after a GUI restart): a write
+  to the base board not acknowledged. Strong lead. **Next, in its
   own session:** time the GUI's first base-board messages over several
   boots; then an OpenX6100 issue for gdyuldin. Shared code, not JS8.
+
+- [ ] **GUI crash while spinning the main dial fast** (VE7NHW,
+  2026-10-13, "a couple of times"): /mnt/app_logs/x6100_log_2026-10-13_
+  23-31-44.txt ends mid-line 64 s after start in a run of
+  `on_vfo_freq_change` (14.084-14.106 MHz, a step every ~40 ms), no error
+  printed (a hard crash, SIGSEGV-like); x6100_daemon restarted the GUI,
+  which power-cycles the WiFi/BT chip (USB errors at the same second) and
+  re-inits the base board. **The 2026-09-27 log ends the same way**
+  (fast tuning around 14.09 MHz, old 0.34-based build): an old bug in
+  shared GUI code, not ours. **Next, in its own session:** enable core
+  dumps on the radio for a while (`ulimit -c unlimited` + a core_pattern
+  on /mnt in x6100_daemon, temporary), reproduce by spinning the dial,
+  read the backtrace on the PC against that build's unstripped binary;
+  then an OpenX6100 issue/PR.
 
 ## To try on the radio (no programming)
 
