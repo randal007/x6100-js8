@@ -54,8 +54,9 @@ prerelease betas (`js8-beta5`, ...) with an SD card image on GitHub.
   it), a test image, radio test, then a PR into `main` (self-merge OK) and
   delete the branch. One or two branches at a time; **always tell Randal
   which branch you're on.**
-- **docs/PLAN.md is the one work list.** Tick items in the same commit as
-  the work. README *Coming next* mirrors its top.
+- **docs/PLAN.md is the one work list** and the only place for "where
+  are we" (not Claude's memory, which keeps lessons only). Tick items in
+  the same commit as the work. README *Coming next* mirrors its top.
 - **Commit and push every change.** End commit messages with the
   Co-Authored-By line.
 - **OpenX6100 (upstream):** always branch → PR → review by gdyuldin or
@@ -86,7 +87,9 @@ every step, then report. Nothing may live only in this conversation.
 2. **docs/PLAN.md:** tick what's done, update each item touched this
    session (state, decisions Randal made, what's waiting on whom), and
    new items for anything found or promised. "Decided: not doing" for
-   anything Randal dropped.
+   anything Randal dropped. Move ticked items (whole, with any leftover
+   moved to a new open item) to the top of docs/PLAN_DONE.md, and
+   rewrite the five-line *In short* at the top of *Now*.
 3. **README (the manual):** the summary at the top, "New in ...",
    "Known issues in ..." (drop the ones no longer true), "Coming next"
    (mirrors PLAN.md), and any section whose behaviour changed.
@@ -100,9 +103,9 @@ every step, then report. Nothing may live only in this conversation.
 6. **The radio:** say what's on the SD card (build, commit) and the
    newest DATA backup folder; nothing left running on it that matters
    (a btmon in /tmp dies at the next restart, fine).
-7. **Claude's memory** (on this PC): the project's current state, a
-   session entry in the history log, and any new lesson or preference of
-   Randal's; keep the MEMORY.md index line current.
+7. **Claude's memory** (on this PC): any new lesson or preference of
+   Randal's, and a short session entry in the history log. No copy of
+   the status (that's PLAN.md); keep the MEMORY.md index line current.
 8. **Report to Randal** in plain words: what was done, what's still
    running or waiting (and on whom), and anything he has to do himself
    (e.g. a merge or a post Claude isn't allowed to make).
@@ -135,6 +138,9 @@ rename).
 
 - **The image** is built only on GitHub (about an hour):
   `gh workflow run 366471886 -R randal007/x6100-js8 --ref <branch or tag>`.
+  To try an open OpenX6100 Buildroot PR with it, add
+  `-f buildroot_ref=<its branch or commit>` (never on a release tag: it
+  refuses anything but master).
   `dialog_js8.c` can't be compiled for ARM locally; the harness build is
   the real compile check.
 - **Unit tests** (as CI does):

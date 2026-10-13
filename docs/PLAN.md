@@ -14,131 +14,34 @@ by gdyuldin or myshak1, never merged by us alone.
 
 ## Now
 
-- [ ] **Next session, first (VE7NHW agreed 2026-10-13, from Claude's
-  feedback):**
-  1. **One source of truth:** PLAN.md is the only "where are we"
-     document. Claude's memory keeps lessons and pointers only (no copy
-     of the status); README *Coming next* stays a short mirror.
-  2. **Trim PLAN.md:** ticked items move to a `docs/PLAN_DONE.md`
-     archive at each offload; a 5-line summary at the top of *Now*. Add
-     both to CLAUDE.md's offload checklist.
-  3. **Build image gets a `buildroot_ref` input** (main.yml, default
-     master), so test images never need a TEST-ONLY commit; then
-     `bt-security-js8`'s hack isn't needed again.
-  4. **Back up `CLAUDE.local.md`** (not in git, only on this PC). **Not
-     on GitHub, not even a gist** (VE7NHW, 2026-10-13): it has the radio's
-     login, the card serial and Bluetooth address. Decide where together:
-     options are a copy on one of the PC's other disks (two 5.5 TB drives
-     sda/sdc are attached), a USB stick, or alongside sd-backups/.
-  5. Then the radio test of run 38428904715 (frame count thread).
-  Working style from now on: shorter sessions, one topic each, offload
-  at the end of each.
+**In short** (updated at each offload; details in the items below):
+1. Card: test image fb8769c (typing-lag + frame count thread): radio test, then PR `typing-lag` into main.
+2. Bluetooth security: #297 approved by myshak1; Buildroot #6 changes requested (2026-10-13): three fixes, then a radio retest.
+3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
+4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
+5. Ticked items move to [PLAN_DONE.md](PLAN_DONE.md) at each offload.
 
-- [x] **Kris's Bluetooth window** (OpenX6100/x6100_gui#280 +
-  AetherX6100Buildroot#4): test with VE7NHW's LE keyboard and report on
-  #280 with `/mnt/bt_pair.log`. Test image: *Build test image* run
-  38106197476 (his branches merged with OpenX6100 main; no JS8 in it, so
-  flash our build back after). To try: forget the old pairing (hold
-  Forget), Scan, the keyboard listed as `[kbd]`, Connect after its pairing
-  key, the passkey if asked, types in Callsign and FT8, hidden after 3
-  minutes (a phone can't see the radio), still paired after a normal
-  power-off and on. **Done 2026-10-11: everything worked first try**
-  (paired in 9 s, hidden after 3 min, saved at power-off and reconnected);
-  report with the log posted on #280. Still to do: **when Buildroot#4 is
-  merged, drop our pairings-backup step from *Build image*.**
-- [x] **Bluetooth keyboards pair every time** (2026-10-11, branch
-  `openx6100-bluetooth`): on the beta 5.1 release candidate the window's
-  pairing failed 4 times out of 4 with VE7NHW's F01 keyboard. btmon on the
-  radio: the keyboard's SMP keys reached Linux 0.3 ms *before* the chip's
-  Encryption Change event (events and data come over two USB endpoints,
-  and WiFi shares the same USB device), so the kernel dropped them
-  ("unexpected SMP command 0x06") and the pairing timed out. A race, not a
-  code change: the same error on 10-10 with x6100-bt-pair, a retry
-  "worked"; Kris's first-time pairing was luck. With btusb's
-  force_poll_sync switched on by hand it paired and bonded first time.
-  Three fixes: **A** kernel patch 9002 (poll sync on from probe, the hold
-  at least one whole jiffy, the event before the worker), in
-  `buildroot/patches/linux/` and copied in by *Build image*; **B** Scan
-  takes turns, LE 3 s / classic 5 s twice (the chip hears no LE during an
-  inquiry); **C** Connect on a keyboard waits for it by name, LE only (it
-  takes a new address at every pairing-key press: D7, D8, ... DD).
-  From a read-through of the whole Bluetooth code, four more: **1** a
-  keyboard paired at a new address makes the window forget its old
-  pairings under the same name (Connect on one hung a minute); **2**
-  Connect during Scan ends the Scan at once; **3** the window's highlight
-  follows the device, not the row number (the list re-sorts during a
-  Scan); **4** WiFi off/on is noticed (a new hci0, not only a missing
-  one) and Bluetooth set up again without a power cycle, and bt_down.sh
-  is never run against a chip that lost power.
-  Reported, not fixed by us (OpenX6100/x6100_gui#292): CAT over
-  Bluetooth needs no pairing; visible and pairable to anyone from boot
-  until the window is opened; the headset PTT button is accepted from any
-  device. **Pull requests opened 2026-10-11:** AetherX6100Buildroot#5
-  (A, the kernel patch) and x6100_gui#291 (B, C, 1-4, from branch
-  bt-keyboard-pairing in OpenX6100's repo); both say the radio test of
-  the image is still to come. Test image: *Build image* run 38205360614.
-  **Radio test 2026-10-12: works** (flashed c2eec93, backup
-  sd-backup-2026-10-12-000900): 5-6 pairings in a row with WiFi on,
-  typing, Connect during Scan, reconnect after restart without opening the
-  window, WiFi off/on; results posted on #291 and Buildroot #5. (Seen then:
-  Connect on a keyboard's old pairing tied the worker up ~1 min; closed
-  2026-10-12, see the Bluetooth security item.) **Next:** reviews of #291 / Buildroot #5; then
-  beta 5.1 (below) with this in. **Released in beta 5.1** (2026-10-12).
-  #291 and Buildroot #5 approved by gdyuldin; **Buildroot #5 merged**
-  2026-10-12 (our copy of patch 9002 and its CI step dropped); **#291
-  merged** 2026-10-12 (OpenX6100's Bluetooth files now identical to ours).
-  Still to do: answers on #292 (Kris answered 2026-10-12: see below).
-  **Next:** test image, radio test (pair several times with WiFi on the
-  home network; headset and phone still found by Scan; keyboard still
-  reconnects after power off/on), then pull requests to OpenX6100:
-  AetherX6100Buildroot (A, with the btmon evidence) and x6100_gui (B + C,
-  Kris tagged). Also for Kris: switching Bluetooth off and on with WiFi
-  running leaves the chip deaf to LE during inquiry until a reboot.
-- [x] **Beta 5.1 release, last steps** (done 2026-10-12: titled, notes, prerelease, banner on beta 5, sha256 e7ea6dc2 checked, local copy in releases/js8-beta5.1) (tag `js8-beta5.1` on 02c8682,
-  *Build image* run 38218854490 started 2026-10-12 07:38 UTC): once it
-  has published, `gh release edit js8-beta5.1 --title "X6100 JS8 beta
-  5.1" --notes-file docs/releases/js8-beta5.1.md --prerelease`, a
-  "Please use beta 5.1" banner on beta 5's page and in
-  docs/releases/js8-beta5.md (beta 5 has the /number bug), check the
-  asset's sha256 against GitHub's digest, then tell VE7NHW; the Facebook
-  post is ready in ~/Pictures/x6100-js8-beta5.1-facebook/post.txt.
-- [x] **Beta 5.1 (the Bluetooth window + the compound-call fix), on
-  branch `openx6100-bluetooth`** (2026-10-11): OpenX6100's main merged in
-  (Bluetooth window, FT8 country, WSJT-X UDP, Decoder text, SSB fix), APP
-  page 3 = WiFi, Bluetooth, (free), JS8 last; one cty.dat (Big CTY,
-  /usr/share/x6100/cty.dat, /mnt/cty.dat wins) for FT8 and JS8; our gpsd /
-  uhid / pairings-backup build steps and `x6100-bt-pair` removed (all in
-  OpenX6100's Buildroot now); version string, README and
-  docs/releases/js8-beta5.1.md ready. **First test image had a bug from
-  the merge:** a lost `break` made JS8's button open Bluetooth on top of a
-  still-running JS8 (orphaned JS8: screen glitches, JS8 wouldn't reopen,
-  typing didn't work). Fixed in f00dd74; a merge review found nothing
-  else. **Next:** flash image run 38188374332 (the release candidate),
-  check the full harness run 38189126031, radio test (Bluetooth window
-  pairing + typing in Callsign and JS8, JS8 RX / TX / beeps, FT8), then
-  PR into main, tag `js8-beta5.1`, release (docs/releases/CHECKLIST.md),
-  a "please use beta 5.1" banner on beta 5's page, Facebook post. If
-  typing still fails on the fixed build: the keyboard does send keys
-  (event5, hid-apple driver after a hid-generic swap) and the GUI has it
-  open: dig into keyboard.c / the group focus with the console.
-- [x] **Compound callsigns (KG4UHM/6) packed and read as desktop**
-  (2026-10-11, a3553bc, js8core local patch 16): js8core's pack_cmd kept
-  2 bits of the SNR and shifted every command, so "SNR -03" went out as
-  -31, our queries arrived as CMD / unknown, and desktop's heartbeat ACKs
-  showed as "HW CPY?", "FB" or "RR" (the auto-reply answered a question
-  never asked). Tests against desktop's own buildMessageFrames() built
-  with Qt, both ways. **Still to do:** report it upstream to
-  JS8Call-improved (docs/js8core-bug-reports.md #11), as #104 was; retest
-  on the air with a "/number" station.
-- [x] **App numbers** (OpenX6100/x6100_gui discussion 283): gdyuldin
-  suggested leaving apps out of the long-press list so their numbers are
-  never stored; myshak1 did that for his four apps. **Done 2026-10-11:**
-  JS8 is no longer a long-press action (opens from the APP menu only),
-  so there's no number to change and nothing to convert. A tester whose
-  key was set to JS8 finds it does nothing: say so in the next release
-  notes. Asked on #283 the same day (reply posted): JS8's two other
-  stored numbers (`MODE_JS8` = 8, `CFG_DIG_TYPE_JS8` 2 / 3) stay as they
-  are, so new log modes start at 9 and digital types at 4.
+- [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
+  feedback).** Working style: shorter sessions, one topic each, offload
+  at the end of each.
+  - [x] **One source of truth:** PLAN.md is the only "where are we"
+    document. Claude's memory keeps lessons and pointers only (no copy
+    of the status); README *Coming next* stays a short mirror.
+  - [x] **Trim PLAN.md:** ticked items move to
+    [PLAN_DONE.md](PLAN_DONE.md) at each offload; the summary above.
+    Both in CLAUDE.md's offload checklist.
+  - [x] **Build image has a `buildroot_ref` input** (default master; a
+    release tag refuses anything else): a test image with an open
+    Buildroot PR is `-f buildroot_ref=<branch>`, no TEST-ONLY commit.
+  - [ ] **Back up `CLAUDE.local.md`** (not in git, only on this PC). **Not
+    on GitHub, not even a gist** (VE7NHW, 2026-10-13): it has the radio's
+    login, the card serial and Bluetooth address. Decide where together:
+    options are a copy on one of the PC's other disks (two 5.5 TB drives
+    sda/sdc are attached), a USB stick, or alongside sd-backups/.
+- [ ] **Compound callsigns, leftovers** (the fix is in beta 5.1, see
+  [PLAN_DONE.md](PLAN_DONE.md)): report it to JS8Call-improved
+  ([js8core-bug-reports.md](js8core-bug-reports.md) #11, draft for
+  VE7NHW first), and retest on the air with a "/number" station.
 - [ ] **JS8 into OpenX6100**, four pull requests one at a time
   ([upstream-patches.md](upstream-patches.md#js8-into-openx6100-the-plan)):
   groundwork, engine (with the licence note), library + tests, app.
@@ -193,9 +96,21 @@ by gdyuldin or myshak1, never merged by us alone.
   kept (VE7NHW; explained in #6). **Tested:** keyboard pair, forget,
   re-pair, reconnect; phone + FT8CN over Bluetooth CAT changing frequency
   with the keyboard connected; from the unpaired PC the radio is
-  invisible to a scan and CAT gets "Connection refused". **Next:**
-  reviews; when both are merged, delete our test branch `bt-security-js8`
-  (its main.yml has a TEST-ONLY Buildroot ref: never merge it) and add
+  invisible to a scan and CAT gets "Connection refused". **Reviews
+  2026-10-13:** #297 approved by myshak1; Buildroot #6 *changes
+  requested* by myshak1 (he'd merge both together): (a)
+  `JustWorksRepairing` back to the default (he missed our reason;
+  Claude's suggestion: `confirm`, so the window's agent decides, yes only
+  during Scan; VE7NHW to decide); (b) radios that ran the old
+  bt_start.sh keep "discoverable" in /var/lib/bluetooth and the
+  `discoverable off` can run before bluetoothd has the adapter: retry and
+  verify as bt_up.sh does, plus a non-zero DiscoverableTimeout /
+  PairableTimeout as a safety net (the window sets its own timeout for
+  Scan); (c) stale comments in bt_start.sh and #297's bt_ctl.c.
+  **Next:** those fixes, a test image (`-f buildroot_ref=bt-security`),
+  radio retest; when both are merged, delete our test branch
+  `bt-security-js8` (its main.yml has a TEST-ONLY Buildroot ref: never
+  merge it; no longer needed now that Build image has buildroot_ref) and add
   the release-note line "Bluetooth CAT: pair the phone once in the
   Bluetooth window". Phone apps: FT8TW (danleetw/FT8TW, on Google Play)
   is the FT8CN fork most use; FT8AF is newer, dev builds only.
@@ -211,8 +126,6 @@ by gdyuldin or myshak1, never merged by us alone.
   myshak1, and one cty.dat (JS8 reads #282's).
 ## To try on the radio (no programming)
 
-- [x] GPS outside: JS8's grid from the fix, the top line, *Battery clock
-  set from GPS time* once. **Works perfectly** (VE7NHW, 2026-10-12).
 - [ ] Ultra on a busy band. Busy bands fine on Fast (VE7NHW, 2026-10-12);
   Ultra needs a second Ultra station: try the two-radio bench (HL2 +
   desktop JS8Call).
@@ -221,9 +134,6 @@ by gdyuldin or myshak1, never merged by us alone.
 - [ ] POTA / SOTA spots through the gateways, when out portable anyway.
 - [ ] Screenshots for the beta 5 page and the Facebook post: `GPS` in the
   top line, an Ultra row.
-- [x] Pictures for the beta 5.1 Facebook post: not needed, VE7NHW had
-  some (2026-10-12).
-
 ## Decided: not doing
 
 So they don't come back up (VE7NHW, 2026-10-11):

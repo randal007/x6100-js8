@@ -8,6 +8,7 @@ This folder holds the plans, research and reviews behind it.
 | File | What |
 |---|---|
 | [PLAN.md](PLAN.md) | **The work list** (after beta 5), how we work with branches, and what we decided not to do |
+| [PLAN_DONE.md](PLAN_DONE.md) | Ticked PLAN.md items, moved there at each offload |
 | [feature-ideas.md](feature-ideas.md) | Brainstorm of features to pick from (APRS services, off-grid, desktop parity) |
 | [MAP_PLAN.md](MAP_PLAN.md) | Show Map design and decisions (built in beta 4) |
 | [upstream-patches.md](upstream-patches.md) | **What we carry on top of upstream** (OpenX6100) and the PRs: sent, merged, and **the plan for JS8 into OpenX6100 in four PRs** |
