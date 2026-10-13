@@ -145,6 +145,15 @@ by gdyuldin or myshak1, never merged by us alone.
   option? **Waiting for gdyuldin.** Fallback if he still says no: his
   add-on idea (JS8 as one GPL add-on from our repo, a small "load an
   add-on from the card" hook in OpenX6100).
+- [ ] **Typing a long message froze the screen** (VE7NHW on the air,
+  2026-10-12 ~04:13Z: GUI stall 23 s, scheduler queue overflow; bogs
+  past ~8 frames when typing fast). Cause: every key re-planned the whole
+  message for the "N frames, N s" count (PC, ASan: 4 ms at 20 chars, 26 ms
+  at 140; many times that on the radio). Fix on branch `typing-lag`
+  (c344509's twin on bt-security-js8): counted 350 ms after the last key,
+  as desktop (100 ms there). Harness KEYS + SAVED pass. Test image (with
+  the Bluetooth changes) run 38346620195. Radio test: type a long message
+  fast, no freeze, count appears after a pause; then PR into main.
 - [ ] **Bluetooth security, #292 points 1 + 2** (2026-10-12; Kris takes
   3, the headset PTT, in bt_audio.c). Branch `bt-security` in both
   OpenX6100 repos: x6100_gui 1d5452e (CAT's RFCOMM socket
