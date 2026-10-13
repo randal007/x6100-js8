@@ -60,15 +60,14 @@ by gdyuldin or myshak1, never merged by us alone.
   **Radio test 2026-10-12: works** (flashed c2eec93, backup
   sd-backup-2026-10-12-000900): 5-6 pairings in a row with WiFi on,
   typing, Connect during Scan, reconnect after restart without opening the
-  window, WiFi off/on; results posted on #291 and Buildroot #5. Seen, for
-  a follow-up: Connect on a keyboard's old pairing still ties the worker
-  up ~1 min (Forget waits behind it); one pairing cancelled while the old
-  bond was still saved. **Next:** reviews of #291 / Buildroot #5; then
+  window, WiFi off/on; results posted on #291 and Buildroot #5. (Seen then:
+  Connect on a keyboard's old pairing tied the worker up ~1 min; closed
+  2026-10-12, see the Bluetooth security item.) **Next:** reviews of #291 / Buildroot #5; then
   beta 5.1 (below) with this in. **Released in beta 5.1** (2026-10-12).
   #291 and Buildroot #5 approved by gdyuldin; **Buildroot #5 merged**
   2026-10-12 (our copy of patch 9002 and its CI step dropped); **#291
   merged** 2026-10-12 (OpenX6100's Bluetooth files now identical to ours).
-  Still to do: answers on #292, and the follow-up above.
+  Still to do: answers on #292 (Kris answered 2026-10-12: see below).
   **Next:** test image, radio test (pair several times with WiFi on the
   home network; headset and phone still found by Scan; keyboard still
   reconnects after power off/on), then pull requests to OpenX6100:
@@ -171,12 +170,11 @@ by gdyuldin or myshak1, never merged by us alone.
   suggested the default and our #292 reply said so): pairing is only
   possible during the window's 3-minute Scan now, and it saves the
   "wrong PIN" trap. Say so in the Buildroot PR.
-  Add to the same radio test the two leftovers from the keyboard tests
-  (2026-10-11/12): Connect on a keyboard's old entry (new address at every
-  pairing) hangs the window ~1 min, Forget waits behind it; Bluetooth
-  off/on with WiFi on left the chip deaf to LE until a reboot (seen
-  before our pairing fixes, maybe gone). What still happens goes to Kris
-  in one comment on #292.
+  The two leftovers from the keyboard tests are closed (2026-10-12):
+  Bluetooth off/on with WiFi on works now (VE7NHW); Connect on an old
+  keyboard entry waiting ~1 min was a pre-#291 entry (forget_old_keyboards
+  removes them now), and ~1 min (2 x 30 s CONN_TIMEOUT_MS) for a device
+  that's off is normal Bluetooth: nothing to do.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2) and #274 (Olivia);
   #271 (WSPR): Kris pushed both fixes asked for (beacon off on close,
   worker always joined), **approved 2026-10-12**. Before 4/4: a 4th APP
