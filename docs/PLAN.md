@@ -16,7 +16,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. Card: test image fb8769c (typing-lag + frame count thread): radio test, then PR `typing-lag` into main.
-2. Bluetooth security: #297 approved by myshak1; Buildroot #6 changes requested (2026-10-13): three fixes, then a radio retest.
+2. Bluetooth security: #297 approved; Buildroot #6 review fixes pushed 2026-10-13; test image run 38448410652 building, then a radio retest.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
 5. Ticked items move to [PLAN_DONE.md](PLAN_DONE.md) at each offload.
@@ -100,17 +100,23 @@ by gdyuldin or myshak1, never merged by us alone.
   2026-10-13:** #297 approved by myshak1; Buildroot #6 *changes
   requested* by myshak1 (he'd merge both together): (a)
   `JustWorksRepairing` back to the default (he missed our reason;
-  Claude's suggestion: `confirm`, so the window's agent decides, yes only
-  during Scan; VE7NHW to decide); (b) radios that ran the old
+  `confirm` instead, so the window's agent decides, yes only during
+  Scan: VE7NHW chose it); (b) radios that ran the old
   bt_start.sh keep "discoverable" in /var/lib/bluetooth and the
   `discoverable off` can run before bluetoothd has the adapter: retry and
   verify as bt_up.sh does, plus a non-zero DiscoverableTimeout /
   PairableTimeout as a safety net (the window sets its own timeout for
   Scan); (c) stale comments in bt_start.sh and #297's bt_ctl.c.
-  **Next:** those fixes, a test image (`-f buildroot_ref=bt-security`),
-  radio retest; when both are merged, delete our test branch
-  `bt-security-js8` (its main.yml has a TEST-ONLY Buildroot ref: never
-  merge it; no longer needed now that Build image has buildroot_ref) and add
+  **All three done 2026-10-13** (Buildroot d92cb37, x6100_gui 8fc9068:
+  also PairableTimeout set on every Scan, since bluez restarts that timer
+  only then); replies posted on #6 and #297. Test branch
+  `bt-security-js8` rebuilt as typing-lag + main + #297 (b0d6183, no
+  TEST-ONLY commit any more): *Build image* run **38448410652** with
+  `buildroot_ref=bt-security`. **Next:** flash it, radio retest (keyboard
+  pair; a phone that forgot the radio re-pairs from Scan; Scan twice,
+  still pairable after the first 3 min; from the unpaired PC hidden right
+  after power-on; FT8CN CAT), post the results on #6; when both are
+  merged, delete `bt-security-js8` and add
   the release-note line "Bluetooth CAT: pair the phone once in the
   Bluetooth window". Phone apps: FT8TW (danleetw/FT8TW, on Google Play)
   is the FT8CN fork most use; FT8AF is newer, dev builds only.
