@@ -160,6 +160,8 @@ by gdyuldin or myshak1, never merged by us alone.
     (bt_start.sh's `sdptool add SP` runs on every hci0 add); tell Kris.
   Before trying again: find out how the X6200 does it, and whether FT8CN
   can take its audio without the phone's call processing. Or WiFi audio.
+  **Asked Kris 2026-10-13: OpenX6100/x6100_gui discussion #299** (Ideas),
+  with these findings; waiting for his answer.
 
 ## To try on the radio (no programming)
 
