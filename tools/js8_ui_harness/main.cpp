@@ -963,7 +963,7 @@ int main() {
         ui_compose_clear();
         std::string lots(150, '~');
         ui_compose_append(lots.c_str());
-        pump(100);
+        pump(500); // counted once typing pauses (350 ms)
         printf("[keys] too long: '%s' (want JS8: too long: ...)\n", stub_last_msg);
         ui_compose_cancel();
         pump(200);
@@ -2710,6 +2710,7 @@ int main() {
                ui_compose_placeholder());
         printf("[saved] hint '%s'\n", stub_last_msg);
         ui_compose_append("<CALL> UR <SNR> QTH <MYGRID4>");
+        pump(500); // counted once typing pauses (350 ms)
         printf("[saved] while typing: '%s' (frames, macros counted filled in)\n", stub_last_msg);
         screenshot("s1_saved_edit.ppm");
         ui_compose_enter();

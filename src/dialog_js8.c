@@ -2914,8 +2914,25 @@ static void rotary_cb(int32_t diff) {
 
 /* ---- Compose window --------------------------------------------------- */
 
-static void compose_changed_cb(lv_event_t *e) {
-    (void)e;
+/* The frame count plans the whole message, which on the radio takes a
+ * few tenths of a second once it is past ~8 frames: done on every key,
+ * fast typing piled the keys up and froze the screen for 20 s. So it is
+ * counted once typing pauses, as desktop does (m_txTextDirtyDebounce,
+ * 100 ms there; longer here for the slower processor). */
+#define COMPOSE_COUNT_MS 350
+static lv_timer_t *compose_count_timer;
+
+static void compose_count_cancel(void) {
+    if (compose_count_timer) {
+        lv_timer_del(compose_count_timer);
+        compose_count_timer = NULL;
+    }
+}
+
+static void compose_count_cb(lv_timer_t *t) {
+    (void)t;
+    compose_count_timer = NULL; /* a one-shot: LVGL deletes it after this */
+    if (!composing) return;
     js8_tx_preview_t pv;
     char        typed[TX_TEXT_MAX * 2];
     macros_fill(textarea_window_get(), false, typed, sizeof(typed)); /* counted as it goes out */
@@ -2924,6 +2941,16 @@ static void compose_changed_cb(lv_event_t *e) {
     /* Why it can't go ("too long: 21 frames (max 20)"), as you type, not
      * the last good count frozen until Enter (B-23). */
     else if (typed[strspn(typed, " ")]) msg_update_text_fmt("JS8: %s", pv.error);
+}
+
+static void compose_changed_cb(lv_event_t *e) {
+    (void)e;
+    if (compose_count_timer) {
+        lv_timer_reset(compose_count_timer);
+        return;
+    }
+    compose_count_timer = lv_timer_create(compose_count_cb, COMPOSE_COUNT_MS, NULL);
+    lv_timer_set_repeat_count(compose_count_timer, 1);
 }
 
 /* JS8 is capitals only: take lowercase (a USB keyboard without Caps Lock,
@@ -2964,6 +2991,7 @@ static void compose_layout(bool typing) {
 
 static void compose_close(void) {
     if (!composing) return;
+    compose_count_cancel();
     textarea_window_close();
     composing = false;
     compose_layout(false);
