@@ -171,6 +171,12 @@ by gdyuldin or myshak1, never merged by us alone.
   suggested the default and our #292 reply said so): pairing is only
   possible during the window's 3-minute Scan now, and it saves the
   "wrong PIN" trap. Say so in the Buildroot PR.
+  Add to the same radio test the two leftovers from the keyboard tests
+  (2026-10-11/12): Connect on a keyboard's old entry (new address at every
+  pairing) hangs the window ~1 min, Forget waits behind it; Bluetooth
+  off/on with WiFi on left the chip deaf to LE until a reboot (seen
+  before our pairing fixes, maybe gone). What still happens goes to Kris
+  in one comment on #292.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2) and #274 (Olivia);
   #271 (WSPR): Kris pushed both fixes asked for (beacon off on close,
   worker always joined), **approved 2026-10-12**. Before 4/4: a 4th APP
@@ -186,19 +192,18 @@ by gdyuldin or myshak1, never merged by us alone.
 
 ## To try on the radio (no programming)
 
-- [ ] GPS outside: JS8's grid from the fix, the top line, *Battery clock
-  set from GPS time* once.
-- [ ] Ultra on a busy band.
+- [x] GPS outside: JS8's grid from the fix, the top line, *Battery clock
+  set from GPS time* once. **Works perfectly** (VE7NHW, 2026-10-12).
+- [ ] Ultra on a busy band. Busy bands fine on Fast (VE7NHW, 2026-10-12);
+  Ultra needs a second Ultra station: try the two-radio bench (HL2 +
+  desktop JS8Call).
 - [ ] NR held off while JS8 is open: turn NR on over CAT (radio on the
   PC's USB) and see it stay off.
 - [ ] POTA / SOTA spots through the gateways, when out portable anyway.
 - [ ] Screenshots for the beta 5 page and the Facebook post: `GPS` in the
   top line, an Ultra row.
-- [ ] Pictures for the beta 5.1 Facebook post (offered 2026-10-12, not
-  taken yet): the Bluetooth window with the keyboard connected (`*`,
-  `[kbd]`, page 2 buttons), FT8 showing a country, JS8 with text typed
-  on the Bluetooth keyboard. `~/Work/bin/x6100-screenshot` while
-  VE7NHW opens each screen; into ~/Pictures/x6100-js8-beta5.1-facebook/.
+- [x] Pictures for the beta 5.1 Facebook post: not needed, VE7NHW had
+  some (2026-10-12).
 
 ## Decided: not doing
 
