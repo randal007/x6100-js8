@@ -176,6 +176,18 @@ by gdyuldin or myshak1, never merged by us alone.
   Bluetooth; a btmon from an X6200 owner would settle it; fallback: WiFi
   with Icom's network protocol (FT8CN speaks it, IC-705), a big job.
 
+- [ ] **FT2 to play with (VE7NHW, 2026-10-13), throwaway branch
+  `bt-ft2-test`** = `bt-security-js8` + Kris's FT2 (OpenX6100 #288,
+  myshak1:ft2 76d98ce), merge d94d92b (conflicts in digital_modes.h /
+  qso_log.h: both numbers kept, JS8 2/3 + 8, FT2 4 + 9). *Build image*
+  run **38462549776** (`buildroot_ref=bt-security`), unit tests run
+  38462556518. Going back to a build without FT2 is safe: migration 5
+  stays recorded (older builds skip versions above theirs), the FT2
+  frequency rows are type 4 (ignored by FT8/FT4/JS8), a saved
+  `ft8_protocol` 2 is clamped on load. Never merge `bt-ft2-test`; delete
+  it once FT2 has been tried (FT2 comes in properly when OpenX6100
+  merges #288).
+
 ## To try on the radio (no programming)
 
 - [ ] Ultra on a busy band. Busy bands fine on Fast (VE7NHW, 2026-10-12);
