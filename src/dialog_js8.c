@@ -1018,11 +1018,10 @@ static int rx_speed_mask(void) {
 }
 
 /* The one-time decoder setup (js8_wisdom.h): no speed is decoded until the
- * FFT plans are measured; the notice box shows meanwhile (rx_start()). */
+ * FFT plans are measured; the notice banner shows meanwhile (rx_start()). */
 static bool        decoder_setup;
-static lv_obj_t   *setup_box;
-static lv_obj_t   *setup_title;
-static lv_obj_t   *setup_seg[5]; /* one a speed measured */
+static lv_obj_t   *setup_box;   /* the banner */
+static lv_obj_t   *setup_title; /* its text */
 static lv_timer_t *setup_timer;
 
 static int rx_decode_mask(void) { return decoder_setup ? 0 : rx_speed_mask(); }
@@ -2412,17 +2411,15 @@ static void on_audio(const float *samples, unsigned n, void *ctx) {
 
 /* ---- Receiver lifecycle ----------------------------------------------- */
 
-/* The decoder setup's notice: a box in the middle of the list (mock-up A
- * in docs/mockups/fftw-wisdom/), a segment for each speed measured. Over the list and the TX bar, under the popups made later. */
-#define SETUP_BOX_W 560
-#define SETUP_BOX_H 132
-#define SETUP_SEG_W 92
-
+/* The decoder setup's notice: a yellow banner over the waterfall strip
+ * (mock-up C in docs/mockups/fftw-wisdom/, VE7NHW's pick), counting the
+ * speeds measured. Over the waterfall and the status line, under the
+ * popups made later. */
 static void setup_notice_update(void) {
     unsigned done = 0;
     js8_decoder_setup_running(&done);
-    for (unsigned i = 0; i < sizeof(setup_seg) / sizeof(setup_seg[0]); i++)
-        lv_obj_set_style_bg_color(setup_seg[i], lv_color_hex(i < done ? 0x50FF50 : 0x404040), 0);
+    lv_label_set_text_fmt(setup_title, "Setting up the decoder (one time only)  %u/%u", done,
+                          js8_decoder_setup_speeds());
 }
 
 static void setup_end(void) {
@@ -2430,7 +2427,6 @@ static void setup_end(void) {
     setup_timer = NULL;
     if (setup_box) lv_obj_del(setup_box);
     setup_box = setup_title = NULL;
-    memset(setup_seg, 0, sizeof(setup_seg));
     decoder_setup = false;
 }
 
@@ -2450,37 +2446,16 @@ static void setup_notice_show(void) {
     setup_box = lv_obj_create(dialog.obj);
     lv_obj_remove_style_all(setup_box);
     lv_obj_clear_flag(setup_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
-    lv_obj_set_size(setup_box, SETUP_BOX_W, SETUP_BOX_H);
-    lv_obj_set_pos(setup_box, (DIALOG_WIDTH - SETUP_BOX_W) / 2, INSET + WF_VISIBLE + TX_BAR_H + 35);
-    lv_obj_set_style_bg_color(setup_box, lv_color_hex(0x101010), 0);
-    lv_obj_set_style_bg_opa(setup_box, LV_OPA_90, 0);
-    lv_obj_set_style_border_color(setup_box, lv_color_hex(COLOR_LIGHT_YELLOW), 0);
-    lv_obj_set_style_border_width(setup_box, 2, 0);
-    lv_obj_set_style_radius(setup_box, 8, 0);
+    lv_obj_set_size(setup_box, WIDTH, WF_VISIBLE);
+    lv_obj_set_pos(setup_box, INSET, INSET);
+    lv_obj_set_style_bg_color(setup_box, lv_color_hex(0xFFD000), 0);
+    lv_obj_set_style_bg_opa(setup_box, LV_OPA_COVER, 0);
 
     setup_title = lv_label_create(setup_box);
-    lv_obj_set_style_text_font(setup_title, &sony_30, 0);
-    lv_obj_set_style_text_color(setup_title, lv_color_white(), 0);
-    lv_label_set_text(setup_title, "Setting up the decoder");
-    lv_obj_align(setup_title, LV_ALIGN_TOP_MID, 0, 12);
-
-    lv_obj_t *note = lv_label_create(setup_box);
-    lv_obj_set_style_text_font(note, &sony_22, 0);
-    lv_obj_set_style_text_color(note, lv_color_hex(0xC0C0C0), 0);
-    lv_label_set_text(note, "One time only, about 20 s");
-    lv_obj_align(note, LV_ALIGN_TOP_MID, 0, 54);
-
-    const unsigned n = sizeof(setup_seg) / sizeof(setup_seg[0]);
-    const int      gap = 6, x0 = (SETUP_BOX_W - (int)n * SETUP_SEG_W - ((int)n - 1) * gap) / 2;
-    for (unsigned i = 0; i < n; i++) {
-        setup_seg[i] = lv_obj_create(setup_box);
-        lv_obj_remove_style_all(setup_seg[i]);
-        lv_obj_set_size(setup_seg[i], SETUP_SEG_W, 14);
-        lv_obj_set_pos(setup_seg[i], x0 + (int)i * (SETUP_SEG_W + gap), 96);
-        lv_obj_set_style_bg_opa(setup_seg[i], LV_OPA_COVER, 0);
-        lv_obj_set_style_radius(setup_seg[i], 3, 0);
-    }
+    lv_obj_set_style_text_font(setup_title, &sony_28, 0);
+    lv_obj_set_style_text_color(setup_title, lv_color_black(), 0);
     setup_notice_update();
+    lv_obj_center(setup_title);
     setup_timer = lv_timer_create(setup_timer_cb, 250, NULL);
 }
 

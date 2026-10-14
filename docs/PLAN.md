@@ -102,9 +102,9 @@ by gdyuldin or myshak1, never merged by us alone.
   **Built (cloud session 2026-10-14), PR open, waiting on VE7NHW:** branch
   `claude/fftw-wisdom-task-fwoz5u` (the cloud session's fixed name, not
   `fftw-wisdom`). `src/js8/wisdom.cpp` (DecoderSetup) + `js8_wisdom.h`;
-  no engine change. Notice: mock-up A (box over the list, a segment per
-  speed), docs/mockups/fftw-wisdom/; **VE7NHW to pick A/B/C** before the
-  merge. Closing during the setup is instant; it finishes behind and
+  no engine change. Notice: **mock-up C, VE7NHW's pick (2026-10-14)**: a
+  yellow banner over the waterfall strip counting the speeds (2/5),
+  docs/mockups/fftw-wisdom/. Closing during the setup is instant; it finishes behind and
   saves the file. **Next:** test image + radio test: first open (notice,
   time it takes: the "about 20 s" is a PC-based guess), APP during it,
   later opens with no 12-13 s pass (check the "decode pass took" lines).
