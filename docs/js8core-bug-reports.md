@@ -41,7 +41,7 @@ includes (bug 10), each its own commit, with desktop-vector checks in their
 | 10 | Missing standard includes | builds with GCC / libstdc++ | fixed (patch 1); sent in #108 |
 | 11 | Compound frames' command and SNR packed unlike desktop | everyone working a /number call | fixed (patch 16); sent in #108 |
 | 12 | ~~Ultra (JS8 60) not on Turbo's decode schedule~~ **Not a bug** | - | patch 14 withdrawn 2026-10-14: desktop decodes Ultra once at 79 symbols + start delay + 0.5 s, as js8core does (punk-kaos on #108) |
-| 13 | FFTW plans measured on every start (no wisdom kept) | slow first decode after each start (X6100: 12-13 s) | asked in Android-port#109; wisdom file on our side planned (PLAN.md) |
+| 13 | FFTW plans measured on every start (no wisdom kept) | slow first decode after each start (X6100: 12-13 s) | asked in Android-port#109 (punk-kaos: belongs in js8core, planned); wisdom file on our side planned (PLAN.md) |
 
 ### 1. A directed message's number is taken after any command
 
@@ -148,8 +148,9 @@ measuring is redone every time the decoders are built. Desktop uses the
 same flag but saves `js8call_wisdom.dat`, so it measures once ever. On the
 X6100 the first pass after opening JS8 takes 12-13 s (PC: 1.1 s, later
 passes 0.05 s; with `FFTW_ESTIMATE` 0.09 s). Asked the team what they think
-on **JS8Call-improved/Android-port#109** (2026-10-14); we're thinking of a
-wisdom file on our side (PLAN.md).
+on **JS8Call-improved/Android-port#109** (2026-10-14); punk-kaos the same
+day: it belongs in js8core, he had planned it. We're thinking of a wisdom
+file on our side (PLAN.md).
 
 ## How we checked against desktop
 

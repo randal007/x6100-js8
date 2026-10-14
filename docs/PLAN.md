@@ -87,6 +87,8 @@ by gdyuldin or myshak1, never merged by us alone.
   behind it). Mock-up first. Check who else in the GUI program uses FFTW
   (its planner isn't thread-safe). Branch e.g. `fftw-wisdom`. **Also:**
   asked JS8Call-improved what they think: **Android-port#109**
+  (punk-kaos 2026-10-14 15:04Z: makes sense in js8core, he had planned it
+  but not got to it; so a js8core version could be offered to them)
   (posted 2026-10-14, VE7NHW OK'd the text; "thinking of", not "doing").
   Note: our local patch 3 (decoders built lazily per thread) is what puts
   the measuring inside the first pass.
@@ -240,7 +242,12 @@ by gdyuldin or myshak1, never merged by us alone.
   ~6 Hz signal at Center, unmarked); the receive window follows Center
   (from the code: Center 1600 = 1500-1700, misses 1400-1500); suggested
   WSJT-X's way (decode 1400-1600 always, thin TX marker). Waiting for
-  Kris. Earlier: try it on the radio (he asked: keep the branch until
+  Kris. **Kris answered the same evening (#271, 20:22Z): agreed on both,
+  changed it as WSJT-X does in d6377057** (decodes 1400-1600 always, edges
+  outlined; "TX freq" button/knob moves a thin ~6 Hz red marker; moving it
+  no longer rebuilds the receive chain). VE7NHW's beacon reached Perth, AU
+  (40 W, amp left on, 33' EFRW). **Next:** a new wspr-test image with
+  d6377057 to retest, if VE7NHW wants. Earlier: try it on the radio (he asked: keep the branch until
   then; same JS8/Bluetooth code as 5.2 + WSPR + FT8 knob, says "beta 5.1"
   on the air); try WSPR RX, then a beacon on the dummy load
   (it opens in RX only); report on #271. Delete the branch after.
