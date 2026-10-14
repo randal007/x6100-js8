@@ -148,8 +148,9 @@ by gdyuldin or myshak1, never merged by us alone.
   20 frames, Log fields kept, encoder fix, Ultra once a slot. Not in it:
   the FT8 knob (#300, Georgy wants a rework). Notes
   docs/releases/js8-beta5.2.md; README updated. **Next:** tag, *Build image*
-  on the tag (Buildroot master), CHECKLIST steps 5-7; delete
-  `bt-security-js8`; VE7NHW deletes the merged OpenX6100 branches
+  on the tag (Buildroot master), CHECKLIST steps 5-7; keep
+  `bt-security-js8` and `wspr-test` (VE7NHW: WSPR build goes on the radio
+  next; wspr-test is based on bt-security-js8); VE7NHW deletes the merged OpenX6100 branches
   (bt-security in both repos, js8-groundwork, adif-ssb-fix,
   bt-keyboard-pairing; Claude's auto mode can't).
 - [x] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
@@ -222,7 +223,9 @@ by gdyuldin or myshak1, never merged by us alone.
   `wspr-test` = bt-security-js8 (12d374c, on the card) + main + Kris's
   #271 (91c0292): WSPR in APP page 3's free slot, JS8 stays last. *Build
   image* run **38606840476** (`buildroot_ref=bt-security`), built OK 2026-10-14. **Next:**
-  flash when VE7NHW says; try WSPR RX, then a beacon on the dummy load
+  flash next time VE7NHW is at the radio (he asked: keep the branch until
+  then; same JS8/Bluetooth code as 5.2 + WSPR + FT8 knob, says "beta 5.1"
+  on the air); try WSPR RX, then a beacon on the dummy load
   (it opens in RX only); report on #271. Delete the branch after.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2), #274 (Olivia), #271
   (WSPR, 2026-10-12, after Kris's two fixes), #296 (headset PTT,
