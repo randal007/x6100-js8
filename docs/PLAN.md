@@ -21,7 +21,8 @@ by gdyuldin or myshak1, never merged by us alone.
 3. JS8 into OpenX6100: 1/4 (#290) merged 2026-10-14; **2/4 = #301** (js8-engine) opened, waits for gdyuldin + myshak1.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
 5. JS8 part 2/4 done (#301); 3/4 (`js8-library`) once #301 merges, with JS8_RX_TEXT_LEN 640 and the FFTW wisdom fix if ready.
-6. Waiting on others: #290 (gdyuldin, nudged 2026-10-13), #300 FT8 knob, Android-port#108 (js8core), discussion #299 answered. Unexplained TX at power-up: FT8CN suspected.
+6. Helping Kris: conflict-fix PRs myshak1/x6100_gui#1-#3 (PSK31, Olivia, FT2). WSPR test image run 38606840476 building (branch wspr-test).
+7. Waiting on others: #290 (gdyuldin, nudged 2026-10-13), #300 FT8 knob, Android-port#108 (js8core), discussion #299 answered. Unexplained TX at power-up: FT8CN suspected.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
@@ -192,6 +193,25 @@ by gdyuldin or myshak1, never merged by us alone.
   the release-note line "Bluetooth CAT: pair the phone once in the
   Bluetooth window". Phone apps: FT8TW (danleetw/FT8TW, on Google Play)
   is the FT8CN fork most use; FT8AF is newer, dev builds only.
+- [ ] **Helping Kris: PSK31, Olivia, FT2 conflicts (2026-10-14, VE7NHW
+  asked).** #272 and #274 conflicted with main since the Bluetooth window
+  (both add an app on APP page 3), #288 since our #290 (JS8 and FT2 in the
+  same lists). Resolved each against OpenX6100 main (keep both; the
+  Bluetooth case's `break` restored, a plain keep-both drops it; FT2
+  numbers as agreed: dig type FT2 4, MODE_FT2 9), syntax-checked with GCC
+  12, and offered as PRs **into his own branches**: myshak1/x6100_gui#1
+  (psk31), #2 (olivia), #3 (ft2), from OpenX6100 branches
+  `psk31-merge-main`, `olivia-merge-main`, `ft2-merge-main` (delete those
+  once he has merged or closed them). Told him page 3 only holds four
+  apps, so the third of WSPR/PSK31/Olivia (and JS8 in 4/4) needs a 4th
+  APP page, his call. WSPR #271 and RTTY #276: approved and clean, waiting
+  for Kris to merge.
+- [ ] **WSPR test build (2026-10-14, VE7NHW wants to try WSPR):** branch
+  `wspr-test` = bt-security-js8 (12d374c, on the card) + main + Kris's
+  #271 (91c0292): WSPR in APP page 3's free slot, JS8 stays last. *Build
+  image* run **38606840476** (`buildroot_ref=bt-security`). **Next:**
+  flash when VE7NHW says; try WSPR RX, then a beacon on the dummy load
+  (it opens in RX only); report on #271. Delete the branch after.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2), #274 (Olivia), #271
   (WSPR, 2026-10-12, after Kris's two fixes), #296 (headset PTT,
   2026-10-13). #293 and #294 merged by gdyuldin 2026-10-12 (he answered
