@@ -102,7 +102,11 @@ by gdyuldin or myshak1, never merged by us alone.
   cancelled for **`digimodes-test`** = that + Kris's PSK31 (#272) and
   Olivia (#274), from our conflict fixes, on a new **APP page 4** (page 3
   is full: WiFi, Bluetooth, WSPR, JS8; test-only layout, the real one is
-  for Kris), *Build image* run **38637209733**.
+  for Kris), *Build image* run **38637209733** (on the card). Then + Kris's
+  **RTTY transmit #276** (approved by gdyuldin, waiting for Kris to
+  merge; merged cleanly) + the unstripped-GUI CI step: digimodes-test
+  24c9481, *Build image* run **38651955343**; flash it with core dumps set
+  up on the card before its first boot (crash hunt).
   **Next:** flash when VE7NHW says; time the one-time setup, APP during
   it, then reopen twice and read "first decode pass since JS8 opened".
   Earlier: **To a cloud session (VE7NHW 2026-10-14, using the Claude Code cloud
