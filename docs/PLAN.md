@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. Card: test image 3385886 (run 38478388820: Bluetooth incl. udev fix af4c2ae + FT8 knob fix, no FT2), flashed 2026-10-13, backup sd-backup-2026-10-13-162408. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible. **Next image: run 38513350311** (bt-security-js8 12d374c: + Ultra timing #10, the two review fixes), building 2026-10-14; flash only when VE7NHW says.
+1. Card: test image 12d374c (run 38513350311: Bluetooth incl. udev fix + FT8 knob fix + Ultra timing #10 + the two review fixes, no FT2), flashed 2026-10-14, backup sd-backup-2026-10-14-063750. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible, Ultra still decodes (two-radio bench).
 2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
@@ -51,7 +51,7 @@ by gdyuldin or myshak1, never merged by us alone.
   the same way, sent to him as information only. Patch 14 withdrawn
   (UPSTREAM.md, bug list), reverted on #108 (5a108cf4, title/body updated,
   reply with the numbers). Unit tests pass (fast + speed sets). **Next:**
-  image run 38513350311 on the card when VE7NHW says; check Ultra still
+  image run 38513350311 on the card 2026-10-14; check Ultra still
   decodes (two-radio bench); merge #10, delete the branch.
 - [x] **Code review of everything since beta 5.1 (2026-10-14, VE7NHW
   asked, after the recent crashes).** JS8 app (typing count thread,
