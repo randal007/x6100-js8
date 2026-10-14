@@ -144,9 +144,9 @@ rename).
   `dialog_js8.c` can't be compiled for ARM locally; the harness build is
   the real compile check.
 - **Unit tests** (as CI does):
-  `cmake -B build_test -DENABLE_TESTING=YES && cmake --build build_test -j --target test_js8 test_qth`,
-  then `build_test/tests/test_js8 "~[slow]"` (fast ones) and
-  `build_test/tests/test_qth`. Catch2 splits test names at commas:
+  `cmake -B build_test -DENABLE_TESTING=YES && cmake --build build_test -j --target test_js8 test_js8_db test_qth`,
+  then `build_test/tests/test_js8 "~[slow]"` (fast ones),
+  `build_test/tests/test_js8_db` and `build_test/tests/test_qth`. Catch2 splits test names at commas:
   escape `\,`.
 - **UI harness:** see [tools/js8_ui_harness/README.md](tools/js8_ui_harness/README.md).
   `ONLY_<NAME>=1` runs one scenario; audio is fed in real time, so a full
