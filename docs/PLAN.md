@@ -40,8 +40,9 @@ by gdyuldin or myshak1, never merged by us alone.
     login, the card serial and Bluetooth address. Decide where together:
     options are a copy on one of the PC's other disks (two 5.5 TB drives
     sda/sdc are attached), a USB stick, or alongside sd-backups/.
-- [ ] **Ultra decoded once a slot, as desktop (2026-10-14; engine, Ultra
-  only): PR #10, branch `ultra-timing`.** punk-kaos (Android-port's
+- [x] **Ultra decoded once a slot, as desktop (2026-10-14; engine, Ultra
+  only): PR #10, merged into main 2026-10-14 (VE7NHW: go with what was
+  agreed upstream), branch deleted.** punk-kaos (Android-port's
   developer) on #108: our patch 14 made Ultra's first decode 2.528 s into
   the slot, before the signal can be complete (2.628 s). He was right:
   desktop (`turboOrUltra`) decodes Turbo and Ultra once at 79 symbols +
@@ -51,9 +52,8 @@ by gdyuldin or myshak1, never merged by us alone.
   which the retry finds 0.4 s after desktop; Turbo (his design) holds up
   the same way, sent to him as information only. Patch 14 withdrawn
   (UPSTREAM.md, bug list), reverted on #108 (5a108cf4, title/body updated,
-  reply with the numbers). Unit tests pass (fast + speed sets). **Next:**
-  image run 38513350311 on the card 2026-10-14; check Ultra still
-  decodes (two-radio bench); merge #10, delete the branch.
+  reply with the numbers). Unit tests pass (fast + speed sets). Image run 38513350311 (with it) on the card
+  2026-10-14; the bench check moved to "To try on the radio".
 - [ ] **JS8 hangs 5-13 s when closed soon after opening: FFTW measured on
   every open (2026-10-14, VE7NHW; JS8 library, not the engine's code).**
   Seen on 12d374c: APP pressed a few seconds after opening JS8, the GUI
@@ -275,6 +275,8 @@ by gdyuldin or myshak1, never merged by us alone.
 
 ## To try on the radio (no programming)
 
+- [ ] Ultra still decodes after #10 (once a slot, 3.128 s in): two-radio
+  bench, test build 12d374c is on the card.
 - [ ] Ultra on a busy band. Busy bands fine on Fast (VE7NHW, 2026-10-12);
   Ultra needs a second Ultra station: try the two-radio bench (HL2 +
   desktop JS8Call).
