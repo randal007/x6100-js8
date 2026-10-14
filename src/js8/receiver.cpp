@@ -280,7 +280,11 @@ void Receiver::engine_log(std::string_view m) {
     auto colon   = m.find(':');
     if (colon != std::string_view::npos) ps.decodes += (unsigned)std::atoi(std::string(m.substr(colon + 1)).c_str());
     char line[176];
-    if (s > LONG_PASS_S) {
+    if (!first_logged_[lane]) {
+        first_logged_[lane] = true;
+        snprintf(line, sizeof(line), "first decode pass%s since JS8 opened took %.2f s", lane ? " (Ultra)" : "", s);
+        report(line);
+    } else if (s > LONG_PASS_S) {
         snprintf(line, sizeof(line), "decode pass%s took %.1f s", lane ? " (Ultra)" : "", s);
         report(line);
     }

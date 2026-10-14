@@ -172,6 +172,9 @@ private:
     std::mutex                            stats_mutex_;
     std::chrono::steady_clock::time_point stats_start_;
     PassStats                             stats_[2];
+    /// Each lane's first pass since JS8 opened is logged whatever it takes
+    /// (the FFT plans are made in it unless js8_wisdom.dat has them).
+    bool first_logged_[2] = {false, false};
     /// The main decode thread is in a pass: an Ultra pass ending meanwhile
     /// isn't the end of a cycle (the main pass's end is).
     std::atomic<bool> main_busy_{false};
