@@ -64,6 +64,10 @@ prerelease betas (`js8-beta5`, ...) with an SD card image on GitHub.
   check every `case ACTION_APP_*` block in `src/main_screen.c` (a lost
   `break` once opened two apps at once) and stored numbers
   ([docs/UPSTREAM_README.md](docs/UPSTREAM_README.md)).
+- **A PR that is mostly a merge** (conflicts resolved, main brought into
+  someone's branch): its "Files changed" tab is mostly other people's
+  work, so the description shows our own lines, code plus a link to each
+  (VE7NHW, 2026-10-14).
 - **js8core bugs** (the engine, `third-party/js8core`) go in
   [docs/js8core-bug-reports.md](docs/js8core-bug-reports.md) and
   `third-party/js8core/UPSTREAM.md` (our local patches, numbered).
