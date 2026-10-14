@@ -246,8 +246,9 @@ by gdyuldin or myshak1, never merged by us alone.
   for Kris to merge.
 - [ ] **PSK31 / Olivia tried on the radio (digimodes-test, 2026-10-14):**
   comments posted on #272 and #274 (VE7NHW's findings): the waterfall
-  keeps scrolling while keyed, showing our own TX audio looped back by the
-  base board (suggested: ignore capture while keyed, as JS8, pause or
+  keeps scrolling while keyed and shows blank static (not the band, not
+  our TX; TX itself fine, full power; first comment wrongly said TX audio,
+  corrected) (suggested: ignore capture while keyed, as JS8, pause or
   black rows); the scrolling flicker JS8 had (suggested, optional: our
   row averaging, avg += a*(row-avg), a 0.65/0.5/0.35). Waiting for Kris.
 - [ ] **WSPR test build (2026-10-14, VE7NHW wants to try WSPR):** branch
