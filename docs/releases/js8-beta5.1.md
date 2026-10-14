@@ -1,3 +1,5 @@
+> ⚠️ **Please use [beta 5.2](https://github.com/randal007/x6100-js8/releases/tag/js8-beta5.2) instead.** It fixes the screen freezing while typing a long message and long messages from desktop stations being cut at 255 characters, and it locks Bluetooth down (the radio hidden until you Scan, CAT over Bluetooth only for paired devices).
+
 **JS8 on the Xiegu X6100, running on the radio itself.** No PC, phone or tablet needed: the X6100 firmware (OpenX6100, gdyuldin's) with a JS8 app next to FT8 and RTTY.
 
 Beta 5.1 brings a **Bluetooth window** to pair keyboards on the radio itself, now pairing first time, every time, and an important fix: **messages to and from stations with a "/" and a number in their call** (like KG4UHM/6) were packed and read differently from desktop JS8Call. Please update if you work JS8 on the air.
