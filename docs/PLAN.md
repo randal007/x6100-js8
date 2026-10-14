@@ -260,6 +260,19 @@ by gdyuldin or myshak1, never merged by us alone.
   then; same JS8/Bluetooth code as 5.2 + WSPR + FT8 knob, says "beta 5.1"
   on the air); try WSPR RX, then a beacon on the dummy load
   (it opens in RX only); report on #271. Delete the branch after.
+- [ ] **Murus apps (WeFax, NavTex, SSTV) into OpenX6100, for Hany
+  (2026-10-14, VE7NHW).** Hany doesn't use GitHub: he hands VE7NHW a
+  tarball once an app is done, we make the PRs (Hany as author, VE7NHW
+  co-author), one per app, WeFax first. **Discussion opened:
+  OpenX6100/x6100_gui#302** (text in
+  [upstream-prs/14-murus-apps-discussion.md](upstream-prs/14-murus-apps-discussion.md));
+  VE7NHW sends Hany the link on Facebook. Open points: Hany's own files
+  carry no licence notice (needs his written OK, LGPL-2.1-or-later
+  asked); NavTex has fldigi / Franco Venturi GPL-3.0 code (to
+  third-party/); app numbers 109-111 already reserved (#283); a 4th/5th
+  APP page with Kris. Tip: keep each tarball Hany sends in git (scratch)
+  to see what changed between drops. **Waiting:** answers on #302,
+  Hany's "version 1".
 - [ ] **OpenX6100 reviews:** approved #288 (FT2), #274 (Olivia), #271
   (WSPR, 2026-10-12, after Kris's two fixes), #296 (headset PTT,
   2026-10-13). #293 and #294 merged by gdyuldin 2026-10-12 (he answered
