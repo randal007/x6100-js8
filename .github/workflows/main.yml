@@ -149,6 +149,24 @@ jobs:
         path: AetherX6100Buildroot/build/images/sdcard.${{ github.ref_name }}.img.zip
         retention-days: 30
 
+    # The GUI program before Buildroot strips it, for reading a core dump
+    # from the radio (the image's copy has no symbols). Same build, so its
+    # code is byte for byte the image's.
+    - name: Upload unstripped GUI
+      if: always()
+      continue-on-error: true
+      run: |
+        f=$(find AetherX6100Buildroot/build/build -path '*x6100*gui*' -name x6100_gui -type f -perm -u+x | head -1)
+        echo "unstripped: $f"; file "$f"
+        mkdir -p unstripped && cp "$f" unstripped/x6100_gui
+    - uses: actions/upload-artifact@v4
+      if: always()
+      continue-on-error: true
+      with:
+        name: x6100_gui-unstripped.${{ github.ref_name }}
+        path: unstripped/x6100_gui
+        retention-days: 30
+
     # Create release
     - name: Release
       uses: softprops/action-gh-release@v2
