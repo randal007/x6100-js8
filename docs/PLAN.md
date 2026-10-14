@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. Card: test image 3385886 (run 38478388820: Bluetooth incl. udev fix af4c2ae + FT8 knob fix, no FT2), flashed 2026-10-13, backup sd-backup-2026-10-13-162408. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible.
+1. Card: test image 3385886 (run 38478388820: Bluetooth incl. udev fix af4c2ae + FT8 knob fix, no FT2), flashed 2026-10-13, backup sd-backup-2026-10-13-162408. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible. **Next image: run 38513350311** (bt-security-js8 12d374c: + Ultra timing #10, the two review fixes), building 2026-10-14; flash only when VE7NHW says.
 2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
@@ -39,13 +39,42 @@ by gdyuldin or myshak1, never merged by us alone.
     login, the card serial and Bluetooth address. Decide where together:
     options are a copy on one of the PC's other disks (two 5.5 TB drives
     sda/sdc are attached), a USB stick, or alongside sd-backups/.
+- [ ] **Ultra decoded once a slot, as desktop (2026-10-14; engine, Ultra
+  only): PR #10, branch `ultra-timing`.** punk-kaos (Android-port's
+  developer) on #108: our patch 14 made Ultra's first decode 2.528 s into
+  the slot, before the signal can be complete (2.628 s). He was right:
+  desktop (`turboOrUltra`) decodes Turbo and Ultra once at 79 symbols +
+  start delay + 0.5 s (Ultra 3.128 s); patch 14 came from misreading it.
+  Measured with generated signals (scratch experiment, 20 seeds a point):
+  the early try decodes on-time signals but misses weak or late ones,
+  which the retry finds 0.4 s after desktop; Turbo (his design) holds up
+  the same way, sent to him as information only. Patch 14 withdrawn
+  (UPSTREAM.md, bug list), reverted on #108 (5a108cf4, title/body updated,
+  reply with the numbers). Unit tests pass (fast + speed sets). **Next:**
+  image run 38513350311 on the card when VE7NHW says; check Ultra still
+  decodes (two-radio bench); merge #10, delete the branch.
+- [x] **Code review of everything since beta 5.1 (2026-10-14, VE7NHW
+  asked, after the recent crashes).** JS8 app (typing count thread,
+  20-frame text size, held log fields), the test build's shared code
+  (Bluetooth CAT, Bluetooth window, FT8 knob), Buildroot bt-security
+  scripts, workflows: nothing that could crash. Our shared changes are
+  off the main-dial path (the main waterfall doesn't use lv_waterfall),
+  so the dial crash stays an OpenX6100 item. Two fixes: fe81d2a (an
+  encoder exception refuses the message instead of ending the GUI) on
+  main; fe3f68a on #297 (Bluetooth CAT off, not open to all, if
+  BT_SECURITY can't be set; comment posted). Noted: our main lacks 4
+  OpenX6100 commits (9556ce3 DNF drawn at the right place among them),
+  for the next upstream merge. Unit tests here need the scratch-copy
+  trick: this PC's GCC 16 has no static libasan (tests/CMakeLists.txt
+  links -static-libasan; CI is fine).
 - [ ] **Compound callsigns, leftovers** (the fix is in beta 5.1, see
   [PLAN_DONE.md](PLAN_DONE.md)). **Sent upstream 2026-10-13 (VE7NHW asked):
   JS8Call-improved/Android-port#108** (from randal007/Android-port,
   branch compound-cmd-desktop): the compound fix, Ultra on Turbo's
   schedule (patch 14) and the GCC includes (patch 1); the rest of our
   engine bug fixes were already in their master (#105); our other local
-  patches are features, not sent. Not built in their tree (Claude may not
+  patches are features, not sent. **Ultra on Turbo's schedule taken back
+  out 2026-10-14** (see the Ultra item). Not built in their tree (Claude may not
   build downloaded code here); the new checks pass against our copy.
   **Next:** their review; retest on the air with a "/number" station.
 - [ ] **JS8 into OpenX6100**, four pull requests one at a time
