@@ -21,7 +21,7 @@ by gdyuldin or myshak1, never merged by us alone.
 3. JS8 into OpenX6100: 1/4 (#290) merged 2026-10-14; **2/4 = #301** (js8-engine) opened, waits for gdyuldin + myshak1.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
 5. JS8 part 2/4 done (#301); 3/4 (`js8-library`) once #301 merges, with JS8_RX_TEXT_LEN 640 and the FFTW wisdom fix if ready.
-6. Helping Kris: conflict-fix PRs myshak1/x6100_gui#1-#3 (PSK31, Olivia, FT2). WSPR test image run 38606840476 building (branch wspr-test).
+6. Helping Kris: conflict-fix PRs myshak1/x6100_gui#1-#3 (PSK31, Olivia, FT2). Next test image: `digimodes-test` (5.2 + FFTW wisdom #11 + WSPR d637705 + PSK31 + Olivia + FT8 knob), run 38637209733.
 7. Waiting on others: #290 (gdyuldin, nudged 2026-10-13), #300 FT8 knob, Android-port#108 (js8core), discussion #299 answered. Unexplained TX at power-up: FT8CN suspected.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
@@ -98,7 +98,11 @@ by gdyuldin or myshak1, never merged by us alone.
   (12.2 s, then 13.1 s) was in the same GUI run, where FFTW already had
   the wisdom in memory (PC: 1.1 s, then 0.07 s): a second cause may exist.
   Test branch `wisdom-wspr-test` (main + #11 + WSPR d637705 + FT8 knob +
-  f50ef2c logging every open's first pass), image run 38633091601.
+  f50ef2c logging every open's first pass); its image run 38633091601 was
+  cancelled for **`digimodes-test`** = that + Kris's PSK31 (#272) and
+  Olivia (#274), from our conflict fixes, on a new **APP page 4** (page 3
+  is full: WiFi, Bluetooth, WSPR, JS8; test-only layout, the real one is
+  for Kris), *Build image* run **38637209733**.
   **Next:** flash when VE7NHW says; time the one-time setup, APP during
   it, then reopen twice and read "first decode pass since JS8 opened".
   Earlier: **To a cloud session (VE7NHW 2026-10-14, using the Claude Code cloud
