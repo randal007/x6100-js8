@@ -244,6 +244,16 @@ by gdyuldin or myshak1, never merged by us alone.
   apps, so the third of WSPR/PSK31/Olivia (and JS8 in 4/4) needs a 4th
   APP page, his call. WSPR #271 and RTTY #276: approved and clean, waiting
   for Kris to merge.
+- [ ] **One transmit-level (ALC) module for every digital app (2026-10-14,
+  VE7NHW: needs fixing; PSK31 and Olivia put out less than JS8 with the
+  XPA125B).** FT8's tx_worker corrects per chunk from single readings
+  (saves its offset); PSK31/Olivia/WSPR copy it but only read FT8's offset,
+  never save. Ours (tx_level.c, beta 4.6) averages, ramps, holds at the
+  ALC's onset, saves. PSK31 reads lower partly by nature (average < peak).
+  **Discussion opened: OpenX6100/x6100_gui#303** (text in
+  [upstream-prs/15-tx-level-discussion.md](upstream-prs/15-tx-level-discussion.md)):
+  offered tx_level/tx_player as a PR of their own before JS8 4/4.
+  **Next:** their answer; a JS8-vs-Olivia wattmeter comparison if useful.
 - [ ] **PSK31 / Olivia tried on the radio (digimodes-test, 2026-10-14):**
   comments posted on #272 and #274 (VE7NHW's findings): the waterfall
   keeps scrolling while keyed and shows blank static (not the band, not
