@@ -4,11 +4,14 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Beta 5.1** is the current release: a **Bluetooth window** to pair
-> keyboards on the radio itself (now pairing first time, every time), and a
-> fix for messages to and from
-> stations with a "/" and a number in their call (KG4UHM/6), which were
-> packed and read differently from desktop JS8Call
+> **Beta 5.2** is the current release: no more freezes typing a long
+> message, messages up to 20 frames as on desktop (and long ones from
+> desktop stations no longer cut short), a name or comment typed in Log QSO
+> during a QSO kept for the log at the end, and **Bluetooth locked down**:
+> the radio stays hidden until you Scan, and CAT over Bluetooth only talks
+> to paired devices ([New in beta 5.2](#new-in-beta-52)). Beta 5.1 brought
+> the **Bluetooth window** to pair keyboards on the radio itself and a fix
+> for stations with a "/" and a number in their call
 > ([New in beta 5.1](#new-in-beta-51)). Beta 5 brought the **Ultra** speed
 > (desktop's "JS8 60") decoded on its own processor core, a **USB GPS** for
 > the clock and your grid, **Bluetooth keyboards**, *Anyone have
@@ -52,6 +55,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
+- [New in beta 5.2](#new-in-beta-52)
 - [New in beta 5.1](#new-in-beta-51)
 - [New in beta 5](#new-in-beta-5)
 - [New in beta 4.7](#new-in-beta-47)
@@ -59,7 +63,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
-- [Known issues in beta 5.1](#known-issues-in-beta-51)
+- [Known issues in beta 5.2](#known-issues-in-beta-52)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -692,6 +696,9 @@ one is used.
   keyboards should work the same way; reports welcome.
 - The same window also connects Bluetooth headphones for listening and a
   phone's serial link; those are Kris's features, not tried with JS8 yet.
+- **A phone for CAT over Bluetooth** (FT8CN, FT8TW) has to be paired once
+  since beta 5.2: press **Scan** in the Bluetooth window, then pair from
+  the phone within 3 minutes. Unpaired devices can't connect.
 
 ## Speeds
 
@@ -1010,6 +1017,40 @@ version or the new one; a `.tmp` left behind is
 picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
+
+## New in beta 5.2
+
+Released 2026-10-14 ([release notes](docs/releases/js8-beta5.2.md)).
+
+- **No more freezes typing a long message.** Every key re-counted the
+  whole message's frames, and past about 8 frames the screen stalled (once
+  for 23 s on the air). The count now waits until you pause typing, as
+  desktop does, and runs on its own thread.
+- **Messages up to 20 frames, as on desktop.** The box stopped at 160
+  characters (about 10 frames); now only the 20-frame limit (5 minutes on
+  the air) stops you. **Long messages from desktop stations** were cut at
+  255 characters in the message list, History and Inbox; they now come
+  through whole.
+- **Log QSO keeps what you typed during the QSO.** A name, note or grid
+  typed in the Log popup mid-QSO and then cancelled is kept for that
+  station, and the Log at the end opens with it: one QSO, start to end.
+  Forgotten on Save, or 30 minutes after the QSO.
+- **Bluetooth locked down** (with OpenX6100: our x6100_gui#297 and
+  AetherX6100Buildroot#6, Kris SP2KMO's #296):
+  - the radio is **hidden at power-on** and can only be paired with during
+    the 3 minutes after **Scan** in the Bluetooth window (before, it was
+    visible to anyone nearby until the window had been opened once);
+  - **CAT over Bluetooth only talks to paired devices.** A phone app
+    (FT8CN, FT8TW) now needs pairing once: Scan in the Bluetooth window,
+    then pair from the phone;
+  - a Bluetooth headset's button only keys the radio from that headset.
+- **Fixed: a message the encoder couldn't take ended the GUI program**
+  instead of being refused. Never seen on the air; found in a code review.
+- **Ultra decoded once a slot, as desktop does** (3.1 s into the slot, when
+  the signal is complete). Betas 5 and 5.1 tried it early and then every
+  second, which desktop doesn't; JS8Call-improved's developer spotted it.
+- **From OpenX6100:** the low tuning limit is 100 kHz (was 500 kHz), and
+  DNF's notch is drawn at the right place.
 
 ## New in beta 5.1
 
@@ -1364,7 +1405,7 @@ with every change.
 ([Installing](#installing)) and put them back: beta 4 reads them as they
 are, and its new settings start at their defaults.
 
-## Known issues in beta 5.1
+## Known issues in beta 5.2
 
 - **Bluetooth headphones while JS8 is open:** while you listen on
   headphones the radio's speaker is turned down, so JS8's alert beeps
@@ -1373,11 +1414,15 @@ are, and its new settings start at their defaults.
   new address) keeps the Bluetooth window busy for up to a minute, and
   Forget waits until it's done. Connect the new entry instead; the old one
   goes away by itself once that's paired.
-- **Bluetooth after power-on:** until the Bluetooth window has been opened
-  once, the radio can be seen and paired with by anyone nearby, and CAT
-  over Bluetooth needs no pairing. That's in OpenX6100's shared firmware;
-  reported there (x6100_gui#292). Opening the Bluetooth window once hides
-  the radio again.
+- **Closing JS8 right after opening it can hang for 10-15 s.** The
+  decoder's first pass after JS8 opens sets up its maths from scratch
+  (FFTW timing test runs), which takes 12-13 s on the radio, and closing
+  waits for it. Wait a few seconds after opening before closing; a fix
+  that keeps the setup on the SD card is planned.
+- **Spinning the main dial very fast** has twice restarted the GUI
+  program (the radio comes back by itself in a few seconds). Seen on older
+  builds too; it's in OpenX6100's shared code, not JS8, and being looked
+  into.
 - **Not tried on the air yet:** the high-SWR protection, the APRS
   More services list, POTA and SOTA spots, position messages and email
   through the gateways, Ultra on a busy band, and the GPS grid outside.
@@ -1394,17 +1439,13 @@ are, and its new settings start at their defaults.
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
-- [x] **Typing and logging** (done, in the next beta): no more freezes typing a long
-  message, messages up to 20 frames as on desktop (the box stopped at
-  about 10), long messages from desktop stations no longer cut short, and
-  a name or comment typed in Log QSO during a QSO kept for the log at the
-  end
-- [ ] **Bluetooth security** (with OpenX6100): CAT over Bluetooth only
-  for paired devices, the radio hidden until you Scan, the headset button
-  only from the headset
-- [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is
-  [OpenX6100/x6100_gui#290](https://github.com/OpenX6100/x6100_gui/pull/290);
-  the licence is agreed (JS8 in the normal build), the engine comes next
+- [ ] **JS8 opens and closes without a pause:** the decoder's setup saved
+  on the SD card, as desktop JS8Call does, with a one-time notice the first
+  time
+- [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is in
+  ([#290](https://github.com/OpenX6100/x6100_gui/pull/290)), part 2, the
+  engine, is up for review
+  ([#301](https://github.com/OpenX6100/x6100_gui/pull/301))
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests

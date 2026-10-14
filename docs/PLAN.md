@@ -17,7 +17,7 @@ by gdyuldin or myshak1, never merged by us alone.
 **In short** (updated at each offload; details in the items below):
 1. Card: test image 12d374c (run 38513350311: Bluetooth incl. udev fix + FT8 knob fix + Ultra timing #10 + the two review fixes, no FT2), flashed 2026-10-14, backup sd-backup-2026-10-14-063750. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible, Ultra still decodes (two-radio bench).
 1b. **JS8 close hang** (new 2026-10-14): FFTW measured on every open; plan: saved wisdom + one-time notice (item below). Investigating only, no code yet; asked JS8Call-improved on Android-port#109.
-2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
+2. Bluetooth security: #297 + Buildroot #6 merged 2026-10-14 (VE7NHW); **beta 5.2** being released from main.
 3. JS8 into OpenX6100: 1/4 (#290) merged 2026-10-14; **2/4 = #301** (js8-engine) opened, waits for gdyuldin + myshak1.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
 5. JS8 part 2/4 done (#301); 3/4 (`js8-library`) once #301 merges, with JS8_RX_TEXT_LEN 640 and the FFTW wisdom fix if ready.
@@ -142,7 +142,19 @@ by gdyuldin or myshak1, never merged by us alone.
   so). The add-on idea is off. **Nudged on #290 2026-10-13 22:4xZ** (asked gdyuldin if anything is left; said 2/4 is ready to follow). **Next:** prepare 2/4 now, before #290 merges (js8-engine, with that note
   and local patch 16) once #290 is merged; 3/4 will carry
   JS8_RX_TEXT_LEN 640 (typing-lag).
-- [ ] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
+- [ ] **Beta 5.2 (2026-10-14, VE7NHW asked):** main after merging
+  OpenX6100 main (eb8589d: Bluetooth security #297 + Buildroot #6 merged
+  by VE7NHW 2026-10-14, headset PTT #296, 100 kHz, DNF) + typing-lag,
+  20 frames, Log fields kept, encoder fix, Ultra once a slot. Not in it:
+  the FT8 knob (#300, Georgy wants a rework). Notes
+  docs/releases/js8-beta5.2.md; README updated. **Next:** tag, *Build image*
+  on the tag (Buildroot master), CHECKLIST steps 5-7; delete
+  `bt-security-js8`; VE7NHW deletes the merged OpenX6100 branches
+  (bt-security in both repos, js8-groundwork, adif-ssb-fix,
+  bt-keyboard-pairing; Claude's auto mode can't).
+- [x] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
+  **Done 2026-10-14: #297 and Buildroot #6 merged by VE7NHW** (both
+  approved), in beta 5.2.
   Kris did point 3 (headset PTT only from the headset's own link):
   **x6100_gui#296, approved by VE7NHW 2026-10-13**. Ours, points 1 + 2,
   **opened 2026-10-13: x6100_gui #297** (CAT RFCOMM BT_SECURITY_MEDIUM,
