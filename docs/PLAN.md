@@ -75,7 +75,12 @@ by gdyuldin or myshak1, never merged by us alone.
   decoder starts and saved after it stops (.tmp + rename), as desktop.
   When the file is missing (first open of a new build): build the decoders
   up front, not inside the first pass, with a small notice in the JS8
-  window ("Setting up the decoder, one time only, about 15 s") until done;
+  window ("Setting up the decoder, one time only, about 15 s") until done.
+  **The setup measures all five speeds, Ultra included (VE7NHW
+  2026-10-14),** whatever is switched on, then frees the ones that are
+  off, so the file covers any speed switched on later; normal opens build
+  only the speeds switched on (keeps patch 3's memory saving). Messages
+  in the first slot or two of that one-time setup can be missed;
   **pressing APP meanwhile must not look like a freeze or crash** (keep
   the notice up while closing, or hide the window at once and finish
   behind it). Mock-up first. Check who else in the GUI program uses FFTW
