@@ -23,6 +23,9 @@
 #include "history.hpp"
 #include "tx_level.h"
 #include "js8_history.h"
+#include "js8_wisdom.h"
+#include "wisdom.hpp"
+#include "datafile.hpp"
 
 #include <unistd.h>
 #include <glob.h>
@@ -4676,4 +4679,150 @@ TEST_CASE("drive level: just short with the ALC at zero, there in the first tran
         CHECK(f[i].mean_w >= 0.28f);
         CHECK(f[i].mean_alc <= 1.0f);
     }
+}
+
+// ---- Decoder setup: FFTW wisdom (js8_wisdom.h) ----------------------------
+
+namespace {
+
+std::string wisdom_test_dir() {
+    char t[] = "/tmp/js8_wisdom_XXXXXX";
+    REQUIRE(mkdtemp(t));
+    return t;
+}
+
+std::string read_whole(const std::string &path) {
+    std::ifstream in(path, std::ios::binary);
+    return std::string(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+}
+
+// Waits for the setup thread; false if it didn't end in time.
+bool wait_setup(unsigned max_s = 300) {
+    for (unsigned i = 0; i < max_s * 10; i++) {
+        if (!js8_decoder_setup_running(nullptr)) return true;
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    return false;
+}
+
+} // namespace
+
+TEST_CASE("decoder setup: a second build with the wisdom loaded doesn't measure again", "[js8][wisdom]") {
+    using namespace x6100::js8;
+    forget_wisdom();
+    double measured = build_decoder(SUBMODE_NORMAL);
+    std::string text = export_wisdom();
+    REQUIRE(text.rfind("(fftw-", 0) == 0);
+
+    forget_wisdom();
+    REQUIRE(import_wisdom(text));
+    double loaded = build_decoder(SUBMODE_NORMAL);
+    INFO("Normal's decoder: " << measured << " s measuring, " << loaded << " s with the wisdom");
+    CHECK(loaded < measured / 2);
+    forget_wisdom();
+}
+
+TEST_CASE("decoder setup: damaged or cut-short wisdom isn't loaded", "[js8][wisdom]") {
+    using namespace x6100::js8;
+    forget_wisdom();
+    build_decoder(SUBMODE_ULTRA);
+    std::string text = export_wisdom();
+    REQUIRE(!text.empty());
+    forget_wisdom();
+    const std::string none = export_wisdom(); // FFTW's header only
+
+    CHECK_FALSE(import_wisdom(""));
+    CHECK_FALSE(import_wisdom("not wisdom at all\n"));
+    CHECK_FALSE(import_wisdom(text.substr(0, text.size() / 2)));
+    // Nothing half-loaded is left behind.
+    CHECK(export_wisdom() == none);
+}
+
+TEST_CASE("decoder setup: no file, every speed measured and the file written; read back next time", "[js8][wisdom]") {
+    using namespace x6100::js8;
+    const std::string dir  = wisdom_test_dir();
+    const std::string path = dir + "/js8_wisdom.dat";
+    DecoderSetup::get().reset();
+
+    unsigned done = 99;
+    CHECK_FALSE(js8_decoder_setup_begin(path.c_str())); // missing: the setup starts
+    CHECK(js8_decoder_setup_running(&done));
+    CHECK(done < js8_decoder_setup_speeds());
+    CHECK_FALSE(js8_decoder_setup_begin(path.c_str())); // a second open meanwhile: still running
+    REQUIRE(wait_setup());
+    js8_decoder_setup_running(&done);
+    CHECK(done == js8_decoder_setup_speeds());
+    CHECK(js8_decoder_setup_seconds() > 0);
+    CHECK(js8_decoder_setup_begin(path.c_str())); // done: the decoder can start
+
+    const std::string text = read_whole(path);
+    CHECK(text == export_wisdom());
+    CHECK_FALSE(std::filesystem::exists(path + ".tmp"));
+
+    // Every speed is in it: none of them measures again.
+    for (int speed : {SUBMODE_NORMAL, SUBMODE_FAST, SUBMODE_TURBO, SUBMODE_SLOW, SUBMODE_ULTRA}) {
+        build_decoder(speed);
+        INFO("speed bit " << speed);
+        CHECK_FALSE(wisdom_has_new(export_wisdom(), text));
+    }
+
+    // Next power-on: loaded from the file, no setup.
+    DecoderSetup::get().reset();
+    CHECK(js8_decoder_setup_begin(path.c_str()));
+    CHECK_FALSE(js8_decoder_setup_running(nullptr));
+    CHECK_FALSE(wisdom_has_new(export_wisdom(), text));
+    CHECK_FALSE(wisdom_has_new(text, export_wisdom()));
+    // Closing with nothing new learnt leaves the file alone.
+    std::filesystem::remove(path);
+    js8_decoder_setup_save(path.c_str());
+    CHECK_FALSE(std::filesystem::exists(path));
+
+    DecoderSetup::get().reset();
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("decoder setup: a damaged file is measured again and written over", "[js8][wisdom]") {
+    using namespace x6100::js8;
+    const std::string dir  = wisdom_test_dir();
+    const std::string path = dir + "/js8_wisdom.dat";
+    {
+        std::ofstream out(path);
+        out << "(fftw-3.3.10 fftwf_wisdom #x12345678\n  (garbage";
+    }
+    DecoderSetup::get().reset();
+    CHECK_FALSE(js8_decoder_setup_begin(path.c_str()));
+    REQUIRE(wait_setup());
+    CHECK(js8_decoder_setup_begin(path.c_str()));
+    const std::string text = read_whole(path);
+    CHECK(text == export_wisdom());
+
+    DecoderSetup::get().reset();
+    CHECK(js8_decoder_setup_begin(path.c_str())); // good now
+    DecoderSetup::get().reset();
+    std::filesystem::remove_all(dir);
+}
+
+TEST_CASE("decoder setup: closing saves wisdom learnt since the file was read", "[js8][wisdom]") {
+    using namespace x6100::js8;
+    const std::string dir  = wisdom_test_dir();
+    const std::string path = dir + "/js8_wisdom.dat";
+    // A file with Normal's plans only (as an older build might leave).
+    forget_wisdom();
+    build_decoder(SUBMODE_NORMAL);
+    const std::string normal_only = export_wisdom();
+    REQUIRE(write_data_file(path, normal_only));
+
+    DecoderSetup::get().reset();
+    REQUIRE(js8_decoder_setup_begin(path.c_str()));
+    js8_decoder_setup_save(path.c_str());
+    CHECK(read_whole(path) == normal_only); // nothing new yet
+
+    build_decoder(SUBMODE_TURBO); // measured: not in the file
+    js8_decoder_setup_save(path.c_str());
+    const std::string text = read_whole(path);
+    CHECK(wisdom_has_new(text, normal_only));
+    CHECK_FALSE(wisdom_has_new(export_wisdom(), text));
+
+    DecoderSetup::get().reset();
+    std::filesystem::remove_all(dir);
 }

@@ -1007,6 +1007,7 @@ All on the **DATA** partition, readable on a PC:
 | `js8_held.txt` | messages held for other stations |
 | `js8_texts.txt` | INFO, STATUS, last POTA/SOTA references, spot frequency/mode/comment, alert words, groups, operator's call |
 | `js8_saved.txt` | your [saved messages](#saved-messages), one a line (an empty line = an empty one) |
+| `js8_wisdom.dat` | the decoder's measured settings (FFTW wisdom, as desktop's `js8call_wisdom.dat`): made at the first open of a new build, which then shows *Setting up the decoder* for about 20 s. Deleting it is harmless: it is made again |
 | `js8_history.db` | the station history: every station you've exchanged messages with, per band, their INFO and STATUS, and each QSO's text with times (SQLite: any SQLite viewer opens it on a PC) |
 | `params.db`, `qso_log.db` | the radio's settings and QSO database |
 | `incoming_log.adi` | put an ADIF log here to import it (worked-before marks) at the next start |

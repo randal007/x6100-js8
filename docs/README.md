@@ -32,3 +32,4 @@ This folder holds the plans, research and reviews behind it.
 | [SPOTS_PLAN.md](SPOTS_PLAN.md) | POTA and SOTA spots over APRS (beta 2) |
 | [bug-hunt-2026-09-28.md](bug-hunt-2026-09-28.md) | The first bug hunt; every finding fixed or decided |
 | [map-mockups/](map-mockups/) | The map mock-ups the design was picked from |
+| [mockups/fftw-wisdom/](mockups/fftw-wisdom/README.md) | The decoder-setup notice mock-ups (FFTW wisdom) |

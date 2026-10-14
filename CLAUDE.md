@@ -135,8 +135,8 @@ every step, then report. Nothing may live only in this conversation.
 While JS8 is open it sets the RX filter 200–3000 Hz (restored on close),
 the TX filter 160–3000, NR/NB/DNF off, power capped at 5 W. Files on the
 DATA partition: `js8call_log.adi`, `js8_inbox.txt`, `js8_held.txt`,
-`js8_texts.txt`, `js8_saved.txt`, `js8_history.db` (written via `.tmp` +
-rename).
+`js8_texts.txt`, `js8_saved.txt`, `js8_history.db`, `js8_wisdom.dat` (the
+decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
 
 ## Build and test
 
