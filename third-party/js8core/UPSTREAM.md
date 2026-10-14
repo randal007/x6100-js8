@@ -17,8 +17,10 @@ Copied from that commit:
 
 ## Local patches
 
-Each one is its own commit on top of the pristine import, so
-`git log -- third-party/js8core` shows them.
+In randal007/x6100-js8, where they were made, each one is its own commit
+(`git log -- third-party/js8core`). In OpenX6100/x6100_gui they came in
+together, in the commit after the unchanged import, so `git diff` between
+the two shows all of them.
 
 1. **Missing standard includes.** `varicode.hpp` uses `std::function` and
    `jsc.cpp` uses `std::strncmp` without including `<functional>` /
