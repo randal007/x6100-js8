@@ -499,11 +499,13 @@ public:
 
         // Turbo can decode as soon as its 79 symbols are captured. Keep the
         // slot available for later retries, matching the desktop scheduler.
-        // Desktop schedules Ultra (I, its "JS8 60") exactly as Turbo (turboOrUltra).
+        // Ultra (I) keeps the full threshold, start delay and 0.5 s guard
+        // included, one decode a slot: desktop's samplesNeeded() for its
+        // "JS8 60" (patch 14, which gave it Turbo's path, was withdrawn).
         int samples_needed = (sm.symbol_samples * JS8_NUM_SYMBOLS) +
                             static_cast<int>((0.5 + sm.start_delay_ms / 1000.0) * sample_rate);
         int retry_samples = period;
-        if (sm.id == protocol::SubmodeId::C || sm.id == protocol::SubmodeId::I) {
+        if (sm.id == protocol::SubmodeId::C) {
           samples_needed = sm.symbol_samples * JS8_NUM_SYMBOLS;
           retry_samples = sample_rate;
         }

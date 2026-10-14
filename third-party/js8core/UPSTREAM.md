@@ -126,11 +126,18 @@ Each one is its own commit on top of the pristine import, so
     "decode window merged: the decoder was busy" at Info level: the app
     counts these to show when decoding falls behind.
 
-14. **Ultra (I, desktop's "JS8 60") scheduled as Turbo.** The decode scheduler gave only
-    Turbo (C) its early window (decode once the 79 symbols are in, retry
-    every second); Ultra got the slow modes' one decode a slot. Desktop
-    JS8Call-improved (`mainwindow.cpp`, `turboOrUltra`) treats the two
-    alike, so I now takes C's path.
+14. **Withdrawn 2026-10-14.** It gave Ultra (I, desktop's "JS8 60")
+    Turbo's early window (decode once the 79 symbols are in, retry every
+    second), on a misreading of desktop. Desktop JS8Call-improved
+    (`mainwindow.cpp`, `turboOrUltra`) decodes Turbo and Ultra once a slot
+    at `samplesNeeded()`: the 79 symbols plus the start delay plus 0.5 s,
+    which is what js8core does for I without the patch (3.128 s into
+    Ultra's 4 s slot). punk-kaos spotted it on Android-port#108: the first
+    try came at 2.528 s, before the signal (2.628 s) can be complete.
+    Measured with generated signals: the early try decodes on-time
+    signals, misses weak or late ones, which the retry then finds 0.4 s
+    after desktop would. Back to upstream's code; the number is kept so
+    the later patches keep theirs.
 
 15. **Ultra on its own decode thread, and a thread-start hook.**
     `EngineConfig::ultra_own_thread`: the engine's decode queue and
