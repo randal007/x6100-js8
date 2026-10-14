@@ -12,6 +12,7 @@ add_compile_definitions(LV_DRAW_NEON=0 JS8_RTC_FLAG_PATH="${CMAKE_BINARY_DIR}/js
                         JS8_LOG_PATH="${CMAKE_BINARY_DIR}/js8call_log.adi"
                         JS8_INBOX_PATH="${CMAKE_BINARY_DIR}/js8_inbox.txt"
                         JS8_HELD_PATH="${CMAKE_BINARY_DIR}/js8_held.txt"
+                        JS8_WISDOM_PATH="${CMAKE_BINARY_DIR}/js8_wisdom.dat"
                         JS8_SAVED_PATH="${CMAKE_BINARY_DIR}/js8_saved.txt"
                         JS8_HISTORY_PATH="${CMAKE_BINARY_DIR}/js8_history.db"
                         JS8_MAP_DATA_PATH="${X}/tools/map_data/js8_map.bin"

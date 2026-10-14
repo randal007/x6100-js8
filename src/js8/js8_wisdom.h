@@ -6,7 +6,8 @@
  *  The decoder's FFT plans are measured once ever and kept in a file on the
  *  DATA partition, as desktop JS8Call keeps js8call_wisdom.dat. Without the
  *  file (first open of a new build, or deleted) every speed's plans are
- *  measured up front by a thread of its own: about 15 s on the radio, once.
+ *  measured up front by a thread of its own, once: about 17 s on the radio
+ *  (estimated from PC timings: the four main speeds took 12-13 s there).
  *  See wisdom.hpp.
  */
 

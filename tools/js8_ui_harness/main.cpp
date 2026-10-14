@@ -8,6 +8,10 @@
 #include "widgets/lv_waterfall.h"
 #include "js8_wf.h"
 #include "js8_history.h"
+#include "js8_wisdom.h"
+LV_FONT_DECLARE(sony_22)
+LV_FONT_DECLARE(sony_28)
+LV_FONT_DECLARE(sony_30)
 #include "widgets/lv_finder.h"
 extern "C" {
 void dialog_destruct(void);
@@ -73,6 +77,7 @@ js8_history_t *dialog_js8_history(void);
 int  dialog_js8_map_stacks(const char **text);
 void dialog_js8_time_auto(bool on);
 const char *dialog_js8_st_qrz(void);
+const char *dialog_js8_setup_notice(void);
 int  dialog_js8_finder_hz(void);
 void ui_main_redraw_watch(void);
 bool ui_main_redraw_due(void);
@@ -399,6 +404,98 @@ static void feed_speeds(const std::vector<x6100::js8::TestStation> &band) {
     pump(2000);
 }
 
+// Band noise only, for `s` seconds, in real time (the waterfall moves).
+static void feed_noise(double s) {
+    static std::mt19937             rng(11);
+    std::normal_distribution<float> noise(0.0f, 0.02f);
+    std::vector<float>              audio((std::size_t)(s * RATE));
+    for (auto &x : audio) x = noise(rng);
+    const std::size_t piece = RATE / 50;
+    auto              t0    = std::chrono::steady_clock::now();
+    for (std::size_t i = 0; i < audio.size(); i += piece) {
+        unsigned n = (unsigned)std::min(piece, audio.size() - i);
+        dialog_audio_samples(n, &audio[i]);
+        auto due = t0 + std::chrono::microseconds((long long)((i + n) * 1e6 / RATE));
+        while (std::chrono::steady_clock::now() < due) pump(5);
+    }
+}
+
+// ONLY_SETUPMOCK: the decoder-setup notice options, drawn with LVGL and the
+// radio's fonts over a live JS8 screen, at the radio's positions (the dialog
+// at 2,72; the waterfall strip 6,76 788x55; the TX bar 6,131 788x30; the
+// list 6,161 788x252). docs/mockups/fftw-wisdom/.
+static lv_obj_t *mock_label(lv_obj_t *parent, const lv_font_t *font, uint32_t color, const char *text) {
+    lv_obj_t *l = lv_label_create(parent);
+    lv_obj_set_style_text_font(l, font, 0);
+    lv_obj_set_style_text_color(l, lv_color_hex(color), 0);
+    lv_label_set_text(l, text);
+    return l;
+}
+
+static void setup_mockups() {
+    lv_obj_t *top = lv_layer_top();
+    auto      clear = [&] {
+        lv_obj_clean(top);
+        pump(100);
+    };
+
+    // A: a box in the middle of the list, big text, a bar for the 5 speeds.
+    {
+        lv_obj_t *box = lv_obj_create(top);
+        lv_obj_remove_style_all(box);
+        lv_obj_set_size(box, 560, 132);
+        lv_obj_set_pos(box, 120, 196);
+        lv_obj_set_style_bg_color(box, lv_color_hex(0x101010), 0);
+        lv_obj_set_style_bg_opa(box, LV_OPA_90, 0);
+        lv_obj_set_style_border_color(box, lv_color_hex(0xFFFF30), 0);
+        lv_obj_set_style_border_width(box, 2, 0);
+        lv_obj_set_style_radius(box, 8, 0);
+        lv_obj_t *h = mock_label(box, &sony_30, 0xFFFFFF, "Setting up the decoder");
+        lv_obj_align(h, LV_ALIGN_TOP_MID, 0, 12);
+        lv_obj_t *t = mock_label(box, &sony_22, 0xC0C0C0, "One time only, about 20 s");
+        lv_obj_align(t, LV_ALIGN_TOP_MID, 0, 54);
+        for (int i = 0; i < 5; i++) {
+            lv_obj_t *seg = lv_obj_create(box);
+            lv_obj_remove_style_all(seg);
+            lv_obj_set_size(seg, 92, 14);
+            lv_obj_set_pos(seg, 38 + i * 98, 96);
+            lv_obj_set_style_bg_color(seg, lv_color_hex(i < 2 ? 0x50FF50 : 0x404040), 0);
+            lv_obj_set_style_bg_opa(seg, LV_OPA_COVER, 0);
+            lv_obj_set_style_radius(seg, 3, 0);
+        }
+        pump(200);
+        screenshot("mock_a_box.ppm");
+        clear();
+    }
+    // B: the TX bar says it, in yellow, with the speeds counted.
+    {
+        lv_obj_t *bar = mock_label(top, &sony_22, 0xFFFF30, "Setting up the decoder: one time only, about 20 s  (2/5)");
+        lv_obj_set_size(bar, 788, 30);
+        lv_obj_set_pos(bar, 6, 131);
+        lv_obj_set_style_pad_left(bar, 6, 0);
+        lv_obj_set_style_pad_top(bar, 3, 0);
+        lv_obj_set_style_bg_color(bar, lv_color_hex(0x202020), 0);
+        lv_obj_set_style_bg_opa(bar, LV_OPA_COVER, 0);
+        pump(200);
+        screenshot("mock_b_txbar.ppm");
+        clear();
+    }
+    // C: a yellow banner over the waterfall strip, black text.
+    {
+        lv_obj_t *ban = lv_obj_create(top);
+        lv_obj_remove_style_all(ban);
+        lv_obj_set_size(ban, 788, 55);
+        lv_obj_set_pos(ban, 6, 76);
+        lv_obj_set_style_bg_color(ban, lv_color_hex(0xFFD000), 0);
+        lv_obj_set_style_bg_opa(ban, LV_OPA_COVER, 0);
+        lv_obj_t *t = mock_label(ban, &sony_28, 0x000000, "Setting up the decoder (one time only)  2/5");
+        lv_obj_center(t);
+        pump(200);
+        screenshot("mock_c_banner.ppm");
+        clear();
+    }
+}
+
 static lv_obj_t *find_obj(lv_obj_t *o, const lv_obj_class_t *cls) {
     if (lv_obj_check_type(o, cls)) return o;
     for (uint32_t i = 0; i < lv_obj_get_child_cnt(o); i++)
@@ -493,6 +590,15 @@ int main() {
     if (getenv("ONLY_MODE")) stub_mode_setup();
     if (getenv("ONLY_INBOX") || getenv("ONLY_SMS") || getenv("ONLY_REPLYQ")) unlink(JS8_INBOX_PATH); // before the dialog loads it
     if (getenv("ONLY_HELD")) unlink(JS8_HELD_PATH);
+    // The decoder setup (js8_wisdom.h): without js8_wisdom.dat, the first
+    // open measures every speed's FFT plans before decoding starts. Every
+    // scenario but SETUP starts with the file there, as on a radio after
+    // its first open of a build; the first run in a build dir makes it here.
+    if (getenv("ONLY_SETUP")) unlink(JS8_WISDOM_PATH);
+    else if (!js8_decoder_setup_begin(JS8_WISDOM_PATH)) {
+        printf("[harness] no %s: the decoder setup first\n", JS8_WISDOM_PATH);
+        while (js8_decoder_setup_running(nullptr)) usleep(100000);
+    }
     if (getenv("ONLY_ROWS")) {
         // 60 messages, the oldest and #55 unread: only the newest 50 were
         // listed (bug hunt 9), so the oldest could never be opened.
@@ -569,6 +675,56 @@ int main() {
         dialog_destruct(); // what GEN does
         pump(500);
         printf("[gen] closed with the %s list open: running=%d (survived)\n", which, ui_running());
+        return 0;
+    }
+    if (getenv("ONLY_SETUP")) {
+        // The first open of a new build: no js8_wisdom.dat. Every speed's
+        // FFT plans are measured before decoding starts, with a notice; APP
+        // meanwhile closes at once and the setup finishes behind.
+        using clk = std::chrono::steady_clock;
+        feed_noise(2);
+        unsigned done = 0;
+        bool     running = js8_decoder_setup_running(&done);
+        printf("[setup] opened: notice '%s', setup running %d, %u of 5 speeds (want Setting up the decoder, 1)\n",
+               dialog_js8_setup_notice(), running, done);
+        screenshot("e0_setup_notice.ppm");
+
+        auto t0 = clk::now();
+        dialog_destruct(); // APP
+        double ms = std::chrono::duration<double, std::milli>(clk::now() - t0).count();
+        printf("[setup] APP during the setup: closed in %.0f ms, running=%d (want < 1000, 0)\n", ms, ui_running());
+        printf("[setup] the setup carries on behind: %d (want 1)\n", js8_decoder_setup_running(nullptr));
+        pump(1000);
+
+        ui_open();
+        feed_noise(2);
+        running = js8_decoder_setup_running(&done);
+        printf("[setup] reopened while it runs: notice '%s', %u of 5 speeds (want Setting up the decoder)\n",
+               running ? dialog_js8_setup_notice() : "(setup already done)", done);
+        if (running) screenshot("e1_setup_reopened.ppm");
+        for (int i = 0; i < 600 && js8_decoder_setup_running(nullptr); i++) feed_noise(0.5);
+        feed_noise(1);
+        printf("[setup] done in %.1f s: notice '%s', file %d (want empty, 1)\n", js8_decoder_setup_seconds(),
+               dialog_js8_setup_notice(), access(JS8_WISDOM_PATH, R_OK) == 0);
+        screenshot("e2_setup_done.ppm");
+
+        feed_band({{"N0XYZ", "EN34", "K2XYZ", "K2XYZ HELLO", 1320, 0.05f}});
+        printf("[setup] decoding after the setup: %d (want 1)\n", ui_list_has("HELLO") ? 1 : 0);
+        t0 = clk::now();
+        dialog_destruct();
+        ms = std::chrono::duration<double, std::milli>(clk::now() - t0).count();
+        printf("[setup] closed after it: %.0f ms (want < 1000)\n", ms);
+
+        ui_open(); // the next open: the file is there, no notice
+        pump(500);
+        printf("[setup] opened again: notice '%s', running %d (want empty, 0)\n", dialog_js8_setup_notice(),
+               js8_decoder_setup_running(nullptr));
+        dialog_destruct();
+        return 0;
+    }
+    if (getenv("ONLY_SETUPMOCK")) {
+        feed_noise(4);
+        setup_mockups();
         return 0;
     }
     if (getenv("ONLY_TXBAR")) {

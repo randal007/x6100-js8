@@ -99,6 +99,15 @@ by gdyuldin or myshak1, never merged by us alone.
   in the GUI program to clash with.
   Side note: the main decode lane is 25-38 % busy on the radio with a few
   windows waiting (rx_all on, 40 m): a separate question.
+  **Built (cloud session 2026-10-14), PR open, waiting on VE7NHW:** branch
+  `claude/fftw-wisdom-task-fwoz5u` (the cloud session's fixed name, not
+  `fftw-wisdom`). `src/js8/wisdom.cpp` (DecoderSetup) + `js8_wisdom.h`;
+  no engine change. Notice: mock-up A (box over the list, a segment per
+  speed), docs/mockups/fftw-wisdom/; **VE7NHW to pick A/B/C** before the
+  merge. Closing during the setup is instant; it finishes behind and
+  saves the file. **Next:** test image + radio test: first open (notice,
+  time it takes: the "about 20 s" is a PC-based guess), APP during it,
+  later opens with no 12-13 s pass (check the "decode pass took" lines).
 - [x] **Code review of everything since beta 5.1 (2026-10-14, VE7NHW
   asked, after the recent crashes).** JS8 app (typing count thread,
   20-frame text size, held log fields), the test build's shared code
