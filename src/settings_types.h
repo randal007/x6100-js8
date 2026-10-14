@@ -49,6 +49,7 @@ typedef enum {
      * to it does nothing now until another action is picked. */
     ACTION_APP_JS8 = 112,
     ACTION_APP_BT = 116,
+    ACTION_APP_PSK = 114,
 } press_action_t;
 
 typedef enum {
