@@ -18,9 +18,9 @@ by gdyuldin or myshak1, never merged by us alone.
 1. Card: test image 12d374c (run 38513350311: Bluetooth incl. udev fix + FT8 knob fix + Ultra timing #10 + the two review fixes, no FT2), flashed 2026-10-14, backup sd-backup-2026-10-14-063750. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible, Ultra still decodes (two-radio bench).
 1b. **JS8 close hang** (new 2026-10-14): FFTW measured on every open; plan: saved wisdom + one-time notice (item below). Investigating only, no code yet; asked JS8Call-improved on Android-port#109.
 2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
-3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
+3. JS8 into OpenX6100: 1/4 (#290) merged 2026-10-14; **2/4 = #301** (js8-engine) opened, waits for gdyuldin + myshak1.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
-5. **First next session: prepare JS8 part 2/4 (`js8-engine`)**: our #290 nudge (2026-10-13) said it's ready to open once #290 merges, but the branch doesn't exist yet.
+5. JS8 part 2/4 done (#301); 3/4 (`js8-library`) once #301 merges, with JS8_RX_TEXT_LEN 640 and the FFTW wisdom fix if ready.
 6. Waiting on others: #290 (gdyuldin, nudged 2026-10-13), #300 FT8 knob, Android-port#108 (js8core), discussion #299 answered. Unexplained TX at power-up: FT8CN suspected.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
@@ -118,8 +118,18 @@ by gdyuldin or myshak1, never merged by us alone.
 - [ ] **JS8 into OpenX6100**, four pull requests one at a time
   ([upstream-patches.md](upstream-patches.md#js8-into-openx6100-the-plan)):
   groundwork, engine (with the licence note), library + tests, app.
-  **1/4 opened
-  2026-10-11: OpenX6100/x6100_gui#290**, approved by myshak1 (his
+  **1/4 OpenX6100/x6100_gui#290: merged 2026-10-14 by VE7NHW** (approved by
+  both gdyuldin and myshak1; VE7NHW: our own fully approved PR, we merge
+  it; Claude's auto mode can't merge in OpenX6100, so VE7NHW presses it).
+  **2/4 opened 2026-10-14: OpenX6100/x6100_gui#301** (branch `js8-engine`,
+  35cbb7f, reviewers gdyuldin + myshak1): three commits, js8core as
+  published (1f8d390a), our patches, build + README *License* (GUI files
+  LGPL, js8core GPL-3.0, image GPL-3.0, corresponding source incl.
+  Buildroot `legal-info`); engine identical to main and to the radio's
+  12d374c; compiles with the image's GCC 12, no warnings. Asked gdyuldin
+  who adds `legal-info` to *Build image*. Text in
+  [upstream-prs/13-js8-engine-pr.md](upstream-prs/13-js8-engine-pr.md).
+  1/4 history: opened 2026-10-11, approved by myshak1 (his
   review: test_js8_db to expect the last migration, since FT2 #288 adds
   migration 5: done in 8479839, JS8's stored numbers written out too);
   tested on VE7NHW's radio (FT8 QSO logged right); waiting for gdyuldin.
