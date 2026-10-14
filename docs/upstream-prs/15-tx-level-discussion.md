@@ -19,7 +19,7 @@ Testing PSK31 (#272) and Olivia (#274) on my X6100 with an amplifier (XPA125B), 
   - backs off in limited steps if overdriven (ALC high) or well over the setting;
   - **saves what it learned**, so the next transmission starts at the right level.
 
-  The result is a steady power that lands on the setting, which is what the amplifier needs.
+  The result is a steady power that lands on the setting, which is what the amplifier needs. **On the air:** it has been in daily use on my station for the last couple of weeks. I drive the XPA125B with the X6100 set to just 0.3-0.4 W, all the time, and the ALC code holds that low level steady, transmission after transmission. That low-power range is exactly where the old scheme see-sawed for us.
 
 **One thing that isn't the code:** PSK31's envelope rises and falls at every phase change, so its *average* power on a wattmeter is lower than a single steady tone (FT8, JS8, Olivia, WSPR) at the same peak. Some of PSK31's lower reading is the mode itself. Olivia, though, sends one tone at a time and should reach the same power as JS8.
 
