@@ -43,6 +43,7 @@ typedef enum {
     ACTION_APP_QTH,
     ACTION_APP_CALLSIGN,
     ACTION_APP_WIFI,
+    ACTION_APP_WSPR = 113,
     /* JS8 opens from the APP menu only, not as a long-press action (#283),
      * so its number is never stored; up to beta 5 it was 111, and a key set
      * to it does nothing now until another action is picked. */
