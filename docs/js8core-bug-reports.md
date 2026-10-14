@@ -20,7 +20,8 @@ to `UPSTREAM.md`, and add it here.**
 2026-09-28. Upstream fixed 1–8 in their #105 (checked against their master
 2026-10-13). **Sent as a pull request 2026-10-13:**
 [Android-port#108](https://github.com/JS8Call-improved/Android-port/pull/108):
-bug 11 (compound calls), Ultra on Turbo's schedule (our patch 14) and the
+bug 11 (compound calls), Ultra on Turbo's schedule (our patch 14, taken
+back out 2026-10-14: see bug 12) and the
 includes (bug 10), each its own commit, with desktop-vector checks in their
 `varicode_roundtrip`.
 
@@ -39,7 +40,7 @@ includes (bug 10), each its own commit, with desktop-vector checks in their
 | 9 | `compute_drift_estimate()` one start delay short | time sync | worked around (patch 10) |
 | 10 | Missing standard includes | builds with GCC / libstdc++ | fixed (patch 1); sent in #108 |
 | 11 | Compound frames' command and SNR packed unlike desktop | everyone working a /number call | fixed (patch 16); sent in #108 |
-| 12 | Ultra (JS8 60) not on Turbo's decode schedule | Ultra decodes | fixed (patch 14); sent in #108 |
+| 12 | ~~Ultra (JS8 60) not on Turbo's decode schedule~~ **Not a bug** | - | patch 14 withdrawn 2026-10-14: desktop decodes Ultra once at 79 symbols + start delay + 0.5 s, as js8core does (punk-kaos on #108) |
 
 ### 1. A directed message's number is taken after any command
 
