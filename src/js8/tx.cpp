@@ -22,6 +22,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstring>
+#include <stdexcept>
 
 namespace x6100::js8 {
 
@@ -123,14 +124,26 @@ TxPlan plan_message(const std::string &my_call, const std::string &my_grid, cons
 
     const auto &costas = js8core::protocol::costas(sp.original_costas ? js8core::protocol::CostasType::Original
                                                                        : js8core::protocol::CostasType::Modified);
-    for (auto &[frame, bits] : frames) {
-        TxFrame f;
-        f.frame = frame.substr(0, 12);
-        f.bits  = bits;
-        js8core::legacy_encode(bits, costas, f.frame.c_str(), f.tones.data());
-        plan.frames.push_back(f);
+    // legacy_encode reads 12 characters and throws on one outside the JS8
+    // alphabet. Neither should come out of build_message_frames, but an
+    // exception left uncaught here would end the whole GUI program (this
+    // runs on the GUI thread and on the compose window's count thread):
+    // refuse the message instead.
+    try {
+        for (auto &[frame, bits] : frames) {
+            if (frame.size() < 12) throw std::runtime_error("JS8 can't encode this message");
+            TxFrame f;
+            f.frame = frame.substr(0, 12);
+            f.bits  = bits;
+            js8core::legacy_encode(bits, costas, f.frame.c_str(), f.tones.data());
+            plan.frames.push_back(f);
+        }
+        plan.preview = decode_back(plan.frames, sp);
+    } catch (const std::exception &e) {
+        plan.frames.clear();
+        plan.error = e.what();
+        return plan;
     }
-    plan.preview = decode_back(plan.frames, sp);
     if ((int)plan.frames.size() > TX_MAX_FRAMES)
         plan.error = "too long: " + std::to_string(plan.frames.size()) + " frames (max " +
                      std::to_string(TX_MAX_FRAMES) + ")";
