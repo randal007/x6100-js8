@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. Card: **WSPR test image 1de85e5** (run 38606840476: wspr-test = 12d374c + main + Kris's WSPR #271), flashed 2026-10-14, backup sd-backup-2026-10-14-121313. To check: WSPR RX, then a beacon on the dummy load; also still open from 12d374c: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible, Ultra on the bench.
+1. Card: **digimodes-test bd3bfd7** (run 38637209733: 5.2 + FFTW wisdom #11 + WSPR d637705 + PSK31 + Olivia on APP page 4 + FT8 knob), flashed 2026-10-14, backup sd-backup-2026-10-14-150624. To check: the one-time decoder setup (banner, time, APP during it, then "first decode pass since JS8 opened" on reopens), WSPR TX marker, PSK31, Olivia, the FT8 knob.
 1b. **JS8 close hang** (new 2026-10-14): FFTW measured on every open; plan: saved wisdom + one-time notice (item below). Investigating only, no code yet; asked JS8Call-improved on Android-port#109.
 2. Bluetooth security: #297 + Buildroot #6 merged 2026-10-14 (VE7NHW); **beta 5.2** released from main 2026-10-14.
 3. JS8 into OpenX6100: 1/4 (#290) merged 2026-10-14; **2/4 = #301** (js8-engine) opened, waits for gdyuldin + myshak1.
