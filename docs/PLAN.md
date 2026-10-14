@@ -16,6 +16,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. Card: test image 12d374c (run 38513350311: Bluetooth incl. udev fix + FT8 knob fix + Ultra timing #10 + the two review fixes, no FT2), flashed 2026-10-14, backup sd-backup-2026-10-14-063750. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible, Ultra still decodes (two-radio bench).
+1b. **JS8 close hang** (new 2026-10-14): FFTW measured on every open; plan: saved wisdom + one-time notice (item below). Investigating only, no code yet.
 2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
@@ -53,6 +54,36 @@ by gdyuldin or myshak1, never merged by us alone.
   reply with the numbers). Unit tests pass (fast + speed sets). **Next:**
   image run 38513350311 on the card 2026-10-14; check Ultra still
   decodes (two-radio bench); merge #10, delete the branch.
+- [ ] **JS8 hangs 5-13 s when closed soon after opening: FFTW measured on
+  every open (2026-10-14, VE7NHW; JS8 library, not the engine's code).**
+  Seen on 12d374c: APP pressed a few seconds after opening JS8, the GUI
+  stuck until the first decode pass ended ("decode pass took 12.2 s", then
+  13.1 s on the next open; scheduler queue overflow meanwhile; later passes
+  0.5-1.5 s). **Cause:** closing joins the decode threads, which stop only
+  between passes (engine.cpp ~1282), and the first pass after each open
+  builds the decoders (thread_local in legacy_decode, new threads each
+  open), whose FFTW plans use FFTW_ESTIMATE_PATIENT: without FFTW_ESTIMATE
+  that is a *measuring* planner. Desktop uses the same flag but keeps
+  `js8call_wisdom.dat` (fftwf_import_wisdom at start, export at exit,
+  mainwindow.cpp 669/1945), so it measures once ever; js8core and the
+  Android app keep no wisdom. **Measured on the PC** (scratch, one window,
+  all four main speeds): first pass 1.1 s, later 0.05 s; with
+  FFTW_ESTIMATE the first pass is 0.09 s; the radio is ~10x slower, which
+  fits 12-13 s. Leading silence in the window makes no difference
+  (checked, ruled out). No wisdom file on the radio. **Plan (VE7NHW
+  2026-10-14, no code yet):** `js8_wisdom.dat` on /mnt, loaded before the
+  decoder starts and saved after it stops (.tmp + rename), as desktop.
+  When the file is missing (first open of a new build): build the decoders
+  up front, not inside the first pass, with a small notice in the JS8
+  window ("Setting up the decoder, one time only, about 15 s") until done;
+  **pressing APP meanwhile must not look like a freeze or crash** (keep
+  the notice up while closing, or hide the window at once and finish
+  behind it). Mock-up first. Check who else in the GUI program uses FFTW
+  (its planner isn't thread-safe). Branch e.g. `fftw-wisdom`. **Also:**
+  VE7NHW wonders whether to suggest wisdom to JS8Call-improved
+  (Android-port: js8core has none); draft for him to OK before posting.
+  Side note: the main decode lane is 25-38 % busy on the radio with a few
+  windows waiting (rx_all on, 40 m): a separate question.
 - [x] **Code review of everything since beta 5.1 (2026-10-14, VE7NHW
   asked, after the recent crashes).** JS8 app (typing count thread,
   20-frame text size, held log fields), the test build's shared code
