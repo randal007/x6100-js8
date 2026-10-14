@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. Card: test image 12d374c (run 38513350311: Bluetooth incl. udev fix + FT8 knob fix + Ultra timing #10 + the two review fixes, no FT2), flashed 2026-10-14, backup sd-backup-2026-10-14-063750. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible, Ultra still decodes (two-radio bench).
+1. Card: **WSPR test image 1de85e5** (run 38606840476: wspr-test = 12d374c + main + Kris's WSPR #271), flashed 2026-10-14, backup sd-backup-2026-10-14-121313. To check: WSPR RX, then a beacon on the dummy load; also still open from 12d374c: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible, Ultra on the bench.
 1b. **JS8 close hang** (new 2026-10-14): FFTW measured on every open; plan: saved wisdom + one-time notice (item below). Investigating only, no code yet; asked JS8Call-improved on Android-port#109.
 2. Bluetooth security: #297 + Buildroot #6 merged 2026-10-14 (VE7NHW); **beta 5.2** being released from main.
 3. JS8 into OpenX6100: 1/4 (#290) merged 2026-10-14; **2/4 = #301** (js8-engine) opened, waits for gdyuldin + myshak1.
@@ -222,8 +222,9 @@ by gdyuldin or myshak1, never merged by us alone.
 - [ ] **WSPR test build (2026-10-14, VE7NHW wants to try WSPR):** branch
   `wspr-test` = bt-security-js8 (12d374c, on the card) + main + Kris's
   #271 (91c0292): WSPR in APP page 3's free slot, JS8 stays last. *Build
-  image* run **38606840476** (`buildroot_ref=bt-security`), built OK 2026-10-14. **Next:**
-  flash next time VE7NHW is at the radio (he asked: keep the branch until
+  image* run **38606840476** (`buildroot_ref=bt-security`), built OK, **on
+  the card 2026-10-14** (backup sd-backup-2026-10-14-121313). **Next:**
+  try it on the radio (he asked: keep the branch until
   then; same JS8/Bluetooth code as 5.2 + WSPR + FT8 knob, says "beta 5.1"
   on the air); try WSPR RX, then a beacon on the dummy load
   (it opens in RX only); report on #271. Delete the branch after.
