@@ -41,6 +41,7 @@ includes (bug 10), each its own commit, with desktop-vector checks in their
 | 10 | Missing standard includes | builds with GCC / libstdc++ | fixed (patch 1); sent in #108 |
 | 11 | Compound frames' command and SNR packed unlike desktop | everyone working a /number call | fixed (patch 16); sent in #108 |
 | 12 | ~~Ultra (JS8 60) not on Turbo's decode schedule~~ **Not a bug** | - | patch 14 withdrawn 2026-10-14: desktop decodes Ultra once at 79 symbols + start delay + 0.5 s, as js8core does (punk-kaos on #108) |
+| 13 | FFTW plans measured on every start (no wisdom kept) | slow first decode after each start (X6100: 12-13 s) | asked in Android-port#109; wisdom file on our side planned (PLAN.md) |
 
 ### 1. A directed message's number is taken after any command
 
@@ -139,7 +140,7 @@ own compound frames read back with the wrong command. Found on the air
 2026-10-11; fixed here as local patch 16 (desktop's two functions, checked
 bit for bit against desktop's `buildMessageFrames()`).
 
-### 12. FFTW plans measured on every start (asked, not a bug)
+### 13. FFTW plans measured on every start (asked, not a bug)
 
 The decoders' FFTW plans use `FFTW_ESTIMATE_PATIENT`, which without
 `FFTW_ESTIMATE` is a measuring planner, and js8core keeps no wisdom, so the
