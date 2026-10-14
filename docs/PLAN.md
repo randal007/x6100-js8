@@ -354,7 +354,16 @@ by gdyuldin or myshak1, never merged by us alone.
   own session:** time the GUI's first base-board messages over several
   boots; then an OpenX6100 issue for gdyuldin. Shared code, not JS8.
 
-- [ ] **GUI crash while spinning the main dial fast** (VE7NHW,
+- [ ] **GUI crash while spinning the main dial fast** (again 2026-10-14
+  22:16:19Z on digimodes-test bd3bfd7, FT8 window, 37 s after boot,
+  10 Hz steps every ~50 ms around 14.0956 MHz; **this time the log ends
+  in `realloc(): invalid pointer`**: heap corruption, likely two threads
+  on the same LVGL memory). Core dumps switched on for the running GUI
+  (prlimit + /proc core_pattern → /mnt/cores; both gone at reboot, only
+  the first crash per GUI start). *Build image* now also uploads the
+  unstripped GUI (9c9eecb, artifact `x6100_gui-unstripped.<ref>`);
+  digimodes-test rebuilt with it, run 38647101050, to read the core.
+  Earlier: (VE7NHW,
   2026-10-13, "a couple of times"): /mnt/app_logs/x6100_log_2026-10-13_
   23-31-44.txt ends mid-line 64 s after start in a run of
   `on_vfo_freq_change` (14.084-14.106 MHz, a step every ~40 ms), no error
