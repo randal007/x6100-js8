@@ -31,6 +31,9 @@ target_sources(${PROJECT_NAME} PUBLIC
     dialog_wspr.c wspr_app.c wspr_worker.c wspr_demod.c wspr_fano.c
     wspr_encode.c wspr_mod.c wspr_spec.c
     dialog_psk.c psk_rx.c psk_tx.c psk_spec.c psk_macro.c digi_qso.c
+    dialog_olivia.c olivia.c olivia_mod.c olivia_demod.c olivia_rx.c
+    olivia_resamp.c olivia_tx.c olivia_app.c olivia_macro.c
+    psk_spec.c digi_qso.c
     ft8_ui/table_view.c
     ft8_udp.c
     dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c

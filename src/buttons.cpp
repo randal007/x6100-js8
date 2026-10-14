@@ -328,6 +328,7 @@ static button_data_t  btn_js8    = make_app_btn("JS8", ACTION_APP_JS8);
 static button_data_t  btn_bt     = make_app_btn("Bluetooth", ACTION_APP_BT);
 static button_data_t  btn_wspr   = make_app_btn("WSPR", ACTION_APP_WSPR);
 static button_data_t  btn_psk    = make_app_btn("PSK31", ACTION_APP_PSK);
+static button_data_t  btn_olivia = make_app_btn("Olivia", ACTION_APP_OLIVIA);
 
 /* RTTY */
 static button_data_t btn_rtty_p1 = {
@@ -465,7 +466,7 @@ static buttons_page_t page_app_3 = {
 /* TEST build: page 3 is full, the newer digital modes get a 4th page
  * (the layout for OpenX6100 is still to agree with myshak1). */
 static buttons_page_t page_app_4 = {
-    {&btn_app_p4, &btn_psk}
+    {&btn_app_p4, &btn_psk, &btn_olivia}
 };
 
 /* RTTY */
