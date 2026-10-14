@@ -244,6 +244,12 @@ by gdyuldin or myshak1, never merged by us alone.
   apps, so the third of WSPR/PSK31/Olivia (and JS8 in 4/4) needs a 4th
   APP page, his call. WSPR #271 and RTTY #276: approved and clean, waiting
   for Kris to merge.
+- [ ] **PSK31 / Olivia tried on the radio (digimodes-test, 2026-10-14):**
+  comments posted on #272 and #274 (VE7NHW's findings): the waterfall
+  keeps scrolling while keyed, showing our own TX audio looped back by the
+  base board (suggested: ignore capture while keyed, as JS8, pause or
+  black rows); the scrolling flicker JS8 had (suggested, optional: our
+  row averaging, avg += a*(row-avg), a 0.65/0.5/0.35). Waiting for Kris.
 - [ ] **WSPR test build (2026-10-14, VE7NHW wants to try WSPR):** branch
   `wspr-test` = bt-security-js8 (12d374c, on the card) + main + Kris's
   #271 (91c0292): WSPR in APP page 3's free slot, JS8 stays last. *Build
