@@ -209,7 +209,7 @@ by gdyuldin or myshak1, never merged by us alone.
 - [ ] **WSPR test build (2026-10-14, VE7NHW wants to try WSPR):** branch
   `wspr-test` = bt-security-js8 (12d374c, on the card) + main + Kris's
   #271 (91c0292): WSPR in APP page 3's free slot, JS8 stays last. *Build
-  image* run **38606840476** (`buildroot_ref=bt-security`). **Next:**
+  image* run **38606840476** (`buildroot_ref=bt-security`), built OK 2026-10-14. **Next:**
   flash when VE7NHW says; try WSPR RX, then a beacon on the dummy load
   (it opens in RX only); report on #271. Delete the branch after.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2), #274 (Olivia), #271
