@@ -90,6 +90,13 @@ by gdyuldin or myshak1, never merged by us alone.
   (posted 2026-10-14, VE7NHW OK'd the text; "thinking of", not "doing").
   Note: our local patch 3 (decoders built lazily per thread) is what puts
   the measuring inside the first pass.
+  **To a cloud session (VE7NHW 2026-10-14, using the Claude Code cloud
+  credits, which expire 2026-11-04):** brief in
+  [tasks/fftw-wisdom.md](tasks/fftw-wisdom.md); it opens a PR on branch
+  `fftw-wisdom`, then image + radio test here. Then the same credits for a
+  deep bug review of JS8 parts 3 and 4 (library + app) before they go to
+  OpenX6100. FFTW is used only by the decoder (checked): no other planner
+  in the GUI program to clash with.
   Side note: the main decode lane is 25-38 % busy on the radio with a few
   windows waiting (rx_all on, 40 m): a separate question.
 - [x] **Code review of everything since beta 5.1 (2026-10-14, VE7NHW
