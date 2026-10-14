@@ -234,7 +234,13 @@ by gdyuldin or myshak1, never merged by us alone.
   #271 (91c0292): WSPR in APP page 3's free slot, JS8 stays last. *Build
   image* run **38606840476** (`buildroot_ref=bt-security`), built OK, **on
   the card 2026-10-14** (backup sd-backup-2026-10-14-121313). **Next:**
-  try it on the radio (he asked: keep the branch until
+  **Tried 2026-10-14 (VE7NHW):** RX decodes; a beacon was sent and VE7NHW
+  saw it on PSK Reporter. Findings posted on #271 (comment
+  6177106854): the red bar is the 200 Hz receive window, not TX (TX is a
+  ~6 Hz signal at Center, unmarked); the receive window follows Center
+  (from the code: Center 1600 = 1500-1700, misses 1400-1500); suggested
+  WSJT-X's way (decode 1400-1600 always, thin TX marker). Waiting for
+  Kris. Earlier: try it on the radio (he asked: keep the branch until
   then; same JS8/Bluetooth code as 5.2 + WSPR + FT8 knob, says "beta 5.1"
   on the air); try WSPR RX, then a beacon on the dummy load
   (it opens in RX only); report on #271. Delete the branch after.
