@@ -92,7 +92,16 @@ by gdyuldin or myshak1, never merged by us alone.
   (posted 2026-10-14, VE7NHW OK'd the text; "thinking of", not "doing").
   Note: our local patch 3 (decoders built lazily per thread) is what puts
   the measuring inside the first pass.
-  **To a cloud session (VE7NHW 2026-10-14, using the Claude Code cloud
+  **Done by the cloud session: PR #11** (branch
+  claude/fftw-wisdom-task-fwoz5u; notice option C picked by VE7NHW;
+  reviewed here, nothing wrong). **But:** the radio's second open
+  (12.2 s, then 13.1 s) was in the same GUI run, where FFTW already had
+  the wisdom in memory (PC: 1.1 s, then 0.07 s): a second cause may exist.
+  Test branch `wisdom-wspr-test` (main + #11 + WSPR d637705 + FT8 knob +
+  f50ef2c logging every open's first pass), image run 38633091601.
+  **Next:** flash when VE7NHW says; time the one-time setup, APP during
+  it, then reopen twice and read "first decode pass since JS8 opened".
+  Earlier: **To a cloud session (VE7NHW 2026-10-14, using the Claude Code cloud
   credits, which expire 2026-11-04):** brief in
   [tasks/fftw-wisdom.md](tasks/fftw-wisdom.md); it opens a PR on branch
   `fftw-wisdom`, then image + radio test here. Then the same credits for a
