@@ -16,7 +16,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. Card: test image 12d374c (run 38513350311: Bluetooth incl. udev fix + FT8 knob fix + Ultra timing #10 + the two review fixes, no FT2), flashed 2026-10-14, backup sd-backup-2026-10-14-063750. To check: the FT8 knob (#300), a phone connecting during Scan leaves the radio visible, Ultra still decodes (two-radio bench).
-1b. **JS8 close hang** (new 2026-10-14): FFTW measured on every open; plan: saved wisdom + one-time notice (item below). Investigating only, no code yet.
+1b. **JS8 close hang** (new 2026-10-14): FFTW measured on every open; plan: saved wisdom + one-time notice (item below). Investigating only, no code yet; asked JS8Call-improved on Android-port#109.
 2. Bluetooth security: radio retest passed 2026-10-13 (plus udev fix af4c2ae); #297 + Buildroot #6 wait for Kris to merge.
 3. JS8 into OpenX6100: 1/4 (#290) waits for gdyuldin; licence settled.
 4. Workflow clean-up: one status list, PLAN_DONE archive, buildroot_ref (done 2026-10-13); CLAUDE.local.md backup place to decide.
@@ -80,8 +80,10 @@ by gdyuldin or myshak1, never merged by us alone.
   the notice up while closing, or hide the window at once and finish
   behind it). Mock-up first. Check who else in the GUI program uses FFTW
   (its planner isn't thread-safe). Branch e.g. `fftw-wisdom`. **Also:**
-  VE7NHW wonders whether to suggest wisdom to JS8Call-improved
-  (Android-port: js8core has none); draft for him to OK before posting.
+  asked JS8Call-improved what they think: **Android-port#109**
+  (posted 2026-10-14, VE7NHW OK'd the text; "thinking of", not "doing").
+  Note: our local patch 3 (decoders built lazily per thread) is what puts
+  the measuring inside the first pass.
   Side note: the main decode lane is 25-38 % busy on the radio with a few
   windows waiting (rx_all on, 40 m): a separate question.
 - [x] **Code review of everything since beta 5.1 (2026-10-14, VE7NHW

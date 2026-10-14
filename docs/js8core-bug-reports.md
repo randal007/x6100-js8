@@ -138,6 +138,17 @@ own compound frames read back with the wrong command. Found on the air
 2026-10-11; fixed here as local patch 16 (desktop's two functions, checked
 bit for bit against desktop's `buildMessageFrames()`).
 
+### 12. FFTW plans measured on every start (asked, not a bug)
+
+The decoders' FFTW plans use `FFTW_ESTIMATE_PATIENT`, which without
+`FFTW_ESTIMATE` is a measuring planner, and js8core keeps no wisdom, so the
+measuring is redone every time the decoders are built. Desktop uses the
+same flag but saves `js8call_wisdom.dat`, so it measures once ever. On the
+X6100 the first pass after opening JS8 takes 12-13 s (PC: 1.1 s, later
+passes 0.05 s; with `FFTW_ESTIMATE` 0.09 s). Asked the team what they think
+on **JS8Call-improved/Android-port#109** (2026-10-14); we're thinking of a
+wisdom file on our side (PLAN.md).
+
 ## How we checked against desktop
 
 Desktop's `Varicode.cpp` and `JS8_JSC` build on their own with Qt 6
