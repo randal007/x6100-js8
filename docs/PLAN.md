@@ -17,9 +17,9 @@ by gdyuldin or myshak1, never merged by us alone.
 **In short** (updated at each offload; details in the items below):
 1. **Card:** test build `digimodes-test` 24c9481 (beta 5.2 + FFTW wisdom PR #11 + WSPR/PSK31/Olivia/RTTY TX from Kris's PRs + FT8 knob), flashed 2026-10-14 17:36 local, backup sd-backup-2026-10-14-173552, **test-only core dumps in /usr/sbin/x6100_daemon** (to /mnt/cores). First boot not yet seen.
 2. **Next on the radio:** catch the dial crash on that first boot (FT8, spin the knob; `realloc(): invalid pointer`, crashes cluster on a build's first boot), read the core with the unstripped GUI (builds/ci-38651955343/unstripped/); time the decoder setup banner and read "first decode pass since JS8 opened" on reopens (the second-open puzzle); try RTTY TX, WSPR marker, PSK31, Olivia.
-3. **Released:** beta 5.2 (2026-10-14). JS8 into OpenX6100: 1/4 #290 merged, **2/4 #301** waits for review; 3/4 next (with the FFTW wisdom fix once radio-tested).
+3. **Released:** beta 5.2 (2026-10-14). JS8 into OpenX6100: 1/4 #290 merged, **2/4 #301** waits for review; 3/4 next (with the FFTW wisdom fix, radio-tested and on main 2026-10-15).
 4. **Open with others:** Kris: merge WSPR/RTTY, conflict-fix PRs myshak1/x6100_gui#1-3, replies on #272/#274; discussions #302 (Murus apps, Hany's licence) and #303 (one transmit-level module); Georgy: #301, #300 rework.
-5. **Cloud credits** ($100, expire 2026-11-04, only via sessions VE7NHW starts on claude.ai/code): FFTW wisdom done (PR #11); next a deep review of JS8 parts 3+4.
+5. **Cloud credits** ($100, expire 2026-11-04, only via sessions VE7NHW starts on claude.ai/code): FFTW wisdom done (PR #11, merged 2026-10-15); next a deep review of JS8 parts 3+4.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
@@ -38,7 +38,7 @@ by gdyuldin or myshak1, never merged by us alone.
     login, the card serial and Bluetooth address. Decide where together:
     options are a copy on one of the PC's other disks (two 5.5 TB drives
     sda/sdc are attached), a USB stick, or alongside sd-backups/.
-- [ ] **JS8 hangs 5-13 s when closed soon after opening: FFTW measured on
+- [x] **JS8 hangs 5-13 s when closed soon after opening: FFTW measured on
   every open (2026-10-14, VE7NHW; JS8 library, not the engine's code).**
   Seen on 12d374c: APP pressed a few seconds after opening JS8, the GUI
   stuck until the first decode pass ended ("decode pass took 12.2 s", then
@@ -92,6 +92,12 @@ by gdyuldin or myshak1, never merged by us alone.
   up on the card before its first boot (crash hunt).
   **Next:** flash when VE7NHW says; time the one-time setup, APP during
   it, then reopen twice and read "first decode pass since JS8 opened".
+  **Done 2026-10-15: radio-tested by VE7NHW on digimodes-test** (the setup
+  runs once after a new image, decodes from the start on every boot after,
+  and JS8 closes at once when closed a few seconds after opening, first and
+  second open alike: the second-open puzzle didn't show). **PR #11 merged
+  into main** (1b36ead; main merged into the branch first, PLAN.md conflict
+  only). Goes to OpenX6100 with 3/4.
   Earlier: **To a cloud session (VE7NHW 2026-10-14, using the Claude Code cloud
   credits, which expire 2026-11-04):** brief in
   [tasks/fftw-wisdom.md](tasks/fftw-wisdom.md); it opens a PR on branch
@@ -140,7 +146,7 @@ by gdyuldin or myshak1, never merged by us alone.
   and local patch 16) once #290 is merged; 3/4 will carry
   JS8_RX_TEXT_LEN 640 (typing-lag).
   **2026-10-14: #290 merged (VE7NHW, both approved), 2/4 opened as #301.**
-  3/4 also carries the FFTW wisdom fix (PR #11) once radio-tested.
+  3/4 also carries the FFTW wisdom fix (PR #11, on main since 2026-10-15).
 - [ ] **Helping Kris: PSK31, Olivia, FT2 conflicts (2026-10-14, VE7NHW
   asked).** #272 and #274 conflicted with main since the Bluetooth window
   (both add an app on APP page 3), #288 since our #290 (JS8 and FT2 in the

@@ -1440,9 +1440,9 @@ are, and its new settings start at their defaults.
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
-- [ ] **JS8 opens and closes without a pause:** the decoder's setup saved
+- [x] **JS8 opens and closes without a pause:** the decoder's setup saved
   on the SD card, as desktop JS8Call does, with a one-time notice the first
-  time (built, being tested on the radio)
+  time (tested on the radio, in the next release)
 - [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is in
   ([#290](https://github.com/OpenX6100/x6100_gui/pull/290)), part 2, the
   engine, is up for review
