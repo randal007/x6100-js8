@@ -16,7 +16,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. **Card:** test build `digimodes-test` 24c9481 (beta 5.2 + FFTW wisdom + WSPR/PSK31/Olivia/RTTY TX from Kris's PRs + FT8 knob), flashed 2026-10-14 17:36, backup sd-backup-2026-10-14-173552, **test-only core dumps in /usr/sbin/x6100_daemon** (to /mnt/cores). Boots fine; FFTW wisdom radio-tested OK.
-2. **Next on the radio:** the dial crash (FT8, spin the knob fast; if the GUI restarts, USB console on DEV, fetch /mnt/cores, read it with builds/ci-38651955343/unstripped/); try RTTY TX, the new WSPR marker, PSK31, Olivia.
+2. **Next on the radio:** flash digimodes-test afd514e (run 38761835319) when built, test #304 (zoom: floor stays put) and #305 (S-meter offset), post results; the dial crash (FT8, spin the knob fast; if the GUI restarts, USB console on DEV, fetch /mnt/cores, read it with builds/ci-38651955343/unstripped/); try RTTY TX, the new WSPR marker, PSK31, Olivia.
 3. **On main, not released:** FFTW wisdom (PR #11, merged 2026-10-15). JS8 into OpenX6100: 1/4 #290 merged, **2/4 #301** waits for review; 3/4 next (library + tests + the wisdom fix).
 4. **Murus apps:** drop on `murus-drops`, cloud brief docs/tasks/murus-apps.md (Part 1 next); Hany to OK LGPL headers on #302.
    **Open with others:** Georgy: #301, #300 rework; Kris: merge WSPR/RTTY, our conflict-fix PRs myshak1/x6100_gui#1-3, replies on #272/#274; discussions #302 (Murus apps) and #303 (transmit level). Android-port#108 merged 2026-10-14.
@@ -160,7 +160,10 @@ by gdyuldin or myshak1, never merged by us alone.
   2 WeFax, 3 SSTV, 4 Channel List; NavTex and DSC later. Each session
   pushes a branch + draft PR into `ox-main` here; this PC compile-checks,
   test image, radio test, then the real OpenX6100 PR. **Order and layout (VE7NHW 2026-10-15):**
-  Kris's apps go in first; APP page 3 WiFi, BT, WSPR, JS8; page 4 PSK31,
+  Kris's apps go in first; **S-meter offset and zoom auto-level fix
+  sent straight away as #305 / #304** (branches s-meter-offset,
+  zoom-auto-levels, Hany as author; radio test in digimodes-test afd514e,
+  Build image run 38761835319). APP page 3 WiFi, BT, WSPR, JS8; page 4 PSK31,
   Olivia, WeFax, SSTV; page 5 NavTex, DSC (as digimodes-test); numbers
   unchanged. **Waiting:** Hany's
   OK on the headers; Randal starts the Part 1 session.

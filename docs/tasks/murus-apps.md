@@ -43,8 +43,8 @@ tests it on the radio, then pushes it to OpenX6100 and opens the real PR.
 | `src/ui_list.c/.h`, `src/app_info.c/.h` | new: list widget and Info window (the apps' credits) used by WeFax, NavTex, SSTV, DSC | Part 1 |
 | `src/recorder.c` | the recorder writes **WAV, mono, 12 kHz, 16-bit** (was MP3 at the capture rate), the format the apps' *Test* function plays back; also `mkdir` of the folder, `localtime_r` | Part 1 (changes every user's recordings: say so in the PR, ask Georgy) |
 | `src/spectrum.c` | tuning markers for WeFax (1075/1925 Hz), NavTex and DSC (915/1085 Hz): includes each app's header and asks `dialog_*_is_active()` | Part 1 (see below) |
-| `src/cfg/settings_manager.h`, `cfg_api.*`, `settings/settings_page_ui.cpp`, `src/dsp.cpp` | **S-meter offset** setting (-30..+30 dB, display and CAT) | Part 1b, its own PR |
-| `src/dsp.cpp` | auto levels add `zoom_level_offset` (the noise floor climbed 3 dB per zoom step) | Part 1c, its own PR |
+| `src/cfg/settings_manager.h`, `cfg_api.*`, `settings/settings_page_ui.cpp`, `src/dsp.cpp` | **S-meter offset** setting (-30..+30 dB, display and CAT) | **sent: #305** (leave out) |
+| `src/dsp.cpp` | auto levels add `zoom_level_offset` (the noise floor climbed 3 dB per zoom step) | **sent: #304** (leave out) |
 | `src/cfg/settings_manager.h` | `HF_MIN_FREQ` 500 kHz to 100 kHz | **drop:** already in OpenX6100 (#294) |
 | `src/settings_types.h` | `ACTION_APP_WEFAX/NAVTEX/SSTV/DSC` | each app's own PR, with its number written out (see the comment there on ox-main) |
 | `src/buttons.cpp` | app buttons, a 4th APP page | each app's own PR (see below) |
@@ -118,10 +118,9 @@ app's header**: e.g. `spectrum_set_markers(int from_hz, int to_hz)` /
 `spectrum_clear_markers()`, which an app calls when it opens and closes (one
 commit of ours on top of Hany's; Georgy asked for exactly this kind of
 change on #300). Nothing visible to a user until an app uses it, except the
-recorder's WAV. Also, as **two separate small branches** from `ox-main`:
-**Part 1b** `murus-smeter-offset` (the S-meter offset setting) and
-**Part 1c** `murus-zoom-levels` (the auto-level fix at zoom), each with its
-own draft PR.
+recorder's WAV. (The S-meter offset and the zoom auto-level fix are **done**: sent from
+Randal's PC as OpenX6100/x6100_gui #305 and #304, 2026-10-15. Leave
+them out.)
 
 **Part 2: WeFax.** Branch `murus-wefax`, cut from `murus-groundwork` (it
 needs it). `dialog_wefax*`, `src/wefax/`, `wefax_stations.txt`, its
@@ -153,7 +152,8 @@ working on it). Each gets its own part here when its drop arrives.
 Each session updates its own line here (on its branch is fine; Randal's
 session copies it to main).
 
-- Part 1 (`murus-groundwork`, `murus-smeter-offset`, `murus-zoom-levels`): not started
+- Part 1 (`murus-groundwork`): not started
+- Parts 1b/1c: sent as OpenX6100 #305 (S-meter offset) and #304 (zoom levels), 2026-10-15
 - Part 2 (`murus-wefax`): not started (needs Part 1)
 - Part 3 (`murus-sstv`): not started (needs Part 1)
 - Part 4 (`murus-channels`): not started
