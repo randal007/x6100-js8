@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. Card: **digimodes-test bd3bfd7** (run 38637209733: 5.2 + FFTW wisdom #11 + WSPR d637705 + PSK31 + Olivia on APP page 4 + FT8 knob), flashed 2026-10-14, backup sd-backup-2026-10-14-150624. To check: the one-time decoder setup (banner, time, APP during it, then "first decode pass since JS8 opened" on reopens), WSPR TX marker, PSK31, Olivia, the FT8 knob.
+1. Card: **digimodes-test 24c9481** (run 38651955343: 5.2 + FFTW wisdom #11 + WSPR d637705 + PSK31 + Olivia (APP page 4) + RTTY transmit #276 + FT8 knob), flashed 2026-10-14, backup sd-backup-2026-10-14-173552. **TEST-ONLY edit on the card:** /usr/sbin/x6100_daemon dumps a core of every GUI crash to /mnt/cores (gone with the next flash); the unstripped GUI is in builds/ci-38651955343/unstripped/. To check: the dial crash on first boot (FT8, spin the knob), the decoder setup banner, RTTY TX, WSPR marker, PSK31, Olivia, FT8 knob.
 1b. **JS8 close hang** (new 2026-10-14): FFTW measured on every open; plan: saved wisdom + one-time notice (item below). Investigating only, no code yet; asked JS8Call-improved on Android-port#109.
 2. Bluetooth security: #297 + Buildroot #6 merged 2026-10-14 (VE7NHW); **beta 5.2** released from main 2026-10-14.
 3. JS8 into OpenX6100: 1/4 (#290) merged 2026-10-14; **2/4 = #301** (js8-engine) opened, waits for gdyuldin + myshak1.
