@@ -110,7 +110,9 @@ by gdyuldin or myshak1, never merged by us alone.
   patches are features, not sent. **Ultra on Turbo's schedule taken back
   out 2026-10-14** (see the Ultra item). Not built in their tree (Claude may not
   build downloaded code here); the new checks pass against our copy.
-  **Next:** their review; retest on the air with a "/number" station.
+  **Merged 2026-10-14 15:02Z by punk-kaos** (the compound fix and the
+  includes; the Ultra commit reverted there too). **Next:** retest on the
+  air with a "/number" station.
 - [ ] **JS8 into OpenX6100**, four pull requests one at a time
   ([upstream-patches.md](upstream-patches.md#js8-into-openx6100-the-plan)):
   groundwork, engine (with the licence note), library + tests, app.

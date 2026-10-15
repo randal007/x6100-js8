@@ -23,7 +23,7 @@ to `UPSTREAM.md`, and add it here.**
 bug 11 (compound calls), Ultra on Turbo's schedule (our patch 14, taken
 back out 2026-10-14: see bug 12) and the
 includes (bug 10), each its own commit, with desktop-vector checks in their
-`varicode_roundtrip`.
+`varicode_roundtrip`. **Merged 2026-10-14 by punk-kaos.**
 
 ## Bugs
 
@@ -38,8 +38,8 @@ includes (bug 10), each its own commit, with desktop-vector checks in their
 | 7 | Ready decode windows dropped while a decode runs | missed decodes | fixed (patch 8) |
 | 8 | Decoder arrays read before being written | nothing decodes (heap builds) | fixed (patch 5) |
 | 9 | `compute_drift_estimate()` one start delay short | time sync | worked around (patch 10) |
-| 10 | Missing standard includes | builds with GCC / libstdc++ | fixed (patch 1); sent in #108 |
-| 11 | Compound frames' command and SNR packed unlike desktop | everyone working a /number call | fixed (patch 16); sent in #108 |
+| 10 | Missing standard includes | builds with GCC / libstdc++ | fixed (patch 1); merged upstream in #108 |
+| 11 | Compound frames' command and SNR packed unlike desktop | everyone working a /number call | fixed (patch 16); merged upstream in #108 |
 | 12 | ~~Ultra (JS8 60) not on Turbo's decode schedule~~ **Not a bug** | - | patch 14 withdrawn 2026-10-14: desktop decodes Ultra once at 79 symbols + start delay + 0.5 s, as js8core does (punk-kaos on #108) |
 | 13 | FFTW plans measured on every start (no wisdom kept) | slow first decode after each start (X6100: 12-13 s) | asked in Android-port#109 (punk-kaos: belongs in js8core, planned); wisdom file on our side planned (PLAN.md) |
 
