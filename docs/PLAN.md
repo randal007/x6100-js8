@@ -18,7 +18,8 @@ by gdyuldin or myshak1, never merged by us alone.
 1. **Card:** test build `digimodes-test` 24c9481 (beta 5.2 + FFTW wisdom + WSPR/PSK31/Olivia/RTTY TX from Kris's PRs + FT8 knob), flashed 2026-10-14 17:36, backup sd-backup-2026-10-14-173552, **test-only core dumps in /usr/sbin/x6100_daemon** (to /mnt/cores). Boots fine; FFTW wisdom radio-tested OK.
 2. **Next on the radio:** the dial crash (FT8, spin the knob fast; if the GUI restarts, USB console on DEV, fetch /mnt/cores, read it with builds/ci-38651955343/unstripped/); try RTTY TX, the new WSPR marker, PSK31, Olivia.
 3. **On main, not released:** FFTW wisdom (PR #11, merged 2026-10-15). JS8 into OpenX6100: 1/4 #290 merged, **2/4 #301** waits for review; 3/4 next (library + tests + the wisdom fix).
-4. **Open with others:** Georgy: #301, #300 rework; Kris: merge WSPR/RTTY, our conflict-fix PRs myshak1/x6100_gui#1-3, replies on #272/#274; discussions #302 (Murus apps) and #303 (transmit level). Android-port#108 merged 2026-10-14.
+4. **Murus apps:** drop on `murus-drops`, cloud brief docs/tasks/murus-apps.md (Part 1 next); Hany to OK LGPL headers on #302.
+   **Open with others:** Georgy: #301, #300 rework; Kris: merge WSPR/RTTY, our conflict-fix PRs myshak1/x6100_gui#1-3, replies on #272/#274; discussions #302 (Murus apps) and #303 (transmit level). Android-port#108 merged 2026-10-14.
 5. **Cloud credits** ($100, expire 2026-11-04, sessions VE7NHW starts on claude.ai/code): next a deep review of JS8 parts 3+4.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
@@ -141,8 +142,25 @@ by gdyuldin or myshak1, never merged by us alone.
   asked); NavTex has fldigi / Franco Venturi GPL-3.0 code (to
   third-party/); app numbers 109-111 already reserved (#283); a 4th/5th
   APP page with Kris. Tip: keep each tarball Hany sends in git (scratch)
-  to see what changed between drops. **Waiting:** answers on #302,
-  Hany's "version 1".
+  to see what changed between drops. **2026-10-15:** Hany answered on #302
+  (13:47Z): five apps (SSTV, WeFax, NavTex/SitorB, DSC new, Channel List /
+  Broadcast Info), GPLv3 so far but **LGPL-2.1-or-later as they go in**,
+  NavTex last (his own decoder replaces the fldigi/Venturi GPL code), app
+  numbers fine. His 1.0.2 beta 4 tarball (sha256 3cfd5ac3...) is in
+  `~/Work/x6100/reference/1ko125-1.0.2-beta4/` and on branch
+  **`murus-drops`** (c0bf2ab, on top of v1.0.2, Hany as author);
+  **`ox-main`** = OpenX6100 main 3b8fd33 for the cloud sessions. Our reply
+  (discussioncomment-18951729, text in
+  [upstream-prs/16-murus-licence-reply.md](upstream-prs/16-murus-licence-reply.md)):
+  may we change his headers to LGPL in each PR (the 7(b) credit term then
+  dropped), licence for the unlabelled Channel List / ui_list files, PR
+  order. **Plan (VE7NHW 2026-10-15): cloud sessions build the PR branches**,
+  brief [tasks/murus-apps.md](tasks/murus-apps.md): Part 1 shared
+  groundwork (+ S-meter offset and zoom auto-level fix as two small PRs),
+  2 WeFax, 3 SSTV, 4 Channel List; NavTex and DSC later. Each session
+  pushes a branch + draft PR into `ox-main` here; this PC compile-checks,
+  test image, radio test, then the real OpenX6100 PR. **Waiting:** Hany's
+  OK on the headers; Randal starts the Part 1 session.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2), #274 (Olivia), #271
   (WSPR, 2026-10-12, after Kris's two fixes), #296 (headset PTT,
   2026-10-13). #293 and #294 merged by gdyuldin 2026-10-12 (he answered
