@@ -159,7 +159,10 @@ by gdyuldin or myshak1, never merged by us alone.
   groundwork (+ S-meter offset and zoom auto-level fix as two small PRs),
   2 WeFax, 3 SSTV, 4 Channel List; NavTex and DSC later. Each session
   pushes a branch + draft PR into `ox-main` here; this PC compile-checks,
-  test image, radio test, then the real OpenX6100 PR. **Waiting:** Hany's
+  test image, radio test, then the real OpenX6100 PR. **Order and layout (VE7NHW 2026-10-15):**
+  Kris's apps go in first; APP page 3 WiFi, BT, WSPR, JS8; page 4 PSK31,
+  Olivia, WeFax, SSTV; page 5 NavTex, DSC (as digimodes-test); numbers
+  unchanged. **Waiting:** Hany's
   OK on the headers; Randal starts the Part 1 session.
 - [ ] **OpenX6100 reviews:** approved #288 (FT2), #274 (Olivia), #271
   (WSPR, 2026-10-12, after Kris's two fixes), #296 (headset PTT,

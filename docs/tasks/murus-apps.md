@@ -83,10 +83,17 @@ start (rule 9). If something doesn't fit, say so in the draft PR.
 - **App numbers** written out in `settings_types.h`: WeFax 109, NavTex 110,
   SSTV 111; DSC the next free number on main when its turn comes. No new
   long-press entries (gdyuldin's rule, discussion #283).
-- **APP menu:** add the app's button on the last APP page that has room;
-  add a page only when it's full (`buttons.cpp` counts pages by itself).
-  Say in the PR that the final layout is to agree with myshak1 (Kris),
-  whose WSPR/PSK31/Olivia PRs (#271, #272, #274) add apps too.
+- **APP menu and order (VE7NHW, 2026-10-15): Kris's apps go into
+  OpenX6100 first** (WSPR #271, PSK31 #272, Olivia #274), so the Murus app
+  PRs are opened there only after those are merged; your branches can be
+  ready before that. The layout carries on from VE7NHW's test build
+  `digimodes-test` (see its `src/buttons.cpp`), which he likes:
+  page 3 = WiFi, Bluetooth, WSPR, JS8 (JS8 comes last, in JS8's own PR
+  4/4); **page 4 = PSK31, Olivia, WeFax, SSTV**; **page 5 (new) = NavTex,
+  DSC**. The Channel List has no APP button. If Kris's apps aren't on
+  `ox-main` yet, put WeFax/SSTV where that layout puts them and say in the
+  PR that it's rebased once his are merged. App numbers don't change with
+  the position (they're IDs, not places).
 - **Compile check:** you can't build the ARM image. Build what you can on
   the host (e.g. the files that don't need the radio's headers with
   `g++/gcc -fsyntax-only`, or the project's own test build if it works) and
