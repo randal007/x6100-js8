@@ -116,7 +116,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta5.1.img.zip` from the Assets.
+   download `sdcard.js8-beta5.2.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works; a
    name-brand 8–32 GB card (SanDisk, Samsung) from a trusted seller is best.
@@ -1166,7 +1166,7 @@ Released 2026-10-05, a quick fix to beta 4.5:
 
 Released 2026-10-04. Most of it is in daily use on the air; what hasn't
 been tried on the air yet is listed in
-[Known issues](#known-issues-in-beta-51).
+[Known issues](#known-issues-in-beta-52).
 
 New:
 
@@ -1442,7 +1442,7 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
 
 - [ ] **JS8 opens and closes without a pause:** the decoder's setup saved
   on the SD card, as desktop JS8Call does, with a one-time notice the first
-  time
+  time (built, being tested on the radio)
 - [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is in
   ([#290](https://github.com/OpenX6100/x6100_gui/pull/290)), part 2, the
   engine, is up for review

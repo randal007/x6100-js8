@@ -4,6 +4,104 @@ Items ticked in [PLAN.md](PLAN.md), moved here at each offload so the work
 list stays short. Newest at the top. Beta 5's list is
 [BETA5_PLAN.md](BETA5_PLAN.md).
 
+## Moved 2026-10-14
+
+- [x] **Ultra decoded once a slot, as desktop (2026-10-14; engine, Ultra
+  only): PR #10, merged into main 2026-10-14 (VE7NHW: go with what was
+  agreed upstream), branch deleted.** punk-kaos (Android-port's
+  developer) on #108: our patch 14 made Ultra's first decode 2.528 s into
+  the slot, before the signal can be complete (2.628 s). He was right:
+  desktop (`turboOrUltra`) decodes Turbo and Ultra once at 79 symbols +
+  start delay + 0.5 s (Ultra 3.128 s); patch 14 came from misreading it.
+  Measured with generated signals (scratch experiment, 20 seeds a point):
+  the early try decodes on-time signals but misses weak or late ones,
+  which the retry finds 0.4 s after desktop; Turbo (his design) holds up
+  the same way, sent to him as information only. Patch 14 withdrawn
+  (UPSTREAM.md, bug list), reverted on #108 (5a108cf4, title/body updated,
+  reply with the numbers). Unit tests pass (fast + speed sets). Image run 38513350311 (with it) on the card
+  2026-10-14; the bench check moved to "To try on the radio".
+- [x] **Code review of everything since beta 5.1 (2026-10-14, VE7NHW
+  asked, after the recent crashes).** JS8 app (typing count thread,
+  20-frame text size, held log fields), the test build's shared code
+  (Bluetooth CAT, Bluetooth window, FT8 knob), Buildroot bt-security
+  scripts, workflows: nothing that could crash. Our shared changes are
+  off the main-dial path (the main waterfall doesn't use lv_waterfall),
+  so the dial crash stays an OpenX6100 item. Two fixes: fe81d2a (an
+  encoder exception refuses the message instead of ending the GUI) on
+  main; fe3f68a on #297 (Bluetooth CAT off, not open to all, if
+  BT_SECURITY can't be set; comment posted). Noted: our main lacks 4
+  OpenX6100 commits (9556ce3 DNF drawn at the right place among them),
+  for the next upstream merge. Unit tests here need the scratch-copy
+  trick: this PC's GCC 16 has no static libasan (tests/CMakeLists.txt
+  links -static-libasan; CI is fine).
+- [x] **Beta 5.2 (2026-10-14, VE7NHW asked):** main after merging
+  OpenX6100 main (eb8589d: Bluetooth security #297 + Buildroot #6 merged
+  by VE7NHW 2026-10-14, headset PTT #296, 100 kHz, DNF) + typing-lag,
+  20 frames, Log fields kept, encoder fix, Ultra once a slot. Not in it:
+  the FT8 knob (#300, Georgy wants a rework). Notes
+  docs/releases/js8-beta5.2.md; README updated. **Released 2026-10-14:**
+  tag js8-beta5.2 (9cc80c7), *Build image* run 38617078227 on Buildroot
+  master; page titled, notes, prerelease; sha256 f1209d01... checked
+  (copy in releases/js8-beta5.2/); "please use 5.2" banner on 5.1.
+  **Next:** Facebook post if VE7NHW wants one (beta 5 template); keep
+  `bt-security-js8` and `wspr-test` (VE7NHW: WSPR build goes on the radio
+  next; wspr-test is based on bt-security-js8); VE7NHW deletes the merged OpenX6100 branches
+  (bt-security in both repos, js8-groundwork, adif-ssb-fix,
+  bt-keyboard-pairing; Claude's auto mode can't).
+- [x] **Bluetooth security, #292** (shared GUI code + Buildroot, not JS8).
+  **Done 2026-10-14: #297 and Buildroot #6 merged by VE7NHW** (both
+  approved), in beta 5.2.
+  Kris did point 3 (headset PTT only from the headset's own link):
+  **x6100_gui#296, approved by VE7NHW 2026-10-13**. Ours, points 1 + 2,
+  **opened 2026-10-13: x6100_gui #297** (CAT RFCOMM BT_SECURITY_MEDIUM,
+  branch `bt-security`, 1d5452e) and **AetherX6100Buildroot #6**
+  (bt_start.sh hidden, not pairable, no bt-agent; branch `bt-security`,
+  8a58909), reviewers gdyuldin + myshak1. `JustWorksRepairing = always`
+  kept (VE7NHW; explained in #6). **Tested:** keyboard pair, forget,
+  re-pair, reconnect; phone + FT8CN over Bluetooth CAT changing frequency
+  with the keyboard connected; from the unpaired PC the radio is
+  invisible to a scan and CAT gets "Connection refused". **Reviews
+  2026-10-13:** #297 approved by myshak1; Buildroot #6 *changes
+  requested* by myshak1 (he'd merge both together): (a)
+  `JustWorksRepairing` back to the default (he missed our reason;
+  `confirm` instead, so the window's agent decides, yes only during
+  Scan: VE7NHW chose it); (b) radios that ran the old
+  bt_start.sh keep "discoverable" in /var/lib/bluetooth and the
+  `discoverable off` can run before bluetoothd has the adapter: retry and
+  verify as bt_up.sh does, plus a non-zero DiscoverableTimeout /
+  PairableTimeout as a safety net (the window sets its own timeout for
+  Scan); (c) stale comments in bt_start.sh and #297's bt_ctl.c.
+  **All three done 2026-10-13** (Buildroot d92cb37, x6100_gui 8fc9068:
+  also PairableTimeout set on every Scan, since bluez restarts that timer
+  only then); replies posted on #6 and #297. Test branch
+  `bt-security-js8` rebuilt as typing-lag + main + #297 (b0d6183, no
+  TEST-ONLY commit any more). **Kris approved #6 2026-10-13 19:57Z**
+  ("approving both once your retest is in", he merges #6 + #297
+  together); his non-blocking leftovers done in Buildroot 9a70644 (CAT
+  Serial Port record added only once, stale udev remove rule dropped;
+  the 20 s udev hold left as is). Test image: *Build image* run
+  **38462204666** (`buildroot_ref=bt-security`; the earlier run
+  38448410652 lacks 9a70644). **Radio retest 2026-10-13 passed** (on
+  bt-ft2-test d94d92b): hidden at boot, keyboard, confirm re-pair
+  refused outside / accepted inside Scan, phone finds and pairs, Scan
+  twice, closes on time, FT8CN CAT, WiFi off/on, one Serial Port record.
+  **Found during it, fixed in Buildroot af4c2ae:** the udev rule
+  `KERNEL=="hci*"` also matched every connection (`hci0:<handle>`,
+  DEVTYPE link), so bt_start.sh ran on each connect: it hid the radio a
+  second after a phone connected during Scan (before #6: made it visible
+  with a new bt-agent) and added a Serial Port record each time (the
+  duplicates). Now `ENV{DEVTYPE}=="host"`; tried in place on the radio.
+  Results posted on #6 and #297. New test image with af4c2ae built in
+  (and the FT8 knob fix, no FT2): *Build image* run **38478388820**
+  (bt-security-js8 3385886, `buildroot_ref=bt-security`), **on the card
+  2026-10-13** (backup sd-backup-2026-10-13-162408). **Next:** check a
+  phone connecting during Scan leaves the radio visible;
+  Kris merges #6 + #297; when both are merged, delete `bt-security-js8`
+  and add
+  the release-note line "Bluetooth CAT: pair the phone once in the
+  Bluetooth window". Phone apps: FT8TW (danleetw/FT8TW, on Google Play)
+  is the FT8CN fork most use; FT8AF is newer, dev builds only.
+
 ## Moved 2026-10-13
 
 - [x] **JS8 typing and logging, branch `typing-lag`** (**merged into main 2026-10-13, PR #9 = 08fc7f6; branch deleted**; 5 commits; all JS8 app / library, nothing shared). Radio-tested

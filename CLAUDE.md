@@ -62,8 +62,13 @@ prerelease betas (`js8-beta5`, ...) with an SD card image on GitHub.
 - **OpenX6100 (upstream):** always branch → PR → review by gdyuldin or
   myshak1, never merged by us alone. After merging upstream into ours,
   check every `case ACTION_APP_*` block in `src/main_screen.c` (a lost
-  `break` once opened two apps at once) and stored numbers
+  `break` once opened two apps at once; a plain "keep both sides" merge
+  of two new apps drops it every time) and stored numbers
   ([docs/UPSTREAM_README.md](docs/UPSTREAM_README.md)).
+- **A PR that is mostly a merge** (conflicts resolved, main brought into
+  someone's branch): its "Files changed" tab is mostly other people's
+  work, so the description shows our own lines, code plus a link to each
+  (VE7NHW, 2026-10-14).
 - **js8core bugs** (the engine, `third-party/js8core`) go in
   [docs/js8core-bug-reports.md](docs/js8core-bug-reports.md) and
   `third-party/js8core/UPSTREAM.md` (our local patches, numbered).
@@ -152,6 +157,14 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
   `ONLY_<NAME>=1` runs one scenario; audio is fed in real time, so a full
   run takes ~45 min even split across 4 build dirs. Full CI run:
   `gh workflow run tests.yml -R randal007/x6100-js8 --ref <branch> -f harness=true`.
+- **Check the app cases after any merge** that adds an app:
+  `awk '/dialog_construct\(/{c=NR} /case ACTION_APP_/{ if (c && NR-c<4) print "FALLTHROUGH near line " NR; c=0 } /break;/{c=0}' src/main_screen.c`
+  prints nothing when every window case ends in its `break`.
+- **Reading a GUI crash:** *Build image* also uploads
+  `x6100_gui-unstripped.<ref>` (the GUI before it is stripped; the
+  image's copy has no symbols). With a core dump from the radio:
+  `arm-linux-gdb x6100_gui core` (the toolchain's gdb), sysroot from the
+  image's rootfs.
 - **Getting a CI image:** `gh run download` hangs; use the artifact API
   (`gh api repos/randal007/x6100-js8/actions/runs/<id>/artifacts`, then
   `.../actions/artifacts/<artifact id>/zip`).
