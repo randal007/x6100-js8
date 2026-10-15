@@ -4,6 +4,78 @@ Items ticked in [PLAN.md](PLAN.md), moved here at each offload so the work
 list stays short. Newest at the top. Beta 5's list is
 [BETA5_PLAN.md](BETA5_PLAN.md).
 
+## Moved 2026-10-15
+
+- [x] **JS8 hangs 5-13 s when closed soon after opening: FFTW measured on
+  every open (2026-10-14, VE7NHW; JS8 library, not the engine's code).**
+  Seen on 12d374c: APP pressed a few seconds after opening JS8, the GUI
+  stuck until the first decode pass ended ("decode pass took 12.2 s", then
+  13.1 s on the next open; scheduler queue overflow meanwhile; later passes
+  0.5-1.5 s). **Cause:** closing joins the decode threads, which stop only
+  between passes (engine.cpp ~1282), and the first pass after each open
+  builds the decoders (thread_local in legacy_decode, new threads each
+  open), whose FFTW plans use FFTW_ESTIMATE_PATIENT: without FFTW_ESTIMATE
+  that is a *measuring* planner. Desktop uses the same flag but keeps
+  `js8call_wisdom.dat` (fftwf_import_wisdom at start, export at exit,
+  mainwindow.cpp 669/1945), so it measures once ever; js8core and the
+  Android app keep no wisdom. **Measured on the PC** (scratch, one window,
+  all four main speeds): first pass 1.1 s, later 0.05 s; with
+  FFTW_ESTIMATE the first pass is 0.09 s; the radio is ~10x slower, which
+  fits 12-13 s. Leading silence in the window makes no difference
+  (checked, ruled out). No wisdom file on the radio. **Plan (VE7NHW
+  2026-10-14, no code yet):** `js8_wisdom.dat` on /mnt, loaded before the
+  decoder starts and saved after it stops (.tmp + rename), as desktop.
+  When the file is missing (first open of a new build): build the decoders
+  up front, not inside the first pass, with a small notice in the JS8
+  window ("Setting up the decoder, one time only, about 15 s") until done.
+  **The setup measures all five speeds, Ultra included (VE7NHW
+  2026-10-14),** whatever is switched on, then frees the ones that are
+  off, so the file covers any speed switched on later; normal opens build
+  only the speeds switched on (keeps patch 3's memory saving). Messages
+  in the first slot or two of that one-time setup can be missed;
+  **pressing APP meanwhile must not look like a freeze or crash** (keep
+  the notice up while closing, or hide the window at once and finish
+  behind it). Mock-up first. Check who else in the GUI program uses FFTW
+  (its planner isn't thread-safe). Branch e.g. `fftw-wisdom`. **Also:**
+  asked JS8Call-improved what they think: **Android-port#109**
+  (punk-kaos 2026-10-14 15:04Z: makes sense in js8core, he had planned it
+  but not got to it; so a js8core version could be offered to them)
+  (posted 2026-10-14, VE7NHW OK'd the text; "thinking of", not "doing").
+  Note: our local patch 3 (decoders built lazily per thread) is what puts
+  the measuring inside the first pass.
+  **Done by the cloud session: PR #11** (branch
+  claude/fftw-wisdom-task-fwoz5u; notice option C picked by VE7NHW;
+  reviewed here, nothing wrong). **But:** the radio's second open
+  (12.2 s, then 13.1 s) was in the same GUI run, where FFTW already had
+  the wisdom in memory (PC: 1.1 s, then 0.07 s): a second cause may exist.
+  Test branch `wisdom-wspr-test` (main + #11 + WSPR d637705 + FT8 knob +
+  f50ef2c logging every open's first pass); its image run 38633091601 was
+  cancelled for **`digimodes-test`** = that + Kris's PSK31 (#272) and
+  Olivia (#274), from our conflict fixes, on a new **APP page 4** (page 3
+  is full: WiFi, Bluetooth, WSPR, JS8; test-only layout, the real one is
+  for Kris), *Build image* run **38637209733** (on the card). Then + Kris's
+  **RTTY transmit #276** (approved by gdyuldin, waiting for Kris to
+  merge; merged cleanly) + the unstripped-GUI CI step: digimodes-test
+  24c9481, *Build image* run **38651955343**; flash it with core dumps set
+  up on the card before its first boot (crash hunt).
+  **Next:** flash when VE7NHW says; time the one-time setup, APP during
+  it, then reopen twice and read "first decode pass since JS8 opened".
+  **Done 2026-10-15: radio-tested by VE7NHW on digimodes-test** (the setup
+  runs once after a new image, decodes from the start on every boot after,
+  and JS8 closes at once when closed a few seconds after opening, first and
+  second open alike: the second-open puzzle didn't show). **PR #11 merged
+  into main** (1b36ead; main merged into the branch first, PLAN.md conflict
+  only). Goes to OpenX6100 with 3/4.
+  Earlier: **To a cloud session (VE7NHW 2026-10-14, using the Claude Code cloud
+  credits, which expire 2026-11-04):** brief in
+  [tasks/fftw-wisdom.md](tasks/fftw-wisdom.md); it opens a PR on branch
+  `fftw-wisdom`, then image + radio test here. Then the same credits for a
+  deep bug review of JS8 parts 3 and 4 (library + app) before they go to
+  OpenX6100. FFTW is used only by the decoder (checked): no other planner
+  in the GUI program to clash with.
+  Side note: the main decode lane is 25-38 % busy on the radio with a few
+  windows waiting (rx_all on, 40 m): a separate question.
+
 ## Moved 2026-10-14
 
 - [x] **Ultra decoded once a slot, as desktop (2026-10-14; engine, Ultra

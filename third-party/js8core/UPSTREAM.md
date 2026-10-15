@@ -167,6 +167,10 @@ the two shows all of them.
     Qt, js8-android 1f8d390a) bit for bit, and desktop's compound frames
     reading back with their command and SNR.
 
+**Upstream since 2026-10-14:** patches 1 and 16 merged in
+JS8Call-improved/Android-port#108; 5-8 and 11's fixes were already in
+their master (#105). Next time js8core is re-imported, drop those.
+
 All sixteen are candidates to send upstream (10 with a fix to `compute_drift_estimate` instead). Patch 5 matters to upstream only
 if they ever move decoders off static storage; patch 6 affects them
 today.
