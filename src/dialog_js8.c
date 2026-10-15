@@ -21,6 +21,7 @@
 #include "js8/js8_speed.h"
 #include "js8/js8_map.h"
 #include "js8/js8_history.h"
+#include "js8/js8_wisdom.h"
 #include "qth/qth.h"
 #include "qso_log.h"
 
@@ -116,6 +117,9 @@
 #define JS8_CTY_SD_PATH  "/mnt/cty.dat" /* a newer list put on the card wins, as for FT8 */
 #ifndef JS8_HISTORY_PATH
 #define JS8_HISTORY_PATH "/mnt/js8_history.db" /* every station exchanged with: INFO, STATUS, QSO texts */
+#endif
+#ifndef JS8_WISDOM_PATH
+#define JS8_WISDOM_PATH  "/mnt/js8_wisdom.dat" /* the decoder's measured FFT plans (desktop: js8call_wisdom.dat) */
 #endif
 #ifndef JS8_QSO_DB_PATH
 #define JS8_QSO_DB_PATH  "/mnt/qso_log.db" /* the radio's QSO log, read-only: new grids and countries */
@@ -1012,6 +1016,15 @@ static int rx_speed_mask(void) {
     for (int s = 0; s < JS8_SPEED_COUNT; s++) mask |= js8_speed_rx_mask((js8_speed_t)s);
     return mask;
 }
+
+/* The one-time decoder setup (js8_wisdom.h): no speed is decoded until the
+ * FFT plans are measured; the notice banner shows meanwhile (rx_start()). */
+static bool        decoder_setup;
+static lv_obj_t   *setup_box;   /* the banner */
+static lv_obj_t   *setup_title; /* its text */
+static lv_timer_t *setup_timer;
+
+static int rx_decode_mask(void) { return decoder_setup ? 0 : rx_speed_mask(); }
 
 /* JS8's time: the radio's clock plus the Time Sync drift (js8_rx.h). */
 static int64_t now_wall_ms(void) {
@@ -2398,6 +2411,54 @@ static void on_audio(const float *samples, unsigned n, void *ctx) {
 
 /* ---- Receiver lifecycle ----------------------------------------------- */
 
+/* The decoder setup's notice: a yellow banner over the waterfall strip
+ * (mock-up C in docs/mockups/fftw-wisdom/, VE7NHW's pick), counting the
+ * speeds measured. Over the waterfall and the status line, under the
+ * popups made later. */
+static void setup_notice_update(void) {
+    unsigned done = 0;
+    js8_decoder_setup_running(&done);
+    lv_label_set_text_fmt(setup_title, "Setting up the decoder (one time only)  %u/%u", done,
+                          js8_decoder_setup_speeds());
+}
+
+static void setup_end(void) {
+    if (setup_timer) lv_timer_del(setup_timer);
+    setup_timer = NULL;
+    if (setup_box) lv_obj_del(setup_box);
+    setup_box = setup_title = NULL;
+    decoder_setup = false;
+}
+
+static void setup_timer_cb(lv_timer_t *t) {
+    (void)t;
+    if (js8_decoder_setup_running(NULL)) {
+        setup_notice_update();
+        return;
+    }
+    setup_end();
+    js8_rx_set_submodes(rx, rx_speed_mask());
+    if (js8_decoder_setup_seconds() > 0)
+        js8_log("decoder setup: done in %.1f s, saved to %s; decoding", js8_decoder_setup_seconds(), JS8_WISDOM_PATH);
+}
+
+static void setup_notice_show(void) {
+    setup_box = lv_obj_create(dialog.obj);
+    lv_obj_remove_style_all(setup_box);
+    lv_obj_clear_flag(setup_box, LV_OBJ_FLAG_SCROLLABLE | LV_OBJ_FLAG_CLICKABLE);
+    lv_obj_set_size(setup_box, WIDTH, WF_VISIBLE);
+    lv_obj_set_pos(setup_box, INSET, INSET);
+    lv_obj_set_style_bg_color(setup_box, lv_color_hex(0xFFD000), 0);
+    lv_obj_set_style_bg_opa(setup_box, LV_OPA_COVER, 0);
+
+    setup_title = lv_label_create(setup_box);
+    lv_obj_set_style_text_font(setup_title, &sony_28, 0);
+    lv_obj_set_style_text_color(setup_title, lv_color_black(), 0);
+    setup_notice_update();
+    lv_obj_center(setup_title);
+    setup_timer = lv_timer_create(setup_timer_cb, 250, NULL);
+}
+
 static void rx_start(void) {
     /* At least a bin per pixel, rounded up to a power of two: FFTW is
      * several times faster at 4096 than at 3035 (= 5 x 607). */
@@ -2423,19 +2484,33 @@ static void rx_start(void) {
         .on_search     = on_search,
     };
     marks_reset();
-    rx = js8_rx_create(SAMPLE_RATE, rx_speed_mask(), my_call(), &cb);
+    /* No js8_wisdom.dat yet (a new build's first open): every speed's FFT
+     * plans are measured first, on a thread of their own, and nothing is
+     * decoded meanwhile; the waterfall runs. Closing doesn't wait for it. */
+    bool still    = js8_decoder_setup_running(NULL); /* from an open closed during it */
+    decoder_setup = !js8_decoder_setup_begin(JS8_WISDOM_PATH);
+    if (decoder_setup && still) js8_log("decoder setup: still measuring; decoding after");
+    else if (decoder_setup)
+        js8_log("decoder setup: measuring the FFT plans (%s missing or unusable); decoding after", JS8_WISDOM_PATH);
+    rx = js8_rx_create(SAMPLE_RATE, rx_decode_mask(), my_call(), &cb);
     if (!rx) msg_schedule_text_fmt("JS8: cannot start decoder");
     js8_rx_set_decode_range(rx, filter_low, filter_high);
     js8_rx_set_qso_offset(rx, param_i_get(cfg.js8.tx_freq()));
     js8_rx_set_sync_marks(rx, param_i_get(cfg.js8.decode_marks()));
     js8_rx_set_auto_sync(rx, param_i_get(cfg.js8.tsync_auto()));
+    if (decoder_setup) setup_notice_show();
 }
 
 static void rx_stop(void) {
+    /* Closed during the decoder setup: no waiting for it; it carries on
+     * behind and saves its file. */
+    if (decoder_setup) js8_log("decoder setup: JS8 closed, the setup finishes on its own");
+    setup_end();
     /* Joins the receiver's threads: no callback runs after this, so the
      * spgram below is no longer in use. */
     js8_rx_destroy(rx);
     rx = NULL;
+    js8_decoder_setup_save(JS8_WISDOM_PATH); /* anything new measured (as desktop at exit) */
 
     if (sg) {
         spgramf_destroy(sg);
@@ -5235,6 +5310,10 @@ static void time_hold_cb(button_data_t *btn) {
         msg_update_text_fmt("Not while sending - Stop TX first");
         return;
     }
+    if (decoder_setup) { /* its decodes would wait behind the setup's measuring */
+        msg_update_text_fmt("Time: after the decoder setup (one time only)");
+        return;
+    }
     js8_rx_search_start(rx, TIME_SEARCH_S);
     msg_update_text_fmt("Time: searching for the band's timing (up to %d min): the first station heard sets it",
                         TIME_SEARCH_S / 60);
@@ -6069,6 +6148,9 @@ unsigned dialog_js8_marks(float *freq_hz, uint8_t *level, unsigned max) {
     }
     return n;
 }
+
+/* For tools/js8_ui_harness: the decoder setup's notice if it shows, else "". */
+const char *dialog_js8_setup_notice(void) { return setup_title ? lv_label_get_text(setup_title) : ""; }
 
 /* For tools/js8_ui_harness: the Stations view's QRZ line if it shows, else "". */
 const char *dialog_js8_st_qrz(void) {
@@ -9123,7 +9205,7 @@ static void set_speed(js8_speed_t s) {
     finder_shown = -1; /* another width: all of it again */
     finder_sync();
     lv_obj_invalidate(finder);
-    if (!param_i_get(cfg.js8.rx_all())) js8_rx_set_submodes(rx, rx_speed_mask());
+    if (!param_i_get(cfg.js8.rx_all())) js8_rx_set_submodes(rx, rx_decode_mask());
     /* A heartbeat that fell due while in Turbo or Ultra mustn't go out the moment we
      * leave it: start the interval again. */
     hb_next_ms = 0;
@@ -9174,7 +9256,7 @@ static void speed_hold_cb(button_data_t *btn) {
  * page 6's button before Hold took its place). */
 static void decode_toggle(void) {
     param_i_set(cfg.js8.rx_all(), !param_i_get(cfg.js8.rx_all()));
-    js8_rx_set_submodes(rx, rx_speed_mask());
+    js8_rx_set_submodes(rx, rx_decode_mask());
     if (param_i_get(cfg.js8.rx_all())) msg_update_text_fmt("Decoding every speed (Normal, Fast, Turbo, Ultra, Slow)");
     else msg_update_text_fmt("Decoding %s only", js8_speed_name(cur_speed()));
 }

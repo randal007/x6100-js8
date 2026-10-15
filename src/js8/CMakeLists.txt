@@ -20,6 +20,7 @@ add_library(JS8 STATIC
     alerts.cpp
     macros.cpp
     timesync.cpp
+    wisdom.cpp
     cpu_fence.cpp
     history.cpp
     js8_ops.cpp
