@@ -106,6 +106,12 @@ change with its layer). Things to know:
 - **Transmit level:** `tx_level` will become a shared module for every
   digital app (discussion #303) after a fix Randal is testing (the drive
   stops at 3.8 W of 5 W with the ALC at 0). Carry it as on main, and say so.
+- **Part 3 left out the drive-level tests** (its commit b626f2a: −207 lines
+  in `tests/test_js8.cpp`, the `#include "tx_level.h"` and one line in
+  `tests/CMakeLists.txt`) because `tx_level.c` comes here: **put them back
+  in Part 4**, as on main, and run them.
+- Part 3's PR text asks whether `add_subdirectory(js8)` belongs in 3/4 or
+  4/4; it's in 3/4 for now: leave it there.
 - Not sent: the UI harness, docs, research, `x6100-bt-pair`.
 Size on main: ~14,000 lines.
 
@@ -114,3 +120,4 @@ Size on main: ~14,000 lines.
 (each session adds one line for its part: branch, draft PR, what's checked,
 what's waiting)
 - **Part 3 (2026-10-16):** branch `js8-library` (3fcba74, 5 commits on ox-js8-engine b040b8f, authored VE7NHW), draft PR randal007/x6100-js8#16 into `ox-js8-engine` with the OpenX6100 text. `src/js8` and `test_js8_db.cpp` as on main 5f86ed0; map data (`tools/map_data`) brought here so the map tests run; `test_js8.cpp` minus the drive-level tests (they need `src/tx_level.c`: back in Part 4); `add_subdirectory(js8)` in `src/CMakeLists.txt` (compiled in the image, linked in Part 4); new `.github/workflows/tests.yml` (test_js8 "~[slow]" + test_js8_db). Checked on the host (GCC 13.3, ASan/UBSan): test_js8 "~[slow]" 129 passed + 2 skipped (root), "[slow]" 8 passed, test_js8_db passed. Not checked: GCC 12 / ARM image build (Randal's session), the PR's CI run. Waiting: 2/4 (#301) merged, then Randal opens the real PR.
+  **Checked on Randal's PC 2026-10-16: every `src/js8` and `tools/map_data` file identical to main; all 29 `src/js8/*.cpp` compile with the image's GCC 12; CI run 38983749378: test_js8 131 test cases / 39,553 assertions and test_js8_db pass.**
