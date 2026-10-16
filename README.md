@@ -1529,3 +1529,15 @@ JS8 app by VE7NHW.
 The GUI is LGPL-2.1-or-later (`LICENSE`). The vendored js8core is GPLv3
 (`third-party/js8core/LICENSE`), so the firmware image is distributed under
 GPLv3.
+
+Each JS8 file says which licence it is under in its first lines
+(`SPDX-License-Identifier`):
+
+- **GPL-3.0-or-later**, the same as desktop JS8Call and js8core: the JS8 app
+  (`src/dialog_js8.*`), its waterfall (`src/js8_wf.*`) and most of the JS8
+  library in `src/js8/` (receive, transmit, commands, automatic replies,
+  inbox, relays, time sync ...), which follow desktop JS8Call's code and run
+  on js8core, and their tests (`tests/test_js8.cpp`, `tools/js8_wavgen`).
+- **LGPL-2.1-or-later**, like the rest of the GUI: the parts with nothing
+  from desktop JS8Call: the map and distances, callsign places, the GPS
+  clock, JS8's settings database (`src/cfg/js8_db.*`) and its test.

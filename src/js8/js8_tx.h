@@ -1,5 +1,5 @@
 /*
- *  SPDX-License-Identifier: GPL-3.0-only
+ *  SPDX-License-Identifier: GPL-3.0-or-later
  *
  *  Xiegu X6100 LVGL GUI - JS8 transmit, C interface for the dialog
  */

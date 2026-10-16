@@ -1,5 +1,5 @@
 /*
- *  SPDX-License-Identifier: GPL-3.0-only
+ *  SPDX-License-Identifier: GPL-3.0-or-later
  *
  *  js8_wavgen: write a JS8 test WAV for the X6100 JS8 app's "Test WAV" mode.
  */

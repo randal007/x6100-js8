@@ -59,6 +59,8 @@ the map stays in PR 4 because it is woven through `dialog_js8.c` and a
 map-less app would be a version never used on the air. Each PR builds and
 works on its own and needs only the ones before it.
 
+**Licences in 3/4 and 4/4 (VE7NHW, 2026-10-16):** our JS8 files that follow desktop JS8Call's code are GPL-3.0-or-later (were GPL-3.0-only until 2026-10-16), the rest LGPL-2.1-or-later; the README's *License* lists which. Say so in each PR. `tests/test_js8_db.cpp` (in OpenX6100 since #290) got its LGPL line on our main only: carry it in 3/4.
+
 Not sent: the UI harness (`tools/js8_ui_harness`, 6,700 lines; later if
 they want it), our docs and research, `x6100-bt-pair` (myshak1's Bluetooth
 window replaces it).
