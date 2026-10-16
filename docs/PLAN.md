@@ -15,12 +15,12 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** test build `digimodes-test` 24c9481 (beta 5.2 + FFTW wisdom + WSPR/PSK31/Olivia/RTTY TX from Kris's PRs + FT8 knob), flashed 2026-10-14 17:36, backup sd-backup-2026-10-14-173552, **test-only core dumps in /usr/sbin/x6100_daemon** (to /mnt/cores). Boots fine; FFTW wisdom radio-tested OK.
-2. **Next on the radio:** flash digimodes-test afd514e (run 38761835319) when built, test #304 (zoom: floor stays put) and #305 (S-meter offset), post results; the dial crash (FT8, spin the knob fast; if the GUI restarts, USB console on DEV, fetch /mnt/cores, read it with builds/ci-38651955343/unstripped/); try RTTY TX, the new WSPR marker, PSK31, Olivia.
-3. **On main, not released:** FFTW wisdom (PR #11, merged 2026-10-15). JS8 into OpenX6100: 1/4 #290 merged, **2/4 #301** waits for review; 3/4 next (library + tests + the wisdom fix).
-4. **Murus apps:** drop on `murus-drops`, cloud brief docs/tasks/murus-apps.md (Part 1 next); Hany to OK LGPL headers on #302.
-   **Open with others:** Georgy: #301, #300 rework; Kris: merge WSPR/RTTY, our conflict-fix PRs myshak1/x6100_gui#1-3, replies on #272/#274; discussions #302 (Murus apps) and #303 (transmit level). Android-port#108 merged 2026-10-14.
-5. **Cloud credits** ($100, expire 2026-11-04, sessions VE7NHW starts on claude.ai/code): next a deep review of JS8 parts 3+4.
+1. **Card:** test build `digimodes-test` 24c9481, flashed 2026-10-14 17:36, backup sd-backup-2026-10-14-173552, test-only core dumps in /usr/sbin/x6100_daemon. FFTW wisdom radio-tested OK (merged). **Ready to flash:** digimodes-test **afd514e** = the same + #304 (zoom auto levels) + #305 (S-meter offset), run 38761835319, downloaded to builds/ci-38761835319/ (core dumps not in the image: re-add after flashing for the crash hunt).
+2. **Next on the radio:** flash afd514e when VE7NHW says; test #304 (zoom in/out with auto levels: floor stays put) and #305 (offset moves the meter), post on both PRs; the dial crash (FT8, spin fast; fetch /mnt/cores, read with builds/ci-38761835319/unstripped/); RTTY TX, WSPR marker, PSK31, Olivia.
+3. **On main, not released:** FFTW wisdom (PR #11). JS8 into OpenX6100: 1/4 #290 merged, **2/4 #301** waits for review; 3/4 next.
+4. **Murus apps:** Hany OK'd LGPL in principle on #302 (our reply asks to change headers; waiting). Drop on `murus-drops`, base copy `ox-main`, brief docs/tasks/murus-apps.md; **VE7NHW starts cloud sessions** (Part 1 groundwork, then 2 WeFax / 3 SSTV, 4 Channel List alongside). Kris's apps go in first; APP page 4 PSK31, Olivia, WeFax, SSTV; page 5 NavTex, DSC. #304 / #305 opened.
+   **Open with others:** Georgy: #301, #300 rework, #304, #305; Kris: merge WSPR/RTTY, myshak1/x6100_gui#1-3, #272/#274; #303 (transmit level).
+5. **Cloud credits** ($100, expire 2026-11-04): Murus Parts 1-4, then a deep review of JS8 parts 3+4.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
