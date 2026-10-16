@@ -15,8 +15,8 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** test build `digimodes-test` 24c9481, flashed 2026-10-14 17:36, backup sd-backup-2026-10-14-173552, test-only core dumps in /usr/sbin/x6100_daemon. FFTW wisdom radio-tested OK (merged). **Ready to flash:** digimodes-test **afd514e** = the same + #304 (zoom auto levels) + #305 (S-meter offset), run 38761835319, downloaded to builds/ci-38761835319/ (core dumps not in the image: re-add after flashing for the crash hunt).
-2. **Next on the radio:** flash afd514e when VE7NHW says; test #304 (zoom in/out with auto levels: floor stays put) and #305 (offset moves the meter), post on both PRs; the dial crash (FT8, spin fast; fetch /mnt/cores, read with builds/ci-38761835319/unstripped/); RTTY TX, WSPR marker, PSK31, Olivia.
+1. **Card:** test build `digimodes-test` **afd514e** (beta 5.2 + FFTW wisdom + WSPR/PSK31/Olivia/RTTY TX + FT8 knob + #304 zoom auto levels + #305 S-meter offset), run 38761835319, flashed 2026-10-15 17:25 local, backup **sd-backup-2026-10-15-172525**, test-only core dumps re-added in /usr/sbin/x6100_daemon (to /mnt/cores; none were caught on 24c9481).
+2. **Next on the radio:** test #304 (zoom in/out with auto levels: floor stays put) and #305 (offset moves the meter), post on both PRs; the dial crash (FT8, spin fast; fetch /mnt/cores, read with builds/ci-38761835319/unstripped/); RTTY TX, WSPR marker, PSK31, Olivia.
 3. **On main, not released:** FFTW wisdom (PR #11). JS8 into OpenX6100: 1/4 #290 merged, **2/4 #301** waits for review; 3/4 next.
 4. **Murus apps:** Hany OK'd LGPL in principle on #302 (our reply asks to change headers; waiting). Drop on `murus-drops`, base copy `ox-main`, brief docs/tasks/murus-apps.md; **VE7NHW starts cloud sessions** (Part 1 groundwork, then 2 WeFax / 3 SSTV, 4 Channel List alongside). Kris's apps go in first; APP page 4 PSK31, Olivia, WeFax, SSTV; page 5 NavTex, DSC. #304 / #305 opened.
    **Open with others:** Georgy: #301, #300 rework, #304, #305; Kris: merge WSPR/RTTY, myshak1/x6100_gui#1-3, #272/#274; #303 (transmit level).
