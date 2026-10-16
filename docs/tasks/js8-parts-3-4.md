@@ -113,3 +113,4 @@ Size on main: ~14,000 lines.
 
 (each session adds one line for its part: branch, draft PR, what's checked,
 what's waiting)
+- **Part 3 (2026-10-16):** branch `js8-library` (3fcba74, 5 commits on ox-js8-engine b040b8f, authored VE7NHW), draft PR randal007/x6100-js8#16 into `ox-js8-engine` with the OpenX6100 text. `src/js8` and `test_js8_db.cpp` as on main 5f86ed0; map data (`tools/map_data`) brought here so the map tests run; `test_js8.cpp` minus the drive-level tests (they need `src/tx_level.c`: back in Part 4); `add_subdirectory(js8)` in `src/CMakeLists.txt` (compiled in the image, linked in Part 4); new `.github/workflows/tests.yml` (test_js8 "~[slow]" + test_js8_db). Checked on the host (GCC 13.3, ASan/UBSan): test_js8 "~[slow]" 129 passed + 2 skipped (root), "[slow]" 8 passed, test_js8_db passed. Not checked: GCC 12 / ARM image build (Randal's session), the PR's CI run. Waiting: 2/4 (#301) merged, then Randal opens the real PR.
