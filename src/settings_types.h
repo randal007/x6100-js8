@@ -48,6 +48,7 @@ typedef enum {
      * so its number is never stored; up to beta 5 it was 111, and a key set
      * to it does nothing now until another action is picked. */
     ACTION_APP_JS8 = 112,
+    ACTION_APP_PSK = 114,
     ACTION_APP_BT = 116,
 } press_action_t;
 
