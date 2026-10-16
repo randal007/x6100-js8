@@ -100,7 +100,7 @@ static int cur_band = -1;
 static void construct_cb(lv_obj_t *parent);
 static void destruct_cb(void);
 static void key_cb(lv_event_t *e);
-static void rotary_cb(int32_t diff);
+static void rotary_cb(int32_t diff, uint16_t dt);
 
 static void band_cb(lv_event_t *e);
 
@@ -596,7 +596,7 @@ static void fade_back_cb(lv_timer_t *t)
 
 /* ---- Dialog callbacks ------------------------------------------------- */
 
-static void rotary_cb(int32_t diff)
+static void rotary_cb(int32_t diff, uint16_t dt)
 {
     int32_t f = (int32_t)tx_hz + diff * TX_STEP_HZ;
 
