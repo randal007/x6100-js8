@@ -1445,7 +1445,7 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   time (tested on the radio, in the next release)
 - [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is in
   ([#290](https://github.com/OpenX6100/x6100_gui/pull/290)), part 2, the
-  engine, is up for review
+  engine, is approved and getting its last touches
   ([#301](https://github.com/OpenX6100/x6100_gui/pull/301))
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 

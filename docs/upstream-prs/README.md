@@ -25,6 +25,14 @@ GUI files compile for the radio (ARM) with it.
 | 9 | OpenX6100/x6100_gui (PR) | [9-js8-1-groundwork-pr-body.md](9-js8-1-groundwork-pr-body.md) | **opened 2026-10-11: OpenX6100/x6100_gui#290** JS8 (1/4), branch `js8-groundwork` (3252bde, one commit with tests/test_js8_db.cpp; image build 38152673163) |
 | 10 | OpenX6100/x6100_gui (discussion 23) | [10-js8-series-note.md](10-js8-series-note.md) | **posted 2026-10-11** on discussion 23 (the series, #290, the licence question to gdyuldin) |
 | 11 | OpenX6100/x6100_gui (PR) | [11-adif-ssb-fix-pr-body.md](11-adif-ssb-fix-pr-body.md) | **opened 2026-10-11: OpenX6100/x6100_gui#289** (ADIF export wrote SSB as AM; split out of JS8 1/4) |
+| 12 | OpenX6100/x6100_gui (discussion 23) | [12-licence-reply.md](12-licence-reply.md) | posted 2026-10-13 (licence settled) |
+| 13 | OpenX6100/x6100_gui (PR) | [13-js8-engine-pr.md](13-js8-engine-pr.md) | **opened 2026-10-14: #301** JS8 (2/4) |
+| 14 | OpenX6100/x6100_gui (discussion) | [14-murus-apps-discussion.md](14-murus-apps-discussion.md) | **posted 2026-10-14: discussion #302** |
+| 15 | OpenX6100/x6100_gui (discussion) | [15-tx-level-discussion.md](15-tx-level-discussion.md) | **posted 2026-10-14: discussion #303** |
+| 16 | OpenX6100/x6100_gui (discussion #302) | [16-murus-licence-reply.md](16-murus-licence-reply.md) | posted 2026-10-15; Hany agreed the same day |
+| 17 | OpenX6100/x6100_gui (PRs) | [17-zoom-smeter-prs.md](17-zoom-smeter-prs.md) | **#304 (merged 2026-10-16), #305** |
+| 18 | OpenX6100/AetherX6100Buildroot (PR) | [18-buildroot-js8-deps.md](18-buildroot-js8-deps.md) | **opened 2026-10-16: #8** (JS8's Boost/FFTW, GUI licence label) |
+| 19 | OpenX6100/x6100_gui (PR #300) | [19-ft8-knob-dt-pr-body.md](19-ft8-knob-dt-pr-body.md) | #300's description after the 2026-10-16 rework |
 
 From now on PRs go from branches inside OpenX6100's own repos (VE7NHW
 has push access), reviewed and merged by gdyuldin or myshak1; the forks

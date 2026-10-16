@@ -152,9 +152,7 @@ working on it). Each gets its own part here when its drop arrives.
 Each session updates its own line here (on its branch is fine; Randal's
 session copies it to main).
 
-- Part 1 (`murus-groundwork`): not started
-- Parts 1b/1c: sent as OpenX6100 #305 (S-meter offset) and #304 (zoom levels), 2026-10-15
-- Part 2 (`murus-wefax`): not started (needs Part 1)
-- Part 3 (`murus-sstv`): not started (needs Part 1)
-- Part 4 (`murus-channels`): not started
+- Parts 1-4: cloud sessions done 2026-10-15: drafts randal007/x6100-js8 #12 (`murus-groundwork`), #13 (`murus-channels`), #14 (`murus-wefax`), #15 (`murus-sstv`), base ox-main 3b8fd33; their notes on branches claude/* (open points: recorder WAV for everyone, mic UP/DOWN shared by WeFax and Channel List, our commits authored "Claude").
+- **2026-10-16, Randal's PC: the OpenX6100-ready branches** `ox-murus-groundwork` / `-wefax` / `-sstv` / `-channels`, rebuilt on OpenX6100 main 9714584 (with #304): Hany's commits as received, ours re-authored to Randal VE7NHW, then a licence commit (Hany's OK on #302 2026-10-15: his files LGPL-2.1-or-later, 7(b) term and NOTICE pointers gone, headers added to his unlabelled files). All compile with GCC 12. The drafts #12-15 are superseded. Sent as Hany wrote it (WAV recorder, mic keys); the reviewers decide in the PRs (VE7NHW). Info window licence text asked on #302. Radio test: image all-apps-test. Then the real PRs, after Kris's apps.
+- Parts 1b/1c: sent as OpenX6100 #305 (S-meter offset) and #304 (zoom levels, **merged 2026-10-16**)
 - NavTex, DSC: waiting for Hany
