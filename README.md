@@ -1533,7 +1533,7 @@ GPLv3.
 Each JS8 file says which licence it is under in its first lines
 (`SPDX-License-Identifier`):
 
-- **GPL-3.0-or-later**, the same as desktop JS8Call and js8core: the JS8 app
+- **GPL-3.0-or-later**, the same as desktop JS8Call: the JS8 app
   (`src/dialog_js8.*`), its waterfall (`src/js8_wf.*`) and most of the JS8
   library in `src/js8/` (receive, transmit, commands, automatic replies,
   inbox, relays, time sync ...), which follow desktop JS8Call's code and run
