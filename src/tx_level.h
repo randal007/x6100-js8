@@ -48,6 +48,9 @@ typedef struct {
     float sum_alc;
     bool  held;     /* the level was found (or had to come down): no more ramping up */
     float up_db;    /* ramped up so far this transmission */
+    int   windows;  /* decisions made so far (each with the averages below) */
+    float win_pwr;
+    float win_alc;
 } tx_level_t;
 
 void tx_level_start(tx_level_t *l, float target_w);
