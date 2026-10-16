@@ -466,14 +466,9 @@ static buttons_page_t page_app_3 = {
     /* JS8 keeps the place its testers know (the last button). */
     {&btn_app_p3, &btn_wifi, &btn_bt, &btn_wspr, &btn_js8}
 };
-/* TEST build: page 3 is full, the newer digital modes get a 4th page
- * (the layout for OpenX6100 is still to agree with myshak1). */
+/* Page 4: PSK31, Olivia, WeFax, SSTV */
 static buttons_page_t page_app_4 = {
-    {&btn_app_p4, &btn_psk, &btn_olivia}
-};
-/* Page 4: PSK31, Olivia, WeFax, SSTV (PSK31 and Olivia come with their own PRs) */
-static buttons_page_t page_app_4 = {
-    {&btn_app_p4, NULL, NULL, &btn_wefax}
+    {&btn_app_p4, &btn_psk, &btn_olivia, &btn_wefax}
 };
 
 /* RTTY */
