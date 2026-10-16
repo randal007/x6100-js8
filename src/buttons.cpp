@@ -331,6 +331,7 @@ static button_data_t  btn_wspr   = make_app_btn("WSPR", ACTION_APP_WSPR);
 static button_data_t  btn_psk    = make_app_btn("PSK31", ACTION_APP_PSK);
 static button_data_t  btn_olivia = make_app_btn("Olivia", ACTION_APP_OLIVIA);
 static button_data_t  btn_wefax  = make_app_btn("WeFax", ACTION_APP_WEFAX);
+static button_data_t  btn_sstv   = make_app_btn("SSTV", ACTION_APP_SSTV);
 
 /* RTTY */
 static button_data_t btn_rtty_p1 = {
@@ -468,7 +469,7 @@ static buttons_page_t page_app_3 = {
 };
 /* Page 4: PSK31, Olivia, WeFax, SSTV */
 static buttons_page_t page_app_4 = {
-    {&btn_app_p4, &btn_psk, &btn_olivia, &btn_wefax}
+    {&btn_app_p4, &btn_psk, &btn_olivia, &btn_wefax, &btn_sstv}
 };
 
 /* RTTY */

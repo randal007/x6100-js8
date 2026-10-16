@@ -51,6 +51,7 @@ typedef enum {
     ACTION_APP_PSK = 114,
     ACTION_APP_OLIVIA = 115,
     ACTION_APP_WEFAX = 109,
+    ACTION_APP_SSTV = 111,
     ACTION_APP_BT = 116,
 } press_action_t;
 
