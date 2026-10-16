@@ -41,6 +41,7 @@
 #include "dialog_msg_voice.h"
 #include "dialog_swrscan.h"
 #include "dialog_ft8.h"
+#include "dialog_wefax.h"
 #include "dialog_gps.h"
 #include "dialog_qth.h"
 #include "dialog_recorder.h"
@@ -235,6 +236,11 @@ void main_screen_start_app(press_action_t app_action) {
             voice_say_text_fmt("PSK31 window");
             break;
 
+        case ACTION_APP_WEFAX:
+            dialog_construct(dialog_wefax, obj);
+            voice_say_text_fmt("WeFax window");
+            break;
+
         default:
             break;
     }
@@ -306,6 +312,7 @@ void main_screen_action(press_action_t action) {
         case ACTION_APP_BT:
         case ACTION_APP_OLIVIA:
         case ACTION_APP_PSK:
+        case ACTION_APP_WEFAX:
             main_screen_start_app(action);
             break;
 
@@ -831,7 +838,7 @@ static void main_screen_hkey_cb(lv_event_t * e) {
 
         case HKEY_UP:
             if (hkey->state == HKEY_RELEASE) {
-                if (!lm_get_freq()) {
+                if (!lm_get_freq() && !dialog_wefax_mic_step(-1)) {
                     freq_shift(+1, 0);
                 }
             } else if (hkey->state == HKEY_LONG) {
@@ -844,7 +851,7 @@ static void main_screen_hkey_cb(lv_event_t * e) {
 
         case HKEY_DOWN:
             if (hkey->state == HKEY_RELEASE) {
-                if (!lm_get_freq()) {
+                if (!lm_get_freq() && !dialog_wefax_mic_step(+1)) {
                     freq_shift(-1, 0);
                 }
             } else if (hkey->state == HKEY_LONG) {
@@ -852,6 +859,13 @@ static void main_screen_hkey_cb(lv_event_t * e) {
                     cfg_band_load_next(false);
                 }
                 dialog_send(EVENT_BAND_DOWN, NULL);
+            }
+            break;
+
+        case HKEY_VM:
+            /* WeFax open: open / close its stations list */
+            if (hkey->state == HKEY_RELEASE) {
+                dialog_wefax_vm_toggle();
             }
             break;
 
