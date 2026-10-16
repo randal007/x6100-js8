@@ -139,7 +139,7 @@ static int cur_band = -1;
 static void construct_cb(lv_obj_t *parent);
 static void destruct_cb(void);
 static void key_cb(lv_event_t *e);
-static void rotary_cb(int32_t diff);
+static void rotary_cb(int32_t diff, uint16_t dt);
 static void band_cb(lv_event_t *e);
 
 static lv_obj_t   *waterfall = NULL;
@@ -1336,7 +1336,7 @@ static void reveal_waterfall(void)
 /* ---- Dialog callbacks ------------------------------------------------- */
 
 /* Main encoder: moves the band; the receiver follows once it stops. */
-static void rotary_cb(int32_t diff)
+static void rotary_cb(int32_t diff, uint16_t dt)
 {
     int32_t mag = diff < 0 ? -diff : diff;
     int32_t step = ROTARY_HZ * (mag > 6 ? 6 : (mag > 3 ? 3 : 1));
