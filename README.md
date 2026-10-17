@@ -1026,8 +1026,7 @@ messages or settings are in it, readable on a PC.
 ## New in Release Candidate 1
 
 Released 2026-10-17 ([release notes](docs/releases/js8-rc1.md)). This is
-the JS8 that is going into the OpenX6100 firmware: from here on, bug fixes
-only.
+the JS8 that is going into the OpenX6100 firmware.
 
 - **JS8 opens and closes without a pause.** Each time JS8 opened, the
   decoder's first pass set up its maths from scratch (FFTW timing test

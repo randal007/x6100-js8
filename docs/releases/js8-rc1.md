@@ -1,6 +1,6 @@
 **JS8 on the Xiegu X6100, running on the radio itself.** No PC, phone or tablet needed: the X6100 firmware (OpenX6100, gdyuldin's) with a JS8 app next to FT8 and RTTY.
 
-**Release Candidate 1 is the JS8 that is going into the OpenX6100 firmware itself.** From here on it gets bug fixes only.
+**Release Candidate 1 is the JS8 that is going into the OpenX6100 firmware itself.**
 
 New since beta 5.2: **JS8 opens and closes without a pause**, its decoder setup kept on the SD card as desktop JS8Call does. Below that is **everything JS8 on the X6100 does**, from beta 1 to here, in one list.
 
