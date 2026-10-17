@@ -1,7 +1,7 @@
 /*
  *  SPDX-License-Identifier: LGPL-2.1-or-later
  *
- *  Xiegu X6100 LVGL GUI - the drive level of a JS8 transmission
+ *  Xiegu X6100 LVGL GUI - the drive level of a digital-mode transmission
  */
 
 #include "tx_level.h"
@@ -22,9 +22,9 @@ float tx_level_block(tx_level_t *l, bool have, float pwr_w, float alc) {
     l->blocks++;
     if (l->blocks <= TX_LEVEL_SETTLE_BLOCKS) return 0.0f;
     /* A decision every half second of blocks, on the readings that came in
-     * it. The radio sends about 2.5 readings a second, so counting readings
-     * made a window of 5 s and the drive crept up 1 dB or so a transmission
-     * (found by IU1WXY). Without any reading the window waits for one. */
+     * it. Counting readings instead made the window as long as the radio
+     * took to send twelve of them (IU1WXY's find). Without any reading the
+     * window waits for one. */
     l->wb++;
     if (have) {
         if (alc < 0.0f) alc = 0.0f;

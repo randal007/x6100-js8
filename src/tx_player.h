@@ -3,15 +3,24 @@
  *
  *  Xiegu X6100 LVGL GUI - digital-mode TX player
  *
- *  Plays a prepared TX waveform with the radio keyed, setting the audio
+ *  Plays a digital mode's audio with the radio keyed, setting the audio
  *  gain from the radio's ALC and power readback (tx_level.c: ramped up to
- *  the ALC's onset, then held). JS8's; FT8 on R1CBU 1.0 has its
- *  own (src/ft8/tx_worker.c). They share the learned gain offset.
+ *  the ALC's onset, then held), for any app: one way for every mode, as
+ *  agreed in OpenX6100/x6100_gui discussion #303. FT8 still has its own
+ *  (src/ft8/tx_worker.c). All of them share one learned gain offset
+ *  (cfg.ft8.output_gain_offset), since every mode drives the same audio
+ *  path.
  *
- *  The waveform is synthesised around TX_PLAYER_AUDIO_HZ; while it plays
- *  the VFO is shifted so the signal lands at the requested audio offset,
- *  and restored afterwards. Blocks for the length of the waveform, so call
- *  it from a worker thread.
+ *  A mode whose average power reads lower for the same peak (PSK31: its
+ *  envelope varies) adds its own correction to base_gain_offset; that
+ *  correction is never stored, so the shared offset stays right for the
+ *  others.
+ *
+ *  The audio is expected around TX_PLAYER_AUDIO_HZ; while it plays the VFO
+ *  is shifted so the signal lands at tx_offset_hz, and restored afterwards.
+ *  Audio already at its own offset: pass tx_offset_hz = TX_PLAYER_AUDIO_HZ
+ *  (no shift). Blocks for the length of the audio, so call it from a
+ *  worker thread.
  */
 
 #pragma once

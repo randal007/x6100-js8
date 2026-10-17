@@ -129,7 +129,7 @@ bool tx_player_stream(tx_fill_fn_t  fill,
         audio_play(block, part); /* R1CBU 1.0: its default player, AUDIO_PLAY_RATE */
     }
 
-    /* The learned gain offset is shared by FT8 and JS8: same audio path. */
+    /* The learned gain offset is shared by every mode: same audio path. */
     param_f_set(cfg.ft8.output_gain_offset(),
                 LV_MAX(gain_offset - base_gain_offset + play_gain_offset, LEARNED_MIN_DB));
     audio_play_wait();

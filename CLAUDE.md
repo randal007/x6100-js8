@@ -124,7 +124,7 @@ every step, then report. Nothing may live only in this conversation.
 | `third-party/js8core/` | The engine: JS8Call-improved's Android port + our local patches (UPSTREAM.md) |
 | `src/js8_wf.c` | JS8's waterfall, drawn on the lower DRM plane |
 | `src/js8_clock.c` | GPS clock, time drift |
-| `src/tx_player.c`, `src/tx_level.c` | Shared transmit audio and level |
+| `src/tx_player.c`, `src/tx_level.c` | Shared transmit audio and level (OpenX6100 #306) |
 | `src/radio.c` | Radio helpers (TX/RX filter, DSP off, speaker) |
 | `src/cfg/js8_db.c` | JS8 settings (`cfg.js8.*`), outside upstream's migrations |
 | `src/keyboard.c`, `src/kbd_rollover.c` | Keyboards (USB and Bluetooth) |
@@ -149,9 +149,10 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
   `dialog_js8.c` can't be compiled for ARM locally; the harness build is
   the real compile check.
 - **Unit tests** (as CI does):
-  `cmake -B build_test -DENABLE_TESTING=YES && cmake --build build_test -j --target test_js8 test_js8_db test_qth`,
+  `cmake -B build_test -DENABLE_TESTING=YES && cmake --build build_test -j --target test_js8 test_js8_db test_qth test_tx_level`,
   then `build_test/tests/test_js8 "~[slow]"` (fast ones),
-  `build_test/tests/test_js8_db` and `build_test/tests/test_qth`. Catch2 splits test names at commas:
+  `build_test/tests/test_js8_db`, `build_test/tests/test_qth` and
+  `build_test/tests/test_tx_level` (the transmit level). Catch2 splits test names at commas:
   escape `\,`.
 - **UI harness:** see [tools/js8_ui_harness/README.md](tools/js8_ui_harness/README.md).
   `ONLY_<NAME>=1` runs one scenario; audio is fed in real time, so a full
