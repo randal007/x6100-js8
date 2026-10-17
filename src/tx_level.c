@@ -39,6 +39,10 @@ float tx_level_block(tx_level_t *l, bool have, float pwr_w, float alc) {
 
 static float decide(tx_level_t *l) {
     float p = l->sum_pwr / l->n, a = l->sum_alc / l->n;
+    l->windows++; /* TEST */
+    l->win_n   = l->n;
+    l->win_pwr = p;
+    l->win_alc = a;
     l->n = l->wb = 0;
     l->sum_pwr = l->sum_alc = 0.0f;
 
