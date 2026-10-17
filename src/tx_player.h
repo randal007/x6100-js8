@@ -17,6 +17,7 @@
 #pragma once
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #ifdef __cplusplus
@@ -29,14 +30,21 @@ extern "C" {
 /* Digital modes are capped at this power. */
 #define TX_PLAYER_MAX_PWR_W 5.0f
 
+/* Audio sent per pass; the ALC and power are read between passes. */
+#define TX_PLAYER_BLOCK 2048
+
 /* Abort-check callback. Return true to stop TX after the current block. */
 typedef bool (*tx_abort_fn_t)(void *ctx);
+
+/* Gives the next audio: up to n samples into buf, returns how many, 0 at
+ * the end. */
+typedef size_t (*tx_fill_fn_t)(int16_t *buf, size_t n, void *ctx);
 
 /* Starting gain offset (dB) for the radio's firmware and power setting. */
 float tx_player_base_gain_offset(void);
 
 /* Key the radio and play n_samples of int16 audio at AUDIO_PLAY_RATE,
- * shifted to tx_offset_hz. Samples are scaled in place. Returns false if
+ * shifted to tx_offset_hz (samples not modified). Returns false if
  * abort_check stopped it early. */
 bool tx_player_play(int16_t      *samples,
                     uint32_t      n_samples,
@@ -44,6 +52,16 @@ bool tx_player_play(int16_t      *samples,
                     float         base_gain_offset,
                     tx_abort_fn_t abort_check,
                     void         *abort_check_ctx);
+
+/* The same with the audio asked for block by block from fill (int16 at
+ * AUDIO_PLAY_RATE), for transmissions too long to keep in memory (WeFax,
+ * SSTV). */
+bool tx_player_stream(tx_fill_fn_t  fill,
+                      void         *fill_ctx,
+                      int32_t       tx_offset_hz,
+                      float         base_gain_offset,
+                      tx_abort_fn_t abort_check,
+                      void         *abort_check_ctx);
 
 #ifdef __cplusplus
 }
