@@ -16,7 +16,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. **Card:** `all-apps-test` **eb339dc** (run 38979367716: our main + OpenX6100 main + Kris's latest WSPR/RTTY/PSK31/Olivia/FT2 + Hany's WeFax/SSTV/Channel List + FT8 knob rework + TX level log + S-meter offset), flashed 2026-10-16 20:21 local, backup **sd-backup-2026-10-16-202105**, test-only core dumps on.
-2. **Next on the radio:** flash `tx-level-fix` (likely fix for 3.8 W of 5, Build image run 39059735209), JS8 TX at 5 W on the dummy load, console connected: wattmeter and the "TX level:" lines; then the list under *To try on the radio*.
+2. **Next on the radio:** flash `all-apps-test` d91a675 (all the digital apps + the likely fix for 3.8 W of 5 + Kris's menu-crash fix, Build image run 39059910797), JS8 TX at 5 W on the dummy load, console connected: wattmeter and the "TX level:" lines; then the list under *To try on the radio*.
 3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, Kris's points done, waits for Kris + **Buildroot #8** (Boost/FFTW), then VE7NHW merges; **3/4 and 4/4 ready** as draft PRs here #16 / #17 (checked). FFTW wisdom released in **Release Candidate 1** (`js8-rc1`, 2026-10-17; was going to be beta 5.3), the JS8 going into OpenX6100.
 4. **Waiting on others:** Georgy: #305 (±10 dB?), #300 (knob rework), Buildroot #8; Kris: #301, merging his apps (then Hany's go in, groundwork first); Hany: Info window licence text (#302). #303: our tx_level PR after the fix.
 5. **VE7NHW, any time:** delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y` (notes copied to main); pick where to back up CLAUDE.local.md. Cloud credits ($100, to 2026-11-04) left for a deep review of JS8 3/4 + 4/4 or the tx_level fix.
@@ -90,7 +90,7 @@ by gdyuldin or myshak1, never merged by us alone.
   offered tx_level/tx_player as a PR of their own before JS8 4/4.
   **Next:** their answer; a JS8-vs-Olivia wattmeter comparison if useful.
   **2026-10-16:** Georgy + Kris agree (one stored level + PSK31 correction, clamp the stored value; Kris moves WSPR/PSK31/Olivia/RTTY/JTTY once we send it). **VE7NHW: our tx_level stops at 3.8 W of 5 W, no amp, ALC 0, in JS8**: told them on #303 we measure first. Suspects (from the code): drive at its 0 dB ceiling, the radio's own power reading saying ~5 W, or the 8 dB ramp limit. Log ("TX level:" every 0.5 s) in all-apps-test, on the card. **Next:** one JS8 TX at 5 W on the dummy load, read /tmp/x6100_log.txt over the console, fix, then the PR (with the clamp).
-  **2026-10-17 (cloud session): likely cause found, branch `tx-level-fix`** (from main 19dd03a, test image Build image run 39059735209, Tests run 39059737055). IU1WXY's copy of our tx_level.c (his repo, c2e419d) found it: the radio sends only ~2.5 readings a second (his figure, not yet ours), so our window of 12 *readings* was ~5 s, two decisions a JS8 frame, ~1 dB up a transmission; our #303 post ("½-second averages, 1 dB/s") described the code wrongly. Branch: 21797ed window = 12 *blocks* (as his) + ALC "shows" from 0.3 not 0.1 (with 1-2 readings a window one stray 0.1 held it at 1.9 W of 5 in the model); f7214fe tx_player_stream() (WeFax/SSTV) + learned level floor -42 dB (Kris's clamp; 5 W needs ~-36 dB total on rev 3 bases per IU1WXY and Hany); a099c48 TEST log (readings per window, base rev; drop before the PR). Unit tests: new 2.5-readings case (fails on main, passes), lag sweep both ways, fast suite green. Not in it: PSK31 correction (Kris's apps not on main), IU1WXY's ALC 1/3 thresholds. **Next:** VE7NHW flashes it (replaces all-apps-test), JS8 TX at 5 W on the dummy load: wattmeter + "TX level: N readings" lines; if 5 W, the #303 PR (from OpenX6100 main, without TEST, with the PSK31 correction and a correction of our #303 description). Nothing posted on #303 yet.
+  **2026-10-17 (cloud session): likely cause found, branch `tx-level-fix`** (from main 19dd03a, test image Build image run 39059735209, Tests run 39059737055). IU1WXY's copy of our tx_level.c (his repo, c2e419d) found it: the radio sends only ~2.5 readings a second (his figure, not yet ours), so our window of 12 *readings* was ~5 s, two decisions a JS8 frame, ~1 dB up a transmission; our #303 post ("½-second averages, 1 dB/s") described the code wrongly. Branch: 21797ed window = 12 *blocks* (as his) + ALC "shows" from 0.3 not 0.1 (with 1-2 readings a window one stray 0.1 held it at 1.9 W of 5 in the model); f7214fe tx_player_stream() (WeFax/SSTV) + learned level floor -42 dB (Kris's clamp; 5 W needs ~-36 dB total on rev 3 bases per IU1WXY and Hany); a099c48 TEST log (readings per window, base rev; drop before the PR). Unit tests: new 2.5-readings case (fails on main, passes), lag sweep both ways, fast suite green. Not in it: PSK31 correction (Kris's apps not on main), IU1WXY's ALC 1/3 thresholds. **VE7NHW asked for it in all-apps-test instead (2026-10-17):** 21797ed, f7214fe and a099c48 put on all-apps-test after reverting 45358a2 (the old TEST log, which a099c48 replaces): d91a675, tx files identical to tx-level-fix, GCC 12 clean, Build image run **39059910797**; tx-level-fix's own image run 39059735209 cancelled. **Next:** VE7NHW flashes all-apps-test, JS8 TX at 5 W on the dummy load: wattmeter + "TX level: N readings" lines; if 5 W, the #303 PR (from OpenX6100 main, without TEST, with the PSK31 correction and a correction of our #303 description). Nothing posted on #303 yet.
 - [ ] **Murus apps (WeFax, NavTex, SSTV) into OpenX6100, for Hany
   (2026-10-14, VE7NHW).** Hany doesn't use GitHub: he hands VE7NHW a
   tarball once an app is done, we make the PRs (Hany as author, VE7NHW
@@ -207,7 +207,7 @@ by gdyuldin or myshak1, never merged by us alone.
   (reproduced on the PC under AddressSanitizer). One-line fix sent as
   **myshak1/x6100_gui#4** into Kris's `rtty` (branch
   `digi-menu-esc-crash` in OpenX6100), noted on #276; the same file is in
-  #272 / #274. On `all-apps-test` (89c2f4e), no image built yet. Also seen:
+  #272 / #274. On `all-apps-test` (89c2f4e, now in d91a675's image, run 39059910797). Also seen:
   the test-only core dumps in /mnt/cores came out **0 bytes** (three
   crashes 15:27-15:35Z), so that set-up doesn't work yet. **Next:** test
   image, VOL with each list open in RTTY / PSK31 / Olivia; Kris merges.
@@ -272,6 +272,8 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Decided: not doing
 
 So they don't come back up (VE7NHW, 2026-10-11):
+
+- **More contact with IU1WXY** (VE7NHW, 2026-10-17): no more emails; his firmware is ignored (see PLAN_DONE.md).
 
 - **CW input for JS8's text boxes** (Discussion #2, OE3WYC): out of scope,
   a lot of work for few users.

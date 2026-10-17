@@ -4,6 +4,33 @@ Items ticked in [PLAN.md](PLAN.md), moved here at each offload so the work
 list stays short. Newest at the top. Beta 5's list is
 [BETA5_PLAN.md](BETA5_PLAN.md).
 
+## Moved 2026-10-17
+
+- [x] **IU1WXY firmware (Giovanni Ricciardi IU1WXY, github.com/IU1WXY/X6100-IU1WXY)
+  takes OpenX6100 and our work, sometimes from open PRs (2026-10-16).**
+  Kris emailed him (cc gdyuldin, VE7NHW) asking to wait for OpenX6100
+  releases; Giovanni won't wait, "door open". VE7NHW replied backing Kris
+  (wait for releases; fixes back as PRs welcome). Checked in his repo
+  (2026-10-16): licences in order (GUI LGPL, js8core LICENSE kept, image
+  GPLv3, source public per tag), our JS8 headers kept, credits "From
+  randal007's x6100-js8", JS8_APP_VERSION "X6100 IU1WXY" (on-air STATUS
+  tells his builds apart); everything of ours he has was released first,
+  except Bluetooth security #297 (per Kris's list). His credits list "the
+  integration of JS8 ... into the radio" under his own work. VE7NHW doesn't
+  like how he works. **Offered, not decided:** a "Using this code" note in
+  the README (take from releases, send fixes back, report bugs on other
+  firmware to its author) and a firmware question in the issue template.
+  Waiting for Giovanni's answer.
+  **2026-10-17, closed:** Giovanni wrote he was removing or rewriting our
+  code; his v0.127 (same day) says "rewritten as own code": the JS8 app
+  and library renamed, ~5% of lines matching ours (was ~93%), the layout
+  and comments still following ours; js8core still our copy (371 of 379
+  files identical) without UPSTREAM.md. **VE7NHW: no more emails, ignore
+  him** ("stealing ideas and rewriting them without helping the
+  community"). The reply drafted that day was not sent. (This entry was
+  dropped from PLAN.md in e140beb without being moved here.)
+
+
 ## Moved 2026-10-16
 
 - [x] **Licence lines on our JS8 files tidied (VE7NHW, 2026-10-16):** the 52
