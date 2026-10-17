@@ -24,6 +24,21 @@ by gdyuldin or myshak1, never merged by us alone.
    **Open with others (2026-10-16):** #304 merged 2026-10-16. #305: Kris approved, Georgy doubts ±30 dB (S-meter is calibrated), Hany offers less: we asked if ±10 dB is OK (waiting for Georgy). #303: Georgy + Kris agree on one module (one stored level + per-mode correction; Kris: PSK31 only, clamp the stored level, he moves his apps once we send tx_level as a PR); **VE7NHW not happy with tx_level yet: 3.8 W of 5 W, no amp, ALC 0, in JS8**: told them we measure first; log in all-apps-test. #300: reworked 2026-10-16 (waiting for Georgy). Kris's #272/#274 have our waterfall suggestions; all his apps approved, not merged; he deleted + restored his branches 2026-10-16 19:16Z (slip); myshak1/x6100_gui#1-3 closed (he merged main himself), our `*-merge-main` branches deleted. #295: approved by us 2026-10-16.
 5. **Cloud credits** ($100, expire 2026-11-04): Murus Parts 1-4 done 2026-10-15. **JS8 3/4 and 4/4 briefed** ([tasks/js8-parts-3-4.md](tasks/js8-parts-3-4.md), base `ox-js8-engine`): **Both done 2026-10-16/17: draft PRs #16 (js8-library) and #17 (js8-app), checked here (identical to main, GCC 12, CI green)**; real PRs once #301 is merged, one at a time.
 
+- [ ] **IU1WXY firmware (Giovanni Ricciardi IU1WXY, github.com/IU1WXY/X6100-IU1WXY)
+  takes OpenX6100 and our work, sometimes from open PRs (2026-10-16).**
+  Kris emailed him (cc gdyuldin, VE7NHW) asking to wait for OpenX6100
+  releases; Giovanni won't wait, "door open". VE7NHW replied backing Kris
+  (wait for releases; fixes back as PRs welcome). Checked in his repo
+  (2026-10-16): licences in order (GUI LGPL, js8core LICENSE kept, image
+  GPLv3, source public per tag), our JS8 headers kept, credits "From
+  randal007's x6100-js8", JS8_APP_VERSION "X6100 IU1WXY" (on-air STATUS
+  tells his builds apart); everything of ours he has was released first,
+  except Bluetooth security #297 (per Kris's list). His credits list "the
+  integration of JS8 ... into the radio" under his own work. VE7NHW doesn't
+  like how he works. **Offered, not decided:** a "Using this code" note in
+  the README (take from releases, send fixes back, report bugs on other
+  firmware to its author) and a firmware question in the issue template.
+  Waiting for Giovanni's answer.
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
   at the end of each.
@@ -81,19 +96,7 @@ by gdyuldin or myshak1, never merged by us alone.
   JS8_RX_TEXT_LEN 640 (typing-lag).
   **2026-10-14: #290 merged (VE7NHW, both approved), 2/4 opened as #301.**
   3/4 also carries the FFTW wisdom fix (PR #11, on main since 2026-10-15).
-- [ ] **Helping Kris: PSK31, Olivia, FT2 conflicts (2026-10-14, VE7NHW
-  asked).** #272 and #274 conflicted with main since the Bluetooth window
-  (both add an app on APP page 3), #288 since our #290 (JS8 and FT2 in the
-  same lists). Resolved each against OpenX6100 main (keep both; the
-  Bluetooth case's `break` restored, a plain keep-both drops it; FT2
-  numbers as agreed: dig type FT2 4, MODE_FT2 9), syntax-checked with GCC
-  12, and offered as PRs **into his own branches**: myshak1/x6100_gui#1
-  (psk31), #2 (olivia), #3 (ft2), from OpenX6100 branches
-  `psk31-merge-main`, `olivia-merge-main`, `ft2-merge-main` (delete those
-  once he has merged or closed them). Told him page 3 only holds four
-  apps, so the third of WSPR/PSK31/Olivia (and JS8 in 4/4) needs a 4th
-  APP page, his call. WSPR #271 and RTTY #276: approved and clean, waiting
-  for Kris to merge.
+  **2026-10-16:** #301 approved by gdyuldin; Kris's three points done (b040b8f) and answered; Buildroot #8 (Boost/FFTW, licence label) opened. **3/4 and 4/4 prepared by cloud sessions:** draft PRs here #16 (`js8-library`) and #17 (`js8-app`, merges OpenX6100 main 9714584 first, since js8-engine sits on js8-groundwork), both checked on this PC (files identical to main, GCC 12, CI green). **Next:** Kris's OK + Buildroot #8 merged -> VE7NHW merges #301; then 3/4 as a real PR from `js8-library`, then 4/4; 4/4 gets the tx_level fix when there is one.
 - [ ] **One transmit-level (ALC) module for every digital app (2026-10-14,
   VE7NHW: needs fixing; PSK31 and Olivia put out less than JS8 with the
   XPA125B).** FT8's tx_worker corrects per chunk from single readings
@@ -104,35 +107,7 @@ by gdyuldin or myshak1, never merged by us alone.
   [upstream-prs/15-tx-level-discussion.md](upstream-prs/15-tx-level-discussion.md)):
   offered tx_level/tx_player as a PR of their own before JS8 4/4.
   **Next:** their answer; a JS8-vs-Olivia wattmeter comparison if useful.
-- [ ] **PSK31 / Olivia tried on the radio (digimodes-test, 2026-10-14):**
-  comments posted on #272 and #274 (VE7NHW's findings): the waterfall
-  keeps scrolling while keyed and shows blank static (not the band, not
-  our TX; TX itself fine, full power; first comment wrongly said TX audio,
-  corrected) (suggested: ignore capture while keyed, as JS8, pause or
-  black rows); the scrolling flicker JS8 had (suggested, optional: our
-  row averaging, avg += a*(row-avg), a 0.65/0.5/0.35). Waiting for Kris.
-- [ ] **WSPR test build (2026-10-14, VE7NHW wants to try WSPR):** branch
-  `wspr-test` = bt-security-js8 (12d374c, on the card) + main + Kris's
-  #271 (91c0292): WSPR in APP page 3's free slot, JS8 stays last. *Build
-  image* run **38606840476** (`buildroot_ref=bt-security`), built OK, **on
-  the card 2026-10-14** (backup sd-backup-2026-10-14-121313). **Next:**
-  **Tried 2026-10-14 (VE7NHW):** RX decodes; a beacon was sent and VE7NHW
-  saw it on PSK Reporter. Findings posted on #271 (comment
-  6177106854): the red bar is the 200 Hz receive window, not TX (TX is a
-  ~6 Hz signal at Center, unmarked); the receive window follows Center
-  (from the code: Center 1600 = 1500-1700, misses 1400-1500); suggested
-  WSJT-X's way (decode 1400-1600 always, thin TX marker). Waiting for
-  Kris. **Kris answered the same evening (#271, 20:22Z): agreed on both,
-  changed it as WSJT-X does in d6377057** (decodes 1400-1600 always, edges
-  outlined; "TX freq" button/knob moves a thin ~6 Hz red marker; moving it
-  no longer rebuilds the receive chain). VE7NHW's beacon reached Perth, AU
-  (40 W, amp left on, 33' EFRW). **Next:** a new wspr-test image with
-  d6377057 to retest: in digimodes-test (now on the card). Branches
-  `wspr-test`, `wisdom-wspr-test` and `bt-security-js8` are superseded by
-  digimodes-test: delete when VE7NHW agrees. Earlier: try it on the radio (he asked: keep the branch until
-  then; same JS8/Bluetooth code as 5.2 + WSPR + FT8 knob, says "beta 5.1"
-  on the air); try WSPR RX, then a beacon on the dummy load
-  (it opens in RX only); report on #271. Delete the branch after.
+  **2026-10-16:** Georgy + Kris agree (one stored level + PSK31 correction, clamp the stored value; Kris moves WSPR/PSK31/Olivia/RTTY/JTTY once we send it). **VE7NHW: our tx_level stops at 3.8 W of 5 W, no amp, ALC 0, in JS8**: told them on #303 we measure first. Suspects (from the code): drive at its 0 dB ceiling, the radio's own power reading saying ~5 W, or the 8 dB ramp limit. Log ("TX level:" every 0.5 s) in all-apps-test, on the card. **Next:** one JS8 TX at 5 W on the dummy load, read /tmp/x6100_log.txt over the console, fix, then the PR (with the clamp).
 - [ ] **Murus apps (WeFax, NavTex, SSTV) into OpenX6100, for Hany
   (2026-10-14, VE7NHW).** Hany doesn't use GitHub: he hands VE7NHW a
   tarball once an app is done, we make the PRs (Hany as author, VE7NHW
@@ -179,6 +154,7 @@ by gdyuldin or myshak1, never merged by us alone.
   modifier broken, not ours): gdyuldin asked the reporter for params.db;
   VE7NHW: leave it to others. Before 4/4: a 4th APP page agreed with
   myshak1, and one cty.dat (JS8 reads #282's).
+  **2026-10-16:** #295 approved by us (Buildroot #7 fixed our point); #253's reporter attached params.db (left to others).
 - [ ] **Idea, to rethink: phone digital modes (FT8CN) with audio over
   Bluetooth** (VE7NHW, 2026-10-13; shared GUI code, Kris's bt_audio.c,
   not JS8). The X6200 does it (two-way audio + CAT with FT8CN). Tried by
@@ -227,7 +203,7 @@ by gdyuldin or myshak1, never merged by us alone.
   /tmp/x6100_log.txt to /mnt (VE7NHW to decide). Idea for gdyuldin
   (shared CAT code): ignore CAT PTT for a few seconds after start or
   after a Bluetooth CAT client connects; CAT PTT isn't logged at all.
-
+  **2026-10-16:** FT2 (suspect 2) is in all-apps-test, now on the card: console connected on the first boots.
 - [ ] **FT8 window: the knob moves the TX frequency 1 Hz a click
   however fast it turns** (VE7NHW, 2026-10-13; shared code, OpenX6100's
   FT8 app). Same cause as JS8's 10fdf95 (1.0 hands over every click on
@@ -239,6 +215,7 @@ by gdyuldin or myshak1, never merged by us alone.
   than count clicks in dialog_ft8.c: **rework needed** (shared code).
   Not in beta 5.2; the test builds still carry 3385886. **Next:** rework
   as he asks; radio check of the current fix still open.
+  **2026-10-16: reworked as Georgy asked** (6050dd9: apps' `rotary_cb(diff, dt)`, FT8 speeds up from the knob's `dt`); Kris told his apps need the extra argument. In all-apps-test. **Next:** radio test, Georgy's review.
 - [ ] **Start-up glitch, old** (VE7NHW, 2026-10-13: seen on earlier
   versions too, "sometimes"): right after boot no waterfall and the
   S-meter at full scale, then relays click and it comes right. Guess: a
@@ -282,9 +259,11 @@ by gdyuldin or myshak1, never merged by us alone.
   on /mnt in x6100_daemon, temporary), reproduce by spinning the dial,
   read the backtrace on the PC against that build's unstripped binary;
   then an OpenX6100 issue/PR.
+  **2026-10-16:** nothing caught on afd514e (no cores, no new crash logs since 10-14). all-apps-test flashed with the same test-only core dumps (unstripped GUI in builds/ci-38979367716/unstripped/).
 
 ## To try on the radio (no programming)
 
+- [ ] **all-apps-test (on the card since 2026-10-16):** JS8 TX at 5 W on the dummy load (TX level log); FT8 knob fast; Kris's WSPR (marker, decode window), PSK31/Olivia (waterfall stops while keyed, averaging), RTTY's new page 2; Hany's WeFax, SSTV (TX on the dummy load first), Channel List (mic V/M, GENE, NW, UP/DOWN); the first boots with the console connected (FT2).
 - [ ] Ultra still decodes after #10 (once a slot, 3.128 s in): two-radio
   bench, test build 12d374c is on the card.
 - [ ] Ultra on a busy band. Busy bands fine on Fast (VE7NHW, 2026-10-12);

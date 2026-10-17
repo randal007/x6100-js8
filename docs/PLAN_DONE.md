@@ -4,6 +4,66 @@ Items ticked in [PLAN.md](PLAN.md), moved here at each offload so the work
 list stays short. Newest at the top. Beta 5's list is
 [BETA5_PLAN.md](BETA5_PLAN.md).
 
+## Moved 2026-10-16
+
+- [x] **Licence lines on our JS8 files tidied (VE7NHW, 2026-10-16):** the 52
+  files that follow desktop JS8Call (app, waterfall, most of src/js8,
+  test_js8, js8_wavgen) GPL-3.0-only -> **GPL-3.0-or-later** as desktop's
+  (a8aa43c); the LGPL ones stay; tests/test_js8_db.cpp got its LGPL line
+  (in OpenX6100 since #290: carry it in 3/4); README *License* lists the
+  split (e99a61c: names only desktop as "or later", js8core's LICENSE says
+  GPLv3 only). Drafts #16/#17 already carry the new lines.
+
+## Moved 2026-10-16
+
+- [x] **Helping Kris: PSK31, Olivia, FT2 conflicts (2026-10-14, VE7NHW
+  asked).** #272 and #274 conflicted with main since the Bluetooth window
+  (both add an app on APP page 3), #288 since our #290 (JS8 and FT2 in the
+  same lists). Resolved each against OpenX6100 main (keep both; the
+  Bluetooth case's `break` restored, a plain keep-both drops it; FT2
+  numbers as agreed: dig type FT2 4, MODE_FT2 9), syntax-checked with GCC
+  12, and offered as PRs **into his own branches**: myshak1/x6100_gui#1
+  (psk31), #2 (olivia), #3 (ft2), from OpenX6100 branches
+  `psk31-merge-main`, `olivia-merge-main`, `ft2-merge-main` (delete those
+  once he has merged or closed them). Told him page 3 only holds four
+  apps, so the third of WSPR/PSK31/Olivia (and JS8 in 4/4) needs a 4th
+  APP page, his call. WSPR #271 and RTTY #276: approved and clean, waiting
+  for Kris to merge.
+  **Done 2026-10-16:** Kris merged main into his branches himself; myshak1/x6100_gui#1-3 closed, our `psk31/olivia/ft2-merge-main` branches deleted.
+
+- [x] **PSK31 / Olivia tried on the radio (digimodes-test, 2026-10-14):**
+  comments posted on #272 and #274 (VE7NHW's findings): the waterfall
+  keeps scrolling while keyed and shows blank static (not the band, not
+  our TX; TX itself fine, full power; first comment wrongly said TX audio,
+  corrected) (suggested: ignore capture while keyed, as JS8, pause or
+  black rows); the scrolling flicker JS8 had (suggested, optional: our
+  row averaging, avg += a*(row-avg), a 0.65/0.5/0.35). Waiting for Kris.
+  **Done 2026-10-15/16: Kris took both suggestions** (#274 f55afef7, #272 35296e06: waterfall stops with a red frame while keyed, rows averaged at 0.5; Olivia text follows *Decoder text*). Retest: in "To try on the radio".
+
+- [x] **WSPR test build (2026-10-14, VE7NHW wants to try WSPR):** branch
+  `wspr-test` = bt-security-js8 (12d374c, on the card) + main + Kris's
+  #271 (91c0292): WSPR in APP page 3's free slot, JS8 stays last. *Build
+  image* run **38606840476** (`buildroot_ref=bt-security`), built OK, **on
+  the card 2026-10-14** (backup sd-backup-2026-10-14-121313). **Next:**
+  **Tried 2026-10-14 (VE7NHW):** RX decodes; a beacon was sent and VE7NHW
+  saw it on PSK Reporter. Findings posted on #271 (comment
+  6177106854): the red bar is the 200 Hz receive window, not TX (TX is a
+  ~6 Hz signal at Center, unmarked); the receive window follows Center
+  (from the code: Center 1600 = 1500-1700, misses 1400-1500); suggested
+  WSJT-X's way (decode 1400-1600 always, thin TX marker). Waiting for
+  Kris. **Kris answered the same evening (#271, 20:22Z): agreed on both,
+  changed it as WSJT-X does in d6377057** (decodes 1400-1600 always, edges
+  outlined; "TX freq" button/knob moves a thin ~6 Hz red marker; moving it
+  no longer rebuilds the receive chain). VE7NHW's beacon reached Perth, AU
+  (40 W, amp left on, 33' EFRW). **Next:** a new wspr-test image with
+  d6377057 to retest: in digimodes-test (now on the card). Branches
+  `wspr-test`, `wisdom-wspr-test` and `bt-security-js8` are superseded by
+  digimodes-test: delete when VE7NHW agrees. Earlier: try it on the radio (he asked: keep the branch until
+  then; same JS8/Bluetooth code as 5.2 + WSPR + FT8 knob, says "beta 5.1"
+  on the air); try WSPR RX, then a beacon on the dummy load
+  (it opens in RX only); report on #271. Delete the branch after.
+  **Closed 2026-10-16:** superseded by digimodes-test, then all-apps-test (Kris's d6377057 is in); branches wspr-test, wisdom-wspr-test, bt-security-js8 deleted. Retest: in "To try on the radio".
+
 ## Moved 2026-10-15
 
 - [x] **JS8 hangs 5-13 s when closed soon after opening: FFTW measured on
