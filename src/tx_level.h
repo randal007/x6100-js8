@@ -10,8 +10,9 @@
  *  power in 0.1 W steps, so at 0.3 W a true 0.28 W reads 0.2 W "short",
  *  and the drive swung by several dB a second (VE7NHW, 2026-10-04: an
  *  XPA125B behind it went 18-35 W and back every two seconds).
+ *  The radio sends a new reading only about 2.5 times a second.
  *
- *  Now, with readings averaged over half a second: while the ALC reads
+ *  Now, with the readings of each half second averaged: while the ALC reads
  *  zero the drive ramps up, one way only (1 dB a second while the power is
  *  under half the setting, then 0.5 dB a second), and stops for the rest
  *  of the transmission once the ALC shows (it then holds the power at the
@@ -31,9 +32,11 @@ extern "C" {
 #endif
 
 #define TX_LEVEL_SETTLE_BLOCKS 30    /* about 1.3 s: the PA and the ALC settle first */
-#define TX_LEVEL_WINDOW_BLOCKS 12    /* about 0.5 s of readings per decision */
+#define TX_LEVEL_WINDOW_BLOCKS 12    /* about 0.5 s of blocks per decision */
 #define TX_LEVEL_ALC_HIGH      0.5f  /* the radio's ALC (0-10) above this: overdriven */
-#define TX_LEVEL_ALC_SHOWS     0.1f  /* from this the ALC is working: hold there */
+#define TX_LEVEL_ALC_SHOWS     0.25f /* from 0.3 (read in 0.1 steps) the ALC is working: hold there.
+                                      * Not 0.1: with two or three readings a window, one stray
+                                      * 0.1 stopped it short */
 #define TX_LEVEL_DOWN_MAX_DB   0.75f /* the most the drive drops in one window */
 #define TX_LEVEL_UP_FAST_DB    0.5f  /* up a window while far short (1 dB a second) */
 #define TX_LEVEL_UP_SLOW_DB    0.25f /* up a window when near (0.5 dB a second) */
@@ -44,6 +47,7 @@ typedef struct {
     float target_w; /* the power asked for */
     int   blocks;   /* blocks played so far */
     int   n;        /* readings in the current window */
+    int   wb;       /* blocks in the current window */
     float sum_pwr;
     float sum_alc;
     bool  held;     /* the level was found (or had to come down): no more ramping up */

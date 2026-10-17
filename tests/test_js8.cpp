@@ -4525,8 +4525,9 @@ struct FrameStats {
 };
 
 // Frames one after another, the gain carried over (the learned offset).
+// every: the radio sends a reading after one block in `every` (1: after each).
 std::vector<FrameStats> run_frames(bool old_loop, float set_w, float full_db, float start_db, int frames,
-                                   size_t delay = 8, float smooth = 0.25f, bool round_p = false) {
+                                   size_t delay = 8, float smooth = 0.25f, bool round_p = false, int every = 1) {
     ModelRadio r{set_w, full_db};
     r.delay   = delay;
     r.smooth  = smooth;
@@ -4549,7 +4550,9 @@ std::vector<FrameStats> run_frames(bool old_loop, float set_w, float full_db, fl
                 st.mean_alc += r.true_alc(g);
                 n++;
             }
-            float d = old_loop ? (b > 30 ? old_correction(set_w, pwr, alc) * 0.4f : 0.0f) : tx_level_block(&l, true, pwr, alc);
+            bool  have = b % every == every - 1;
+            float d = old_loop ? (b > 30 && have ? old_correction(set_w, pwr, alc) * 0.4f : 0.0f)
+                               : tx_level_block(&l, have, pwr, alc);
             int   dir = d > 0 ? 1 : d < 0 ? -1 : 0;
             if (dir && last_dir && dir != last_dir) st.turns++;
             if (dir) last_dir = dir;
@@ -4615,6 +4618,34 @@ TEST_CASE("drive level: starting far too low or too hot, it settles within two t
     }
 }
 
+TEST_CASE("drive level: the radio's readings come about 2.5 a second, not after every block", "[js8][txlevel]") {
+    // IU1WXY (his tx_level.c, 2026-10): a window of 12 readings was then about
+    // 5 s, two decisions in a frame, and the drive came up only a dB or so a
+    // transmission (VE7NHW 2026-10-16: 3.8 W of 5, ALC 0). A window is half a
+    // second of blocks, whatever readings came in it.
+    for (float set : {0.3f, 1.0f, 5.0f}) {
+        INFO("set " << set << " W");
+        auto low = run_frames(false, set, -14.0f, -20.0f, 6, 8, 0.25f, false, 9); // 6 dB too low
+        for (int f = 1; f < 6; f++) {
+            INFO("frame " << f << ": " << low[f].min_w << "-" << low[f].max_w << " W, ALC " << low[f].mean_alc);
+            CHECK(low[f].mean_w >= set * 0.7f);
+            CHECK(low[f].mean_alc <= 1.0f);
+            CHECK(swing_db(low[f]) < 0.8f);
+        }
+        auto hot = run_frames(false, set, -14.0f, -4.0f, 10, 8, 0.25f, false, 9); // 10 dB too hot
+        CHECK(hot[3].mean_alc <= 1.0f);
+        CHECK(hot[9].mean_w >= set * 0.7f);
+        CHECK(swing_db(hot[9]) < 0.8f);
+    }
+    // No reading at all in a window: no decision until one comes.
+    tx_level_t l;
+    tx_level_start(&l, 5.0f);
+    float total = 0;
+    for (int b = 0; b < TX_LEVEL_SETTLE_BLOCKS + 3 * TX_LEVEL_WINDOW_BLOCKS; b++) total += tx_level_block(&l, false, 0, 0);
+    CHECK(total == 0.0f);
+    CHECK(tx_level_block(&l, true, 1.0f, 0.0f) == TX_LEVEL_UP_FAST_DB); // the late reading decides at once
+}
+
 TEST_CASE("drive level: ramps up while the ALC reads zero, holds once it shows", "[js8][txlevel]") {
     tx_level_t l;
     tx_level_start(&l, 0.3f);
@@ -4632,8 +4663,12 @@ TEST_CASE("drive level: ramps up while the ALC reads zero, holds once it shows",
     CHECK(total == 0.0f); // it had to come down: no ramping up after, this transmission
     tx_level_start(&l, 0.3f);
     total = 0;
-    for (int b = 0; b < 200; b++) total += tx_level_block(&l, true, 0.2f, 0.2f); // the ALC shows a little
+    for (int b = 0; b < 200; b++) total += tx_level_block(&l, true, 0.2f, 0.3f); // the ALC shows a little
     CHECK(total == 0.0f); // there: held
+    tx_level_start(&l, 0.3f);
+    total = 0;
+    for (int b = 0; b < 30 + 2 * TX_LEVEL_WINDOW_BLOCKS; b++) total += tx_level_block(&l, true, 0.2f, 0.1f); // a stray 0.1
+    CHECK(total == Catch::Approx(2 * TX_LEVEL_UP_SLOW_DB)); // not the ALC yet: still up
     tx_level_start(&l, 0.3f);
     total = 0;
     for (int b = 0; b < 200; b++) total += tx_level_block(&l, true, 0.3f, 0.0f); // reads the setting
@@ -4652,9 +4687,11 @@ TEST_CASE("drive level: steady whatever the meter's lag and rounding", "[js8][tx
     for (size_t delay : {0u, 8u, 16u})
         for (float smooth : {1.0f, 0.25f, 0.1f})
             for (bool round_p : {false, true})
-                for (float start : {-24.0f, -16.0f, -12.0f, -4.0f}) {
-                    auto f = run_frames(false, 0.3f, -14.0f, start, 8, delay, smooth, round_p);
+                for (float start : {-24.0f, -16.0f, -12.0f, -4.0f})
+                for (int every : {1, 9}) { // a reading after every block, or 2.5 a second as the radio
+                    auto f = run_frames(false, 0.3f, -14.0f, start, 8, delay, smooth, round_p, every);
                     INFO("delay " << delay << " smooth " << smooth << " round " << round_p << " start " << start
+                                  << " every " << every
                                   << ": frames 3-7 e.g. " << f[3].min_w << "-" << f[3].max_w << " W, ALC "
                                   << f[3].mean_alc);
                     for (int i = 0; i < 8; i++) CHECK(f[i].turns <= 2); // never a see-saw
