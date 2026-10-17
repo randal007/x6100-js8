@@ -30,7 +30,6 @@ list stays short. Newest at the top. Beta 5's list is
   community"). The reply drafted that day was not sent. (This entry was
   dropped from PLAN.md in e140beb without being moved here.)
 
-
 ## Moved 2026-10-16
 
 - [x] **Licence lines on our JS8 files tidied (VE7NHW, 2026-10-16):** the 52
