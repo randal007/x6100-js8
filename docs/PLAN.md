@@ -15,8 +15,8 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** `all-apps-test` **eb339dc** (run 38979367716: our main + OpenX6100 main + Kris's latest WSPR/RTTY/PSK31/Olivia/FT2 + Hany's WeFax/SSTV/Channel List + FT8 knob rework + TX level log + S-meter offset), flashed 2026-10-16 20:21 local, backup **sd-backup-2026-10-16-202105**, test-only core dumps on.
-2. **Next on the radio:** flash `all-apps-test` d91a675 (all the digital apps + the likely fix for 3.8 W of 5 + Kris's menu-crash fix, Build image run 39059910797), JS8 TX at 5 W on the dummy load, console connected: wattmeter and the "TX level:" lines; then the list under *To try on the radio*.
+1. **Card:** `all-apps-test` **d91a675** (run 39059910797: the digital apps as before + Kris's menu-crash fix + the transmit-level fix + TX level log), flashed 2026-10-17 12:57 local, backup **sd-backup-2026-10-17-125726**. Core dumps no longer set up (the old test-only daemon is gone with this image).
+2. **Next on the radio:** JS8 TX at 5 W on the dummy load, console connected: wattmeter and the "TX level:" lines; then the list under *To try on the radio*.
 3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, Kris's points done, waits for Kris + **Buildroot #8** (Boost/FFTW), then VE7NHW merges; **3/4 and 4/4 ready** as draft PRs here #16 / #17 (checked). FFTW wisdom released in **Release Candidate 1** (`js8-rc1`, 2026-10-17; was going to be beta 5.3), the JS8 going into OpenX6100.
 4. **Waiting on others:** Georgy: #305 (±10 dB?), #300 (knob rework), Buildroot #8; Kris: #301, merging his apps (then Hany's go in, groundwork first); Hany: done (Info window text OK, 2026-10-17). #303: our tx_level PR after the fix.
 5. **VE7NHW, any time:** delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y` (notes copied to main); pick where to back up CLAUDE.local.md. Cloud credits ($100, to 2026-11-04) left for a deep review of JS8 3/4 + 4/4 or the tx_level fix.
