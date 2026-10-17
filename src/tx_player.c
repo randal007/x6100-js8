@@ -61,12 +61,6 @@ bool tx_player_play(int16_t      *samples,
     tx_level_t     level;
     tx_level_start(&level, LV_MIN(param_f_get(cfg.pwr()), TX_PLAYER_MAX_PWR_W));
     tx_info_refresh(&msg_id, NULL, NULL, NULL); /* readings from before this one don't count */
-    /* TEST: why the drive stops short (VE7NHW 2026-10-16: 3.8 W of 5, no
-     * amplifier, ALC at 0). */
-    LV_LOG_USER("TX level: target %.1f W, base %.1f dB, stored %.1f dB, play vol %.1f dB, gain %.1f dB",
-                level.target_w, base_gain_offset, param_f_get(cfg.ft8.output_gain_offset()),
-                play_gain_offset, gain_offset);
-    int log_windows = 0;
 
     float    prev_gain_offset = gain_offset;
     int16_t *ptr              = samples;
@@ -77,11 +71,6 @@ bool tx_player_play(int16_t      *samples,
         float pwr = 0.0f, alc = 0.0f;
         bool  have = tx_info_refresh(&msg_id, &alc, &pwr, NULL);
         gain_offset = clamp_gain(gain_offset + tx_level_block(&level, have, pwr, alc));
-        if (level.windows != log_windows) {
-            log_windows = level.windows;
-            LV_LOG_USER("TX level: pwr %.2f W, alc %.2f, gain %.2f dB, up %.2f dB%s",
-                        level.win_pwr, level.win_alc, gain_offset, level.up_db, level.held ? ", held" : "");
-        }
         if (n_samples <= 0) {
             break;
         }
@@ -105,8 +94,6 @@ bool tx_player_play(int16_t      *samples,
 
     /* The learned gain offset is shared by FT8 and JS8: same audio path. */
     param_f_set(cfg.ft8.output_gain_offset(), gain_offset - base_gain_offset + play_gain_offset);
-    LV_LOG_USER("TX level: end, gain %.1f dB, stored %.1f dB", gain_offset,
-                param_f_get(cfg.ft8.output_gain_offset()));
     audio_play_wait();
     radio_set_modem(false);
     radio_set_freq((int32_t)radio_freq);

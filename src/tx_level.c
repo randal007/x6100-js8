@@ -29,9 +29,6 @@ float tx_level_block(tx_level_t *l, bool have, float pwr_w, float alc) {
     float p = l->sum_pwr / l->n, a = l->sum_alc / l->n;
     l->n = 0;
     l->sum_pwr = l->sum_alc = 0.0f;
-    l->windows++;
-    l->win_pwr = p;
-    l->win_alc = a;
 
     float d = 0.0f;
     if (a > TX_LEVEL_ALC_HIGH) {
