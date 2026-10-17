@@ -1,6 +1,8 @@
 **JS8 on the Xiegu X6100, running on the radio itself.** No PC, phone or tablet needed: the X6100 firmware (OpenX6100, gdyuldin's) with a JS8 app next to FT8 and RTTY.
 
-Beta 5.3 makes **JS8 open and close without a pause**: the decoder's setup is now kept on the SD card, as desktop JS8Call does, so it runs once instead of every time JS8 opens. Everything else is as in [beta 5.2](https://github.com/randal007/x6100-js8/releases/tag/js8-beta5.2).
+**Release Candidate 1 is the JS8 that is going into the OpenX6100 firmware itself.** From here on it gets bug fixes only.
+
+New since beta 5.2: **JS8 opens and closes without a pause**. The decoder's setup is now kept on the SD card, as desktop JS8Call does, so it runs once instead of every time JS8 opens. Everything else is as in [beta 5.2](https://github.com/randal007/x6100-js8/releases/tag/js8-beta5.2).
 
 > [!IMPORTANT]
 > Writing the image replaces the whole SD card. **Copy your files off the DATA partition first** (`params.db`, `qso_log.db`, `*.adi`, `js8_*.txt`, `js8_history.db`, `bluetooth.tar`) and copy them back after the first start.
@@ -25,7 +27,7 @@ The JS8 files that follow desktop JS8Call are now marked GPL-3.0-or-later, as de
 ## Updating
 
 1. Copy the DATA partition's files to your PC (see the box at the top).
-2. Download `sdcard.js8-beta5.3.img.zip` below and write it to the card with balenaEtcher or Rufus.
+2. Download `sdcard.js8-rc1.img.zip` below and write it to the card with balenaEtcher or Rufus.
 3. Start the radio once with the new card, then copy your files back.
 4. APP → page 3 → **JS8**. The first open shows *Setting up the decoder* for about 20 seconds, once.
 

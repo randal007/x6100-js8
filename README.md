@@ -4,9 +4,10 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Beta 5.3** is the current release: **JS8 opens and closes without a
-> pause**, its decoder setup kept on the SD card as desktop JS8Call does
-> ([New in beta 5.3](#new-in-beta-53)). Beta 5.2 brought no more freezes
+> **Release Candidate 1** is the current release, the JS8 that goes into
+> the OpenX6100 firmware itself: **JS8 opens and closes without a pause**,
+> its decoder setup kept on the SD card as desktop JS8Call does
+> ([New in Release Candidate 1](#new-in-release-candidate-1)). Beta 5.2 brought no more freezes
 > typing a long message, messages up to 20 frames as on desktop (and long ones from
 > desktop stations no longer cut short), a name or comment typed in Log QSO
 > during a QSO kept for the log at the end, and **Bluetooth locked down**:
@@ -57,7 +58,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
-- [New in beta 5.3](#new-in-beta-53)
+- [New in Release Candidate 1](#new-in-release-candidate-1)
 - [New in beta 5.2](#new-in-beta-52)
 - [New in beta 5.1](#new-in-beta-51)
 - [New in beta 5](#new-in-beta-5)
@@ -66,7 +67,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
-- [Known issues in beta 5.3](#known-issues-in-beta-53)
+- [Known issues in Release Candidate 1](#known-issues-in-release-candidate-1)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -119,7 +120,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta5.3.img.zip` from the Assets.
+   download `sdcard.js8-rc1.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works; a
    name-brand 8–32 GB card (SanDisk, Samsung) from a trusted seller is best.
@@ -1022,9 +1023,11 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
-## New in beta 5.3
+## New in Release Candidate 1
 
-Released 2026-10-17 ([release notes](docs/releases/js8-beta5.3.md)).
+Released 2026-10-17 ([release notes](docs/releases/js8-rc1.md)). This is
+the JS8 that is going into the OpenX6100 firmware: from here on, bug fixes
+only.
 
 - **JS8 opens and closes without a pause.** Each time JS8 opened, the
   decoder's first pass set up its maths from scratch (FFTW timing test
@@ -1425,7 +1428,7 @@ with every change.
 ([Installing](#installing)) and put them back: beta 4 reads them as they
 are, and its new settings start at their defaults.
 
-## Known issues in beta 5.3
+## Known issues in Release Candidate 1
 
 - **Bluetooth headphones while JS8 is open:** while you listen on
   headphones the radio's speaker is turned down, so JS8's alert beeps
