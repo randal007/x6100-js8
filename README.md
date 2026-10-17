@@ -1418,8 +1418,12 @@ are, and its new settings start at their defaults.
 - **Closing JS8 right after opening it can hang for 10-15 s.** The
   decoder's first pass after JS8 opens sets up its maths from scratch
   (FFTW timing test runs), which takes 12-13 s on the radio, and closing
-  waits for it. Wait a few seconds after opening before closing; a fix
-  that keeps the setup on the SD card is planned.
+  waits for it. Wait a few seconds after opening before closing; fixed
+  for the next release (the setup is kept on the SD card).
+- **Transmit power can stop short of the setting:** without the
+  amplifier, set to 5 W, one JS8 transmission stayed at about 3.8 W with
+  the ALC at 0. Being measured; with the XPA125B (which needs only a
+  fraction of a watt) it's steady.
 - **Spinning the main dial very fast** has twice restarted the GUI
   program (the radio comes back by itself in a few seconds). Seen on older
   builds too; it's in OpenX6100's shared code, not JS8, and being looked
@@ -1446,7 +1450,10 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
 - [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is in
   ([#290](https://github.com/OpenX6100/x6100_gui/pull/290)), part 2, the
   engine, is approved and getting its last touches
-  ([#301](https://github.com/OpenX6100/x6100_gui/pull/301))
+  ([#301](https://github.com/OpenX6100/x6100_gui/pull/301)), parts 3
+  and 4 are ready to follow
+- [ ] **Transmit power reaching the setting** without an amplifier (being
+  measured)
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests

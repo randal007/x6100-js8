@@ -15,30 +15,12 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** **`all-apps-test` eb339dc** (run 38979367716: our main + OpenX6100 main + Kris's latest 5 apps + Hany's WeFax/SSTV/Channel List + knob rework + TX level log + S-meter offset), flashed 2026-10-16 20:21 local, backup **sd-backup-2026-10-16-202105**, test-only core dumps in /usr/sbin/x6100_daemon (to /mnt/cores). No cores or crash logs were caught on afd514e.
-2. **Next on the radio:** JS8 at 5 W into the dummy load, console connected (the "TX level:" log: why 3.8 W of 5, ALC 0); FT8 knob fast; Hany's apps (SSTV TX on the dummy load first); FT2 is in (a power-up TX suspect: watch the first boots); the dial crash if it shows.
-3. **On main, not released:** FFTW wisdom (PR #11). JS8 into OpenX6100: 1/4 #290 merged; **2/4 #301 approved by Georgy** (2026-10-15; he wants `legal-info` as its own PR); **Kris's review asks** a Buildroot PR (boost + fftw-single in x6100_gui.mk, X6100_GUI_LICENSE still "GPLv2"), README: the *GUI program* is GPL-3.0, not the image, and CRCpp/Eigen licence files. Our turn; 3/4 next.
-4. **Murus apps:** **Hany's full written OK on #302 (2026-10-15 16:52Z):** headers to LGPL-2.1-or-later, 7(b) dropped, unlabelled files LGPL too, order agreed. **Cloud sessions done 2026-10-15:** draft PRs here #12 groundwork, #13 Channel List, #14 WeFax, #15 SSTV (base `ox-main`); no GCC 12 check, image or radio test yet; their notes on branches claude/* (not merged). Open: #12 recorder MP3 -> WAV for everyone, #13 + #14 both take mic UP/DOWN, our commits authored "Claude".
-   **Done 2026-10-16 (VE7NHW agreed):** #301: README says the GUI *program* is GPL-3.0 + CRC++/Eigen licence files (b040b8f, same files on main); Buildroot **OpenX6100/AetherX6100Buildroot#8** (`js8-deps`: boost + fftw-single, licence LGPL-2.1+ / GPL-3.0; js8core/LICENSE joins LICENSE_FILES once X6100_GUI_VERSION has it). Reply to Kris posted on #301; #295 approved by us; the 3.8 W was in JS8. After #8 merges: drop the "Enable JS8 dependencies" step in main.yml. #305: asked Georgy if ±10 dB is OK (range not changed yet). #300 reworked as Georgy asked (6050dd9: rotary_cb gets `dt`; Kris told his WSPR/PSK31/Olivia need the extra argument). #303: told them we measure first. **Test image digimodes-test 48d1269** (knob rework + TX level log every 0.5 s, "TX level:" lines in /tmp/x6100_log.txt): *Build image* run **38975177237**. **#304 merged by VE7NHW 2026-10-16** (radio test OK). Branches deleted 2026-10-16: psk31/olivia/ft2-merge-main (OpenX6100), wspr-test, wisdom-wspr-test, bt-security-js8 (ours).
-   **Murus, 2026-10-16 (VE7NHW: send as Hany wrote it, the reviewers say what they think in the PRs):** OpenX6100-ready branches built fresh on OpenX6100 main 9714584, Hany's commits as received, ours authored by VE7NHW, + a licence commit (his files LGPL-2.1-or-later, 7(b) and NOTICE pointers gone, headers added to his unlabelled files): **`ox-murus-groundwork` ddf3f84, `ox-murus-wefax` e847c96, `ox-murus-sstv` 41dbda3, `ox-murus-channels` 87c7375** (here; the cloud drafts #12-15 kept for comparison). All compile with GCC 12. Open: the Info window still *says* GPL v3 and /usr/share/x6100/COPYING (not in OpenX6100's image): **asked Hany on #302 2026-10-16** (discussioncomment-18984760), waiting. **All-apps test image `all-apps-test` eb339dc** = our main + OpenX6100 main + Kris's latest wspr/rtty/psk31/olivia/ft2 (PR heads) + Hany's WeFax/SSTV/Channel List (no NavTex/DSC) + knob rework + TX level log + S-meter offset; APP page 3 WiFi, BT, WSPR, JS8; page 4 PSK31, Olivia, WeFax, SSTV; mic UP/DOWN/V/M as in 1KO125 (WeFax open: its stations, else channels). *Build image* run **38979367716**. Supersedes digimodes-test (run 38975177237, same knob + log). FT2 is in it: one of the two suspects for the power-up TX (2026-10-13), keep the console connected.
-   **Open with others (2026-10-16):** #304 merged 2026-10-16. #305: Kris approved, Georgy doubts ±30 dB (S-meter is calibrated), Hany offers less: we asked if ±10 dB is OK (waiting for Georgy). #303: Georgy + Kris agree on one module (one stored level + per-mode correction; Kris: PSK31 only, clamp the stored level, he moves his apps once we send tx_level as a PR); **VE7NHW not happy with tx_level yet: 3.8 W of 5 W, no amp, ALC 0, in JS8**: told them we measure first; log in all-apps-test. #300: reworked 2026-10-16 (waiting for Georgy). Kris's #272/#274 have our waterfall suggestions; all his apps approved, not merged; he deleted + restored his branches 2026-10-16 19:16Z (slip); myshak1/x6100_gui#1-3 closed (he merged main himself), our `*-merge-main` branches deleted. #295: approved by us 2026-10-16.
-5. **Cloud credits** ($100, expire 2026-11-04): Murus Parts 1-4 done 2026-10-15. **JS8 3/4 and 4/4 briefed** ([tasks/js8-parts-3-4.md](tasks/js8-parts-3-4.md), base `ox-js8-engine`): **Both done 2026-10-16/17: draft PRs #16 (js8-library) and #17 (js8-app), checked here (identical to main, GCC 12, CI green)**; real PRs once #301 is merged, one at a time.
+1. **Card:** `all-apps-test` **eb339dc** (run 38979367716: our main + OpenX6100 main + Kris's latest WSPR/RTTY/PSK31/Olivia/FT2 + Hany's WeFax/SSTV/Channel List + FT8 knob rework + TX level log + S-meter offset), flashed 2026-10-16 20:21 local, backup **sd-backup-2026-10-16-202105**, test-only core dumps on.
+2. **Next on the radio:** JS8 TX at 5 W on the dummy load, console connected, read the "TX level:" lines (why 3.8 W of 5, ALC 0) and fix tx_level; then the list under *To try on the radio*.
+3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, Kris's points done, waits for Kris + **Buildroot #8** (Boost/FFTW), then VE7NHW merges; **3/4 and 4/4 ready** as draft PRs here #16 / #17 (checked). FFTW wisdom on main, not released.
+4. **Waiting on others:** Georgy: #305 (±10 dB?), #300 (knob rework), Buildroot #8; Kris: #301, merging his apps (then Hany's go in, groundwork first); Hany: Info window licence text (#302). #303: our tx_level PR after the fix.
+5. **VE7NHW, any time:** delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y` (notes copied to main); pick where to back up CLAUDE.local.md. Cloud credits ($100, to 2026-11-04) left for a deep review of JS8 3/4 + 4/4 or the tx_level fix.
 
-- [ ] **IU1WXY firmware (Giovanni Ricciardi IU1WXY, github.com/IU1WXY/X6100-IU1WXY)
-  takes OpenX6100 and our work, sometimes from open PRs (2026-10-16).**
-  Kris emailed him (cc gdyuldin, VE7NHW) asking to wait for OpenX6100
-  releases; Giovanni won't wait, "door open". VE7NHW replied backing Kris
-  (wait for releases; fixes back as PRs welcome). Checked in his repo
-  (2026-10-16): licences in order (GUI LGPL, js8core LICENSE kept, image
-  GPLv3, source public per tag), our JS8 headers kept, credits "From
-  randal007's x6100-js8", JS8_APP_VERSION "X6100 IU1WXY" (on-air STATUS
-  tells his builds apart); everything of ours he has was released first,
-  except Bluetooth security #297 (per Kris's list). His credits list "the
-  integration of JS8 ... into the radio" under his own work. VE7NHW doesn't
-  like how he works. **Offered, not decided:** a "Using this code" note in
-  the README (take from releases, send fixes back, report bugs on other
-  firmware to its author) and a firmware question in the issue template.
-  Waiting for Giovanni's answer.
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
   at the end of each.
@@ -144,6 +126,7 @@ by gdyuldin or myshak1, never merged by us alone.
   Olivia, WeFax, SSTV; page 5 NavTex, DSC (as digimodes-test); numbers
   unchanged. **Waiting:** Hany's
   OK on the headers; Randal starts the Part 1 session.
+  **2026-10-15/16:** Hany's full OK (LGPL headers, 7(b) dropped). Cloud drafts #12-15 done, then rebuilt here as `ox-murus-groundwork/-wefax/-sstv/-channels` on OpenX6100 main 9714584 (Hany's commits as received, ours under VE7NHW, licence commit on top; GCC 12 clean); drafts #12-15 closed, their branches deleted. VE7NHW: send as Hany wrote it (WAV recorder, mic keys), reviewers decide in the PRs. Info window licence text asked on #302 (waiting). In all-apps-test on the card. **Next:** radio test; real PRs after Kris's apps are merged (groundwork first).
 - [ ] **OpenX6100 reviews:** approved #288 (FT2), #274 (Olivia), #271
   (WSPR, 2026-10-12, after Kris's two fixes), #296 (headset PTT,
   2026-10-13). #293 and #294 merged by gdyuldin 2026-10-12 (he answered
