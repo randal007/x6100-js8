@@ -17,7 +17,7 @@ by gdyuldin or myshak1, never merged by us alone.
 **In short** (updated at each offload; details in the items below):
 1. **Card:** `all-apps-test` **eb339dc** (run 38979367716: our main + OpenX6100 main + Kris's latest WSPR/RTTY/PSK31/Olivia/FT2 + Hany's WeFax/SSTV/Channel List + FT8 knob rework + TX level log + S-meter offset), flashed 2026-10-16 20:21 local, backup **sd-backup-2026-10-16-202105**, test-only core dumps on.
 2. **Next on the radio:** JS8 TX at 5 W on the dummy load, console connected, read the "TX level:" lines (why 3.8 W of 5, ALC 0) and fix tx_level; then the list under *To try on the radio*.
-3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, Kris's points done, waits for Kris + **Buildroot #8** (Boost/FFTW), then VE7NHW merges; **3/4 and 4/4 ready** as draft PRs here #16 / #17 (checked). FFTW wisdom on main, not released.
+3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, Kris's points done, waits for Kris + **Buildroot #8** (Boost/FFTW), then VE7NHW merges; **3/4 and 4/4 ready** as draft PRs here #16 / #17 (checked). FFTW wisdom released in **beta 5.3** (2026-10-17).
 4. **Waiting on others:** Georgy: #305 (±10 dB?), #300 (knob rework), Buildroot #8; Kris: #301, merging his apps (then Hany's go in, groundwork first); Hany: Info window licence text (#302). #303: our tx_level PR after the fix.
 5. **VE7NHW, any time:** delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y` (notes copied to main); pick where to back up CLAUDE.local.md. Cloud credits ($100, to 2026-11-04) left for a deep review of JS8 3/4 + 4/4 or the tx_level fix.
 

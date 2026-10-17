@@ -4,8 +4,10 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Beta 5.2** is the current release: no more freezes typing a long
-> message, messages up to 20 frames as on desktop (and long ones from
+> **Beta 5.3** is the current release: **JS8 opens and closes without a
+> pause**, its decoder setup kept on the SD card as desktop JS8Call does
+> ([New in beta 5.3](#new-in-beta-53)). Beta 5.2 brought no more freezes
+> typing a long message, messages up to 20 frames as on desktop (and long ones from
 > desktop stations no longer cut short), a name or comment typed in Log QSO
 > during a QSO kept for the log at the end, and **Bluetooth locked down**:
 > the radio stays hidden until you Scan, and CAT over Bluetooth only talks
@@ -55,6 +57,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
+- [New in beta 5.3](#new-in-beta-53)
 - [New in beta 5.2](#new-in-beta-52)
 - [New in beta 5.1](#new-in-beta-51)
 - [New in beta 5](#new-in-beta-5)
@@ -63,7 +66,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
-- [Known issues in beta 5.2](#known-issues-in-beta-52)
+- [Known issues in beta 5.3](#known-issues-in-beta-53)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -116,7 +119,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-beta5.2.img.zip` from the Assets.
+   download `sdcard.js8-beta5.3.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works; a
    name-brand 8–32 GB card (SanDisk, Samsung) from a trusted seller is best.
@@ -1019,6 +1022,22 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
+## New in beta 5.3
+
+Released 2026-10-17 ([release notes](docs/releases/js8-beta5.3.md)).
+
+- **JS8 opens and closes without a pause.** Each time JS8 opened, the
+  decoder's first pass set up its maths from scratch (FFTW timing test
+  runs), which took 12-13 s on the radio, and closing JS8 meanwhile hung
+  until it was done. The setup is now kept on the SD card
+  (`js8_wisdom.dat`, as desktop's `js8call_wisdom.dat`), so it runs only
+  once: the first time JS8 opens after a new image, with a yellow
+  **Setting up the decoder** notice over the waterfall for about 20 s.
+  After that, JS8 decodes from the first slot and closes at once.
+- **Licence notes:** the JS8 files that follow desktop JS8Call are
+  marked GPL-3.0-or-later, as desktop's own are, and the engine's
+  bundled libraries carry their licence files. Nothing changes in use.
+
 ## New in beta 5.2
 
 Released 2026-10-14 ([release notes](docs/releases/js8-beta5.2.md)).
@@ -1406,7 +1425,7 @@ with every change.
 ([Installing](#installing)) and put them back: beta 4 reads them as they
 are, and its new settings start at their defaults.
 
-## Known issues in beta 5.2
+## Known issues in beta 5.3
 
 - **Bluetooth headphones while JS8 is open:** while you listen on
   headphones the radio's speaker is turned down, so JS8's alert beeps
@@ -1415,11 +1434,9 @@ are, and its new settings start at their defaults.
   new address) keeps the Bluetooth window busy for up to a minute, and
   Forget waits until it's done. Connect the new entry instead; the old one
   goes away by itself once that's paired.
-- **Closing JS8 right after opening it can hang for 10-15 s.** The
-  decoder's first pass after JS8 opens sets up its maths from scratch
-  (FFTW timing test runs), which takes 12-13 s on the radio, and closing
-  waits for it. Wait a few seconds after opening before closing; fixed
-  for the next release (the setup is kept on the SD card).
+- **The first open after a new image** shows *Setting up the decoder*
+  for about 20 s, and messages in that first slot or two can be missed.
+  Once only.
 - **Transmit power can stop short of the setting:** without the
   amplifier, set to 5 W, one JS8 transmission stayed at about 3.8 W with
   the ALC at 0. Being measured; with the XPA125B (which needs only a
@@ -1444,9 +1461,6 @@ are, and its new settings start at their defaults.
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
-- [x] **JS8 opens and closes without a pause:** the decoder's setup saved
-  on the SD card, as desktop JS8Call does, with a one-time notice the first
-  time (tested on the radio, in the next release)
 - [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is in
   ([#290](https://github.com/OpenX6100/x6100_gui/pull/290)), part 2, the
   engine, is approved and getting its last touches
