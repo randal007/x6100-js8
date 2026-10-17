@@ -104,7 +104,7 @@
 #define SAVED_N          10     /* saved messages (Query > Saved messages >) */
 /* <MYVERSION> and the default STATUS send this: set it to the release's
  * name for every release (docs/releases/CHECKLIST.md, step 1). */
-#define JS8_APP_VERSION  "X6100 JS8 RC1" /* desktop's is its version number */
+#define JS8_APP_VERSION  "X6100 JS8 RC1.1" /* desktop's is its version number */
 #ifndef JS8_LOG_PATH
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif

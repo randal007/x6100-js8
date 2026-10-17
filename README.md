@@ -4,9 +4,12 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Release Candidate 1** is the current release, the JS8 that goes into
-> the OpenX6100 firmware itself: **JS8 opens and closes without a pause**,
-> its decoder setup kept on the SD card as desktop JS8Call does
+> **Release Candidate 1.1** is the current release, the JS8 that goes
+> into the OpenX6100 firmware itself: **the transmit power now reaches
+> your setting** in the first transmission, from 0.3 W into an amplifier
+> to 5 W barefoot ([New in Release Candidate 1.1](#new-in-release-candidate-11)).
+> Release Candidate 1 made **JS8 open and close without a pause**, its
+> decoder setup kept on the SD card as desktop JS8Call does
 > ([New in Release Candidate 1](#new-in-release-candidate-1)). Beta 5.2 brought no more freezes
 > typing a long message, messages up to 20 frames as on desktop (and long ones from
 > desktop stations no longer cut short), a name or comment typed in Log QSO
@@ -58,6 +61,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [Alerts](#alerts)
 - [APRS](#aprs)
 - [Files on the SD card](#files-on-the-sd-card)
+- [New in Release Candidate 1.1](#new-in-release-candidate-11)
 - [New in Release Candidate 1](#new-in-release-candidate-1)
 - [New in beta 5.2](#new-in-beta-52)
 - [New in beta 5.1](#new-in-beta-51)
@@ -67,7 +71,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 - [New in beta 4.5](#new-in-beta-45)
 - [New in beta 4.1](#new-in-beta-41)
 - [New in beta 4](#new-in-beta-4)
-- [Known issues in Release Candidate 1](#known-issues-in-release-candidate-1)
+- [Known issues in Release Candidate 1.1](#known-issues-in-release-candidate-11)
 - [Coming next](#coming-next)
 - [Bug reports and feature requests](#bug-reports-and-feature-requests)
 - [Credits](#credits)
@@ -120,7 +124,7 @@ the radio's firmware, next to the FT8 and RTTY apps.
 ## Installing
 
 1. Open [Releases](https://github.com/randal007/x6100-js8/releases) and
-   download `sdcard.js8-rc1.img.zip` from the Assets.
+   download `sdcard.js8-rc1.1.img.zip` from the Assets.
 2. Write it to a microSD card with [balenaEtcher](https://etcher.balena.io/)
    or Rufus (they unzip it for you). Any card of 1 GB or more works; a
    name-brand 8–32 GB card (SanDisk, Samsung) from a trusted seller is best.
@@ -464,7 +468,8 @@ the thing. ESC closes lists too, and the VOL knob works in all of them.
   power readings, averaged over half a second: while the ALC reads zero
   the drive **ramps up smoothly** (1 dB a second while far short, then
   0.5 dB a second), and once the ALC starts to show (it then holds the
-  power at your setting) it **stops and holds** for the rest of the
+  power at your setting) or the power reads your setting it **stops and
+  holds** for the rest of the
   transmission, coming down a little only if the ALC shows overdrive. The
   level found is kept, so the next transmission starts there, steady for
   an amplifier behind the radio.
@@ -1023,6 +1028,25 @@ picked up at the next start. A file JS8 couldn't read (an SD card error)
 is kept as `<name>.unreadable-<date>` and a new one started: your old
 messages or settings are in it, readable on a PC.
 
+## New in Release Candidate 1.1
+
+Released 2026-10-17 ([release notes](docs/releases/js8-rc1.1.md)).
+
+- **The transmit power reaches your setting.** Set to 5 W without an
+  amplifier, JS8 could stop at about 3.8 W with the ALC at 0. The drive
+  now decides every half second whatever the radio's readings, and only
+  stops ramping up once the ALC really shows (0.3, not 0.1). Tested on
+  the radio: 5 W reached in the first transmission (2.3 W to 5.2 W in
+  about 6 s), 0.3 W steady, and an overdriven start
+  brought down in a few seconds.
+- **The learned level can't drift too low:** it's kept no lower than
+  -42 dB, so one bad transmission can't leave the next ones starting far
+  too low.
+- The same transmit-level code has gone to OpenX6100 for all the digital
+  apps ([#306](https://github.com/OpenX6100/x6100_gui/pull/306)). The
+  window-by-blocks idea, the 0.3 hold and the -42 dB floor came from
+  Giovanni IU1WXY's copy of this code.
+
 ## New in Release Candidate 1
 
 Released 2026-10-17 ([release notes](docs/releases/js8-rc1.md)). This is
@@ -1427,7 +1451,7 @@ with every change.
 ([Installing](#installing)) and put them back: beta 4 reads them as they
 are, and its new settings start at their defaults.
 
-## Known issues in Release Candidate 1
+## Known issues in Release Candidate 1.1
 
 - **Bluetooth headphones while JS8 is open:** while you listen on
   headphones the radio's speaker is turned down, so JS8's alert beeps
@@ -1439,10 +1463,6 @@ are, and its new settings start at their defaults.
 - **The first open after a new image** shows *Setting up the decoder*
   for about 20 s, and messages in that first slot or two can be missed.
   Once only.
-- **Transmit power can stop short of the setting:** without the
-  amplifier, set to 5 W, one JS8 transmission stayed at about 3.8 W with
-  the ALC at 0. Being measured; with the XPA125B (which needs only a
-  fraction of a watt) it's steady.
 - **Spinning the main dial very fast** has twice restarted the GUI
   program (the radio comes back by itself in a few seconds). Seen on older
   builds too; it's in OpenX6100's shared code, not JS8, and being looked
@@ -1468,8 +1488,6 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   engine, is approved and getting its last touches
   ([#301](https://github.com/OpenX6100/x6100_gui/pull/301)), parts 3
   and 4 are ready to follow
-- [ ] **Transmit power reaching the setting** without an amplifier (being
-  measured)
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests
