@@ -199,6 +199,17 @@ by gdyuldin or myshak1, never merged by us alone.
   Not in beta 5.2; the test builds still carry 3385886. **Next:** rework
   as he asks; radio check of the current fix still open.
   **2026-10-16: reworked as Georgy asked** (6050dd9: apps' `rotary_cb(diff, dt)`, FT8 speeds up from the knob's `dt`); Kris told his apps need the extra argument. In all-apps-test. **Next:** radio test, Georgy's review.
+- [ ] **Digital apps' list crash: VOL press with Menu/Macros open
+  (VE7NHW, 2026-10-17, RTTY page 2 on all-apps-test; shared code, Kris's
+  `digi_menu.c`).** `digi_menu_close()` took the list out of the group
+  before deleting it, so LVGL's keypad sent CANCEL to freed memory
+  (reproduced on the PC under AddressSanitizer). One-line fix sent as
+  **myshak1/x6100_gui#4** into Kris's `rtty` (branch
+  `digi-menu-esc-crash` in OpenX6100), noted on #276; the same file is in
+  #272 / #274. On `all-apps-test` (89c2f4e), no image built yet. Also seen:
+  the test-only core dumps in /mnt/cores came out **0 bytes** (three
+  crashes 15:27-15:35Z), so that set-up doesn't work yet. **Next:** test
+  image, VOL with each list open in RTTY / PSK31 / Olivia; Kris merges.
 - [ ] **Start-up glitch, old** (VE7NHW, 2026-10-13: seen on earlier
   versions too, "sometimes"): right after boot no waterfall and the
   S-meter at full scale, then relays click and it comes right. Guess: a
