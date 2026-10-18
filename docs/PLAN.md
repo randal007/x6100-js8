@@ -224,6 +224,28 @@ by gdyuldin or myshak1, never merged by us alone.
   ask Georgy (licence), then port. Otherwise prototype both gain rules on recorded X6100 audio on
   the PC; then a PR to Georgy's base repo. Base flashing goes through the
   stock Xiegu GUI (slow test loop).
+  **2026-10-17 (evening), VE7NHW: "take R13 and add NR2 and Trained, licences
+  later". Written, not yet on the radio.** Local clone
+  `~/Work/x6100/base_patch` (gdyuldin/x6100_base_patch at r13 644ac67),
+  local branch **`nr2-trained`** (not pushed anywhere): 6862b83 build fixes
+  for this PC's newer arm-none-eabi tools (Arch package, GCC 16 / binutils
+  2.47, installed this session), 4839982 NR2 (`Core/Src/nr2.c`, tables made
+  by `gen_nr2_tables.py`). No GUI change: the **NR level picks the NR**:
+  0-19 R13's NR (depth = level x 3), 20-39 NR2 Linear (39 = as WDSP),
+  40-60 Trained, T1 = -3.0 + 0.25 x (level - 40) (50 = -0.5, his deskHPSDR
+  value). PC tests in `~/Work/x6100/research/nr2-test/` (README-less; run
+  `test_vs_wdsp`, `test_chain`, `cyc_run_chain.sh`): masks vs the real WDSP
+  (deskHPSDR's libwdsp.a) agree 99.7-100 %, noise estimate within 0.02 dB;
+  chip load estimate (qemu instruction trace, M4 cycle weights) R13 NR 6.4 %,
+  NR2 8.5 %, Trained 9.8 % of 180 MHz, heaviest sample lower than R13's.
+  Listening WAVs in `research/nr2-test/listen/`. **Blocked: the .xgf is
+  AES-256 encrypted** (Xiegu key; Franco Venturi's fventuri/BBFW notes; the
+  G90Tools script decrypts/encrypts). Needed: the plain stock
+  `X6100_BBFW_V1.1.6_230307001.bin` (md5 f19fb85d...) and the key or
+  Georgy's packing step. Also unknown: the DMA block size (needs the plain
+  stock image); NR2 doesn't depend on it. **Next:** VE7NHW decides how to get
+  the key/stock image (ask Georgy, recommended), then build `r13nr2`, flash
+  via the stock GUI, test.
 
 - [ ] **Unexplained transmit at power-up (2026-10-13, VE7NHW)**: first
   boot of bt-ft2-test d94d92b (21:37 UTC): a waterfall "glitch" a couple
