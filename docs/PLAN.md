@@ -200,6 +200,18 @@ by gdyuldin or myshak1, never merged by us alone.
   GPL; the image with JS8 is GPL-3.0 already). **Next, in its own
   session:** read bt_audio.c and the audio path, measure the delay, try
   rnnoise on recorded X6100 audio on the PC, then ask Georgy and Kris.
+  **Better: in the base board** (VE7NHW asked, same day). Checked
+  gdyuldin/x6100_base_patch: STM32F427 (180 MHz M4F, 256 KB RAM); R12
+  already has a spectral NR (Core/Src/noise_reduction.c, r10: STFT 256/512
+  at 12.5 kHz, noise PSD tracking, gain = sqrt of a soft-clipped
+  1 - alpha*N/|X|^2, i.e. spectral subtraction). WDSP's NR2 differs mainly
+  in the gain rule (Ephraim-Malah MMSE-LSA, decision-directed a-priori
+  SNR), which fits the base easily; WDSP itself and NR3 (rnnoise) don't.
+  The base repo has no licence file: write the rule from the papers, not
+  from WDSP's GPL code. **Plan:** A/B by ear (X6100 R12 NR vs HL2 NR2 on
+  the same signal); prototype both gain rules on recorded X6100 audio on
+  the PC; then a PR to Georgy's base repo. Base flashing goes through the
+  stock Xiegu GUI (slow test loop).
 
 - [ ] **Unexplained transmit at power-up (2026-10-13, VE7NHW)**: first
   boot of bt-ft2-test d94d92b (21:37 UTC): a waterfall "glitch" a couple
