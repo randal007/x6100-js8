@@ -238,14 +238,33 @@ by gdyuldin or myshak1, never merged by us alone.
   (deskHPSDR's libwdsp.a) agree 99.7-100 %, noise estimate within 0.02 dB;
   chip load estimate (qemu instruction trace, M4 cycle weights) R13 NR 6.4 %,
   NR2 8.5 %, Trained 9.8 % of 180 MHz, heaviest sample lower than R13's.
-  Listening WAVs in `research/nr2-test/listen/`. **Blocked: the .xgf is
-  AES-256 encrypted** (Xiegu key; Franco Venturi's fventuri/BBFW notes; the
-  G90Tools script decrypts/encrypts). Needed: the plain stock
-  `X6100_BBFW_V1.1.6_230307001.bin` (md5 f19fb85d...) and the key or
-  Georgy's packing step. Also unknown: the DMA block size (needs the plain
-  stock image); NR2 doesn't depend on it. **Next:** VE7NHW decides how to get
-  the key/stock image (ask Georgy, recommended), then build `r13nr2`, flash
-  via the stock GUI, test.
+  Listening WAVs in `research/nr2-test/listen/`. The .xgf is AES-256-ECB
+  encrypted (Xiegu key; Franco Venturi's fventuri/BBFW notes).
+  **2026-10-17 (night): unblocked by the key route** (VE7NHW found the
+  key; kept only on this PC in `~/Work/x6100/firmware/xgf.key`, never in
+  git or on GitHub). It decrypts the stock 230307001 file (from the stock
+  20230831 SD image) to md5 f19fb85d..., the one patch.py expects;
+  stock, r12 and r13 unpack and repack byte-identically with
+  `base_patch/xgf.py` (commit 4848e9f; G90Tools' script adds a stray zero
+  block). Control: our build of plain r13 matches Georgy's r13 in all
+  115,776 patched stock bytes except 3 `bl` targets into his added code
+  (other compiler, same functions). patch.py with `REG_REPORT=0` builds
+  in 6 s (the register report took 30+ min and is print-only).
+  **`X6100_BBFW_V1.1.6_230307001_r13nr2.xgf`** (511,456 B, sha256
+  0f66ef60...; GUI reads its rev as 13) is in the stock system's
+  `/usr/firmware` on the radio's eMMC (copied over the USB console, next
+  to r12, r9, 1.1.9) and in /mnt. Not yet flashed. **Recovery checked
+  (stock x6100_ui_v100 disassembly + X6100Control fw_upgrade.c):** the
+  upgrade holds the Morse key line (gpio203) down and pulses the base
+  reset (gpio204); the bootloader starts in flash mode before our program
+  runs, so a crashing NR2 can't block re-flashing r12. WDSP 2.11: emnr.c
+  only fixes getZeta's xi bounds check, which our nr2.c already has;
+  zetaHat.c unchanged. NNR (2.10/2.11, neural, 2.1-4.7 MB models) can't
+  fit the base (1 MB flash, 256 KB RAM). **Next:** VE7NHW boots stock
+  (no SD), external power, flashes r13nr2 from System settings ->
+  Firmware upgrade, checks System info shows `r13nr2`; then our SD, NR
+  level 0-19 = R13 NR, 20-39 NR2, 40-60 Trained; listen for clicks,
+  gaps, waterfall stutter.
 
 - [ ] **Unexplained transmit at power-up (2026-10-13, VE7NHW)**: first
   boot of bt-ft2-test d94d92b (21:37 UTC): a waterfall "glitch" a couple
