@@ -19,7 +19,7 @@ by gdyuldin or myshak1, never merged by us alone.
 2. **Releases:** **RC1** out (`js8-rc1`, FFTW wisdom). **RC1.1** (transmit level reaches the setting): tag `js8-rc1.1` on 6a5d879, tests green (run 39093417631), **image building: run 39093596329**; then the release page (title, notes, prerelease), sha256 check, Facebook post. See the RC1.1 item.
 3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, waits for Kris + **Buildroot #8**, then VE7NHW merges; 3/4 and 4/4 ready as drafts here (#16 / #17). **Transmit level sent as #306** (VE7NHW radio-tested).
 4. **Waiting on others:** Georgy: #305 (±10 dB?), #300, #306, Buildroot #8; Kris: #301, #306, his menu-crash PR myshak1/x6100_gui#4, merging his apps (then Hany's, groundwork first; Hany's Info window text done).
-5. **VE7NHW, any time:** `gh auth refresh -h github.com -s workflow` (then add test_tx_level to tests.yml); delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`, `tx-level-fix` (superseded by main); pick where to back up CLAUDE.local.md; send the RC1 email to Giovanni if wanted (draft given 2026-10-17). Radio: VOL with Menu/Macros open in RTTY/PSK31/Olivia.
+5. **VE7NHW, any time:** `gh auth refresh -h github.com -s workflow` (then add test_tx_level to tests.yml); delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`; pick where to back up CLAUDE.local.md; send the RC1 email to Giovanni if wanted (draft given 2026-10-17). Radio: VOL with Menu/Macros open in RTTY/PSK31/Olivia.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
