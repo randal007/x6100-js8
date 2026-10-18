@@ -265,6 +265,35 @@ by gdyuldin or myshak1, never merged by us alone.
   Firmware upgrade, checks System info shows `r13nr2`; then our SD, NR
   level 0-19 = R13 NR, 20-39 NR2, 40-60 Trained; listen for clicks,
   gaps, waterfall stutter.
+  **2026-10-18: r13nr2 flashed and working (VE7NHW: "working really
+  good"; band too poor to compare).** A faint ringing on empty band at high
+  volume went away on an external speaker: the built-in speaker, not NR2.
+  VE7NHW's reference is **Thetis** (not deskHPSDR). Checked in Thetis's
+  source (ramdor/Thetis, WDSP 1.27): its NR2 core (Trained gain, aepf,
+  noise estimate, getZeta) is identical to the WDSP 2.10 ours was tested
+  against; its defaults T1 -0.5, T2 0.20, AE on, post2 off, gain method
+  Gamma (we have Linear and Trained only). WDSP 2.11 changes nothing for
+  NR2 here. **VE7NHW asked for an NR selector and a Post2 button** (NR
+  button: Off / NR / NR2 / NR2 Trained; Post2 shown only for NR2 / NR2
+  Trained). Done, not yet on the radio:
+  - **BASE** `nr2-trained` 8c3449b (local): register 23 bits 26-27 = NR,
+    bit 28 = post2 (0 = the old level zones, bit-identical to 4839982 on
+    the PC). Each NR gets the whole 0-60 range: R13 depth level/30, NR2
+    floor -6...-28 dB (60 = none), **Trained T1 = -3.0 + 0.1 x level (25 =
+    Thetis's -0.5; the old 50)**. post2 as Thetis's: comfort noise with
+    Thetis's FDnoise spectrum, cut/taper at 2.88 kHz, level within 1 dB of
+    Thetis's on the PC; load 9.8 -> 10.1 %.
+    **`X6100_BBFW_V1.1.6_230307001_r13nr2b.xgf`** (sha256 110b85d9...) on
+    the PC in base_patch/, not yet copied to the radio (radio was off).
+  - **GUI** branch **`nr-selector`** cf2d750 (shared GUI code): the NR
+    button/knob steps the four choices, Post2 button in slot 4 of the NR
+    page, settings `nr_type` / `nr_post2`; any BASE without "nr2" in its
+    version: NR On/Off as before. GCC 12 clean. Build image run
+    **39106682113**.
+  **Next:** copy r13nr2b to the eMMC's /usr/firmware over the console,
+  VE7NHW flashes it from the stock GUI, then the nr-selector image on the
+  SD card (VE7NHW says when); test the four choices and Post2. T2 isn't
+  reachable yet (fixed 0.20).
 
 - [ ] **Unexplained transmit at power-up (2026-10-13, VE7NHW)**: first
   boot of bt-ft2-test d94d92b (21:37 UTC): a waterfall "glitch" a couple
