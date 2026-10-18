@@ -208,8 +208,8 @@ by gdyuldin or myshak1, never merged by us alone.
   in the gain rule (Ephraim-Malah MMSE-LSA, decision-directed a-priori
   SNR), which fits the base easily; WDSP itself and NR3 (rnnoise) don't.
   The base repo has no licence file: write the rule from the papers, not
-  from WDSP's GPL code. **Plan:** A/B by ear (X6100 R12 NR vs HL2 NR2 on
-  the same signal); prototype both gain rules on recorded X6100 audio on
+  from WDSP's GPL code. **VE7NHW 2026-10-17: NR2 on the HL2 is "way better"
+  than the X6100's NR**; he likes this plan. **Plan:** prototype both gain rules on recorded X6100 audio on
   the PC; then a PR to Georgy's base repo. Base flashing goes through the
   stock Xiegu GUI (slow test loop).
 
