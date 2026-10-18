@@ -283,17 +283,22 @@ by gdyuldin or myshak1, never merged by us alone.
     Thetis's -0.5; the old 50)**. post2 as Thetis's: comfort noise with
     Thetis's FDnoise spectrum, cut/taper at 2.88 kHz, level within 1 dB of
     Thetis's on the PC; load 9.8 -> 10.1 %.
-    **`X6100_BBFW_V1.1.6_230307001_r13nr2b.xgf`** (sha256 110b85d9...) on
-    the PC in base_patch/, not yet copied to the radio (radio was off).
+    **T2 added (VE7NHW asked, same night): 7aefe50**, bits 29-31, codes
+    0-7 = 0.20 (default), 0.02, 0.05, 0.08, 0.11, 0.14, 0.17, 0.25;
+    code 0 bit-identical to 8c3449b. **`X6100_BBFW_V1.1.6_230307001_r13nr2c.xgf`**
+    (sha256 c94358ef...) on the PC in base_patch/ (r13nr2b superseded), not
+    yet copied to the radio (radio was off).
   - **GUI** branch **`nr-selector`** cf2d750 (shared GUI code): the NR
     button/knob steps the four choices, Post2 button in slot 4 of the NR
-    page, settings `nr_type` / `nr_post2`; any BASE without "nr2" in its
-    version: NR On/Off as before. GCC 12 clean. Build image run
-    **39106682113**.
-  **Next:** copy r13nr2b to the eMMC's /usr/firmware over the console,
+    page, **T2 button (f8cfc9c) in the last slot, NR2 Trained only, on the
+    knob** (`CTRL_NR_T2` after the RTTY controls, past the stored binds),
+    settings `nr_type` / `nr_post2` / `nr_t2`; any BASE without "nr2" in
+    its version: NR On/Off as before. GCC 12 clean. Build image run
+    **39107245811** (39106682113 cancelled: no T2).
+  **Next:** copy r13nr2c to the eMMC's /usr/firmware over the console,
   VE7NHW flashes it from the stock GUI, then the nr-selector image on the
-  SD card (VE7NHW says when); test the four choices and Post2. T2 isn't
-  reachable yet (fixed 0.20).
+  SD card (VE7NHW says when); test the four choices, Post2 and T2. Note:
+  Trained's old 50 is now 25.
 
 - [ ] **Unexplained transmit at power-up (2026-10-13, VE7NHW)**: first
   boot of bt-ft2-test d94d92b (21:37 UTC): a waterfall "glitch" a couple
