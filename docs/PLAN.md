@@ -15,11 +15,11 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** `all-apps-test` **d91a675** (run 39059910797: the digital apps as before + Kris's menu-crash fix + the transmit-level fix + TX level log), flashed 2026-10-17 12:57 local, backup **sd-backup-2026-10-17-125726**. Core dumps no longer set up (the old test-only daemon is gone with this image).
-2. **Next on the radio:** JS8 TX at 5 W on the dummy load, console connected: wattmeter and the "TX level:" lines; then the list under *To try on the radio*.
-3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, Kris's points done, waits for Kris + **Buildroot #8** (Boost/FFTW), then VE7NHW merges; **3/4 and 4/4 ready** as draft PRs here #16 / #17 (checked). FFTW wisdom released in **Release Candidate 1** (`js8-rc1`, 2026-10-17; was going to be beta 5.3), the JS8 going into OpenX6100.
-4. **Waiting on others:** Georgy: #305 (±10 dB?), #300 (knob rework), Buildroot #8; Kris: #301, merging his apps (then Hany's go in, groundwork first); Hany: done (Info window text OK, 2026-10-17). #303: our tx_level PR after the fix.
-5. **VE7NHW, any time:** delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y` (notes copied to main); pick where to back up CLAUDE.local.md. Cloud credits ($100, to 2026-11-04) left for a deep review of JS8 3/4 + 4/4 or the tx_level fix.
+1. **Card:** `all-apps-test` **d91a675** (run 39059910797: the digital apps + Kris's menu-crash fix + the transmit-level fix + TX level log), flashed 2026-10-17, backup **sd-backup-2026-10-17-125726**. No core-dump set-up on it.
+2. **Releases:** **RC1** out (`js8-rc1`, FFTW wisdom). **RC1.1** (transmit level reaches the setting): tag `js8-rc1.1` on 6a5d879, tests green (run 39093417631), **image building: run 39093596329**; then the release page (title, notes, prerelease), sha256 check, Facebook post. See the RC1.1 item.
+3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, waits for Kris + **Buildroot #8**, then VE7NHW merges; 3/4 and 4/4 ready as drafts here (#16 / #17). **Transmit level sent as #306** (VE7NHW radio-tested).
+4. **Waiting on others:** Georgy: #305 (±10 dB?), #300, #306, Buildroot #8; Kris: #301, #306, his menu-crash PR myshak1/x6100_gui#4, merging his apps (then Hany's, groundwork first; Hany's Info window text done).
+5. **VE7NHW, any time:** `gh auth refresh -h github.com -s workflow` (then add test_tx_level to tests.yml); delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`, `tx-level-fix` (superseded by main); pick where to back up CLAUDE.local.md; send the RC1 email to Giovanni if wanted (draft given 2026-10-17). Radio: VOL with Menu/Macros open in RTTY/PSK31/Olivia.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
@@ -38,6 +38,20 @@ by gdyuldin or myshak1, never merged by us alone.
     login, the card serial and Bluetooth address. Decide where together:
     options are a copy on one of the PC's other disks (two 5.5 TB drives
     sda/sdc are attached), a USB stick, or alongside sd-backups/.
+- [ ] **Release Candidate 1.1 (VE7NHW 2026-10-17): the transmit-level fix.**
+  On main: 6a5d879 (version "X6100 JS8 RC1.1", README *New in Release
+  Candidate 1.1*, docs/releases/js8-rc1.1.md with every feature); the
+  four tx files identical to OpenX6100 #306; drive-level tests in
+  tests/test_tx_level.cpp. Tests run 39093417631 on main. **Not yet:**
+  the tests.yml step for test_tx_level (the login lacks the `workflow`
+  scope: `gh auth refresh -h github.com -s workflow`, then add
+  `test_tx_level` to the build targets and a step, as in commit eca5c6b
+  on the local branch rc11). Tests run 39093417631 green; **tag
+  `js8-rc1.1` pushed, Build image run 39093596329 started 2026-10-17.**
+  **Next** (if the session's background job didn't already do it): check
+  the run, then `gh release edit js8-rc1.1 -R randal007/x6100-js8 --title "X6100 JS8 Release Candidate 1.1" --notes-file docs/releases/js8-rc1.1.md --prerelease`,
+  sha256 check, and a Facebook post (the RC1 one is the template:
+  ~/Pictures/x6100-js8-rc1-facebook/post.txt).
 - [ ] **Compound callsigns, leftovers** (the fix is in beta 5.1, see
   [PLAN_DONE.md](PLAN_DONE.md)). **Sent upstream 2026-10-13 (VE7NHW asked):
   JS8Call-improved/Android-port#108** (from randal007/Android-port,
@@ -172,6 +186,21 @@ by gdyuldin or myshak1, never merged by us alone.
   Bluetooth; a btmon from an X6200 owner would settle it; fallback: WiFi
   with Icom's network protocol (FT8CN speaks it, IC-705), a big job.
 
+- [ ] **Idea: WDSP noise reduction (NR2 / NR3 / NR4, as on the Hermes
+  Lite 2's Thetis and deskHPSDR) on the X6100** (VE7NHW, 2026-10-17;
+  shared GUI code, not JS8). Asked at the 2026-10-17 offload; Claude's
+  first answer from what's known (not checked on the radio): the
+  receiver's demodulation and the speaker path run on the base board, so
+  the GUI only sees the audio after it; an NR in Linux would mean
+  capturing the RX audio, cleaning it and playing it to the speaker or
+  headphones while the base board's own audio is muted. Unknowns: whether
+  the base audio can be muted while the GUI plays (Kris's bt_audio does
+  RX to a headset, so part of the path exists), the extra delay, CPU on
+  the A7 cores (rnnoise / libspecbleach should fit), and licence (WDSP is
+  GPL; the image with JS8 is GPL-3.0 already). **Next, in its own
+  session:** read bt_audio.c and the audio path, measure the delay, try
+  rnnoise on recorded X6100 audio on the PC, then ask Georgy and Kris.
+
 - [ ] **Unexplained transmit at power-up (2026-10-13, VE7NHW)**: first
   boot of bt-ft2-test d94d92b (21:37 UTC): a waterfall "glitch" a couple
   of seconds after start, then TX (red light, zero power) until he
@@ -255,10 +284,11 @@ by gdyuldin or myshak1, never merged by us alone.
   read the backtrace on the PC against that build's unstripped binary;
   then an OpenX6100 issue/PR.
   **2026-10-16:** nothing caught on afd514e (no cores, no new crash logs since 10-14). all-apps-test flashed with the same test-only core dumps (unstripped GUI in builds/ci-38979367716/unstripped/).
+  **2026-10-17:** the three cores written that morning (RTTY menu crash) were **0 bytes**: the core-dump set-up doesn't work as it is (check /mnt free space, vfat file size, `ulimit -c` in x6100_daemon) before relying on it. d91a675 on the card has none (unstripped GUI in builds/ci-39059910797/unstripped/).
 
 ## To try on the radio (no programming)
 
-- [ ] **all-apps-test (on the card since 2026-10-16):** JS8 TX at 5 W on the dummy load (TX level log); FT8 knob fast; Kris's WSPR (marker, decode window), PSK31/Olivia (waterfall stops while keyed, averaging), RTTY's new page 2; Hany's WeFax, SSTV (TX on the dummy load first), Channel List (mic V/M, GENE, NW, UP/DOWN); the first boots with the console connected (FT2).
+- [ ] **all-apps-test (d91a675 on the card since 2026-10-17):** ~~JS8 TX at 5 W~~ done 2026-10-17 (ALC fine at every power); VOL with Menu/Macros open in RTTY, PSK31, Olivia (Kris's #4 fix); FT8 knob fast; Kris's WSPR (marker, decode window), PSK31/Olivia (waterfall stops while keyed, averaging), RTTY's new page 2; Hany's WeFax, SSTV (TX on the dummy load first), Channel List (mic V/M, GENE, NW, UP/DOWN); the first boots with the console connected (FT2).
 - [ ] Ultra still decodes after #10 (once a slot, 3.128 s in): two-radio
   bench, test build 12d374c is on the card.
 - [ ] Ultra on a busy band. Busy bands fine on Fast (VE7NHW, 2026-10-12);
