@@ -209,7 +209,18 @@ by gdyuldin or myshak1, never merged by us alone.
   SNR), which fits the base easily; WDSP itself and NR3 (rnnoise) don't.
   The base repo has no licence file: write the rule from the papers, not
   from WDSP's GPL code. **VE7NHW 2026-10-17: NR2 on the HL2 is "way better"
-  than the X6100's NR**; he likes this plan. **Plan:** prototype both gain rules on recorded X6100 audio on
+  than the X6100's NR**; he likes this plan, and asks for **NR2's
+  "Trained" mode** as on the HL2. Checked in ~/Work/deskhpsdr/wdsp-2.10
+  (emnr.c gain_method 3): NR2's MMSE amplitude gain with a speech-presence
+  term, then a trained 60x60 table (zetaHat.c, CzetaHat: ~14 KB as float)
+  that decides speech/noise per bin from (gamma, xi_hat). Fits the
+  STM32F427 (1 MB flash, R12 ~470 KB; per-bin exp + Bessel I0/I1, ~255
+  bins x ~100 frames/s). **Licence is the catch:** WDSP and the table are
+  GPL (Warren Pratt NR0V); the base repo has no licence, and the table
+  can't be rewritten from papers. Needs Georgy to release the base under
+  GPL, or Warren's OK. **Plan:** run WDSP's real emnr (method 3) on
+  recorded X6100 audio on the PC vs R12's rule; if it matches the HL2,
+  ask Georgy (licence), then port. Otherwise prototype both gain rules on recorded X6100 audio on
   the PC; then a PR to Georgy's base repo. Base flashing goes through the
   stock Xiegu GUI (slow test loop).
 
