@@ -16,7 +16,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. **Card:** `all-apps-test` **d91a675** (run 39059910797: the digital apps + Kris's menu-crash fix + the transmit-level fix + TX level log), flashed 2026-10-17, backup **sd-backup-2026-10-17-125726**. No core-dump set-up on it.
-2. **Releases:** **RC1** out (`js8-rc1`, FFTW wisdom). **RC1.1** (transmit level reaches the setting): tag `js8-rc1.1` on 6a5d879, tests green (run 39093417631), **image building: run 39093596329**; then the release page (title, notes, prerelease), sha256 check, Facebook post. See the RC1.1 item.
+2. **Releases:** **RC1.1 is out** (`js8-rc1.1`, 2026-10-17: the transmit level reaches the setting; page titled, prerelease, sha256 checked). Left: a Facebook post if VE7NHW wants one, and the tests.yml step (needs the `workflow` scope).
 3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, waits for Kris + **Buildroot #8**, then VE7NHW merges; 3/4 and 4/4 ready as drafts here (#16 / #17). **Transmit level sent as #306** (VE7NHW radio-tested).
 4. **Waiting on others:** Georgy: #305 (±10 dB?), #300, #306, Buildroot #8; Kris: #301, #306, his menu-crash PR myshak1/x6100_gui#4, merging his apps (then Hany's, groundwork first; Hany's Info window text done).
 5. **VE7NHW, any time:** `gh auth refresh -h github.com -s workflow` (then add test_tx_level to tests.yml); delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`; pick where to back up CLAUDE.local.md; send the RC1 email to Giovanni if wanted (draft given 2026-10-17). Radio: VOL with Menu/Macros open in RTTY/PSK31/Olivia.
@@ -48,8 +48,9 @@ by gdyuldin or myshak1, never merged by us alone.
   `test_tx_level` to the build targets and a step, as in commit eca5c6b
   on the local branch rc11). Tests run 39093417631 green; **tag
   `js8-rc1.1` pushed, Build image run 39093596329 started 2026-10-17.**
-  **Next** (if the session's background job didn't already do it): check
-  the run, then `gh release edit js8-rc1.1 -R randal007/x6100-js8 --title "X6100 JS8 Release Candidate 1.1" --notes-file docs/releases/js8-rc1.1.md --prerelease`,
+  **Published 2026-10-17** (run 39093596329; page titled with the notes,
+  prerelease; sha256 bd5cc449... matches, copy in releases/js8-rc1.1/).
+  Left: Facebook post, tests.yml step. Done by the background job: `gh release edit js8-rc1.1 -R randal007/x6100-js8 --title "X6100 JS8 Release Candidate 1.1" --notes-file docs/releases/js8-rc1.1.md --prerelease`,
   sha256 check, and a Facebook post (the RC1 one is the template:
   ~/Pictures/x6100-js8-rc1-facebook/post.txt).
 - [ ] **Compound callsigns, leftovers** (the fix is in beta 5.1, see
