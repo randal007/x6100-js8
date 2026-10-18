@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** `nr-selector` **f8cfc9c** (run 39107245811: NR selector, Post2, T2 for the NR2 BASE), flashed 2026-10-18, backup **sd-backup-2026-10-18-080246**. BASE: r13nr2c (VE7NHW flashing it from the stock GUI). No core-dump set-up on it.
+1. **Card:** a private NR2 test build, flashed 2026-10-18 (details in the private repo), backup **sd-backup-2026-10-18-080246**. It is RC1.1 plus the NR2 work: **not** the digital apps of all-apps-test.
 2. **Releases:** **RC1.1 is out** (`js8-rc1.1`, 2026-10-17: the transmit level reaches the setting; page titled, prerelease, sha256 checked). Left: a Facebook post if VE7NHW wants one, and the tests.yml step (needs the `workflow` scope).
 3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, waits for Kris + **Buildroot #8**, then VE7NHW merges; 3/4 and 4/4 ready as drafts here (#16 / #17). **Transmit level sent as #306** (VE7NHW radio-tested).
 4. **Waiting on others:** Georgy: #305 (±10 dB?), #300, #306, Buildroot #8; Kris: #301, #306, his menu-crash PR myshak1/x6100_gui#4, merging his apps (then Hany's, groundwork first; Hany's Info window text done).
@@ -187,122 +187,9 @@ by gdyuldin or myshak1, never merged by us alone.
   Bluetooth; a btmon from an X6200 owner would settle it; fallback: WiFi
   with Icom's network protocol (FT8CN speaks it, IC-705), a big job.
 
-- [ ] **Idea: WDSP noise reduction (NR2 / NR3 / NR4, as on the Hermes
-  Lite 2's Thetis and deskHPSDR) on the X6100** (VE7NHW, 2026-10-17;
-  shared GUI code, not JS8). Asked at the 2026-10-17 offload; Claude's
-  first answer from what's known (not checked on the radio): the
-  receiver's demodulation and the speaker path run on the base board, so
-  the GUI only sees the audio after it; an NR in Linux would mean
-  capturing the RX audio, cleaning it and playing it to the speaker or
-  headphones while the base board's own audio is muted. Unknowns: whether
-  the base audio can be muted while the GUI plays (Kris's bt_audio does
-  RX to a headset, so part of the path exists), the extra delay, CPU on
-  the A7 cores (rnnoise / libspecbleach should fit), and licence (WDSP is
-  GPL; the image with JS8 is GPL-3.0 already). **Next, in its own
-  session:** read bt_audio.c and the audio path, measure the delay, try
-  rnnoise on recorded X6100 audio on the PC, then ask Georgy and Kris.
-  **Better: in the base board** (VE7NHW asked, same day). Checked
-  gdyuldin/x6100_base_patch: STM32F427 (180 MHz M4F, 256 KB RAM); R12
-  already has a spectral NR (Core/Src/noise_reduction.c, r10: STFT 256/512
-  at 12.5 kHz, noise PSD tracking, gain = sqrt of a soft-clipped
-  1 - alpha*N/|X|^2, i.e. spectral subtraction). WDSP's NR2 differs mainly
-  in the gain rule (Ephraim-Malah MMSE-LSA, decision-directed a-priori
-  SNR), which fits the base easily; WDSP itself and NR3 (rnnoise) don't.
-  The base repo has no licence file: write the rule from the papers, not
-  from WDSP's GPL code. **VE7NHW 2026-10-17: NR2 on the HL2 is "way better"
-  than the X6100's NR**; he likes this plan, and asks for **NR2's
-  "Trained" mode** as on the HL2. Checked in ~/Work/deskhpsdr/wdsp-2.10
-  (emnr.c gain_method 3): NR2's MMSE amplitude gain with a speech-presence
-  term, then a trained 60x60 table (zetaHat.c, CzetaHat: ~14 KB as float)
-  that decides speech/noise per bin from (gamma, xi_hat). Fits the
-  STM32F427 (1 MB flash, R12 ~470 KB; per-bin exp + Bessel I0/I1, ~255
-  bins x ~100 frames/s). **Licence is the catch:** WDSP and the table are
-  GPL (Warren Pratt NR0V); the base repo has no licence, and the table
-  can't be rewritten from papers. Needs Georgy to release the base under
-  GPL, or Warren's OK. **Plan:** run WDSP's real emnr (method 3) on
-  recorded X6100 audio on the PC vs R12's rule; if it matches the HL2,
-  ask Georgy (licence), then port. Otherwise prototype both gain rules on recorded X6100 audio on
-  the PC; then a PR to Georgy's base repo. Base flashing goes through the
-  stock Xiegu GUI (slow test loop).
-  **2026-10-17 (evening), VE7NHW: "take R13 and add NR2 and Trained, licences
-  later". Written, not yet on the radio.** Local clone
-  `~/Work/x6100/base_patch` (gdyuldin/x6100_base_patch at r13 644ac67),
-  local branch **`nr2-trained`** (not pushed anywhere): 6862b83 build fixes
-  for this PC's newer arm-none-eabi tools (Arch package, GCC 16 / binutils
-  2.47, installed this session), 4839982 NR2 (`Core/Src/nr2.c`, tables made
-  by `gen_nr2_tables.py`). No GUI change: the **NR level picks the NR**:
-  0-19 R13's NR (depth = level x 3), 20-39 NR2 Linear (39 = as WDSP),
-  40-60 Trained, T1 = -3.0 + 0.25 x (level - 40) (50 = -0.5, his deskHPSDR
-  value). PC tests in `~/Work/x6100/research/nr2-test/` (README-less; run
-  `test_vs_wdsp`, `test_chain`, `cyc_run_chain.sh`): masks vs the real WDSP
-  (deskHPSDR's libwdsp.a) agree 99.7-100 %, noise estimate within 0.02 dB;
-  chip load estimate (qemu instruction trace, M4 cycle weights) R13 NR 6.4 %,
-  NR2 8.5 %, Trained 9.8 % of 180 MHz, heaviest sample lower than R13's.
-  Listening WAVs in `research/nr2-test/listen/`. The .xgf is AES-256-ECB
-  encrypted (Xiegu key; Franco Venturi's fventuri/BBFW notes).
-  **2026-10-17 (night): unblocked by the key route** (VE7NHW found the
-  key; kept only on this PC in `~/Work/x6100/firmware/xgf.key`, never in
-  git or on GitHub). It decrypts the stock 230307001 file (from the stock
-  20230831 SD image) to md5 f19fb85d..., the one patch.py expects;
-  stock, r12 and r13 unpack and repack byte-identically with
-  `base_patch/xgf.py` (commit 4848e9f; G90Tools' script adds a stray zero
-  block). Control: our build of plain r13 matches Georgy's r13 in all
-  115,776 patched stock bytes except 3 `bl` targets into his added code
-  (other compiler, same functions). patch.py with `REG_REPORT=0` builds
-  in 6 s (the register report took 30+ min and is print-only).
-  **`X6100_BBFW_V1.1.6_230307001_r13nr2.xgf`** (511,456 B, sha256
-  0f66ef60...; GUI reads its rev as 13) is in the stock system's
-  `/usr/firmware` on the radio's eMMC (copied over the USB console, next
-  to r12, r9, 1.1.9) and in /mnt. Not yet flashed. **Recovery checked
-  (stock x6100_ui_v100 disassembly + X6100Control fw_upgrade.c):** the
-  upgrade holds the Morse key line (gpio203) down and pulses the base
-  reset (gpio204); the bootloader starts in flash mode before our program
-  runs, so a crashing NR2 can't block re-flashing r12. WDSP 2.11: emnr.c
-  only fixes getZeta's xi bounds check, which our nr2.c already has;
-  zetaHat.c unchanged. NNR (2.10/2.11, neural, 2.1-4.7 MB models) can't
-  fit the base (1 MB flash, 256 KB RAM). **Next:** VE7NHW boots stock
-  (no SD), external power, flashes r13nr2 from System settings ->
-  Firmware upgrade, checks System info shows `r13nr2`; then our SD, NR
-  level 0-19 = R13 NR, 20-39 NR2, 40-60 Trained; listen for clicks,
-  gaps, waterfall stutter.
-  **2026-10-18: r13nr2 flashed and working (VE7NHW: "working really
-  good"; band too poor to compare).** A faint ringing on empty band at high
-  volume went away on an external speaker: the built-in speaker, not NR2.
-  VE7NHW's reference is **Thetis** (not deskHPSDR). Checked in Thetis's
-  source (ramdor/Thetis, WDSP 1.27): its NR2 core (Trained gain, aepf,
-  noise estimate, getZeta) is identical to the WDSP 2.10 ours was tested
-  against; its defaults T1 -0.5, T2 0.20, AE on, post2 off, gain method
-  Gamma (we have Linear and Trained only). WDSP 2.11 changes nothing for
-  NR2 here. **VE7NHW asked for an NR selector and a Post2 button** (NR
-  button: Off / NR / NR2 / NR2 Trained; Post2 shown only for NR2 / NR2
-  Trained). Done, not yet on the radio:
-  - **BASE** `nr2-trained` 8c3449b (local): register 23 bits 26-27 = NR,
-    bit 28 = post2 (0 = the old level zones, bit-identical to 4839982 on
-    the PC). Each NR gets the whole 0-60 range: R13 depth level/30, NR2
-    floor -6...-28 dB (60 = none), **Trained T1 = -3.0 + 0.1 x level (25 =
-    Thetis's -0.5; the old 50)**. post2 as Thetis's: comfort noise with
-    Thetis's FDnoise spectrum, cut/taper at 2.88 kHz, level within 1 dB of
-    Thetis's on the PC; load 9.8 -> 10.1 %.
-    **T2 added (VE7NHW asked, same night): 7aefe50**, bits 29-31, codes
-    0-7 = 0.20 (default), 0.02, 0.05, 0.08, 0.11, 0.14, 0.17, 0.25;
-    code 0 bit-identical to 8c3449b. **`X6100_BBFW_V1.1.6_230307001_r13nr2c.xgf`**
-    (sha256 c94358ef...) on the PC in base_patch/ (r13nr2b superseded), not
-    yet copied to the radio (radio was off).
-  - **GUI** branch **`nr-selector`** cf2d750 (shared GUI code): the NR
-    button/knob steps the four choices, Post2 button in slot 4 of the NR
-    page, **T2 button (f8cfc9c) in the last slot, NR2 Trained only, on the
-    knob** (`CTRL_NR_T2` after the RTTY controls, past the stored binds),
-    settings `nr_type` / `nr_post2` / `nr_t2`; any BASE without "nr2" in
-    its version: NR On/Off as before. GCC 12 clean. Build image run
-    **39107245811: success** (39106682113 cancelled: no T2); image and
-    unstripped GUI in builds/ci-39107245811/. **2026-10-18: r13nr2c copied
-    to the eMMC's /usr/firmware (sha256 checked; VE7NHW flashes it from
-    the stock GUI) and the nr-selector image f8cfc9c flashed to the SD
-    card, DATA backup sd-backup-2026-10-18-080246, DATA identical after.**
-  **Next:** copy r13nr2c to the eMMC's /usr/firmware over the console,
-  VE7NHW flashes it from the stock GUI, then the nr-selector image on the
-  SD card (VE7NHW says when); test the four choices, Post2 and T2. Note:
-  Trained's old 50 is now 25.
+- [ ] **NR2 for the X6100 (base firmware + GUI), kept private for now**
+  (VE7NHW, 2026-10-18). Status and notes are in the private repo (see
+  CLAUDE.local.md), not here.
 
 - [ ] **Unexplained transmit at power-up (2026-10-13, VE7NHW)**: first
   boot of bt-ft2-test d94d92b (21:37 UTC): a waterfall "glitch" a couple
