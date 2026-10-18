@@ -294,7 +294,8 @@ by gdyuldin or myshak1, never merged by us alone.
     knob** (`CTRL_NR_T2` after the RTTY controls, past the stored binds),
     settings `nr_type` / `nr_post2` / `nr_t2`; any BASE without "nr2" in
     its version: NR On/Off as before. GCC 12 clean. Build image run
-    **39107245811** (39106682113 cancelled: no T2).
+    **39107245811: success** (39106682113 cancelled: no T2); image and
+    unstripped GUI in builds/ci-39107245811/, not flashed.
   **Next:** copy r13nr2c to the eMMC's /usr/firmware over the console,
   VE7NHW flashes it from the stock GUI, then the nr-selector image on the
   SD card (VE7NHW says when); test the four choices, Post2 and T2. Note:
