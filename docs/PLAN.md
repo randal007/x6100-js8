@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** `all-apps-test` **d91a675** (run 39059910797: the digital apps + Kris's menu-crash fix + the transmit-level fix + TX level log), flashed 2026-10-17, backup **sd-backup-2026-10-17-125726**. No core-dump set-up on it.
+1. **Card:** `nr-selector` **f8cfc9c** (run 39107245811: NR selector, Post2, T2 for the NR2 BASE), flashed 2026-10-18, backup **sd-backup-2026-10-18-080246**. BASE: r13nr2c (VE7NHW flashing it from the stock GUI). No core-dump set-up on it.
 2. **Releases:** **RC1.1 is out** (`js8-rc1.1`, 2026-10-17: the transmit level reaches the setting; page titled, prerelease, sha256 checked). Left: a Facebook post if VE7NHW wants one, and the tests.yml step (needs the `workflow` scope).
 3. **JS8 into OpenX6100:** 1/4 merged; **2/4 #301** approved by Georgy, waits for Kris + **Buildroot #8**, then VE7NHW merges; 3/4 and 4/4 ready as drafts here (#16 / #17). **Transmit level sent as #306** (VE7NHW radio-tested).
 4. **Waiting on others:** Georgy: #305 (±10 dB?), #300, #306, Buildroot #8; Kris: #301, #306, his menu-crash PR myshak1/x6100_gui#4, merging his apps (then Hany's, groundwork first; Hany's Info window text done).
@@ -295,7 +295,10 @@ by gdyuldin or myshak1, never merged by us alone.
     settings `nr_type` / `nr_post2` / `nr_t2`; any BASE without "nr2" in
     its version: NR On/Off as before. GCC 12 clean. Build image run
     **39107245811: success** (39106682113 cancelled: no T2); image and
-    unstripped GUI in builds/ci-39107245811/, not flashed.
+    unstripped GUI in builds/ci-39107245811/. **2026-10-18: r13nr2c copied
+    to the eMMC's /usr/firmware (sha256 checked; VE7NHW flashes it from
+    the stock GUI) and the nr-selector image f8cfc9c flashed to the SD
+    card, DATA backup sd-backup-2026-10-18-080246, DATA identical after.**
   **Next:** copy r13nr2c to the eMMC's /usr/firmware over the console,
   VE7NHW flashes it from the stock GUI, then the nr-selector image on the
   SD card (VE7NHW says when); test the four choices, Post2 and T2. Note:
