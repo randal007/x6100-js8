@@ -1483,11 +1483,15 @@ are, and its new settings start at their defaults.
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
-- [ ] **JS8 in the OpenX6100 firmware** itself: part 1 is in
-  ([#290](https://github.com/OpenX6100/x6100_gui/pull/290)), part 2, the
-  engine, is approved and getting its last touches
-  ([#301](https://github.com/OpenX6100/x6100_gui/pull/301)), parts 3
-  and 4 are ready to follow
+- [ ] **JS8 in the OpenX6100 firmware** itself: parts 1 to 3 are in
+  ([#290](https://github.com/OpenX6100/x6100_gui/pull/290),
+  [#301](https://github.com/OpenX6100/x6100_gui/pull/301),
+  [#307](https://github.com/OpenX6100/x6100_gui/pull/307)), with the
+  transmit level shared by every digital app
+  ([#306](https://github.com/OpenX6100/x6100_gui/pull/306)); part 4, the
+  JS8 app itself, is up for review
+  ([#308](https://github.com/OpenX6100/x6100_gui/pull/308)). In OpenX6100
+  it answers STATUS as "OpenX6100 JS8" with the firmware's version
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests

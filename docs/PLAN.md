@@ -15,11 +15,11 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** a private NR2 test build, flashed 2026-10-18 (details in the private repo), backup **sd-backup-2026-10-18-080246**. It is RC1.1 plus the NR2 work: **not** the digital apps of all-apps-test.
-2. **Releases:** **RC1.1 is out** (`js8-rc1.1`, 2026-10-17: the transmit level reaches the setting; page titled, prerelease, sha256 checked). Left: a Facebook post if VE7NHW wants one (tests.yml step done 2026-10-18).
-3. **JS8 into OpenX6100:** 1/4 and **2/4 merged** (#301 + Buildroot #8, VE7NHW 2026-10-18), **transmit level #306 merged**. **3/4 #307 merged** (Georgy approved, VE7NHW merged 2026-10-20) and **#313 fixed places merged**; **4/4 = #308** ready, now on main (af30271, OpenX6100 main merged in; JS8 files identical to RC1.1 except the version string), waiting for review (version "OpenX6100 JS8 v1.0.2"), test image run 39139987043. **Hany's four opened:** groundwork #309, Channel List #310, WeFax #311 (on #309), SSTV #312 (on #311); **Fixed places #313** (VE7NHW: the test-build layout no matter what order): every app's lines have their own named place, so the six app PRs merge in any order without conflicts; left: Channel List vs WeFax mic keys, RTTY #276 vs groundwork (one-time merges by us).
-4. **Waiting on others:** Kris: **#314 Bump version to v1.1.0** (Georgy approved; the release is coming; JS8 then sends "OpenX6100 JS8 v1.1.0"); Georgy + Kris: reviews of #308, #309, #310, #311, #312; Hany answered on #310/#311/#312 (2026-10-19) and #309 (recorder: keep MP3, his WAV change was for development; Georgy asked) -> our fixes; Georgy: #305 (±10 dB?); Kris: merging his apps (approved; our #4 fix is in them). #300 approved by Georgy, held until Kris's apps are in.
-5. **VE7NHW, any time:** radio test of 4/4's image (run 39139987043) when he wants; delete OpenX6100 branches `js8-groundwork`, `js8-engine`, `tx-level`; delete branches `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`; pick where to back up CLAUDE.local.md; send the RC1 email to Giovanni if wanted (draft given 2026-10-17). Radio: VOL with Menu/Macros open in RTTY/PSK31/Olivia.
+1. **Card:** a private NR2 test build (details in the private repo); newest DATA backup **sd-backup-2026-10-20-135217** (made by the NR2 session; the one before, 2026-10-18-080246). Not the all-apps-test digital apps.
+2. **Releases:** RC1.1 is out (`js8-rc1.1`, 2026-10-17). OpenX6100 **v1.1.0** is coming (Kris's #314 merged 2026-10-20), without JS8 4/4 unless it's reviewed first.
+3. **JS8 into OpenX6100:** parts 1-3 merged (#290, #301 + Buildroot #8, #307) with #306 (transmit level), #313 (fixed app places) and #300 (knob dt); **4/4 = #308** ready on main, sends "OpenX6100 JS8 v1.1.0", tests green, test image built (run 39139987043, not radio-tested), waiting for review. Hany's apps: #309 groundwork and #310 Channel List approved by Kris (merge after v1.1.0), #311 WeFax (changes requested: done), #312 SSTV on Hany's beta 5; the #310/#311 mic-key merge is ready (branch wefax-channels-merge). Beta 5's non-app parts: #315 waterfall floor, #316 ptt.log, x6100_webserver#6 SSTV page, discussion #317 (I2C).
+4. **Waiting on others:** Georgy + Kris: reviews of #308, #311, #312, #315, #316, webserver#6; Georgy: #317, #305 (±10 dB?); Kris: v1.1.0, merging his apps and our myshak1#8/#9 (page 4 on), #318/#319 (approved by us); Hany: refreshing /mnt/broadcast.csv (#310).
+5. **VE7NHW, any time:** radio test of 4/4's image (run 39139987043) and of Hany's apps (SSTV TX on the dummy load first); RC1.1 Facebook post if wanted; delete branches: OpenX6100 `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library` (merged); ours `js8-library`, `js8-app` (old drafts #16/#17), `ox-murus-sstv-stacked`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`; pick where to back up CLAUDE.local.md.
 
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
@@ -38,21 +38,6 @@ by gdyuldin or myshak1, never merged by us alone.
     login, the card serial and Bluetooth address. Decide where together:
     options are a copy on one of the PC's other disks (two 5.5 TB drives
     sda/sdc are attached), a USB stick, or alongside sd-backups/.
-- [ ] **Release Candidate 1.1 (VE7NHW 2026-10-17): the transmit-level fix.**
-  On main: 6a5d879 (version "X6100 JS8 RC1.1", README *New in Release
-  Candidate 1.1*, docs/releases/js8-rc1.1.md with every feature); the
-  four tx files identical to OpenX6100 #306; drive-level tests in
-  tests/test_tx_level.cpp. Tests run 39093417631 on main. **Not yet:**
-  the tests.yml step for test_tx_level (the login lacks the `workflow`
-  scope: `gh auth refresh -h github.com -s workflow`, then add
-  `test_tx_level` to the build targets and a step, as in commit eca5c6b
-  on the local branch rc11). Tests run 39093417631 green; **tag
-  `js8-rc1.1` pushed, Build image run 39093596329 started 2026-10-17.**
-  **Published 2026-10-17** (run 39093596329; page titled with the notes,
-  prerelease; sha256 bd5cc449... matches, copy in releases/js8-rc1.1/).
-  Left: Facebook post. **tests.yml step done 2026-10-18** (36d679f, after VE7NHW's `gh auth refresh`). Done by the background job: `gh release edit js8-rc1.1 -R randal007/x6100-js8 --title "X6100 JS8 Release Candidate 1.1" --notes-file docs/releases/js8-rc1.1.md --prerelease`,
-  sha256 check, and a Facebook post (the RC1 one is the template:
-  ~/Pictures/x6100-js8-rc1-facebook/post.txt).
 - [ ] **Compound callsigns, leftovers** (the fix is in beta 5.1, see
   [PLAN_DONE.md](PLAN_DONE.md)). **Sent upstream 2026-10-13 (VE7NHW asked):
   JS8Call-improved/Android-port#108** (from randal007/Android-port,
@@ -95,18 +80,6 @@ by gdyuldin or myshak1, never merged by us alone.
   3/4 also carries the FFTW wisdom fix (PR #11, on main since 2026-10-15).
   **2026-10-16:** #301 approved by gdyuldin; Kris's three points done (b040b8f) and answered; Buildroot #8 (Boost/FFTW, licence label) opened. **3/4 and 4/4 prepared by cloud sessions:** draft PRs here #16 (`js8-library`) and #17 (`js8-app`, merges OpenX6100 main 9714584 first, since js8-engine sits on js8-groundwork), both checked on this PC (files identical to main, GCC 12, CI green). **Next:** Kris's OK + Buildroot #8 merged -> VE7NHW merges #301; then 3/4 as a real PR from `js8-library`, then 4/4; 4/4 gets the tx_level fix when there is one.
   **2026-10-18: Buildroot #8 then #301 merged by VE7NHW** (f032490; Georgy approved both, Kris left the final word to him), **#306 merged** (49328dd). **3/4 = OpenX6100/x6100_gui#307** (branch `js8-library`, 6367a0f: rebased onto main 49328dd, four commits; the "drive-level tests wait" commit dropped since they are #306's test_tx_level; the workflow also runs test_tx_level; files identical to our main 728b8d0; 29 src/js8 files GCC 12 clean; tests green on the PR): opened as draft, marked ready after VE7NHW OK'd the text, reviewers gdyuldin + myshak1. **4/4 = #308** (branch `js8-app`, 2133235, draft, base `js8-library` so only its own commits show): app files from main, button/case/build (no tx copy: #306's), and **JS8_APP_VERSION = "OpenX6100 JS8 " VERSION** (main.h, so "OpenX6100 JS8 v1.0.2" now; VE7NHW's choice 2026-10-18: OpenX6100's own name and number; our fork keeps "X6100 JS8 <release>"). GCC 12 clean except dialog_js8.c (needs gpsd headers: image only); break check clean; tests green. Test image (OpenX6100 + JS8 only): test-image.yml run **39139987043: built** (js8-app 2133235, before the #313 merge; dialog_js8.c compiles with GCC 12), downloaded to builds/ci-39139987043/, not flashed. Texts in docs/upstream-prs/20-js8-library-pr.md, 21-js8-app-pr.md. **Next:** image result into #308; VE7NHW radio-tests it if he wants; #308 ready once #307 is merged (GitHub retargets it to main); #300 then gives JS8 the `dt` argument (as all-apps-test 4c159c5); our drafts #16/#17 to close.
-- [ ] **One transmit-level (ALC) module for every digital app (2026-10-14,
-  VE7NHW: needs fixing; PSK31 and Olivia put out less than JS8 with the
-  XPA125B).** FT8's tx_worker corrects per chunk from single readings
-  (saves its offset); PSK31/Olivia/WSPR copy it but only read FT8's offset,
-  never save. Ours (tx_level.c, beta 4.6) averages, ramps, holds at the
-  ALC's onset, saves. PSK31 reads lower partly by nature (average < peak).
-  **Discussion opened: OpenX6100/x6100_gui#303** (text in
-  [upstream-prs/15-tx-level-discussion.md](upstream-prs/15-tx-level-discussion.md)):
-  offered tx_level/tx_player as a PR of their own before JS8 4/4.
-  **Next:** their answer; a JS8-vs-Olivia wattmeter comparison if useful.
-  **2026-10-16:** Georgy + Kris agree (one stored level + PSK31 correction, clamp the stored value; Kris moves WSPR/PSK31/Olivia/RTTY/JTTY once we send it). **VE7NHW: our tx_level stops at 3.8 W of 5 W, no amp, ALC 0, in JS8**: told them on #303 we measure first. Suspects (from the code): drive at its 0 dB ceiling, the radio's own power reading saying ~5 W, or the 8 dB ramp limit. Log ("TX level:" every 0.5 s) in all-apps-test, on the card. **Next:** one JS8 TX at 5 W on the dummy load, read /tmp/x6100_log.txt over the console, fix, then the PR (with the clamp).
-  **2026-10-17 (cloud session): likely cause found, branch `tx-level-fix`** (from main 19dd03a, test image Build image run 39059735209, Tests run 39059737055). IU1WXY's copy of our tx_level.c (his repo, c2e419d) found it: the radio sends only ~2.5 readings a second (his figure, not yet ours), so our window of 12 *readings* was ~5 s, two decisions a JS8 frame, ~1 dB up a transmission; our #303 post ("½-second averages, 1 dB/s") described the code wrongly. Branch: 21797ed window = 12 *blocks* (as his) + ALC "shows" from 0.3 not 0.1 (with 1-2 readings a window one stray 0.1 held it at 1.9 W of 5 in the model); f7214fe tx_player_stream() (WeFax/SSTV) + learned level floor -42 dB (Kris's clamp; 5 W needs ~-36 dB total on rev 3 bases per IU1WXY and Hany); a099c48 TEST log (readings per window, base rev; drop before the PR). Unit tests: new 2.5-readings case (fails on main, passes), lag sweep both ways, fast suite green. Not in it: PSK31 correction (Kris's apps not on main), IU1WXY's ALC 1/3 thresholds. **VE7NHW asked for it in all-apps-test instead (2026-10-17):** 21797ed, f7214fe and a099c48 put on all-apps-test after reverting 45358a2 (the old TEST log, which a099c48 replaces): d91a675, tx files identical to tx-level-fix, GCC 12 clean, Build image run **39059910797**; tx-level-fix's own image run 39059735209 cancelled. **2026-10-17: radio-tested by VE7NHW** ("ALC works great on any power output"; log: 5 W reached in the first transmission, 2.3 -> 5.2 W in ~6 s, held 5.4-5.5 W; 0.3 W held; an overdriven start, ALC 3.5, came down to 0.4 in ~5 s; **6-7 readings per half second**, so IU1WXY's 2.5/s doesn't hold on ours, and which of the two changes fixed 3.8 W isn't separated). **Sent as OpenX6100/x6100_gui#306** (branch tx-level b66a969: module on its own, generic comments, PSK31 correction as a base_gain_offset term, tests/test_tx_level.cpp 6 cases); pointer on #303. **On main and released as RC1.1 (2026-10-17)**: tx-level-fix without the TEST commit, the four files identical to #306, tests moved to tests/test_tx_level.cpp (CI runs it). **Next:** reviews of #306; JS8 4/4 (#17) to carry it (or drop its copy if #306 is merged first). **2026-10-18: #306 merged by VE7NHW** (Georgy approved; 49328dd); 4/4 (#308) uses it, no copy. Left for Kris: moving his apps onto it. Old plan text: VE7NHW flashes all-apps-test, JS8 TX at 5 W on the dummy load: wattmeter + "TX level: N readings" lines; if 5 W, the #303 PR (from OpenX6100 main, without TEST, with the PSK31 correction and a correction of our #303 description). Nothing posted on #303 yet.
 - [ ] **Murus apps (WeFax, NavTex, SSTV) into OpenX6100, for Hany
   (2026-10-14, VE7NHW).** Hany doesn't use GitHub: he hands VE7NHW a
   tarball once an app is done, we make the PRs (Hany as author, VE7NHW
@@ -212,19 +185,6 @@ by gdyuldin or myshak1, never merged by us alone.
   (shared CAT code): ignore CAT PTT for a few seconds after start or
   after a Bluetooth CAT client connects; CAT PTT isn't logged at all.
   **2026-10-16:** FT2 (suspect 2) is in all-apps-test, now on the card: console connected on the first boots.
-- [ ] **FT8 window: the knob moves the TX frequency 1 Hz a click
-  however fast it turns** (VE7NHW, 2026-10-13; shared code, OpenX6100's
-  FT8 app). Same cause as JS8's 10fdf95 (1.0 hands over every click on
-  its own, so the 5x/10x on a single diff never triggers). **PR
-  OpenX6100/x6100_gui#300** (branch `ft8-knob-speed`, counts clicks per
-  30 ms with lv_tick; reviewers gdyuldin + myshak1). Also in test image
-  run 38478388820. **Georgy 2026-10-14 (review comment):** rather change
-  the API and reuse the main screen's speed (`dt`, main_screen.c ~931)
-  than count clicks in dialog_ft8.c: **rework needed** (shared code).
-  Not in beta 5.2; the test builds still carry 3385886. **Next:** rework
-  as he asks; radio check of the current fix still open.
-  **2026-10-16: reworked as Georgy asked** (6050dd9: apps' `rotary_cb(diff, dt)`, FT8 speeds up from the knob's `dt`); Kris told his apps need the extra argument. In all-apps-test. **Next:** radio test, Georgy's review.
-  **2026-10-18: approved by Georgy.** Held (Claude's advice, VE7NHW asked why): it changes every app's knob callback, so Kris's WSPR/PSK31/Olivia would no longer match; either order works, the question is who updates them. Plan: after Kris merges his apps, a commit on #300 updating their rotary_cb, then VE7NHW merges.
 - [ ] **Digital apps' list crash: VOL press with Menu/Macros open
   (VE7NHW, 2026-10-17, RTTY page 2 on all-apps-test; shared code, Kris's
   `digi_menu.c`).** `digi_menu_close()` took the list out of the group
@@ -292,7 +252,7 @@ by gdyuldin or myshak1, never merged by us alone.
 
 ## To try on the radio (no programming)
 
-- [ ] **all-apps-test (d91a675 on the card since 2026-10-17):** ~~JS8 TX at 5 W~~ done 2026-10-17 (ALC fine at every power); VOL with Menu/Macros open in RTTY, PSK31, Olivia (Kris's #4 fix); FT8 knob fast; Kris's WSPR (marker, decode window), PSK31/Olivia (waterfall stops while keyed, averaging), RTTY's new page 2; Hany's WeFax, SSTV (TX on the dummy load first), Channel List (mic V/M, GENE, NW, UP/DOWN); the first boots with the console connected (FT2).
+- [ ] **all-apps-test (d91a675 on the card since 2026-10-17):** ~~JS8 TX at 5 W~~ done 2026-10-17 (ALC fine at every power); VOL with Menu/Macros open in RTTY, PSK31, Olivia (Kris's #4 fix, merged by him); FT8 knob fast (#300, merged); Kris's WSPR (marker, decode window), PSK31/Olivia (waterfall stops while keyed, averaging), RTTY's new page 2; Hany's WeFax, SSTV (TX on the dummy load first), Channel List (mic V/M, GENE, NW, UP/DOWN); the first boots with the console connected (FT2).
 - [ ] Ultra still decodes after #10 (once a slot, 3.128 s in): two-radio
   bench, test build 12d374c is on the card.
 - [ ] Ultra on a busy band. Busy bands fine on Fast (VE7NHW, 2026-10-12);

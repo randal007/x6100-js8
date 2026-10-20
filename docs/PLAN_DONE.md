@@ -4,6 +4,54 @@ Items ticked in [PLAN.md](PLAN.md), moved here at each offload so the work
 list stays short. Newest at the top. Beta 5's list is
 [BETA5_PLAN.md](BETA5_PLAN.md).
 
+## Moved 2026-10-20
+
+- [x] **Release Candidate 1.1 (VE7NHW 2026-10-17): the transmit-level fix.**
+  On main: 6a5d879 (version "X6100 JS8 RC1.1", README *New in Release
+  Candidate 1.1*, docs/releases/js8-rc1.1.md with every feature); the
+  four tx files identical to OpenX6100 #306; drive-level tests in
+  tests/test_tx_level.cpp. Tests run 39093417631 on main. **Not yet:**
+  the tests.yml step for test_tx_level (the login lacks the `workflow`
+  scope: `gh auth refresh -h github.com -s workflow`, then add
+  `test_tx_level` to the build targets and a step, as in commit eca5c6b
+  on the local branch rc11). Tests run 39093417631 green; **tag
+  `js8-rc1.1` pushed, Build image run 39093596329 started 2026-10-17.**
+  **Published 2026-10-17** (run 39093596329; page titled with the notes,
+  prerelease; sha256 bd5cc449... matches, copy in releases/js8-rc1.1/).
+  Left: Facebook post. **tests.yml step done 2026-10-18** (36d679f, after VE7NHW's `gh auth refresh`). Done by the background job: `gh release edit js8-rc1.1 -R randal007/x6100-js8 --title "X6100 JS8 Release Candidate 1.1" --notes-file docs/releases/js8-rc1.1.md --prerelease`,
+  sha256 check, and a Facebook post (the RC1 one is the template:
+  ~/Pictures/x6100-js8-rc1-facebook/post.txt).
+  **Closed 2026-10-20:** published, tests.yml step done; the Facebook post is in *In short* (VE7NHW, any time).
+
+- [x] **One transmit-level (ALC) module for every digital app (2026-10-14,
+  VE7NHW: needs fixing; PSK31 and Olivia put out less than JS8 with the
+  XPA125B).** FT8's tx_worker corrects per chunk from single readings
+  (saves its offset); PSK31/Olivia/WSPR copy it but only read FT8's offset,
+  never save. Ours (tx_level.c, beta 4.6) averages, ramps, holds at the
+  ALC's onset, saves. PSK31 reads lower partly by nature (average < peak).
+  **Discussion opened: OpenX6100/x6100_gui#303** (text in
+  [upstream-prs/15-tx-level-discussion.md](upstream-prs/15-tx-level-discussion.md)):
+  offered tx_level/tx_player as a PR of their own before JS8 4/4.
+  **Next:** their answer; a JS8-vs-Olivia wattmeter comparison if useful.
+  **2026-10-16:** Georgy + Kris agree (one stored level + PSK31 correction, clamp the stored value; Kris moves WSPR/PSK31/Olivia/RTTY/JTTY once we send it). **VE7NHW: our tx_level stops at 3.8 W of 5 W, no amp, ALC 0, in JS8**: told them on #303 we measure first. Suspects (from the code): drive at its 0 dB ceiling, the radio's own power reading saying ~5 W, or the 8 dB ramp limit. Log ("TX level:" every 0.5 s) in all-apps-test, on the card. **Next:** one JS8 TX at 5 W on the dummy load, read /tmp/x6100_log.txt over the console, fix, then the PR (with the clamp).
+  **2026-10-17 (cloud session): likely cause found, branch `tx-level-fix`** (from main 19dd03a, test image Build image run 39059735209, Tests run 39059737055). IU1WXY's copy of our tx_level.c (his repo, c2e419d) found it: the radio sends only ~2.5 readings a second (his figure, not yet ours), so our window of 12 *readings* was ~5 s, two decisions a JS8 frame, ~1 dB up a transmission; our #303 post ("½-second averages, 1 dB/s") described the code wrongly. Branch: 21797ed window = 12 *blocks* (as his) + ALC "shows" from 0.3 not 0.1 (with 1-2 readings a window one stray 0.1 held it at 1.9 W of 5 in the model); f7214fe tx_player_stream() (WeFax/SSTV) + learned level floor -42 dB (Kris's clamp; 5 W needs ~-36 dB total on rev 3 bases per IU1WXY and Hany); a099c48 TEST log (readings per window, base rev; drop before the PR). Unit tests: new 2.5-readings case (fails on main, passes), lag sweep both ways, fast suite green. Not in it: PSK31 correction (Kris's apps not on main), IU1WXY's ALC 1/3 thresholds. **VE7NHW asked for it in all-apps-test instead (2026-10-17):** 21797ed, f7214fe and a099c48 put on all-apps-test after reverting 45358a2 (the old TEST log, which a099c48 replaces): d91a675, tx files identical to tx-level-fix, GCC 12 clean, Build image run **39059910797**; tx-level-fix's own image run 39059735209 cancelled. **2026-10-17: radio-tested by VE7NHW** ("ALC works great on any power output"; log: 5 W reached in the first transmission, 2.3 -> 5.2 W in ~6 s, held 5.4-5.5 W; 0.3 W held; an overdriven start, ALC 3.5, came down to 0.4 in ~5 s; **6-7 readings per half second**, so IU1WXY's 2.5/s doesn't hold on ours, and which of the two changes fixed 3.8 W isn't separated). **Sent as OpenX6100/x6100_gui#306** (branch tx-level b66a969: module on its own, generic comments, PSK31 correction as a base_gain_offset term, tests/test_tx_level.cpp 6 cases); pointer on #303. **On main and released as RC1.1 (2026-10-17)**: tx-level-fix without the TEST commit, the four files identical to #306, tests moved to tests/test_tx_level.cpp (CI runs it). **Next:** reviews of #306; JS8 4/4 (#17) to carry it (or drop its copy if #306 is merged first). **2026-10-18: #306 merged by VE7NHW** (Georgy approved; 49328dd); 4/4 (#308) uses it, no copy. Left for Kris: moving his apps onto it. Old plan text: VE7NHW flashes all-apps-test, JS8 TX at 5 W on the dummy load: wattmeter + "TX level: N readings" lines; if 5 W, the #303 PR (from OpenX6100 main, without TEST, with the PSK31 correction and a correction of our #303 description). Nothing posted on #303 yet.
+  **Closed 2026-10-20:** #306 merged by VE7NHW 2026-10-18 (Georgy approved); JS8 4/4 uses it. Kris moves his apps onto it himself.
+
+- [x] **FT8 window: the knob moves the TX frequency 1 Hz a click
+  however fast it turns** (VE7NHW, 2026-10-13; shared code, OpenX6100's
+  FT8 app). Same cause as JS8's 10fdf95 (1.0 hands over every click on
+  its own, so the 5x/10x on a single diff never triggers). **PR
+  OpenX6100/x6100_gui#300** (branch `ft8-knob-speed`, counts clicks per
+  30 ms with lv_tick; reviewers gdyuldin + myshak1). Also in test image
+  run 38478388820. **Georgy 2026-10-14 (review comment):** rather change
+  the API and reuse the main screen's speed (`dt`, main_screen.c ~931)
+  than count clicks in dialog_ft8.c: **rework needed** (shared code).
+  Not in beta 5.2; the test builds still carry 3385886. **Next:** rework
+  as he asks; radio check of the current fix still open.
+  **2026-10-16: reworked as Georgy asked** (6050dd9: apps' `rotary_cb(diff, dt)`, FT8 speeds up from the knob's `dt`); Kris told his apps need the extra argument. In all-apps-test. **Next:** radio test, Georgy's review.
+  **2026-10-18: approved by Georgy.** Held (Claude's advice, VE7NHW asked why): it changes every app's knob callback, so Kris's WSPR/PSK31/Olivia would no longer match; either order works, the question is who updates them. Plan: after Kris merges his apps, a commit on #300 updating their rotary_cb, then VE7NHW merges.
+  **Closed 2026-10-20:** #300 merged by VE7NHW (Georgy and Kris approved; Kris updates his apps' rotary_cb); JS8 4/4 takes dt. The radio check of the knob is in *To try on the radio*.
+
 ## Moved 2026-10-17
 
 - [x] **IU1WXY firmware (Giovanni Ricciardi IU1WXY, github.com/IU1WXY/X6100-IU1WXY)
