@@ -41,6 +41,10 @@ drop our copy.
 | 23 | myshak1/x6100_gui (his fork) | digi_menu: closing a list with VOL crashed the GUI (list taken out of the group before lv_obj_del, CANCEL to freed memory) | **#4 opened 2026-10-17** into his `rtty` (branch digi-menu-esc-crash in OpenX6100), noted on #276; same file in #272/#274. **Merged by Kris 2026-10-18** into rtty; same commit on #272/#274. |
 | 24 | myshak1/x6100_gui (his fork) | APP layout for all the apps from the start (page 3 WiFi, BT, WSPR, JS8; page 4 PSK31, Olivia, WeFax, SSTV): PSK31 to page 4 place 1, Olivia to place 2 | **#5 and #6 opened 2026-10-18** into his `psk31` / `olivia` (branches psk31-app-page4, olivia-app-page4 in OpenX6100) |
 | 25 | OpenX6100/x6100_gui | Fixed places for the six apps on their way in (APP pages 3 and 4, app numbers, window cases, build lines): they merge in any order without conflicts, the layout never changes | **#313 opened 2026-10-18** (branch app-places, [text](upstream-prs/26-app-places-pr.md)); #308, #311, #312 and myshak1#5, #6, #7 updated to fill their places |
+| 26 | OpenX6100/x6100_gui | From Hany's 1KO125 beta 5, outside the apps: ptt.log (who keyed the transmitter) | **#316 opened 2026-10-20** (branch ptt-log, Hany author) |
+| 27 | OpenX6100/x6100_gui | From Hany's beta 5: the app waterfalls' colours follow the audio noise floor | **#315 opened 2026-10-20** (branch waterfall-noise-floor, Hany author) |
+| 28 | OpenX6100/x6100_webserver | From Hany's beta 5: SSTV page (upload/delete SSTV pictures and templates) | **#6 opened 2026-10-20** from fork randal007/x6100_webserver (no push access in that repo) |
+| 29 | OpenX6100/x6100_gui (discussion) | From Hany's beta 5: re-send the BASE registers after an I2C write error, stop a TX nobody asked for; should X6100Control return write errors? | **#317 opened 2026-10-20** ([text](upstream-prs/27-i2c-discussion.md)) |
 
 ## JS8 into OpenX6100: the plan
 
