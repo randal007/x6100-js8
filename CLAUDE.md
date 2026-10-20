@@ -60,7 +60,17 @@ prerelease betas (`js8-beta5`, ...) with an SD card image on GitHub.
 - **Commit and push every change.** End commit messages with the
   Co-Authored-By line.
 - **OpenX6100 (upstream):** always branch → PR → review by gdyuldin or
-  myshak1, never merged by us alone. After merging upstream into ours,
+  myshak1, never merged by us alone. **Anything outside an app is its own PR**
+  (VE7NHW, 2026-10-20): shared code that comes with someone's app
+  (logs, widgets, web pages) goes separately, with its author.
+  **App PRs that touch the same shared lines** (APP buttons, app numbers,
+  window cases, build lists) merge in any order when each app's lines sit
+  under its own name line (#313, the "fixed places"), and a change several
+  apps need (e.g. turning APP page 4 on, `app-page4-on`) is one shared
+  commit merged into each of their branches: git sees the same change on
+  both sides. Check pairs with `git merge-tree --write-tree --name-only A B`.
+  OpenX6100/x6100_webserver: no push access, PRs from the fork
+  randal007/x6100_webserver. After merging upstream into ours,
   check every `case ACTION_APP_*` block in `src/main_screen.c` (a lost
   `break` once opened two apps at once; a plain "keep both sides" merge
   of two new apps drops it every time) and stored numbers
