@@ -282,11 +282,12 @@ by gdyuldin or myshak1, never merged by us alone.
   **2026-10-16:** nothing caught on afd514e (no cores, no new crash logs since 10-14). all-apps-test flashed with the same test-only core dumps (unstripped GUI in builds/ci-38979367716/unstripped/).
   **2026-10-17:** the three cores written that morning (RTTY menu crash) were **0 bytes**: the core-dump set-up doesn't work as it is (check /mnt free space, vfat file size, `ulimit -c` in x6100_daemon) before relying on it. d91a675 on the card has none (unstripped GUI in builds/ci-39059910797/unstripped/).
 
-- [ ] **From Hany's 1.0.2 beta 5, later and each its own PR (VE7NHW 2026-10-20):**
-  - **I2C protection** (his `radio.c` + `diag_log.c`, ~380 lines, one-line PTT-source hooks in CAT, FT8, voice messages, SSTV): after a write error to the base board all registers are re-sent at once; for 10 s after an error a TX nobody asked for is stopped; `/mnt/ptt.log` and `/mnt/i2c.log`. Shared GUI code (the control link to the base board), for Georgy, radio-tested first. Likely related to our *Unexplained transmit at power-up* and the i2c-0 NAK at each GUI start (items above).
-  - **FT8 CB** (FT8 on 27 MHz with CB callsigns, ~1,200 lines, new app): VE7NHW undecided; needs an APP page 5 place and Georgy's view on 11 m TX.
-  - **Waterfall noise floor** (`lv_waterfall`, ~50 lines, shared): check what uses it.
-  - **Web Manager** (Hany posted its source in his beta 4 assets): only if wanted.
+- [ ] **From Hany's 1.0.2 beta 5, outside the apps: each its own PR (VE7NHW 2026-10-20: "anything outside the app should be a separate PR").** Opened the same day, Hany as author:
+  - **#316 ptt.log** (branch `ptt-log`): who keyed the transmitter (TX commands with their source, BASE TX on/off, "NOT COMMANDED"); his diag_log trimmed to the PTT part, radio.c +55, one-line source names in main_screen/cat/cat_lan/ft8 audio_worker/msg_voice. Fits *Unexplained transmit at power-up*.
+  - **#315 waterfall noise floor** (branch `waterfall-noise-floor`): the app waterfalls' colours follow the audio's noise floor (FT8's background no longer changes colour slot by slot with the AGC); fitted onto #290's ring buffer; overrides set_min/max for every user of the widget (asked if it should be a per-app switch). Not the same as #304 (main waterfall zoom).
+  - **OpenX6100/x6100_webserver#6 SSTV page** (from fork randal007/x6100_webserver, branch sstv-page; no push access there, reviewer request not allowed): upload/delete SSTV pictures and text templates, photo editor. OpenX6100's image already runs this web configurator; Hany added the page. Useful once #312 is in.
+  - **I2C resend** (radio.c resync + stderr/kmsg readers): **discussion drafted for Georgy** (scratchpad i2c-discussion.md, shown to VE7NHW 2026-10-20, not posted): ask whether X6100Control should return write errors instead of parsing perror text; then a PR, radio-tested with the console (the NAK at GUI start).
+  - **FT8 CB**: VE7NHW undecided, not now.
 
 ## To try on the radio (no programming)
 
