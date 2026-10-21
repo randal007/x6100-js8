@@ -17,7 +17,7 @@ by gdyuldin or myshak1, never merged by us alone.
 **In short** (updated at each offload; details in the items below):
 1. **Card:** a private NR2 test build (details in the private repo); newest DATA backup **sd-backup-2026-10-20-135217**. Not the all-apps-test digital apps.
 2. **Releases:** RC1.1 is out (`js8-rc1.1`, 2026-10-17). OpenX6100 **v1.1.0** tagged 2026-10-21 with JS8 parts 1-3 (not 4/4).
-3. **Next (VE7NHW at the radio):** flash the JS8 4/4 test image (run 39668627012, downloaded to builds/ci-39668627012/; DATA backed up first) and test; then VE7NHW merges, after trial merges against current main: **#320**, **#309** (first of Hany's), **#308** (after the radio test), then #310, #311 (+ wefax-channels-merge, the second of #310/#311), #312, #315, #316. **All approved by Kris** (#310 waits for his OK on the RAM change). #312 also gets Hany's new pictures (VE7NHW's OK needed).
+3. **Next (VE7NHW at the radio):** flash the JS8 4/4 test image (run 39668627012, downloaded to builds/ci-39668627012/; DATA backed up first) and test; then VE7NHW merges, after trial merges against current main: **#320**, **#309** (first of Hany's), **#308** (after the radio test), then #310, #311 (+ wefax-channels-merge, the second of #310/#311), #312, #315, #316. **All approved by Kris** (#310 waits for his OK on the RAM change). #312 also gets Hany's new pictures (done 2026-10-22, a53be16, VE7NHW asked).
 4. **Waiting on others:** Kris's re-review of today's fixes (#311/#312 build fix, #316, #315, #310); Georgy (travelling until 10-22/23): reviews, #317, #305; Kris: OK on #310's RAM change. **VE7NHW decides:** what replaces the SSTV pictures (Hany's photos recommended / test cards / none), then answer Kris on #312.
 5. **VE7NHW, any time:** radio test of Hany's apps (SSTV TX on the dummy load first); delete old branches (OpenX6100 `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
 
@@ -39,9 +39,9 @@ by gdyuldin or myshak1, never merged by us alone.
   0.8 MB; same 231,425 matches as before on the PC); reply posted; in
   wefax-channels-merge f800528. Hany replaced the SSTV pictures (colour
   bars + test cards, AI generated, TheMurusTeam/x6100_gui 1ko125 d9932045)
-  and answered on #312; **copying them into #312 was blocked by auto mode
-  (third party's files): waiting for VE7NHW's explicit OK** (files ready,
-  git blobs identical). Hany's new repo TheMurusTeam/x6100_gui (fork of
+  and answered on #312; **in #312 since 2026-10-22 (a53be16, Hany author, VE7NHW
+  asked; auto mode needed his explicit OK for a third party's files)**;
+  reply posted. Hany's new repo TheMurusTeam/x6100_gui (fork of
   OpenX6100, branch 1ko125 on v1.1.0): new LGPL NAVTEX/SITOR-B decoder
   (fldigi GPL code removed), DSC, WeFax Denoise/fading demodulator: later
   PRs (NavTex app; WeFax changes as a follow-up to #311, not into it).
