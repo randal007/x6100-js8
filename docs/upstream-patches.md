@@ -47,6 +47,7 @@ drop our copy.
 | 29 | OpenX6100/x6100_gui (discussion) | From Hany's beta 5: re-send the BASE registers after an I2C write error, stop a TX nobody asked for; should X6100Control return write errors? | **#317 opened 2026-10-20** ([text](upstream-prs/27-i2c-discussion.md)) |
 | 30 | OpenX6100/x6100_gui (reviews) | Kris's #318 (APP page 4 only with its first app) and #319 (FT8/FT4 TX 0.5 s into the slot, as WSJT-X) | **Both approved by VE7NHW 2026-10-20** (#319 with two notes from the code) |
 | 31 | OpenX6100/x6100_gui | Channel List (#310) + WeFax (#311) microphone keys combined as in Hany's firmware (Hany agreed on #311) | **Ready 2026-10-20 on branch `wefax-channels-merge`** (a7cb47d), for whichever of the two is merged second |
+| 32 | OpenX6100/x6100_gui | test_js8: the time-search test fed 34.5 s faster than real time could miss its window (race in the test, not in TimeSearch); feed exactly the window | **#320 opened 2026-10-21** (Kris found it on #314 and gave the fix; same change on our main dc6419b) |
 
 ## JS8 into OpenX6100: the plan
 
