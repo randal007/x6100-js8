@@ -17,8 +17,8 @@ by gdyuldin or myshak1, never merged by us alone.
 **In short** (updated at each offload; details in the items below):
 1. **Card:** a private NR2 test build (details in the private repo); newest DATA backup **sd-backup-2026-10-20-135217**. Not the all-apps-test digital apps.
 2. **Releases:** RC1.1 is out (`js8-rc1.1`, 2026-10-17). OpenX6100 **v1.1.0** tagged 2026-10-21 with JS8 parts 1-3 (not 4/4).
-3. **Next session (VE7NHW, 2026-10-21): test the fresh JS8 4/4 image, then merge.** Image = test-image.yml **run 39668627012** (js8-app 2851576 + OpenX6100 main 6459858 = v1.1.0; was in progress at offload: `gh run view 39668627012 -R randal007/x6100-js8`; download via the artifact API into builds/ci-39668627012/, flash only when VE7NHW says, backing up DATA). Then VE7NHW merges, after trial merges against current main (`git merge-tree --write-tree --name-only`): **#320** (test fix), **#309** (groundwork, first of Hany's), **#308** (JS8 4/4, after the radio test); **#310** once Kris is OK with the broadcast.csv change. All approved by Kris only.
-4. **Waiting on others:** Kris's re-review of today's fixes (#311/#312 build fix, #316, #315, #310); Georgy (travelling until 10-22/23): reviews, #317, #305; Hany: the SSTV default pictures (below). **VE7NHW decides:** what replaces the SSTV pictures (Hany's photos recommended / test cards / none), then answer Kris on #312.
+3. **Next (VE7NHW at the radio):** flash the JS8 4/4 test image (run 39668627012, downloaded to builds/ci-39668627012/; DATA backed up first) and test; then VE7NHW merges, after trial merges against current main: **#320**, **#309** (first of Hany's), **#308** (after the radio test), then #310, #311 (+ wefax-channels-merge, the second of #310/#311), #312, #315, #316. **All approved by Kris** (#310 waits for his OK on the RAM change). #312 also gets Hany's new pictures (VE7NHW's OK needed).
+4. **Waiting on others:** Kris's re-review of today's fixes (#311/#312 build fix, #316, #315, #310); Georgy (travelling until 10-22/23): reviews, #317, #305; Kris: OK on #310's RAM change. **VE7NHW decides:** what replaces the SSTV pictures (Hany's photos recommended / test cards / none), then answer Kris on #312.
 5. **VE7NHW, any time:** radio test of Hany's apps (SSTV TX on the dummy load first); delete old branches (OpenX6100 `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
 
 - [ ] **Kris's reviews of 2026-10-21, all done the same day (VE7NHW: "do all recommended").**
@@ -33,7 +33,20 @@ by gdyuldin or myshak1, never merged by us alone.
   (c84c25f; also in wefax-channels-merge 71c0a18). Replies posted.
   #308 and #320 approved by Kris; **fresh JS8 4/4 test image: run
   39668627012** (js8-app 2851576 + main 6459858 = v1.1.0).
-  **Next:** (1) **SSTV default pictures** (tx_pics/defaultpic1-4.png, Kris
+  **Later 2026-10-21/22:** Kris **approved #311, #312, #315, #316** (all of
+  today's fixes). #310: Kris found the schedule loaded at every boot (11.5
+  MB RAM): now loaded on first GENE/NW, texts in one pool, shrunk (482a91a,
+  0.8 MB; same 231,425 matches as before on the PC); reply posted; in
+  wefax-channels-merge f800528. Hany replaced the SSTV pictures (colour
+  bars + test cards, AI generated, TheMurusTeam/x6100_gui 1ko125 d9932045)
+  and answered on #312; **copying them into #312 was blocked by auto mode
+  (third party's files): waiting for VE7NHW's explicit OK** (files ready,
+  git blobs identical). Hany's new repo TheMurusTeam/x6100_gui (fork of
+  OpenX6100, branch 1ko125 on v1.1.0): new LGPL NAVTEX/SITOR-B decoder
+  (fldigi GPL code removed), DSC, WeFax Denoise/fading demodulator: later
+  PRs (NavTex app; WeFax changes as a follow-up to #311, not into it).
+  4/4 image run 39668627012 **built**, in builds/ci-39668627012/.
+  **Was Next:** (1) **SSTV default pictures** (tx_pics/defaultpic1-4.png, Kris
   asked where they come from): they are Tweety/Sylvester, Popeye, the
   Minions, Tom and Jerry: studio-owned characters that can't ship in the
   image. VE7NHW + Hany decide what replaces them; then answer Kris on #312
