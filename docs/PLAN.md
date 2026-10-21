@@ -21,6 +21,25 @@ by gdyuldin or myshak1, never merged by us alone.
 4. **Waiting on others:** Georgy + Kris: reviews of #308, #311, #312, #315, #316, webserver#6; Georgy: #317, #305 (±10 dB?); Kris: merging his apps (now that v1.1.0 is out) and our myshak1#8/#9 (page 4 on); #318/#319 merged by Kris 2026-10-21 (he'll add #319's two guards after v1.1.0); **#320** (flaky time-search test, Kris's one-line fix, also on our main dc6419b) to review; **#310 Next (Kris, 2026-10-21):** don't copy broadcast.csv to /mnt at all: read /mnt/broadcast.csv if the user put one there, else /usr/share/x6100/broadcast.csv (as OpenVoiceCommand does with /mnt/vosk), so each firmware brings its schedule; update README-broadcast.md to match; ship EiBi's B26 when it's out (sked-b26.csv was 404 on 2026-10-21; A26 ends 10-24). Ask Hany (his code) in the same comment.
 5. **VE7NHW, any time:** radio test of 4/4's image (run 39139987043) and of Hany's apps (SSTV TX on the dummy load first); RC1.1 Facebook post if wanted; delete branches: OpenX6100 `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library` (merged); ours `js8-library`, `js8-app` (old drafts #16/#17), `ox-murus-sstv-stacked`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`; pick where to back up CLAUDE.local.md.
 
+- [ ] **Kris's reviews of 2026-10-21, all done the same day (VE7NHW: "do all recommended").**
+  #311/#312 **didn't compile** (our beta-5 update left WeFax's Clear printing
+  removed decoder functions; our PC check lacked the build's
+  -Werror=implicit-function-declaration, now added): fixed d4cb0df, merged
+  into murus-sstv f0a4eaf and wefax-channels-merge. #316 ptt.log: copied
+  source name (no freed thread buffer), "Bluetooth PTT" source, writer
+  thread + queue (PTT never waits for the SD card), SWR wording (143c336,
+  ThreadSanitizer-clean on the PC). #315: noise-floor levels a switch, on
+  in FT8 only (c99052f). #310: broadcast.csv read in place, no copy
+  (c84c25f; also in wefax-channels-merge 71c0a18). Replies posted.
+  #308 and #320 approved by Kris; **fresh JS8 4/4 test image: run
+  39668627012** (js8-app 2851576 + main 6459858 = v1.1.0).
+  **Next:** (1) **SSTV default pictures** (tx_pics/defaultpic1-4.png, Kris
+  asked where they come from): they are Tweety/Sylvester, Popeye, the
+  Minions, Tom and Jerry: studio-owned characters that can't ship in the
+  image. VE7NHW + Hany decide what replaces them; then answer Kris on #312
+  (also: SSTV's own TX level vs tx_player, "later" is fine). (2) VE7NHW
+  radio-tests the 4/4 image, then merges #308; #320 and #309 can be merged
+  now (Kris approved). (3) EiBi B26 into #310 when published (404 on 10-21).
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
   at the end of each.
