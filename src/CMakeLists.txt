@@ -16,12 +16,13 @@ target_compile_definitions(${PROJECT_NAME} PRIVATE _GNU_SOURCE)
 target_sources(${PROJECT_NAME} PUBLIC
     diag_log.c
     main.c main_screen.c
+    channels.c dialog_channels.c broadcast_db.c broadcast_overlay.c cJSON.c
     styles.c spectrum.c radio.c dsp.cpp util.cpp
     app_ports.cpp
     waterfall.c rotary.cpp keyboard.c kbd_rollover.c encoder.c
     events.c msg.c msg_tiny.c keypad.c
     hkey.c clock.c
-    meter.c band_info.cpp tx_info.c tx_level.c tx_player.c
+    meter.c band_info.cpp tx_info.c
     audio.c mfk.cpp cw.cpp panel.cpp
     rtty.c screenshot.c display.cpp gps.c
     ui_list.c app_info.c
@@ -45,6 +46,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     # PSK31
     # Olivia
     # WeFax
+    dialog_wefax.c wefax/decoder.c wefax/stations.c
     # SSTV
 )
 
