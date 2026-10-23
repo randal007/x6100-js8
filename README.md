@@ -1490,8 +1490,10 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   transmit level shared by every digital app
   ([#306](https://github.com/OpenX6100/x6100_gui/pull/306)); part 4, the
   JS8 app itself, is approved
-  ([#308](https://github.com/OpenX6100/x6100_gui/pull/308)) and gets a
-  last radio test before it's merged. In OpenX6100
+  ([#308](https://github.com/OpenX6100/x6100_gui/pull/308)) and planned
+  for **OpenX6100 v1.2.0**, together with Hany 1KO125's Channel List,
+  WeFax and SSTV; a test image of all four is about to be tried on the
+  radio. In OpenX6100
   it answers STATUS as "OpenX6100 JS8" with the firmware's version
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 

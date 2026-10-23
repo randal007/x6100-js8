@@ -15,44 +15,38 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** a private NR2 test build (details in the private repo); newest DATA backup **sd-backup-2026-10-20-135217**. Not the all-apps-test digital apps.
-2. **Releases:** RC1.1 is out (`js8-rc1.1`, 2026-10-17). OpenX6100 **v1.1.0** tagged 2026-10-21 with JS8 parts 1-3 (not 4/4).
-3. **Merged by VE7NHW 2026-10-22 (Kris approved, main tests green, GCC 12 + break check clean):** #320, #309, #316, #315, #305. **2026-10-22 (VE7NHW's go):** #311 retargeted to main and murus-wefax moved up to wefax-channels-merge f800528 (the Channel List + mic-key commit in it, so merge order #310, #311, #312, #308; #312 to main once #311 is in); description + comment on #311. **Test image run 39849277139 FAILED at the link** (dialog_js8.c: undefined tx_player_base_gain_offset): our 2026-10-20 merge 92e6ec6 (app-page4-on into murus-wefax) kept the old CMake source line and dropped #306's tx_level.c/tx_player.c; nothing on main calls them, so Kris's compile checks passed, but main + #311 + #308 would not link. **Fixed:** 320cffb on murus-wefax (#311), same commit 1632779 on murus-sstv (#312); every merge with main keeps the line; checked nothing else lost. wefax-channels-merge (f800528) is now stale, delete it. **Rebuild: run 39857680626**. **Kris's release plan (email 2026-10-22, VE7NHW agreed):** v1.2.0 = #308, #310, #311, #312 in that order (#312 retargeted to main after #311; we offered), then Kris's bump-v1.2.0 and #321 (headers, approved by us); fixes only after; Kris builds from main and radio-tests before tagging, release notes to us first. v1.3.0 = OpenVoiceCommand (in the image, Georgy decided; we asked Kris to add JS8/WeFax/SSTV/Channel List windows and whether power/NR/filter commands respect JS8's locks), PSK31/Olivia/WSPR/FT2/JTTY/RTTY, Kris's modes onto tx_player; JTTY needs an APP place (we offered help). (test-image.yml, our branch `four-apps-test` b5687a8 = main 2f00e11 + js8-app + wefax-channels-merge + murus-sstv, break check clean). **Next:** download it into builds/ci-39849277139/; VE7NHW flashes it (DATA backed up), tests JS8, Channel List (GENE/NW/mic UP/DOWN), WeFax RX, SSTV RX then TX on the dummy load; then merges all four (Georgy until 10-23). **JS8 header lines done 2026-10-22** (VE7NHW: "Copyright (c) 2026 Randal Warren VE7NHW" + "Part of OpenX6100", as Kris's 10-22 commit; the ported assembler/render and test_js8.cpp also credit the JS8Call-improved authors): #308 46c5e8f (comment posted), our main 59a738e; comments only, so the test image (js8-app 2851576) needs no rebuild. **NR2 selector not in this test** (VE7NHW 2026-10-22: option B, just the four apps; a private build of four-apps-test + nr-selector's three GUI commits cherry-picks cleanly if wanted later; the base board keeps its NR2 firmware either way).
-4. **Waiting on others:** Kris's re-review of today's fixes (#311/#312 build fix, #316, #315, #310); Georgy (travelling until 10-22/23): reviews, #317, #305; Kris: OK on #310's RAM change (482a91a). **VE7NHW decides:** what replaces the SSTV pictures (Hany's photos recommended / test cards / none), then answer Kris on #312.
-5. **VE7NHW, any time:** radio test of Hany's apps (SSTV TX on the dummy load first); delete old branches (OpenX6100 `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
+1. **Card:** still the private NR2 test build; newest DATA backup **sd-backup-2026-10-20-135217**. **Ready to flash:** the four-apps test image (run 39857680626, `builds/ci-39857680626/`), on VE7NHW's word.
+2. **Releases:** RC1.1 is out (`js8-rc1.1`). OpenX6100 v1.1.0 has JS8 parts 1-3. **Kris's plan (agreed 2026-10-22):** v1.2.0 = #308, #310, #311, #312 (+ his version bump and #321), then fixes only; v1.3.0 = OpenVoiceCommand + his modes.
+3. **Next (VE7NHW):** flash the four-apps image, test JS8, Channel List (V/M, GENE, NW, UP/DOWN), WeFax RX, SSTV RX then TX on the dummy load; report to Kris; then merge #310, #311, #312 (Claude points it at main first), #308.
+4. **Waiting on others:** Georgy (back 10-22/23): reviews; Kris: his own v1.2.0 test build, #321, v1.3.0 PRs; EiBi's B26 schedule (still 404).
+5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge` (stale, in #311 now), `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`; `four-apps-test` after the test); pick where to back up CLAUDE.local.md.
 
-- [ ] **Kris's reviews of 2026-10-21, all done the same day (VE7NHW: "do all recommended").**
-  #311/#312 **didn't compile** (our beta-5 update left WeFax's Clear printing
-  removed decoder functions; our PC check lacked the build's
-  -Werror=implicit-function-declaration, now added): fixed d4cb0df, merged
-  into murus-sstv f0a4eaf and wefax-channels-merge. #316 ptt.log: copied
-  source name (no freed thread buffer), "Bluetooth PTT" source, writer
-  thread + queue (PTT never waits for the SD card), SWR wording (143c336,
-  ThreadSanitizer-clean on the PC). #315: noise-floor levels a switch, on
-  in FT8 only (c99052f). #310: broadcast.csv read in place, no copy
-  (c84c25f; also in wefax-channels-merge 71c0a18). Replies posted.
-  #308 and #320 approved by Kris; **fresh JS8 4/4 test image: run
-  39668627012** (js8-app 2851576 + main 6459858 = v1.1.0).
-  **Later 2026-10-21/22:** Kris **approved #311, #312, #315, #316** (all of
-  today's fixes). #310: Kris found the schedule loaded at every boot (11.5
-  MB RAM): now loaded on first GENE/NW, texts in one pool, shrunk (482a91a,
-  0.8 MB; same 231,425 matches as before on the PC); reply posted; in
-  wefax-channels-merge f800528. Hany replaced the SSTV pictures (colour
-  bars + test cards, AI generated, TheMurusTeam/x6100_gui 1ko125 d9932045)
-  and answered on #312; **in #312 since 2026-10-22 (a53be16, Hany author, VE7NHW
-  asked; auto mode needed his explicit OK for a third party's files)**;
-  reply posted. Hany's new repo TheMurusTeam/x6100_gui (fork of
-  OpenX6100, branch 1ko125 on v1.1.0): new LGPL NAVTEX/SITOR-B decoder
-  (fldigi GPL code removed), DSC, WeFax Denoise/fading demodulator: later
-  PRs (NavTex app; WeFax changes as a follow-up to #311, not into it).
-  4/4 image run 39668627012 **built**, in builds/ci-39668627012/.
-  **Was Next:** (1) **SSTV default pictures** (tx_pics/defaultpic1-4.png, Kris
-  asked where they come from): they are Tweety/Sylvester, Popeye, the
-  Minions, Tom and Jerry: studio-owned characters that can't ship in the
-  image. VE7NHW + Hany decide what replaces them; then answer Kris on #312
-  (also: SSTV's own TX level vs tx_player, "later" is fine). (2) VE7NHW
-  radio-tests the 4/4 image, then merges #308; #320 and #309 can be merged
-  now (Kris approved). (3) EiBi B26 into #310 when published (404 on 10-21).
+- [ ] **v1.2.0: JS8 4/4 + the Murus apps into OpenX6100 (2026-10-22).**
+  **#311 retargeted to main** (VE7NHW's go) and murus-wefax moved up to the
+  combining commit (Channel List + mic keys, a7cb47d), so #311 carries #310;
+  description and comment updated. **JS8 header lines** (VE7NHW: "Copyright (c)
+  2026 Randal Warren VE7NHW" + "Part of OpenX6100", as Kris's 10-22 commit;
+  the ported assembler/render and test_js8.cpp also credit the JS8Call-improved
+  authors): #308 46c5e8f, our main 59a738e. **Test image of all four failed at
+  the link** (run 39849277139: undefined tx_player_base_gain_offset): our
+  merge 92e6ec6 (2026-10-20, app-page4-on into murus-wefax) kept the old
+  CMake source line and dropped #306's tx_level.c/tx_player.c; nothing on
+  main calls them, so compile checks passed. **Fixed** 320cffb (#311) and the
+  same commit 1632779 (#312); checked nothing else lost; note posted on both.
+  **Rebuilt: run 39857680626, success**, downloaded to builds/ci-39857680626/
+  (branch `four-apps-test` 462eca3 = main 2f00e11 + js8-app 46c5e8f +
+  murus-wefax 320cffb + murus-sstv 1632779; break check clean). NR2 selector
+  left out (VE7NHW: option B; it cherry-picks cleanly if wanted, private build
+  only). **Kris's release plan** (email 10-22, agreed): merge #308, #310,
+  #311, #312, then bump-v1.2.0 and #321 (approved by us), fixes only, Kris
+  radio-tests main before tagging. v1.3.0: OpenVoiceCommand (in the image,
+  Georgy), PSK31/Olivia/WSPR/FT2/JTTY/RTTY moved onto tx_player; we asked Kris
+  to add JS8/WeFax/SSTV/Channel List to its windows and whether its power/NR/
+  filter commands respect JS8's locks; JTTY needs an APP place (offered help).
+  **Next:** VE7NHW flashes and tests (In short 3); results to Kris; after
+  #311 merges: `gh pr edit 312 -R OpenX6100/x6100_gui --base main`.
+- [ ] **EiBi B26 schedule into #310's broadcast.csv** when EiBi publishes it
+  (sked-b26.csv 404 on 10-21 and 10-22; season starts 2026-10-25).
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
   feedback).** Working style: shorter sessions, one topic each, offload
   at the end of each.

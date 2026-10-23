@@ -4,6 +4,43 @@ Items ticked in [PLAN.md](PLAN.md), moved here at each offload so the work
 list stays short. Newest at the top. Beta 5's list is
 [BETA5_PLAN.md](BETA5_PLAN.md).
 
+## Moved 2026-10-22
+
+- [x] **Kris's reviews of 2026-10-21, all done the same day (VE7NHW: "do all recommended").**
+  #311/#312 **didn't compile** (our beta-5 update left WeFax's Clear printing
+  removed decoder functions; our PC check lacked the build's
+  -Werror=implicit-function-declaration, now added): fixed d4cb0df, merged
+  into murus-sstv f0a4eaf and wefax-channels-merge. #316 ptt.log: copied
+  source name (no freed thread buffer), "Bluetooth PTT" source, writer
+  thread + queue (PTT never waits for the SD card), SWR wording (143c336,
+  ThreadSanitizer-clean on the PC). #315: noise-floor levels a switch, on
+  in FT8 only (c99052f). #310: broadcast.csv read in place, no copy
+  (c84c25f; also in wefax-channels-merge 71c0a18). Replies posted.
+  #308 and #320 approved by Kris; **fresh JS8 4/4 test image: run
+  39668627012** (js8-app 2851576 + main 6459858 = v1.1.0).
+  **Later 2026-10-21/22:** Kris **approved #311, #312, #315, #316** (all of
+  today's fixes). #310: Kris found the schedule loaded at every boot (11.5
+  MB RAM): now loaded on first GENE/NW, texts in one pool, shrunk (482a91a,
+  0.8 MB; same 231,425 matches as before on the PC); reply posted; in
+  wefax-channels-merge f800528. Hany replaced the SSTV pictures (colour
+  bars + test cards, AI generated, TheMurusTeam/x6100_gui 1ko125 d9932045)
+  and answered on #312; **in #312 since 2026-10-22 (a53be16, Hany author, VE7NHW
+  asked; auto mode needed his explicit OK for a third party's files)**;
+  reply posted. Hany's new repo TheMurusTeam/x6100_gui (fork of
+  OpenX6100, branch 1ko125 on v1.1.0): new LGPL NAVTEX/SITOR-B decoder
+  (fldigi GPL code removed), DSC, WeFax Denoise/fading demodulator: later
+  PRs (NavTex app; WeFax changes as a follow-up to #311, not into it).
+  4/4 image run 39668627012 **built**, in builds/ci-39668627012/.
+  **Was Next:** (1) **SSTV default pictures** (tx_pics/defaultpic1-4.png, Kris
+  asked where they come from): they are Tweety/Sylvester, Popeye, the
+  Minions, Tom and Jerry: studio-owned characters that can't ship in the
+  image. VE7NHW + Hany decide what replaces them; then answer Kris on #312
+  (also: SSTV's own TX level vs tx_player, "later" is fine). (2) VE7NHW
+  radio-tests the 4/4 image, then merges #308; #320 and #309 can be merged
+  now (Kris approved). (3) EiBi B26 into #310 when published (404 on 10-21).
+  **Closed 2026-10-22:** all reviews answered and approved; #320/#309/#316/#315/#305 merged by VE7NHW; the SSTV pictures replaced (Hany's, in #312); the 4/4-only image dropped for the four-apps image (see *v1.2.0*). Leftover: EiBi B26 into #310 (own item).
+
+
 ## Moved 2026-10-20
 
 - [x] **Release Candidate 1.1 (VE7NHW 2026-10-17): the transmit-level fix.**

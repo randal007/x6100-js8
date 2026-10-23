@@ -171,6 +171,12 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
 - **Check the app cases after any merge** that adds an app:
   `awk '/dialog_construct\(/{c=NR} /case ACTION_APP_/{ if (c && NR-c<4) print "FALLTHROUGH near line " NR; c=0 } /break;/{c=0}' src/main_screen.c`
   prints nothing when every window case ends in its `break`.
+- **Check the build list after any merge into an app branch:** a
+  keep-ours resolution of `src/CMakeLists.txt` once dropped main's
+  `tx_level.c tx_player.c` (#311/#312, 2026-10-20). Compile checks (ours,
+  reviewers') don't link, so only an image showed it. Run in the merged
+  tree:
+  `for f in $(git grep -ho '[a-z_0-9/]*\.c\b\|[a-z_0-9/]*\.cpp\b' upstream/main -- src/CMakeLists.txt | sort -u); do grep -qw "$f" src/CMakeLists.txt || echo "dropped: $f"; done`
 - **Reading a GUI crash:** *Build image* also uploads
   `x6100_gui-unstripped.<ref>` (the GUI before it is stripped; the
   image's copy has no symbols). With a core dump from the radio:
