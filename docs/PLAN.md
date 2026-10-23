@@ -15,9 +15,9 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** still the private NR2 test build; newest DATA backup **sd-backup-2026-10-20-135217**. **Ready to flash:** the four-apps test image (run 39857680626, `builds/ci-39857680626/`), on VE7NHW's word.
+1. **Card:** the four-apps test image (run 39857680626, branch `four-apps-test` 462eca3), flashed 2026-10-23 on VE7NHW's word, DATA identical after; newest DATA backup **sd-backup-2026-10-23-092818**.
 2. **Releases:** RC1.1 is out (`js8-rc1.1`). OpenX6100 v1.1.0 has JS8 parts 1-3. **Kris's plan (agreed 2026-10-22):** v1.2.0 = #308, #310, #311, #312 (+ his version bump and #321), then fixes only; v1.3.0 = OpenVoiceCommand + his modes.
-3. **Next (VE7NHW):** flash the four-apps image, test JS8, Channel List (V/M, GENE, NW, UP/DOWN), WeFax RX, SSTV RX then TX on the dummy load; report to Kris; then merge #310, #311, #312 (Claude points it at main first), #308.
+3. **Next (VE7NHW):** test the four-apps image: JS8, Channel List (V/M, GENE, NW, UP/DOWN), WeFax RX, SSTV RX then TX on the dummy load; report to Kris; then merge #310, #311, #312 (Claude points it at main first), #308.
 4. **Waiting on others:** Georgy (back 10-22/23): reviews; Kris: his own v1.2.0 test build, #321, v1.3.0 PRs; EiBi's B26 schedule (still 404).
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge` (stale, in #311 now), `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`; `four-apps-test` after the test); pick where to back up CLAUDE.local.md.
 
