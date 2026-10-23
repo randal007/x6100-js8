@@ -192,7 +192,7 @@ by gdyuldin or myshak1, never merged by us alone.
   with Icom's network protocol (FT8CN speaks it, IC-705), a big job.
 
 - [ ] **NR2 for the X6100 (base firmware + GUI), kept private for now**
-  (VE7NHW, 2026-10-18; last worked on 2026-10-21). Status, next step and
+  (VE7NHW, 2026-10-18; last worked on 2026-10-23). Status, next step and
   notes are in the private repo (NR2-NOTES.md, see CLAUDE.local.md), not
   here.
 
