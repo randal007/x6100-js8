@@ -50,6 +50,16 @@ by gdyuldin or myshak1, never merged by us alone.
   in its windows list (Channel List after #310 is on main); while JS8 or
   any digital window is open it refuses power above 5 W, NR/NB/notch on and
   filter changes. **Tested 2026-10-24 evening by VE7NHW:** all four open and work, APP places right, JS8 all good, Channel List from the mic keys, WeFax fine; SSTV opens (no SSTV signals on the band, receive not tried on air). VE7NHW: merge all four; reply to Kris says go ahead. **2026-10-25 13:41-13:42Z Kris merged #323, #308 (JS8 4/4) and #310.** #311 shows "conflicting" on GitHub although git merges it cleanly into main 0a7daa0 (checked: real merge, break check and build list clean; #312 then merges cleanly on top). Fixed with VE7NHW's OK: main merged into murus-wefax (b6fa921), GitHub shows it mergeable again; note on #311. **JS8 in OpenX6100 main = our main** except the intended three: JS8_APP_VERSION "OpenX6100 JS8 " VERSION, rotary_cb's dt (#300), one UPSTREAM.md note; against RC1.1 only header lines and #320's test fix. **Next:** #311, #312 (Kris retargets), v1.2.0 tag; then bring our main up to OpenX6100 main (break check, build-list check).
+- [ ] **Hany's apps, after v1.2.0 (2026-10-25).** All four first PRs merged (#309, #310, #311, **#312 merged 10-25**).
+  Hany's own repo TheMurusTeam/x6100_gui `1ko125` (remote `murus`) now carries our changes (his comment, 10-22),
+  so new work comes from there. **Opened 10-25 (VE7NHW: "add the PR for all the WeFax updates"):** **#324** shared
+  app radio set-up (app_radio.c: USB-D locked, zoom 4x unsaved, DSP off while open; Hany author; own build line) and
+  **#325** WeFax Denoise + Auto Slant 70 + USB-D/zoom + tests/wefax PC tools (base app-radio; ML training kit and
+  .exe tools left out). PC test (our own chart through wefax_gen): at 4 dB Denoise missed the start, classic didn't;
+  asked Hany on #325. **Still to come:** NavTex (now LGPL, own SITOR-B receiver) and DSC (Nayuki QR code, MIT) on APP
+  page 5 (a shared "page 5 on" commit as with page 4); webserver SSTV page (OpenX6100/x6100_webserver#6, needs
+  Georgy's review, then a webserver tag and a Buildroot version bump); mic MODE key; FT8 CB (VE7NHW undecided);
+  SSTV RX/TX radio test. Email to Hany about NavTex/DSC: drafted 10-25.
 - [ ] **Kris's apps (WSPR #271, PSK31 #272, Olivia #274, RTTY #276, FT2 #288) ready for v1.3.0 (2026-10-25, VE7NHW: "fix all the issues, PRs for all").**
   All approved by Georgy. **Kris merged #311 (WeFax) 2026-10-25**; #312 waits for its retarget. Found and fixed, as PRs into
   Kris's branches: **myshak1#10** WSPR "plain call only" (a /P or /QRP call made every TX slot fail silently);
