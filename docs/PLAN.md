@@ -163,6 +163,7 @@ by gdyuldin or myshak1, never merged by us alone.
   VE7NHW: leave it to others. Before 4/4: a 4th APP page agreed with
   myshak1, and one cty.dat (JS8 reads #282's).
   **2026-10-16:** #295 approved by us (Buildroot #7 fixed our point); #253's reporter attached params.db (left to others).
+  **2026-10-24: #323 approved** (Kris: FT8/FT4 with non-standard own calls + a /P, /QRP list in Callsign, fixes #322; GCC 12 clean, merges with our four). Notes for Kris: WSPR (#271) skips every TX silently with a call containing "/" (wants a blocked reason); digi_menu.c listed twice once #272/#274/#276 follow; ESC in the suffix list saves nothing without a word. JS8: VE7NHW: prefix + /QRP (over 9 letters) too rare to handle.
 - [ ] **Idea, to rethink: phone digital modes (FT8CN) with audio over
   Bluetooth** (VE7NHW, 2026-10-13; shared GUI code, Kris's bt_audio.c,
   not JS8). The X6200 does it (two-way audio + CAT with FT8CN). Tried by
