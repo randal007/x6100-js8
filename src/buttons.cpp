@@ -335,6 +335,7 @@ static button_data_t  btn_js8    = make_app_btn("JS8", ACTION_APP_JS8);
 /* PSK31 */
 static button_data_t  btn_psk    = make_app_btn("PSK31", ACTION_APP_PSK);
 /* Olivia */
+static button_data_t  btn_olivia = make_app_btn("Olivia", ACTION_APP_OLIVIA);
 /* WeFax */
 static button_data_t  btn_wefax  = make_app_btn("WeFax", ACTION_APP_WEFAX);
 /* SSTV */
@@ -486,7 +487,7 @@ static buttons_page_t page_app_4 = {{
     /* PSK31 */
     &btn_psk,
     /* Olivia */
-    NULL,
+    &btn_olivia,
     /* WeFax */
     &btn_wefax,
     /* SSTV */
