@@ -49,7 +49,7 @@ by gdyuldin or myshak1, never merged by us alone.
   retargets #312 himself. On our v1.3.0 questions: JS8, WeFax and SSTV are
   in its windows list (Channel List after #310 is on main); while JS8 or
   any digital window is open it refuses power above 5 W, NR/NB/notch on and
-  filter changes. **Tested 2026-10-24 evening by VE7NHW:** all four open and work, APP places right, JS8 all good, Channel List from the mic keys, WeFax fine; SSTV opens (no SSTV signals on the band, receive not tried on air). VE7NHW: merge all four; reply to Kris says go ahead. **Next:** Kris merges + tags v1.2.0; then bring our main up to OpenX6100 main (break check, build-list check).
+  filter changes. **Tested 2026-10-24 evening by VE7NHW:** all four open and work, APP places right, JS8 all good, Channel List from the mic keys, WeFax fine; SSTV opens (no SSTV signals on the band, receive not tried on air). VE7NHW: merge all four; reply to Kris says go ahead. **2026-10-25 13:41-13:42Z Kris merged #323, #308 (JS8 4/4) and #310.** #311 shows "conflicting" on GitHub although git merges it cleanly into main 0a7daa0 (checked: real merge, break check and build list clean; #312 then merges cleanly on top). **Next:** #311, #312 (Kris retargets), v1.2.0 tag; then bring our main up to OpenX6100 main (break check, build-list check).
 - [ ] **EiBi B26 schedule into #310's broadcast.csv** when EiBi publishes it
   (sked-b26.csv 404 on 10-21 and 10-22; season starts 2026-10-25).
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
