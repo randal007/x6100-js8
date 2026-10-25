@@ -17,7 +17,7 @@ by gdyuldin or myshak1, never merged by us alone.
 **In short** (updated at each offload; details in the items below):
 1. **Card:** the four-apps test image (run 39857680626, branch `four-apps-test` 462eca3), flashed 2026-10-23 on VE7NHW's word, DATA identical after; newest DATA backup **sd-backup-2026-10-23-092818**.
 2. **Releases:** RC1.1 is out (`js8-rc1.1`). OpenX6100 v1.1.0 has JS8 parts 1-3. **Kris's plan (agreed 2026-10-22):** v1.2.0 = #308, #310, #311, #312 (+ his version bump and #321), then fixes only; v1.3.0 = OpenVoiceCommand + his modes.
-3. **Next (VE7NHW):** test the four-apps image: JS8, Channel List (V/M, GENE, NW, UP/DOWN), WeFax RX, SSTV RX then TX on the dummy load; report to Kris; then merge #310, #311, #312 (Claude points it at main first), #308.
+3. **Next (VE7NHW):** test the four-apps image: JS8, Channel List (V/M, GENE, NW, UP/DOWN), WeFax RX, SSTV RX then TX on the dummy load; report to Kris. **Kris (email 2026-10-24): unless the test finds something, he merges #308, #310, #311, #312 on 10-25 in that order**, points #312 at main himself, then version bump, full build, his radio test, v1.2.0.
 4. **Waiting on others:** Georgy (back 10-22/23): reviews; Kris: his own v1.2.0 test build, #321, v1.3.0 PRs; EiBi's B26 schedule (still 404).
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge` (stale, in #311 now), `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`; `four-apps-test` after the test); pick where to back up CLAUDE.local.md.
 
@@ -43,8 +43,13 @@ by gdyuldin or myshak1, never merged by us alone.
   Georgy), PSK31/Olivia/WSPR/FT2/JTTY/RTTY moved onto tx_player; we asked Kris
   to add JS8/WeFax/SSTV/Channel List to its windows and whether its power/NR/
   filter commands respect JS8's locks; JTTY needs an APP place (offered help).
-  **Next:** VE7NHW flashes and tests (In short 3); results to Kris; after
-  #311 merges: `gh pr edit 312 -R OpenX6100/x6100_gui --base main`.
+  **2026-10-24 (Kris's email):** he checked all four still merge in order
+  onto main with tx_level.c/tx_player.c in the build list; merges them
+  10-25 (#308, #310, #311, #312) unless VE7NHW's test finds something, and
+  retargets #312 himself. On our v1.3.0 questions: JS8, WeFax and SSTV are
+  in its windows list (Channel List after #310 is on main); while JS8 or
+  any digital window is open it refuses power above 5 W, NR/NB/notch on and
+  filter changes. **Next:** VE7NHW's test result to Kris before 10-25.
 - [ ] **EiBi B26 schedule into #310's broadcast.csv** when EiBi publishes it
   (sked-b26.csv 404 on 10-21 and 10-22; season starts 2026-10-25).
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
