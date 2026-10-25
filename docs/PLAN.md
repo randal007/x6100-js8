@@ -50,6 +50,18 @@ by gdyuldin or myshak1, never merged by us alone.
   in its windows list (Channel List after #310 is on main); while JS8 or
   any digital window is open it refuses power above 5 W, NR/NB/notch on and
   filter changes. **Tested 2026-10-24 evening by VE7NHW:** all four open and work, APP places right, JS8 all good, Channel List from the mic keys, WeFax fine; SSTV opens (no SSTV signals on the band, receive not tried on air). VE7NHW: merge all four; reply to Kris says go ahead. **2026-10-25 13:41-13:42Z Kris merged #323, #308 (JS8 4/4) and #310.** #311 shows "conflicting" on GitHub although git merges it cleanly into main 0a7daa0 (checked: real merge, break check and build list clean; #312 then merges cleanly on top). Fixed with VE7NHW's OK: main merged into murus-wefax (b6fa921), GitHub shows it mergeable again; note on #311. **JS8 in OpenX6100 main = our main** except the intended three: JS8_APP_VERSION "OpenX6100 JS8 " VERSION, rotary_cb's dt (#300), one UPSTREAM.md note; against RC1.1 only header lines and #320's test fix. **Next:** #311, #312 (Kris retargets), v1.2.0 tag; then bring our main up to OpenX6100 main (break check, build-list check).
+- [ ] **Kris's apps (WSPR #271, PSK31 #272, Olivia #274, RTTY #276, FT2 #288) ready for v1.3.0 (2026-10-25, VE7NHW: "fix all the issues, PRs for all").**
+  All approved by Georgy. **Kris merged #311 (WeFax) 2026-10-25**; #312 waits for its retarget. Found and fixed, as PRs into
+  Kris's branches: **myshak1#10** WSPR "plain call only" (a /P or /QRP call made every TX slot fail silently);
+  **myshak1#11** main merged into rtty (CMakeLists + spectrum.h, digi_menu.c off RTTY's line);
+  **myshak1#12** main merged into ft2 (worker.c includes, FT2 = 4 / 9 beside JS8's numbers; test_ft8_qso not run here);
+  **myshak1#13, #14, #15**: tx_level.c / tx_player.c back in WSPR's, PSK31's and Olivia's build line (our 10-18
+  app-places merges dropped them: merged as they were, each would have broken main's link). digi_menu.c listed
+  twice when PSK31/Olivia merge: harmless (CMake builds it once, tried). myshak1#8/#9 (page 4 on) now redundant:
+  main has it since #311. **Test image:** branch `kris-apps-test` cccd5e3 (main 24b5fa8 + SSTV + all the above;
+  break check, build lists, 53 files GCC 12 clean), test-image.yml run **40221803013**.
+  **Next:** VE7NHW flashes and tests RTTY TX (dummy load), PSK31, Olivia, WSPR (with VE7NHW and VE7NHW/P), FT2,
+  VOL with Menu/Macros open in each; results to Kris.
 - [ ] **EiBi B26 schedule into #310's broadcast.csv** when EiBi publishes it
   (sked-b26.csv 404 on 10-21 and 10-22; season starts 2026-10-25).
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
