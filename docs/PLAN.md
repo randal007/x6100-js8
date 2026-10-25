@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** the four-apps test image (run 39857680626, branch `four-apps-test` 462eca3), flashed 2026-10-23 on VE7NHW's word, DATA identical after; newest DATA backup **sd-backup-2026-10-23-092818**.
+1. **Card:** the kris-apps test image (run 40221803013, branch `kris-apps-test` cccd5e3: OpenX6100 main 24b5fa8 + SSTV + Kris's five apps with myshak1#10-15), flashed 2026-10-25 on VE7NHW's word, DATA identical after; newest DATA backup **sd-backup-2026-10-25-123022**.
 2. **Releases:** RC1.1 is out (`js8-rc1.1`). OpenX6100 v1.1.0 has JS8 parts 1-3. **Kris's plan (agreed 2026-10-22):** v1.2.0 = #308, #310, #311, #312 (+ his version bump and #321), then fixes only; v1.3.0 = OpenVoiceCommand + his modes.
 3. **Next (VE7NHW):** test the four-apps image: JS8, Channel List (V/M, GENE, NW, UP/DOWN), WeFax RX, SSTV RX then TX on the dummy load; report to Kris. **Kris (email 2026-10-24): unless the test finds something, he merges #308, #310, #311, #312 on 10-25 in that order**, points #312 at main himself, then version bump, full build, his radio test, v1.2.0.
 4. **Waiting on others:** Georgy (back 10-22/23): reviews; Kris: his own v1.2.0 test build, #321, v1.3.0 PRs; EiBi's B26 schedule (still 404).
