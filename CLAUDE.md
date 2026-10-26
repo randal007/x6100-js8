@@ -177,6 +177,15 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
   reviewers') don't link, so only an image showed it. Run in the merged
   tree:
   `for f in $(git grep -ho '[a-z_0-9/]*\.c\b\|[a-z_0-9/]*\.cpp\b' upstream/main -- src/CMakeLists.txt | sort -u); do grep -qw "$f" src/CMakeLists.txt || echo "dropped: $f"; done`
+- **rerere fills in old answers silently:** `rerere.autoupdate` is on here, so a
+  merge can stop with no conflict markers because rerere replayed an
+  earlier resolution (2026-10-25: three FT2 files). After any merge, compare
+  `git merge-tree --write-tree --name-only` (the real conflicts) with what
+  you resolved yourself, and read rerere's answers before committing.
+- **Run the build-list check on every branch we merge into,** Kris's fork
+  included: our 10-18 app-places merges into his WSPR/PSK31/Olivia
+  branches dropped tx_level.c/tx_player.c, which only a combined test
+  image (run 40221803013's branch) showed a week later (myshak1#13-15).
 - **Reading a GUI crash:** *Build image* also uploads
   `x6100_gui-unstripped.<ref>` (the GUI before it is stripped; the
   image's copy has no symbols). With a core dump from the radio:
