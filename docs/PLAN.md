@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** the kris-apps test image (run 40221803013, branch `kris-apps-test` cccd5e3: OpenX6100 main 24b5fa8 + SSTV + Kris's five apps with myshak1#10-15), flashed 2026-10-25, DATA identical after; newest DATA backup **sd-backup-2026-10-25-123022**.
+1. **Card:** a private test build (f794f84, not in this repo) on top of the kris-apps tree (`kris-apps-test` cccd5e3), so Kris's five apps are on it for item 3; flashed 2026-10-26 08:20, DATA identical after; newest DATA backup **sd-backup-2026-10-26-082049**.
 2. **Releases:** JS8 4/4, Channel List, WeFax and SSTV merged in OpenX6100 on 10-25; #326 (v1.2.0 bump) approved; Kris tags v1.2.0 after his radio test. Ours: RC1.1 (`js8-rc1.1`). v1.3.0 = Kris's five apps + OpenVoiceCommand, Hany's WeFax update (#324/#325, approved by Kris), later NavTex/DSC.
 3. **Next (VE7NHW):** test the kris-apps image (RTTY TX, PSK31, Olivia, WSPR with VE7NHW and VE7NHW/P, FT2, VOL with Menu/Macros open), results to Kris.
 4. **Waiting on others:** Kris: v1.2.0 tag, myshak1#10-15, merges of #324/#325; Georgy: x6100_webserver#6 review; Hany: NavTex/DSC (maybe his own first PR); EiBi's B26 schedule (still 404).

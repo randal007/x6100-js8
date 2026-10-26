@@ -1483,18 +1483,21 @@ are, and its new settings start at their defaults.
 
 The work list is [docs/PLAN.md](docs/PLAN.md).
 
-- [ ] **JS8 in the OpenX6100 firmware** itself: parts 1 to 3 are in
+- [x] **JS8 in the OpenX6100 firmware** itself: all four parts are in
   ([#290](https://github.com/OpenX6100/x6100_gui/pull/290),
   [#301](https://github.com/OpenX6100/x6100_gui/pull/301),
-  [#307](https://github.com/OpenX6100/x6100_gui/pull/307)), with the
-  transmit level shared by every digital app
-  ([#306](https://github.com/OpenX6100/x6100_gui/pull/306)); part 4, the
-  JS8 app itself, is approved
-  ([#308](https://github.com/OpenX6100/x6100_gui/pull/308)) and planned
-  for **OpenX6100 v1.2.0**, together with Hany 1KO125's Channel List,
-  WeFax and SSTV; a test image of all four is about to be tried on the
-  radio. In OpenX6100
-  it answers STATUS as "OpenX6100 JS8" with the firmware's version
+  [#307](https://github.com/OpenX6100/x6100_gui/pull/307),
+  [#308](https://github.com/OpenX6100/x6100_gui/pull/308), merged
+  25 October), with the transmit level shared by every digital app
+  ([#306](https://github.com/OpenX6100/x6100_gui/pull/306)). It ships in
+  **OpenX6100 v1.2.0**, together with Hany 1KO125's Channel List, WeFax
+  and SSTV, and answers STATUS there as "OpenX6100 JS8 v1.2.0". The JS8 in
+  it is the same as Release Candidate 1.1.
+- [ ] **This firmware brought up to OpenX6100 v1.2.0** once it's tagged:
+  Kris SP2KMO's latest Bluetooth and FT8 work, the callsign suffix list
+  (/P, /QRP), the Channel List, WeFax and SSTV.
+- [ ] **More apps in OpenX6100 v1.3.0:** Kris's WSPR, PSK31, Olivia, RTTY
+  transmit and FT2, and Hany's WeFax Denoise, then NavTex and DSC.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests
