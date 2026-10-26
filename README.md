@@ -4,8 +4,9 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Release Candidate 1.1** is the current release, the JS8 that goes
-> into the OpenX6100 firmware itself: **the transmit power now reaches
+> **Release Candidate 1.1** is the current release, the same JS8 that is
+> now in the OpenX6100 firmware itself (merged 25 October, coming in
+> OpenX6100 v1.2.0): **the transmit power now reaches
 > your setting** in the first transmission, from 0.3 W into an amplifier
 > to 5 W barefoot ([New in Release Candidate 1.1](#new-in-release-candidate-11)).
 > Release Candidate 1 made **JS8 open and close without a pause**, its
