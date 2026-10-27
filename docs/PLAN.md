@@ -30,7 +30,6 @@ by gdyuldin or myshak1, never merged by us alone.
     action, number 117; for Hany to decide.
   - **Test image:** branch `kris-apps-test2` 4dec903 (kris-apps-test + both), test-image.yml run **40524047751**.
     **Next:** VE7NHW flashes it and checks VOL with Menu/Macros open in PSK31/Olivia/RTTY, and Channels from APP 5 and a long press.
-  - VE7NHW mentioned three bugs; only two described so far: ask for the third.
 - [ ] **v1.2.0 tag, then our fork up to it (2026-10-25).** All four app PRs merged, #326 (bump) approved.
   **Next:** Kris radio-tests main and tags v1.2.0; then bring our main up to OpenX6100's on its own branch
   (break check, build-list check, rerere check, test image), README *Coming next* and a v1.2.0 Facebook post
