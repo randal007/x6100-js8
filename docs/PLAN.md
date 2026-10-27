@@ -15,10 +15,10 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** a private test build (f794f84, not in this repo) on top of the kris-apps tree (`kris-apps-test` cccd5e3), so Kris's five apps are on it for item 3; flashed 2026-10-26 08:20, DATA identical after; newest DATA backup **sd-backup-2026-10-26-082049**.
-2. **Releases:** JS8 4/4, Channel List, WeFax and SSTV merged in OpenX6100 on 10-25; #326 (v1.2.0 bump) approved; Kris tags v1.2.0 after his radio test. Ours: RC1.1 (`js8-rc1.1`). v1.3.0 = Kris's five apps + OpenVoiceCommand, Hany's WeFax update (#324/#325, approved by Kris), later NavTex/DSC.
-3. **Next (VE7NHW):** test the kris-apps image (RTTY TX, PSK31, Olivia, WSPR with VE7NHW and VE7NHW/P, FT2, VOL with Menu/Macros open), results to Kris.
-4. **Waiting on others:** Kris: v1.2.0 tag, myshak1#10-15, merges of #324/#325; Georgy: x6100_webserver#6 review; Hany: NavTex/DSC (maybe his own first PR); EiBi's B26 schedule (still 404).
+1. **Card:** unchanged since 10-26: the private test build f794f84 on the kris-apps tree; newest DATA backup **sd-backup-2026-10-26-082049**. **Next image:** `kris-apps-test2` 4dec903 (kris-apps + the PSK31/Olivia VOL fix + the Channels button), test-image.yml run **40524047751** (building at the 10-27 offload); flash only when VE7NHW says.
+2. **Releases:** v1.2.0 waits for Kris's tag (#326 approved). #324/#325 now approved by Kris and Georgy: VE7NHW asked Kris on #326 whether they go in before or after the tag. Ours: RC1.1 (`js8-rc1.1`). v1.3.0 = Kris's five apps + OpenVoiceCommand, Hany's WeFax update, Channels button (#328), later NavTex/DSC.
+3. **Next (VE7NHW):** flash kris-apps-test2 and test: VOL with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), Channels from APP page 5 and from a long press, plus the earlier list (RTTY TX, PSK31, Olivia, WSPR with VE7NHW and VE7NHW/P, FT2); results to Kris.
+4. **Waiting on others:** Kris: v1.2.0 tag, the #324/#325 answer, myshak1#10-18; Hany: #328 (Channels button), NavTex/DSC; Georgy: webserver v0.0.5 tag (then Buildroot #9 to the tag); EiBi's B26 schedule.
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
 
 - [ ] **Two finds from VE7NHW's kris-apps test (2026-10-27).**

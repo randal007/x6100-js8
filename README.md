@@ -1498,7 +1498,9 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   Kris SP2KMO's latest Bluetooth and FT8 work, the callsign suffix list
   (/P, /QRP), the Channel List, WeFax and SSTV.
 - [ ] **More apps in OpenX6100 v1.3.0:** Kris's WSPR, PSK31, Olivia, RTTY
-  transmit and FT2, and Hany's WeFax Denoise, then NavTex and DSC.
+  transmit and FT2, and Hany's WeFax Denoise, then NavTex and DSC; a
+  Channels button on the APP menu, so the Channel List opens without the
+  hand mic.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests

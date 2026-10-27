@@ -198,7 +198,9 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
 ## Lessons worth knowing before touching the code
 
 - LVGL 8.3: an indev reset turns a held key into a long press in the next
-  focus; the keypad drops a press while another key is down; an encoder
+  focus (deleting the focused object from its own key handler does it; fix:
+  `lv_indev_wait_release(lv_indev_get_act())` first, as in digi_menu.c
+  myshak1#16-18; a PC repro must start lv_tick high, the radio's uptime); the keypad drops a press while another key is down; an encoder
   never sends LONG_PRESSED to an editable object (use
   LONG_PRESSED_REPEAT); `lv_img` never covers and invalidate adds 5 px
   (whole-dialog redraws: use an opaque box and exact invalidate).
