@@ -15,12 +15,20 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** unchanged since 10-26: the private test build f794f84 on the kris-apps tree; newest DATA backup **sd-backup-2026-10-26-082049**. **Next image:** `kris-apps-test2` 4dec903 (kris-apps + the PSK31/Olivia VOL fix + the Channels button), test-image.yml run **40524047751** (building at the 10-27 offload); flash only when VE7NHW says.
+1. **Card:** unchanged since 10-26: the private test build f794f84 on the kris-apps tree; newest DATA backup **sd-backup-2026-10-26-082049**. **Next image:** `kris-apps-test3` f38b0d7 (kris-apps + the PSK31/Olivia VOL fix + the Channels button + WeFax Post Proc. #329), test-image.yml run **40572901929**; flash only when VE7NHW says.
 2. **Releases:** v1.2.0 waits for Kris's tag (#326 approved). #324/#325 now approved by Kris and Georgy: VE7NHW asked Kris on #326 whether they go in before or after the tag. Ours: RC1.1 (`js8-rc1.1`). v1.3.0 = Kris's five apps + OpenVoiceCommand, Hany's WeFax update, Channels button (#328), later NavTex/DSC.
 3. **Next (VE7NHW):** flash kris-apps-test2 and test: VOL with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), Channels from APP page 5 and from a long press, plus the earlier list (RTTY TX, PSK31, Olivia, WSPR with VE7NHW and VE7NHW/P, FT2); results to Kris.
 4. **Waiting on others:** Kris: v1.2.0 tag, the #324/#325 answer, myshak1#10-18; Hany: #328 (Channels button), NavTex/DSC; Georgy: webserver v0.0.5 tag (then Buildroot #9 to the tag); EiBi's B26 schedule.
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
 
+- [ ] **Hany's 1KO125 1.1-beta1 = the reference for his PRs (Hany's email, 2026-10-27; tag d65e605).** VE7NHW: get WeFax
+  Post Proc. in now for a release soon. **OpenX6100 #329** (branch `wefax-postproc`, base `wefax-denoise` until #325 merges):
+  Hany's 12 commits (neural-network Post Proc., model `rootfs/usr/share/x6100/wefax_pp.bin` 1.2 MB, full-screen fax view);
+  training kit and NOTICE header lines left out; WeFax files otherwise identical to the tag. GCC 12 clean; PC test at 6 dB
+  (`~/Pictures/wefax-postproc-pc-test.png`). **#328:** Channels moved to place 4 of APP page 5 (58828f3), matching his
+  NavTex / DSC / FT8 CB places; VE7NHW: FT8 CB not coming in. Reply email to Hany drafted (NavTex/DSC: his PRs or ours?).
+  **Test image:** branch `kris-apps-test3` f38b0d7 (kris-apps-test2 + #328's move + #329), test-image.yml run
+  **40572901929**; replaces kris-apps-test2. **Next:** VE7NHW flashes and tests the kris-apps list plus WeFax Post Proc.
 - [ ] **Two finds from VE7NHW's kris-apps test (2026-10-27).**
   - **VOL press with Menu/Macros open closed the whole PSK31/Olivia app** (RTTY fine). Kris's shared `digi_menu.c`: the list
     is deleted while VOL is still down, LVGL resets the keypad and the held key repeats ESC into the window. Reproduced and
