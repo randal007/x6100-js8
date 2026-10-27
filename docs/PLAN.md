@@ -21,11 +21,21 @@ by gdyuldin or myshak1, never merged by us alone.
 4. **Waiting on others:** Kris: v1.2.0 tag, myshak1#10-15, merges of #324/#325; Georgy: x6100_webserver#6 review; Hany: NavTex/DSC (maybe his own first PR); EiBi's B26 schedule (still 404).
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
 
+- [ ] **Two finds from VE7NHW's kris-apps test (2026-10-27).**
+  - **VOL press with Menu/Macros open closed the whole PSK31/Olivia app** (RTTY fine). Kris's shared `digi_menu.c`: the list
+    is deleted while VOL is still down, LVGL resets the keypad and the held key repeats ESC into the window. Reproduced and
+    fixed on the PC (LVGL 8.3 + this file, ASan): `lv_indev_wait_release()`. **PRs myshak1#16 (psk31), #17 (olivia), #18 (rtty).**
+  - **Channel List only from the hand mic's V/M key.** VE7NHW: a Channels button on the APP page. **OpenX6100 #328** (branch
+    `channels-app-button`): Channels on a new APP page 5 (NavTex/DSC fixed places beside it), Channels as a long-press
+    action, number 117; for Hany to decide.
+  - **Test image:** branch `kris-apps-test2` 4dec903 (kris-apps-test + both), test-image.yml run **40524047751**.
+    **Next:** VE7NHW flashes it and checks VOL with Menu/Macros open in PSK31/Olivia/RTTY, and Channels from APP 5 and a long press.
+  - VE7NHW mentioned three bugs; only two described so far: ask for the third.
 - [ ] **v1.2.0 tag, then our fork up to it (2026-10-25).** All four app PRs merged, #326 (bump) approved.
   **Next:** Kris radio-tests main and tags v1.2.0; then bring our main up to OpenX6100's on its own branch
   (break check, build-list check, rerere check, test image), README *Coming next* and a v1.2.0 Facebook post
   (VE7NHW: a positive "free and open" post first).
-- [ ] **Hany's apps, after v1.2.0 (2026-10-25).** All four first PRs merged (#309, #310, #311, **#312 merged 10-25**).
+- [ ] **Hany's apps, after v1.2.0 (2026-10-25).** **2026-10-27: Georgy approved #324 and #325 (both clean); question for Kris (in v1.2.0 or after its tag?) drafted, VE7NHW to post it on #326 (Claude not allowed to comment there). Webserver #6 merged by Georgy: needs a webserver tag, then the Buildroot bump (X6100_WEBSERVER_VERSION v0.0.4).** All four first PRs merged (#309, #310, #311, **#312 merged 10-25**).
   Hany's own repo TheMurusTeam/x6100_gui `1ko125` (remote `murus`) now carries our changes (his comment, 10-22),
   so new work comes from there. **Opened 10-25 (VE7NHW: "add the PR for all the WeFax updates"):** **#324** shared
   app radio set-up (app_radio.c: USB-D locked, zoom 4x unsaved, DSP off while open; Hany author; own build line) and
