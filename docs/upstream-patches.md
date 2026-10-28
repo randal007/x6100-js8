@@ -57,6 +57,7 @@ drop our copy.
 | 39 | OpenX6100/x6100_gui (review) | Kris's #326: bump to v1.2.0 | **Approved by VE7NHW 2026-10-25.** |
 | 40 | myshak1/x6100_gui (his fork) | digi_menu.c: VOL press with Menu/Macros open closed the whole PSK31/Olivia app (the list's delete resets LVGL's keypad, the held key then repeats ESC into the window); `lv_indev_wait_release()` | **#16 (psk31), #17 (olivia), #18 (rtty) opened 2026-10-27** (branches `digi-menu-vol-close-*` in OpenX6100), found by VE7NHW on the radio, reproduced and fixed on the PC (LVGL 8.3, ASan) |
 | 41 | OpenX6100/x6100_gui | Channel List without the hand mic: a Channels button on a new APP page 5 (fixed places for NavTex and DSC beside it), Channels as a long-press action, number 117 | **#328 opened 2026-10-27** (branch `channels-app-button`), for Hany to decide |
+| 42 | OpenX6100/x6100_gui | Channel List crashed the GUI when it opened on an empty list (LVGL 8.3 frees an unset table cell; core dump from the radio, reproduced and fixed on a PC under ASan). One line in build_window() | **#330 opened 2026-10-28** (branch `channels-empty-list`), for Hany (TheMurusTeam), gdyuldin, myshak1 |
 
 ## JS8 into OpenX6100: the plan
 
