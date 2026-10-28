@@ -30,13 +30,13 @@ by gdyuldin or myshak1, never merged by us alone.
   **Test image:** branch `kris-apps-test3` f38b0d7 (kris-apps-test2 + #328's move + #329), test-image.yml run
   **40572901929**; replaces kris-apps-test2. **Next:** VE7NHW flashes and tests the kris-apps list plus WeFax Post Proc.
 - [ ] **OpenX6X00 (Guru-RF/OpenX6X00, Joeri Van Dooren ON6URE; not OpenX6100) and our JS8 code (checked 2026-10-27,
-  VE7NHW asked).** Fork of IU1WXY's open v0.127 (created 10-20, one squashed first commit). Credits R1CBU, R2RFE, Hany,
-  Kris, randal007 (map, PSK/Olivia merge...), keeps R1CBU's copyright lines, JS8 files back under GPL-3 (Giovanni had
-  macros as LGPL). **But** `src/js8_window.c` holds 41 of the long sentences of our `dialog_js8.c` and `src/js8/macros.cpp`
-  is 95 % ours (code lines), both without "Copyright (c) 2026 Randal Warren VE7NHW"; the credits don't say the JS8 app is
-  from our port; their README claims every author's notice stays. Likely inherited from v0.127 (not confirmed). Facebook
-  clarification drafted for VE7NHW (OpenX6100 ≠ OpenX6X00, Georgy R2RFE leads) without the licence point.
-  **Next, if VE7NHW wants:** a friendly issue/message to Joeri (notice back in those files + a credit line), VE7NHW posts it.
+  VE7NHW asked).** Created 10-20. Credits R1CBU, R2RFE, Hany, Kris, randal007 (map, PSK/Olivia merge...), keeps R1CBU's
+  copyright lines, JS8 files under GPL-3. **But** `src/js8_window.c` holds 41 of the long sentences of our `dialog_js8.c`
+  and `src/js8/macros.cpp` is 95 % ours (code lines), both without "Copyright (c) 2026 Randal Warren VE7NHW"; the credits
+  don't say the JS8 app is from our port; their README says every author's notice stays. Probably inherited from the
+  code they forked (not confirmed). Facebook clarification drafted for VE7NHW (OpenX6100 ≠ OpenX6X00, Georgy R2RFE leads),
+  without the licence point. **Next, if VE7NHW wants:** a friendly issue/message to Joeri (notice back in those files + a
+  credit line), VE7NHW posts it.
 - [ ] **Two finds from VE7NHW's kris-apps test (2026-10-27).**
   - **VOL press with Menu/Macros open closed the whole PSK31/Olivia app** (RTTY fine). Kris's shared `digi_menu.c`: the list
     is deleted while VOL is still down, LVGL resets the keypad and the held key repeats ESC into the window. Reproduced and
