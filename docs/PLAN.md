@@ -15,12 +15,20 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** unchanged since 10-26: the private test build f794f84 on the kris-apps tree; newest DATA backup **sd-backup-2026-10-26-082049**. **Next image:** `kris-apps-test3` f38b0d7 (kris-apps + the PSK31/Olivia VOL fix + the Channels button + WeFax Post Proc. #329), test-image.yml run **40572901929**, **built OK 10-27 20:55Z** (artifact `sdcard.test-kris-apps-test3.img.zip`); flash only when VE7NHW says.
+1. **Card:** since 10-28 06:00Z a private test build (d9ef184) whose app tree is `kris-apps-test3` f38b0d7 (kris-apps + the PSK31/Olivia VOL fix + the Channels button #328 + WeFax Post Proc. #329), so the kris-apps list can be tested on it as is; newest DATA backup **sd-backup-2026-10-27-225840**. **Found on it:** the Channel List crashed the GUI on an empty list (fix **#330**, below). The next private build carries the #330 fix.
 2. **Releases:** v1.2.0 waits for Kris's tag (#326 approved). #324/#325 now approved by Kris and Georgy: VE7NHW asked Kris on #326 whether they go in before or after the tag. Ours: RC1.1 (`js8-rc1.1`). v1.3.0 = Kris's five apps + OpenVoiceCommand, Hany's WeFax update (#324/#325 + Post Proc. #329: VE7NHW wants WeFax done for a release soon), Channels button (#328), later NavTex/DSC.
 3. **Next (VE7NHW):** flash kris-apps-test3 and test: WeFax Denoise Post Proc. (a `_pp.png` after 2-3 min, progress panel, full-screen view F2, F4 Original/Processed), VOL with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), Channels from APP page 5 and from a long press, plus the earlier list (RTTY TX, PSK31, Olivia, WSPR with VE7NHW and VE7NHW/P, FT2); results to Kris.
-4. **Waiting on others:** Kris: v1.2.0 tag, the #324/#325 answer, myshak1#10-18; Hany: #328 (Channels button), #329 (Post Proc.), NavTex/DSC (his PRs or ours? asked in the reply email VE7NHW sends); Georgy: webserver v0.0.5 tag (then Buildroot #9 to the tag); EiBi's B26 schedule.
+4. **Waiting on others:** Kris: v1.2.0 tag, the #324/#325 answer, myshak1#10-18; Hany: #328 (Channels button), **#330** (Channel List empty-list crash, also Georgy/Kris), #329 (Post Proc.), NavTex/DSC (his PRs or ours? asked in the reply email VE7NHW sends); Georgy: webserver v0.0.5 tag (then Buildroot #9 to the tag); EiBi's B26 schedule.
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
 
+- [ ] **Channel List crash on an empty list (VE7NHW, 2026-10-28): OpenX6100 #330** (branch `channels-empty-list`,
+  worktree `~/Work/x6100/wt-channels-empty`). Pressing Channels (APP page 5) restarted the GUI every time; the V/M key
+  runs the same function. Core dump from the radio (prlimit + core_pattern to /tmp/cores, header and stack read over the
+  console): SIGSEGV at address 4 in `lv_table_set_row_cnt` <- `refresh_table` <- `build_window` <- `construct_cb`.
+  With `/mnt/channels.json` empty the new table shrinks from 1 row to 0 and LVGL 8.3 frees cell 0, never set, without
+  a NULL check (lv_table.c:228). Fix: one `lv_table_set_cell_value(table, 0, 0, " ")` in build_window(); reproduced and
+  fixed on the PC (LVGL ad032d8, ASan). **Next:** review by Hany / Georgy / Kris; radio test with the next build. Note:
+  the app_logs files stop at ~18 KB because x6100_gui's stdout is block-buffered and lost at a crash.
 - [ ] **Hany's 1KO125 1.1-beta1 = the reference for his PRs (Hany's email, 2026-10-27; tag d65e605).** VE7NHW: get WeFax
   Post Proc. in now for a release soon. **OpenX6100 #329** (branch `wefax-postproc`, base `wefax-denoise` until #325 merges):
   Hany's 12 commits (neural-network Post Proc., model `rootfs/usr/share/x6100/wefax_pp.bin` 1.2 MB, full-screen fax view);
