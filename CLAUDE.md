@@ -191,6 +191,17 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
   image's copy has no symbols). With a core dump from the radio:
   `arm-linux-gdb x6100_gui core` (the toolchain's gdb), sysroot from the
   image's rootfs.
+  **What worked (2026-10-28, Channels crash):** `prlimit --pid $(pidof
+  x6100_gui) --core=unlimited:unlimited` and `core_pattern` to
+  **/tmp/cores** (RAM, ~210 MB; dumps written to /mnt came out 0 bytes).
+  Too big for the console or the radio's WiFi, so read only what's needed
+  with `dd | base64` over the console: the first 96 KB (registers, signal,
+  file maps: `readelf -n`) and ~1.5 KB from the crashing thread's SP (its
+  file offset from the core's program headers); return addresses in
+  x6100_gui (PIE, minus its load address) resolve with the toolchain's
+  `addr2line` on the unstripped GUI, LVGL's with `nm -D` on the image's
+  liblvgl.so. The `app_logs` files stop at ~18 KB: x6100_gui's stdout is
+  block-buffered and the rest is lost at a crash.
 - **Getting a CI image:** `gh run download` hangs; use the artifact API
   (`gh api repos/randal007/x6100-js8/actions/runs/<id>/artifacts`, then
   `.../actions/artifacts/<artifact id>/zip`).
