@@ -63,9 +63,11 @@ prerelease betas (`js8-beta5`, ...) with an SD card image on GitHub.
   myshak1, never merged by us alone. **Anything outside an app is its own PR**
   (VE7NHW, 2026-10-20): shared code that comes with someone's app
   (logs, widgets, web pages) goes separately, with its author.
-  **App PRs that touch the same shared lines** (APP buttons, app numbers,
-  window cases, build lists) merge in any order when each app's lines sit
-  under its own name line (#313, the "fixed places"), and a change several
+  **No empty APP buttons** (Georgy, 2026-10-28: an empty button looks like
+  a bug): the empty "fixed places" are gone (#328), a new app goes at the
+  end of the APP pages. **App PRs that touch the same shared lines** (app
+  numbers, window cases, build lists) merge in any order when each app's
+  lines sit under its own name line (#313), and a change several
   apps need (e.g. turning APP page 4 on, `app-page4-on`) is one shared
   commit merged into each of their branches: git sees the same change on
   both sides. Check pairs with `git merge-tree --write-tree --name-only A B`.
