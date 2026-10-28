@@ -21,6 +21,11 @@ by gdyuldin or myshak1, never merged by us alone.
 4. **Waiting on others:** Kris: v1.2.0 tag, the #324/#325 answer, myshak1#10-18; Kris: merges #324/#325/#328 then builds the v1.2.0 test image (his email 10-28); Hany: #328 (Channels button), **#330** (Channel List empty-list crash, also Georgy/Kris), #329 (Post Proc.), NavTex/DSC (his PRs or ours? asked in the reply email VE7NHW sends); Georgy: merge Buildroot #9 (approved 10-28, now pinned to the v0.0.5 tag he made); EiBi's B26 schedule.
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
 
+- [ ] **Channel List still crashes on CLOSE with an empty list (VE7NHW, 2026-10-28, on c910ca5 which has #330).** Opening
+  is fixed; closing the empty list restarts the GUI. Not found by reading close_common()/overlay_close()/dialog_destruct();
+  the PC test (empty table deleted) doesn't crash. Not fixed yet (VE7NHW: later). **Next:** core dump on the radio as for
+  #330 (prlimit + core_pattern to /tmp/cores), and ask VE7NHW how it was closed (F1 Close, V/M, APP/GEN) and from where
+  (main screen or over an app). Tell Kris/Hany before v1.2.0 ships Channels on APP 4.
 - [ ] **Channel List crash on an empty list (VE7NHW, 2026-10-28): OpenX6100 #330** (branch `channels-empty-list`,
   worktree `~/Work/x6100/wt-channels-empty`). Pressing Channels (APP page 5) restarted the GUI every time; the V/M key
   runs the same function. Core dump from the radio (prlimit + core_pattern to /tmp/cores, header and stack read over the
