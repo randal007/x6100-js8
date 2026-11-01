@@ -18,7 +18,7 @@ by gdyuldin or myshak1, never merged by us alone.
 1. **Card:** since 10-29 a private test build (d6c80b3, with the #330 fix) whose app tree is `kris-apps-test3` f38b0d7 (kris-apps + the PSK31/Olivia VOL fix + the Channels button #328 + WeFax Post Proc. #329), so the kris-apps list can be tested on it as is; newest DATA backup **sd-backup-2026-10-29-071241**. **Found on it:** the Channel List crashed the GUI on an empty list (fix **#330**, below).
 2. **Releases:** **OpenX6100 v1.2.0 is out (2026-11-01, Kris):** JS8, WeFax + Denoise, SSTV, Channel List + its button. Ours: RC1.1 (`js8-rc1.1`); fork being brought to v1.2.0 on `merge-v1.2.0` (image run 41362032030); maybe no more fork releases after that (VE7NHW undecided). v1.3.0 = Kris's five apps (all five PRs conflict with main since v1.2.0) + OpenVoiceCommand (no PR yet), Hany's Post Proc. #329 (needs Kris/Georgy's review), later NavTex/DSC.
 3. **Next (VE7NHW):** flash kris-apps-test3 and test: WeFax Denoise Post Proc. (a `_pp.png` after 2-3 min, progress panel, full-screen view F2, F4 Original/Processed), VOL with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), Channels from APP page 5 and from a long press, plus the earlier list (RTTY TX, PSK31, Olivia, WSPR with VE7NHW and VE7NHW/P, FT2); results to Kris.
-4. **Waiting on others:** Kris: myshak1#10-18 (no answer since 10-25/27; asked 11-01 whether he or we merge main into his five branches); Kris/Georgy: review of #329 (Hany: "looks perfect", 10-31); Hany: NavTex/DSC (his PRs or ours?); EiBi's B26 schedule. VE7NHW: the Channel List close crash (empty list) shipped in v1.2.0; VE7NHW (11-01): probably not an issue, test later.
+4. **Waiting on others:** Kris: **myshak1#19-23** (11-01: main v1.2.0 merged into each of his five branches, with our #10-18 folded in; APP 4 = SSTV, Channels, WSPR, PSK31, APP 5 = Olivia; test image run 41362789243, branch `kris-apps-v13` in OpenX6100); Georgy/Kris: **#332** S-meter offset ±10 dB (Georgy's #305 point, never changed before #305 merged at ±30); Kris/Georgy: review of #329 (Hany: "looks perfect", 10-31); Hany: NavTex/DSC (his PRs or ours?); EiBi's B26 schedule. VE7NHW: the Channel List close crash (empty list) shipped in v1.2.0; VE7NHW (11-01): probably not an issue, test later.
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
 
 - [ ] **Channel List still crashes on CLOSE with an empty list (VE7NHW, 2026-10-28, on c910ca5 which has #330).** Opening
@@ -78,6 +78,13 @@ by gdyuldin or myshak1, never merged by us alone.
   Georgy's review, then a webserver tag and a Buildroot version bump); mic MODE key; FT8 CB (VE7NHW undecided);
   SSTV RX/TX radio test. Email to Hany about NavTex/DSC: drafted 10-25.
 - [ ] **Kris's apps (WSPR #271, PSK31 #272, Olivia #274, RTTY #276, FT2 #288) ready for v1.3.0 (2026-10-25, VE7NHW: "fix all the issues, PRs for all").**
+  **2026-11-01 (after v1.2.0, all five conflicted with main):** branches `wspr-v13`, `psk31-v13`, `olivia-v13`, `rtty-v13`,
+  `ft2-v13` in OpenX6100 (worktree `~/Work/x6100/wt-kris-v13`), each = Kris's branch + our open fixes + main (v1.2.0);
+  shared commit `app-pages-v13` 3e46387 (page 4 one app per line). Layout (PR order): APP 4 = SSTV, Channels, WSPR,
+  PSK31; APP 5 = Olivia (labels "APP n:5"). digi_menu.c: the branches' copy with the VOL fix (main's Callsign /P list
+  gets it too). All ten pairs merge cleanly. **PRs myshak1#19 (WSPR), #20 (PSK31), #21 (Olivia), #22 (RTTY), #23 (FT2)**
+  (supersede #8-#18), noted on #271. Combined branch `kris-apps-v13` 48ed610, test image run **41362789243**.
+  **Next:** VE7NHW flashes it and tests (list below); results on the PRs; Kris merges.
   All approved by Georgy. **Kris merged #311 (WeFax) 2026-10-25**; #312 waits for its retarget. Found and fixed, as PRs into
   Kris's branches: **myshak1#10** WSPR "plain call only" (a /P or /QRP call made every TX slot fail silently);
   **myshak1#11** main merged into rtty (CMakeLists + spectrum.h, digi_menu.c off RTTY's line);
