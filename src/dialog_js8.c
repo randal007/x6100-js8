@@ -37,6 +37,7 @@
 #include "gps.h"
 #include "keyboard.h"
 #include "lock_manager.h"
+#include "main.h"
 #include "main_screen.h"
 #include "msg.h"
 #include "radio.h"
@@ -104,9 +105,9 @@
 #define JS8_SAVED_PATH   "/mnt/js8_saved.txt"   /* saved messages, one a line (empty: none) */
 #endif
 #define SAVED_N          10     /* saved messages (Query > Saved messages >) */
-/* <MYVERSION> and the default STATUS send this: set it to the release's
- * name for every release (docs/releases/CHECKLIST.md, step 1). */
-#define JS8_APP_VERSION  "X6100 JS8 RC1.1" /* desktop's is its version number */
+/* <MYVERSION> and the default STATUS send this, so other stations see which
+ * firmware answered: OpenX6100's own version (main.h). */
+#define JS8_APP_VERSION  "OpenX6100 JS8 " VERSION /* desktop's is its version number */
 #ifndef JS8_LOG_PATH
 #define JS8_LOG_PATH     "/mnt/js8call_log.adi" /* desktop JS8Call's name */
 #endif
@@ -245,7 +246,7 @@ static void        map_qrz_clear(const char *call);
 static void        map_qrz_show(void);
 static void        map_show(bool on);
 static void        map_free(void);
-static void        rotary_cb(int32_t diff);
+static void        rotary_cb(int32_t diff, uint16_t dt);
 static void        reply_cb(button_data_t *btn);
 static void        send_cb(button_data_t *btn);
 static void        stop_tx_cb(button_data_t *btn);
@@ -2949,7 +2950,7 @@ static void finder_sync(void) {
     cursor_place(); /* hidden on the red band's offset */
 }
 
-static void rotary_cb(int32_t diff) {
+static void rotary_cb(int32_t diff, uint16_t dt) {
     user_touch();
     if (cq_adjusting) {
         cq_adjust_turn(diff);

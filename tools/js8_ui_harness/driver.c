@@ -187,7 +187,7 @@ const char *ui_focused_text(void) {
     if (!f || !lv_obj_check_type(f, &lv_list_btn_class)) return "";
     return lv_list_get_btn_text(lv_obj_get_parent(f), f);
 }
-void ui_rotary(int32_t diff) { dialog_js8->rotary_cb(diff); }
+void ui_rotary(int32_t diff) { dialog_js8->rotary_cb(diff, 0); }
 /* JS8's TX offset (the main knob moves it). */
 int ui_tx_offset(void) { return param_i_get(cfg.js8.tx_freq()); }
 /* Does any item or title in the focused list contain `text`? */
