@@ -4,9 +4,13 @@
 tablet: the decoder, keyboard, waterfall, logbook and inbox all live in
 the radio's firmware, next to the FT8 and RTTY apps.
 
-> **Release Candidate 1.1** is the current release, the same JS8 that is
-> now in the OpenX6100 firmware itself (merged 25 October, coming in
-> OpenX6100 v1.2.0): **the transmit power now reaches
+> **JS8 is now in the official OpenX6100 firmware:**
+> [OpenX6100 v1.2.0](https://github.com/OpenX6100/x6100_gui/releases/tag/v1.2.0)
+> (1 November 2026) has it on APP page 3, with WeFax, SSTV and the
+> Channel List beside it. That is the image to install for most people.
+>
+> **Release Candidate 1.1** is this fork's last release, the same JS8 as in
+> OpenX6100 v1.2.0: **the transmit power now reaches
 > your setting** in the first transmission, from 0.3 W into an amplifier
 > to 5 W barefoot ([New in Release Candidate 1.1](#new-in-release-candidate-11)).
 > Release Candidate 1 made **JS8 open and close without a pause**, its
@@ -1488,19 +1492,20 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   ([#290](https://github.com/OpenX6100/x6100_gui/pull/290),
   [#301](https://github.com/OpenX6100/x6100_gui/pull/301),
   [#307](https://github.com/OpenX6100/x6100_gui/pull/307),
-  [#308](https://github.com/OpenX6100/x6100_gui/pull/308), merged
-  25 October), with the transmit level shared by every digital app
-  ([#306](https://github.com/OpenX6100/x6100_gui/pull/306)). It ships in
-  **OpenX6100 v1.2.0**, together with Hany 1KO125's Channel List, WeFax
-  and SSTV, and answers STATUS there as "OpenX6100 JS8 v1.2.0". The JS8 in
-  it is the same as Release Candidate 1.1.
-- [ ] **This firmware brought up to OpenX6100 v1.2.0** once it's tagged:
+  [#308](https://github.com/OpenX6100/x6100_gui/pull/308)), with the
+  transmit level shared by every digital app
+  ([#306](https://github.com/OpenX6100/x6100_gui/pull/306)). **Released in
+  [OpenX6100 v1.2.0](https://github.com/OpenX6100/x6100_gui/releases/tag/v1.2.0)**
+  on 1 November 2026, together with Hany 1KO125's Channel List (with its
+  own APP button), WeFax (with Denoise) and SSTV. It answers STATUS there
+  as "OpenX6100 JS8 v1.2.0"; the JS8 in it is the same as Release
+  Candidate 1.1.
+- [ ] **This firmware brought up to OpenX6100 v1.2.0** (being tested):
   Kris SP2KMO's latest Bluetooth and FT8 work, the callsign suffix list
   (/P, /QRP), the Channel List, WeFax and SSTV.
 - [ ] **More apps in OpenX6100 v1.3.0:** Kris's WSPR, PSK31, Olivia, RTTY
-  transmit and FT2, and Hany's WeFax Denoise and Post Proc. (a neural network that cleans each saved fax, and a full-screen fax view), then NavTex and DSC; a
-  Channels button on the APP menu, so the Channel List opens without the
-  hand mic.
+  transmit and FT2, and Hany's WeFax Post Proc. (a neural network that
+  cleans each saved fax, and a full-screen fax view), then NavTex and DSC.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests

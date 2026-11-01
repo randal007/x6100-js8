@@ -16,9 +16,9 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. **Card:** since 10-29 a private test build (d6c80b3, with the #330 fix) whose app tree is `kris-apps-test3` f38b0d7 (kris-apps + the PSK31/Olivia VOL fix + the Channels button #328 + WeFax Post Proc. #329), so the kris-apps list can be tested on it as is; newest DATA backup **sd-backup-2026-10-29-071241**. **Found on it:** the Channel List crashed the GUI on an empty list (fix **#330**, below).
-2. **Releases:** v1.2.0 waits for Kris's tag (#326 approved). #324/#325 now approved by Kris and Georgy: VE7NHW asked Kris on #326 whether they go in before or after the tag. Ours: RC1.1 (`js8-rc1.1`). v1.3.0 = Kris's five apps + OpenVoiceCommand, Hany's WeFax update (#324/#325 + Post Proc. #329: VE7NHW wants WeFax done for a release soon), Channels button (#328), later NavTex/DSC.
+2. **Releases:** **OpenX6100 v1.2.0 is out (2026-11-01, Kris):** JS8, WeFax + Denoise, SSTV, Channel List + its button. Ours: RC1.1 (`js8-rc1.1`); fork being brought to v1.2.0 on `merge-v1.2.0` (image run 41362032030); maybe no more fork releases after that (VE7NHW undecided). v1.3.0 = Kris's five apps (all five PRs conflict with main since v1.2.0) + OpenVoiceCommand (no PR yet), Hany's Post Proc. #329 (needs Kris/Georgy's review), later NavTex/DSC.
 3. **Next (VE7NHW):** flash kris-apps-test3 and test: WeFax Denoise Post Proc. (a `_pp.png` after 2-3 min, progress panel, full-screen view F2, F4 Original/Processed), VOL with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), Channels from APP page 5 and from a long press, plus the earlier list (RTTY TX, PSK31, Olivia, WSPR with VE7NHW and VE7NHW/P, FT2); results to Kris.
-4. **Waiting on others:** Kris: v1.2.0 tag, the #324/#325 answer, myshak1#10-18; Kris: merges #324/#325/#328 then builds the v1.2.0 test image (his email 10-28); Hany: #328 (Channels button), **#330** (Channel List empty-list crash, also Georgy/Kris), #329 (Post Proc.), NavTex/DSC (his PRs or ours? asked in the reply email VE7NHW sends); Georgy: merge Buildroot #9 (approved 10-28, now pinned to the v0.0.5 tag he made); EiBi's B26 schedule.
+4. **Waiting on others:** Kris: myshak1#10-18 (no answer since 10-25/27; asked 11-01 whether he or we merge main into his five branches); Kris/Georgy: review of #329 (Hany: "looks perfect", 10-31); Hany: NavTex/DSC (his PRs or ours?); EiBi's B26 schedule. VE7NHW: the Channel List close crash (empty list) shipped in v1.2.0; VE7NHW (11-01): probably not an issue, test later.
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
 
 - [ ] **Channel List still crashes on CLOSE with an empty list (VE7NHW, 2026-10-28, on c910ca5 which has #330).** Opening
@@ -59,10 +59,14 @@ by gdyuldin or myshak1, never merged by us alone.
     action, number 117; for Hany to decide.
   - **Test image:** branch `kris-apps-test2` 4dec903 (kris-apps-test + both), test-image.yml run **40524047751**.
     **Next:** VE7NHW flashes it and checks VOL with Menu/Macros open in PSK31/Olivia/RTTY, and Channels from APP 5 and a long press.
-- [ ] **v1.2.0 tag, then our fork up to it (2026-10-25).** All four app PRs merged, #326 (bump) approved.
-  **Next:** Kris radio-tests main and tags v1.2.0; then bring our main up to OpenX6100's on its own branch
-  (break check, build-list check, rerere check, test image), README *Coming next* and a v1.2.0 Facebook post
-  (VE7NHW: a positive "free and open" post first).
+- [ ] **Our fork up to v1.2.0.** **OpenX6100 v1.2.0 released 2026-11-01 18:21Z by Kris** (JS8, WeFax with Denoise,
+  SSTV, Channel List with its APP button; #324/#325/#328/#330/#331 went in before the tag; Buildroot #9 in, webserver
+  v0.0.5). **2026-11-01:** branch `merge-v1.2.0` (worktree `~/Work/x6100/wt-merge-v1.2.0`, 93bb0c91): src/ now exactly
+  v1.2.0's (the plain merge had registered JS8 twice in main_screen.c and src/CMakeLists.txt: took upstream's);
+  kept our workflows, README, UPSTREAM.md, cty.dat; STATUS now says "OpenX6100 JS8 v1.2.0"; harness builds
+  (rotary_cb(diff, 0)). Image run **41362032030**, tests run **41362034142**. Facebook post for v1.2.0 drafted
+  (`~/Pictures/openx6100-v1.2.0-facebook/post.txt`). **Next:** VE7NHW flashes and checks it; PR into main.
+  VE7NHW (11-01): after this, we **may stop updating the fork** (people use OpenX6100's releases): undecided.
 - [ ] **Hany's apps, after v1.2.0 (2026-10-25).** **2026-10-27: Georgy approved #324 and #325 (both clean); VE7NHW asked Kris on #326 (in v1.2.0 or after its tag?) and Georgy on webserver #6 for a v0.0.5 tag. Webserver #6 merged by Georgy: Buildroot bump opened as AetherX6100Buildroot#9 (pins the merge commit; to the tag if Georgy makes v0.0.5).** All four first PRs merged (#309, #310, #311, **#312 merged 10-25**).
   Hany's own repo TheMurusTeam/x6100_gui `1ko125` (remote `murus`) now carries our changes (his comment, 10-22),
   so new work comes from there. **Opened 10-25 (VE7NHW: "add the PR for all the WeFax updates"):** **#324** shared
