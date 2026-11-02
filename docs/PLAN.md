@@ -107,6 +107,15 @@ by gdyuldin or myshak1, never merged by us alone.
   break check, build lists, 53 files GCC 12 clean), test-image.yml run **40221803013**.
   **Next:** VE7NHW flashes and tests RTTY TX (dummy load), PSK31, Olivia, WSPR (with VE7NHW and VE7NHW/P), FT2,
   VOL with Menu/Macros open in each; results to Kris.
+- [ ] **Transmit level for modes whose strength swings (VE7NHW, 2026-11-02).** VE7NHW: all apps should share one
+  ALC/level code, *except* modes without a steady carrier (like VARA), where JS8's code doesn't fit. Checked Kris's
+  modulators + simulated (research/tx-envelope/papr.py): **steady (peaks = average): JS8, FT8/FT2, RTTY, WSPR, JTTY;
+  swinging: PSK31 (idle 3.0 dB peaks over average, typing 1.2 dB) and Olivia (3.7 dB, 75% overlapped tones).** Our
+  tx_level and Kris's PSK31/Olivia loops (FT8's get_correction) all raise the drive until the *measured* power reaches
+  the setting: if the radio's meter reads average power, PSK31/Olivia peaks end up 2-2.4x the setting and the ALC
+  squashes them (splatter). **Next:** bench test (dummy load, MFJ peak vs average, the radio's own power reading,
+  ALC) with PSK31 idle and Olivia; then a plan with Kris: steady modes on tx_level, PSK31/Olivia aiming their peaks
+  at the setting with no ALC action.
 - [ ] **EiBi B26 schedule into #310's broadcast.csv** when EiBi publishes it
   (sked-b26.csv 404 on 10-21 and 10-22; season starts 2026-10-25).
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
