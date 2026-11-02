@@ -91,11 +91,11 @@ by gdyuldin or myshak1, never merged by us alone.
   **2026-11-02 later:** #332 (S-meter ±10 dB) **merged by Kris**. **#333 JTTY** (Kris, +5284, GPL-3.0, APP 5 after
   Olivia, MODE_JTTY 10, app 118; review asked of VE7NHW + Georgy): reviewed by Claude (TX only on a key, power/freq
   restored, clean close; merges with all five; JTTY files GCC 12 clean); notes: ESC as the TX thread wakes keys 250 ms of
-  silence, copyright-name edits in shared files, a shared tx_level later for all his apps. Approval drafted, VE7NHW
-  to OK. Six-app test image: branch `kris-apps-jtty-test` (OpenX6100), run **41507827952**.
+  silence, copyright-name edits in shared files, a shared tx_level later for all his apps. **Approved 11-02** (VE7NHW OK'd). Six-app test image: branch `kris-apps-jtty-test` (OpenX6100), run **41507827952**.
   **#329:** Kris (review, 11-02): wants the model's training kit (tests/wefax/ml, in Hany's 1ko125), the model's licence
   and training data, the NOTICE line gone (done 13271c3), Hany's empty author e-mail, Post Proc. time on the radio.
-  Reply to Hany drafted, VE7NHW to OK (he kept licence questions out of the 10-27 email to Hany).
+  **Reply posted 11-02** (VE7NHW OK'd, licence question included): asks Hany OK to add the kit without .exe, the model's
+  licence + training charts, his author e-mail; we measure Post Proc. time on the radio.
   All approved by Georgy. **Kris merged #311 (WeFax) 2026-10-25**; #312 waits for its retarget. Found and fixed, as PRs into
   Kris's branches: **myshak1#10** WSPR "plain call only" (a /P or /QRP call made every TX slot fail silently);
   **myshak1#11** main merged into rtty (CMakeLists + spectrum.h, digi_menu.c off RTTY's line);
@@ -107,7 +107,8 @@ by gdyuldin or myshak1, never merged by us alone.
   break check, build lists, 53 files GCC 12 clean), test-image.yml run **40221803013**.
   **Next:** VE7NHW flashes and tests RTTY TX (dummy load), PSK31, Olivia, WSPR (with VE7NHW and VE7NHW/P), FT2,
   VOL with Menu/Macros open in each; results to Kris.
-- [ ] **Transmit level for modes whose strength swings (VE7NHW, 2026-11-02).** VE7NHW: all apps should share one
+- [ ] **Two transmit-level codes (VE7NHW decided 2026-11-02): one shared for steady modes (tx_level: JS8, FT8/FT2, RTTY, WSPR, JTTY), one shared for modes whose strength swings (PSK31, Olivia), not one per app.** Told Kris in the #333 approval (note 3).
+  Background: VE7NHW: all apps should share one
   ALC/level code, *except* modes without a steady carrier, where JS8's code doesn't fit. Checked Kris's
   modulators + simulated (research/tx-envelope/papr.py): **steady (peaks = average): JS8, FT8/FT2, RTTY, WSPR, JTTY;
   swinging: PSK31 (idle 3.0 dB peaks over average, typing 1.2 dB) and Olivia (3.7 dB, 75% overlapped tones).** Our
