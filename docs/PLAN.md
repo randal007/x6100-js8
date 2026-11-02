@@ -15,33 +15,38 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** since 10-29 a private test build (d6c80b3, with the #330 fix) whose app tree is `kris-apps-test3` f38b0d7 (kris-apps + the PSK31/Olivia VOL fix + the Channels button #328 + WeFax Post Proc. #329), so the kris-apps list can be tested on it as is; newest DATA backup **sd-backup-2026-10-29-071241**. **Found on it:** the Channel List crashed the GUI on an empty list (fix **#330**, below).
-2. **Releases:** **OpenX6100 v1.2.0 is out (2026-11-01, Kris):** JS8, WeFax + Denoise, SSTV, Channel List + its button. Ours: RC1.1 (`js8-rc1.1`); fork being brought to v1.2.0 on `merge-v1.2.0` (image run 41362032030); maybe no more fork releases after that (VE7NHW undecided). v1.3.0 = Kris's five apps (all five PRs conflict with main since v1.2.0) + OpenVoiceCommand (no PR yet), Hany's Post Proc. #329 (needs Kris/Georgy's review), later NavTex/DSC.
-3. **Next (VE7NHW):** flash kris-apps-test3 and test: WeFax Denoise Post Proc. (a `_pp.png` after 2-3 min, progress panel, full-screen view F2, F4 Original/Processed), VOL with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), Channels from APP page 5 and from a long press, plus the earlier list (RTTY TX, PSK31, Olivia, WSPR with VE7NHW and VE7NHW/P, FT2); results to Kris.
-4. **Waiting on others:** Kris: **myshak1#19-23** (11-01: main v1.2.0 merged into each of his five branches, with our #10-18 folded in; APP 4 = SSTV, Channels, WSPR, PSK31, APP 5 = Olivia; test image run 41362789243, branch `kris-apps-v13` in OpenX6100); Georgy/Kris: **#332** S-meter offset ±10 dB (Kris 11-02: "looks good", a comment, not yet an approval) (Georgy's #305 point, never changed before #305 merged at ±30); Kris/Georgy: review of #329 (Hany: "looks perfect", 10-31); Hany: NavTex/DSC (his PRs or ours?); EiBi's B26 schedule. VE7NHW: the Channel List close crash (empty list) shipped in v1.2.0; VE7NHW (11-01): probably not an issue, test later.
-5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`; ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md.
+1. **Card:** still the 10-29 private test build d6c80b3 (kris-apps-test3 tree), DATA backup **sd-backup-2026-10-29-071241**; the six-app image (run 41507827952) was being flashed at the 11-02 offload, see the *1.3.0* item for whether it landed.
+2. **Releases:** **OpenX6100 v1.2.0 out 2026-11-01** (JS8, WeFax + Denoise, SSTV, Channel List). Ours: RC1.1 (`js8-rc1.1`); `merge-v1.2.0` built (run 41362032030, tests green), not in main (VE7NHW: maybe no more fork updates). **1.3.0:** Kris's five apps (#271/#272/#274/#276/#288, approved + mergeable) + JTTY #333 (approved by us) + #332 (merged) + Hany's #329 (waiting on Hany) + OpenVoiceCommand (no PR yet); later NavTex/DSC.
+3. **Next (VE7NHW):** test the six-app image (list in the *1.3.0* item) incl. WeFax Post Proc. timing; bench power test (steady vs PSK31/Olivia at ~0.3 W into the amp); then merge the five (+ #333 once Georgy/Kris are happy) in OpenX6100.
+4. **Waiting on others:** Kris: his own radio test of the six; Hany: #329 answers (kit, model licence/training charts, e-mail), NavTex/DSC; Georgy: #333 review; EiBi's B26 schedule.
+5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`, `wspr-v13`/`psk31-v13`/`olivia-v13`/`rtty-v13`/`ft2-v13`/`app-pages-v13`/`kris-apps-v13` (merged into Kris's branches); ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md; ask Jake 2E0JFS for his repo link.
 
 - [ ] **Channel List still crashes on CLOSE with an empty list (VE7NHW, 2026-10-28, on c910ca5 which has #330).** Opening
   is fixed; closing the empty list restarts the GUI. Not found by reading close_common()/overlay_close()/dialog_destruct();
   the PC test (empty table deleted) doesn't crash. Not fixed yet (VE7NHW: later). **Next:** core dump on the radio as for
   #330 (prlimit + core_pattern to /tmp/cores), and ask VE7NHW how it was closed (F1 Close, V/M, APP/GEN) and from where
-  (main screen or over an app). Tell Kris/Hany before v1.2.0 ships Channels on APP 4.
-- [ ] **Channel List crash on an empty list (VE7NHW, 2026-10-28): OpenX6100 #330** (branch `channels-empty-list`,
-  worktree `~/Work/x6100/wt-channels-empty`). Pressing Channels (APP page 5) restarted the GUI every time; the V/M key
-  runs the same function. Core dump from the radio (prlimit + core_pattern to /tmp/cores, header and stack read over the
-  console): SIGSEGV at address 4 in `lv_table_set_row_cnt` <- `refresh_table` <- `build_window` <- `construct_cb`.
-  With `/mnt/channels.json` empty the new table shrinks from 1 row to 0 and LVGL 8.3 frees cell 0, never set, without
-  a NULL check (lv_table.c:228). Fix: one `lv_table_set_cell_value(table, 0, 0, " ")` in build_window(); reproduced and
-  fixed on the PC (LVGL ad032d8, ASan). **Next:** review by Hany / Georgy / Kris; radio test with the next build. Note:
-  the app_logs files stop at ~18 KB because x6100_gui's stdout is block-buffered and lost at a crash.
-- [ ] **Hany's 1KO125 1.1-beta1 = the reference for his PRs (Hany's email, 2026-10-27; tag d65e605).** VE7NHW: get WeFax
-  Post Proc. in now for a release soon. **OpenX6100 #329** (branch `wefax-postproc`, base `wefax-denoise` until #325 merges):
-  Hany's 12 commits (neural-network Post Proc., model `rootfs/usr/share/x6100/wefax_pp.bin` 1.2 MB, full-screen fax view);
-  training kit and NOTICE header lines left out; WeFax files otherwise identical to the tag. GCC 12 clean; PC test at 6 dB
-  (`~/Pictures/wefax-postproc-pc-test.png`). **#328 (10-28, Kris's email for Georgy: no empty buttons):** pages 3/4 without empty places, page 5 gone: APP 3 WiFi, BT, JS8, WeFax; APP 4 SSTV, Channels (a6d8dc4; kris-apps-test3 still has the old page 5). Before that: Channels moved to place 4 of APP page 5 (58828f3), matching his
-  NavTex / DSC / FT8 CB places; VE7NHW: FT8 CB not coming in. Reply email to Hany drafted 10-27 (in the chat and clipboard; no licence questions, VE7NHW's wish): VE7NHW sends it.
-  **Test image:** branch `kris-apps-test3` f38b0d7 (kris-apps-test2 + #328's move + #329), test-image.yml run
-  **40572901929**; replaces kris-apps-test2. **Next:** VE7NHW flashes and tests the kris-apps list plus WeFax Post Proc.
+  (main screen or over an app).
+  Channel List *open* on an empty list is fixed (#330, in v1.2.0); this close crash shipped in v1.2.0 (VE7NHW 11-01: probably not an issue, test later).
+- [ ] **1.3.0: Kris's five apps + JTTY, tested and merged (2026-11-02).** All five (#271 WSPR, #272 PSK31, #274 Olivia,
+  #276 RTTY, #288 FT2) approved and mergeable after Kris merged our myshak1#19-23 (v1.2.0 merged in, our #10-18
+  folded in). Layout agreed with Kris: APP 4 = SSTV, Channels, WSPR, PSK31; APP 5 = Olivia, JTTY. **#333 JTTY** approved
+  by us 11-02 (notes: ESC/250 ms key-up, copyright-name edits outside the app, two level codes later); Georgy asked too.
+  Kris asks **VE7NHW or Georgy to merge the five once tested**. **Six-app test image:** branch `kris-apps-jtty-test`
+  (OpenX6100, da16317 = main + the five + JTTY), run **41507827952**; flashing it was started at the 11-02 offload
+  (`echo y | x6100-flash-a 41507827952` from the scratchpad copy; check the newest sd-backups folder).
+  **Test list:** RTTY TX (dummy load), PSK31, Olivia, WSPR (VE7NHW and VE7NHW/P: "plain call only"), FT2, JTTY, VOL
+  with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), APP pages 4 and 5, Channels from APP 4 and a long
+  press, WeFax Post Proc. time for a full fax (for #329). **Next:** results on the PRs; VE7NHW merges.
+- [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
+  kit (`tests/wefax/ml` in Hany's `1ko125`, LGPL, without the .exe), the model's licence and training charts, Hany's
+  empty author e-mail ("Hany El Imam <>"), Post Proc. time on the radio. NOTICE lines removed (13271c3, worktree
+  `~/Work/x6100/wt-wefax-pp`). Our reply with the questions posted 11-02. **Next:** Hany's answers, then add the kit.
+- [ ] **Hany's next apps:** NavTex (LGPL, own SITOR-B) and DSC (Nayuki QR, MIT) on APP 5 after JTTY (his PRs or ours?),
+  mic MODE key, FT8 CB (VE7NHW undecided), SSTV RX/TX radio test.
+- [ ] **Jake 2E0JFS's UI work (VE7NHW, 2026-11-02):** VE7NHW heard he has a fork updated to v1.2.0. Not found on
+  GitHub (no account with his call; no fork of OpenX6100 pushed since v1.2.0 but Kris's and Hany's; OpenX6X00's 15
+  forks; code/commit search). Known: he designed the Black Metal and Total Black themes credited in OpenX6X00
+  (README, docs/MANUAL.md, src/theme.c), code by others. **Next:** VE7NHW asks him for the link.
 - [ ] **OpenX6X00 (Guru-RF/OpenX6X00, Joeri Van Dooren ON6URE; not OpenX6100) and our JS8 code (checked 2026-10-27,
   VE7NHW asked).** Created 10-20. Credits R1CBU, R2RFE, Hany, Kris, randal007 (map, PSK/Olivia merge...), keeps R1CBU's
   copyright lines, JS8 files under GPL-3. **But** `src/js8_window.c` holds 41 of the long sentences of our `dialog_js8.c`
@@ -50,15 +55,6 @@ by gdyuldin or myshak1, never merged by us alone.
   code they forked (not confirmed). Facebook clarification drafted for VE7NHW (OpenX6100 ≠ OpenX6X00, Georgy R2RFE leads),
   without the licence point. **Next, if VE7NHW wants:** a friendly issue/message to Joeri (notice back in those files + a
   credit line), VE7NHW posts it.
-- [ ] **Two finds from VE7NHW's kris-apps test (2026-10-27).**
-  - **VOL press with Menu/Macros open closed the whole PSK31/Olivia app** (RTTY fine). Kris's shared `digi_menu.c`: the list
-    is deleted while VOL is still down, LVGL resets the keypad and the held key repeats ESC into the window. Reproduced and
-    fixed on the PC (LVGL 8.3 + this file, ASan): `lv_indev_wait_release()`. **PRs myshak1#16 (psk31), #17 (olivia), #18 (rtty).**
-  - **Channel List only from the hand mic's V/M key.** VE7NHW: a Channels button on the APP page. **OpenX6100 #328** (branch
-    `channels-app-button`): Channels on a new APP page 5 (NavTex/DSC fixed places beside it), Channels as a long-press
-    action, number 117; for Hany to decide.
-  - **Test image:** branch `kris-apps-test2` 4dec903 (kris-apps-test + both), test-image.yml run **40524047751**.
-    **Next:** VE7NHW flashes it and checks VOL with Menu/Macros open in PSK31/Olivia/RTTY, and Channels from APP 5 and a long press.
 - [ ] **Our fork up to v1.2.0.** **OpenX6100 v1.2.0 released 2026-11-01 18:21Z by Kris** (JS8, WeFax with Denoise,
   SSTV, Channel List with its APP button; #324/#325/#328/#330/#331 went in before the tag; Buildroot #9 in, webserver
   v0.0.5). **2026-11-01:** branch `merge-v1.2.0` (worktree `~/Work/x6100/wt-merge-v1.2.0`, 93bb0c91): src/ now exactly
@@ -67,46 +63,6 @@ by gdyuldin or myshak1, never merged by us alone.
   (rotary_cb(diff, 0)). Image run **41362032030**, tests run **41362034142**. Facebook post for v1.2.0 drafted
   (`~/Pictures/openx6100-v1.2.0-facebook/post.txt`). **Next:** VE7NHW flashes and checks it; PR into main.
   VE7NHW (11-01): after this, we **may stop updating the fork** (people use OpenX6100's releases): undecided.
-- [ ] **Hany's apps, after v1.2.0 (2026-10-25).** **2026-10-27: Georgy approved #324 and #325 (both clean); VE7NHW asked Kris on #326 (in v1.2.0 or after its tag?) and Georgy on webserver #6 for a v0.0.5 tag. Webserver #6 merged by Georgy: Buildroot bump opened as AetherX6100Buildroot#9 (pins the merge commit; to the tag if Georgy makes v0.0.5).** All four first PRs merged (#309, #310, #311, **#312 merged 10-25**).
-  Hany's own repo TheMurusTeam/x6100_gui `1ko125` (remote `murus`) now carries our changes (his comment, 10-22),
-  so new work comes from there. **Opened 10-25 (VE7NHW: "add the PR for all the WeFax updates"):** **#324** shared
-  app radio set-up (app_radio.c: USB-D locked, zoom 4x unsaved, DSP off while open; Hany author; own build line) and
-  **#325** WeFax Denoise + Auto Slant 70 + USB-D/zoom + tests/wefax PC tools (base app-radio; ML training kit and
-  .exe tools left out). PC test (our own chart through wefax_gen): at 4 dB Denoise missed the start, classic didn't;
-  asked Hany on #325; **fixed by Hany 10-25 (5e8df85: START judged on the classic discriminator), on #325 as e4fa888; retest: start found at 8.5/6/4/3 dB.** Kris approved #324 and #325 (note: NR button turns NR back on while WeFax holds DSP off; Hany fixed it 10-25, 3a9adae, same code as JS8's dsp_held_cb: on #324 as 3af8902, merged into #325). Hany (email 10-25): NavTex/SITOR-B/DSC decoder ready (beats Venturi's in 95% of his regression set), SITOR-B text view to match RTTY's font setting first; may open his first PR himself. **Still to come:** NavTex (now LGPL, own SITOR-B receiver) and DSC (Nayuki QR code, MIT) on APP
-  page 5 (a shared "page 5 on" commit as with page 4); webserver SSTV page (OpenX6100/x6100_webserver#6, needs
-  Georgy's review, then a webserver tag and a Buildroot version bump); mic MODE key; FT8 CB (VE7NHW undecided);
-  SSTV RX/TX radio test. Email to Hany about NavTex/DSC: drafted 10-25.
-- [ ] **Kris's apps (WSPR #271, PSK31 #272, Olivia #274, RTTY #276, FT2 #288) ready for v1.3.0 (2026-10-25, VE7NHW: "fix all the issues, PRs for all").**
-  **2026-11-01 (after v1.2.0, all five conflicted with main):** branches `wspr-v13`, `psk31-v13`, `olivia-v13`, `rtty-v13`,
-  `ft2-v13` in OpenX6100 (worktree `~/Work/x6100/wt-kris-v13`), each = Kris's branch + our open fixes + main (v1.2.0);
-  shared commit `app-pages-v13` 3e46387 (page 4 one app per line). Layout (PR order): APP 4 = SSTV, Channels, WSPR,
-  PSK31; APP 5 = Olivia (labels "APP n:5"). digi_menu.c: the branches' copy with the VOL fix (main's Callsign /P list
-  gets it too). All ten pairs merge cleanly. **PRs myshak1#19 (WSPR), #20 (PSK31), #21 (Olivia), #22 (RTTY), #23 (FT2)**
-  (supersede #8-#18), noted on #271. Combined branch `kris-apps-v13` 48ed610, test image run **41362789243**.
-  **2026-11-02: Kris merged #19-#23 into his branches** (closed #8-#18 as folded in); layout OK with him, **JTTY will
-  follow on page 5 after Olivia**. All five OpenX6100 PRs now approved + MERGEABLE. He asks **VE7NHW or Georgy to merge
-  #271/#272/#274/#276/#288 for 1.3.0 once tested**; he tests the image (run 41362789243, succeeded) on his radio first.
-  **Next:** VE7NHW (and Kris) test that image; then VE7NHW merges the five in OpenX6100 (the merge button is his).
-  **2026-11-02 later:** #332 (S-meter ±10 dB) **merged by Kris**. **#333 JTTY** (Kris, +5284, GPL-3.0, APP 5 after
-  Olivia, MODE_JTTY 10, app 118; review asked of VE7NHW + Georgy): reviewed by Claude (TX only on a key, power/freq
-  restored, clean close; merges with all five; JTTY files GCC 12 clean); notes: ESC as the TX thread wakes keys 250 ms of
-  silence, copyright-name edits in shared files, two shared level codes later (steady vs swinging modes). **Approved 11-02** (VE7NHW OK'd). Six-app test image: branch `kris-apps-jtty-test` (OpenX6100), run **41507827952**.
-  **#329:** Kris (review, 11-02): wants the model's training kit (tests/wefax/ml, in Hany's 1ko125), the model's licence
-  and training data, the NOTICE line gone (done 13271c3), Hany's empty author e-mail, Post Proc. time on the radio.
-  **Reply posted 11-02** (VE7NHW OK'd, licence question included): asks Hany OK to add the kit without .exe, the model's
-  licence + training charts, his author e-mail; we measure Post Proc. time on the radio.
-  All approved by Georgy. **Kris merged #311 (WeFax) 2026-10-25**; #312 waits for its retarget. Found and fixed, as PRs into
-  Kris's branches: **myshak1#10** WSPR "plain call only" (a /P or /QRP call made every TX slot fail silently);
-  **myshak1#11** main merged into rtty (CMakeLists + spectrum.h, digi_menu.c off RTTY's line);
-  **myshak1#12** main merged into ft2 (worker.c includes, FT2 = 4 / 9 beside JS8's numbers; test_ft8_qso not run here);
-  **myshak1#13, #14, #15**: tx_level.c / tx_player.c back in WSPR's, PSK31's and Olivia's build line (our 10-18
-  app-places merges dropped them: merged as they were, each would have broken main's link). digi_menu.c listed
-  twice when PSK31/Olivia merge: harmless (CMake builds it once, tried). myshak1#8/#9 (page 4 on) now redundant:
-  main has it since #311. **Test image:** branch `kris-apps-test` cccd5e3 (main 24b5fa8 + SSTV + all the above;
-  break check, build lists, 53 files GCC 12 clean), test-image.yml run **40221803013**.
-  **Next:** VE7NHW flashes and tests RTTY TX (dummy load), PSK31, Olivia, WSPR (with VE7NHW and VE7NHW/P), FT2,
-  VOL with Menu/Macros open in each; results to Kris.
 - [ ] **Two transmit-level codes (VE7NHW decided 2026-11-02): one shared for steady modes (tx_level: JS8, FT8/FT2, RTTY, WSPR, JTTY), one shared for modes whose strength swings (PSK31, Olivia), not one per app.** Told Kris in the #333 approval (note 3).
   **The swinging-mode code also gets a manual TX level (VE7NHW, 2026-11-02):** a TX level setting in each app's
   Settings (press, turn the MFK, press), the MFK adjusting it live while sending, and the ALC and power shown on

@@ -1500,11 +1500,12 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   own APP button), WeFax (with Denoise) and SSTV. It answers STATUS there
   as "OpenX6100 JS8 v1.2.0"; the JS8 in it is the same as Release
   Candidate 1.1.
-- [ ] **This firmware brought up to OpenX6100 v1.2.0** (being tested):
+- [ ] **This firmware brought up to OpenX6100 v1.2.0** (built, not yet released here):
   Kris SP2KMO's latest Bluetooth and FT8 work, the callsign suffix list
   (/P, /QRP), the Channel List, WeFax and SSTV.
 - [ ] **More apps in OpenX6100 v1.3.0:** Kris's WSPR, PSK31, Olivia, RTTY
-  transmit and FT2, and Hany's WeFax Post Proc. (a neural network that
+  transmit, FT2 and JTTY (WSJT-X 3.2's new keyboard mode), on APP pages 4
+  and 5, and Hany's WeFax Post Proc. (a neural network that
   cleans each saved fax, and a full-screen fax view), then NavTex and DSC.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
