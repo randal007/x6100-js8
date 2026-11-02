@@ -108,7 +108,7 @@ by gdyuldin or myshak1, never merged by us alone.
   **Next:** VE7NHW flashes and tests RTTY TX (dummy load), PSK31, Olivia, WSPR (with VE7NHW and VE7NHW/P), FT2,
   VOL with Menu/Macros open in each; results to Kris.
 - [ ] **Transmit level for modes whose strength swings (VE7NHW, 2026-11-02).** VE7NHW: all apps should share one
-  ALC/level code, *except* modes without a steady carrier (like VARA), where JS8's code doesn't fit. Checked Kris's
+  ALC/level code, *except* modes without a steady carrier, where JS8's code doesn't fit. Checked Kris's
   modulators + simulated (research/tx-envelope/papr.py): **steady (peaks = average): JS8, FT8/FT2, RTTY, WSPR, JTTY;
   swinging: PSK31 (idle 3.0 dB peaks over average, typing 1.2 dB) and Olivia (3.7 dB, 75% overlapped tones).** Our
   tx_level and Kris's PSK31/Olivia loops (FT8's get_correction) all raise the drive until the *measured* power reaches
@@ -116,6 +116,13 @@ by gdyuldin or myshak1, never merged by us alone.
   squashes them (splatter). **Next:** bench test (dummy load, MFJ peak vs average, the radio's own power reading,
   ALC) with PSK31 idle and Olivia; then a plan with Kris: steady modes on tx_level, PSK31/Olivia aiming their peaks
   at the setting with no ALC action.
+  **VE7NHW (11-02): fine at normal power, fails at sub-1 W into an amp.** Why, from tx_level.c (a reading of the code,
+  to confirm on the bench): the ramp-up stops only when the ALC shows (>= 0.3) or the average power reading reaches the
+  setting - 0.05 W. At 5 W a swinging signal's peaks hit the radio's power limit and the ALC shows early, so it holds
+  (peaks squashed, but bounded). At 0.3 W the ALC stays at 0, and the power reading (0.1 W steps) sees only the
+  average, 42-50% of the peaks: it keeps raising, up to 8 dB, until the average reaches the setting, so the peaks reach
+  2-2.4x the drive the amplifier was set up for. **Idea:** no feedback for these modes: take the steady-tone level
+  learned for that power (FT8's/JS8's calibration) and scale the audio so the signal's *peaks* equal that tone.
 - [ ] **EiBi B26 schedule into #310's broadcast.csv** when EiBi publishes it
   (sked-b26.csv 404 on 10-21 and 10-22; season starts 2026-10-25).
 - [ ] **Workflow clean-up (VE7NHW agreed 2026-10-13, from Claude's
