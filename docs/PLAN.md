@@ -108,6 +108,9 @@ by gdyuldin or myshak1, never merged by us alone.
   **Next:** VE7NHW flashes and tests RTTY TX (dummy load), PSK31, Olivia, WSPR (with VE7NHW and VE7NHW/P), FT2,
   VOL with Menu/Macros open in each; results to Kris.
 - [ ] **Two transmit-level codes (VE7NHW decided 2026-11-02): one shared for steady modes (tx_level: JS8, FT8/FT2, RTTY, WSPR, JTTY), one shared for modes whose strength swings (PSK31, Olivia), not one per app.** Told Kris in the #333 approval (note 3).
+  **The swinging-mode code also gets a manual TX level (VE7NHW, 2026-11-02):** a TX level setting in each app's
+  Settings (press, turn the MFK, press), the MFK adjusting it live while sending, and the ALC and power shown on
+  screen while sending; saved per app. The peak-matched calibration gives the starting point, the user trims it.
   Background: VE7NHW: all apps should share one
   ALC/level code, *except* modes without a steady carrier, where JS8's code doesn't fit. Checked Kris's
   modulators + simulated (research/tx-envelope/papr.py): **steady (peaks = average): JS8, FT8/FT2, RTTY, WSPR, JTTY;
