@@ -88,6 +88,14 @@ by gdyuldin or myshak1, never merged by us alone.
   follow on page 5 after Olivia**. All five OpenX6100 PRs now approved + MERGEABLE. He asks **VE7NHW or Georgy to merge
   #271/#272/#274/#276/#288 for 1.3.0 once tested**; he tests the image (run 41362789243, succeeded) on his radio first.
   **Next:** VE7NHW (and Kris) test that image; then VE7NHW merges the five in OpenX6100 (the merge button is his).
+  **2026-11-02 later:** #332 (S-meter ±10 dB) **merged by Kris**. **#333 JTTY** (Kris, +5284, GPL-3.0, APP 5 after
+  Olivia, MODE_JTTY 10, app 118; review asked of VE7NHW + Georgy): reviewed by Claude (TX only on a key, power/freq
+  restored, clean close; merges with all five; JTTY files GCC 12 clean); notes: ESC as the TX thread wakes keys 250 ms of
+  silence, copyright-name edits in shared files, a shared tx_level later for all his apps. Approval drafted, VE7NHW
+  to OK. Six-app test image: branch `kris-apps-jtty-test` (OpenX6100), run **41507827952**.
+  **#329:** Kris (review, 11-02): wants the model's training kit (tests/wefax/ml, in Hany's 1ko125), the model's licence
+  and training data, the NOTICE line gone (done 13271c3), Hany's empty author e-mail, Post Proc. time on the radio.
+  Reply to Hany drafted, VE7NHW to OK (he kept licence questions out of the 10-27 email to Hany).
   All approved by Georgy. **Kris merged #311 (WeFax) 2026-10-25**; #312 waits for its retarget. Found and fixed, as PRs into
   Kris's branches: **myshak1#10** WSPR "plain call only" (a /P or /QRP call made every TX slot fail silently);
   **myshak1#11** main merged into rtty (CMakeLists + spectrum.h, digi_menu.c off RTTY's line);
