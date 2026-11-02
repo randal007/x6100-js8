@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** still the 10-29 private test build d6c80b3 (kris-apps-test3 tree), DATA backup **sd-backup-2026-10-29-071241**; the six-app image (run 41507827952) was being flashed at the 11-02 offload, see the *1.3.0* item for whether it landed.
+1. **Card:** a private test build from another session (flashed 2026-11-02 11:20 PDT, DATA backup **sd-backup-2026-11-02-112046**), in use for its own tests. The six-app image (run 41507827952) was **not flashed** at the 11-02 offload so as not to overwrite it: VE7NHW picks when.
 2. **Releases:** **OpenX6100 v1.2.0 out 2026-11-01** (JS8, WeFax + Denoise, SSTV, Channel List). Ours: RC1.1 (`js8-rc1.1`); `merge-v1.2.0` built (run 41362032030, tests green), not in main (VE7NHW: maybe no more fork updates). **1.3.0:** Kris's five apps (#271/#272/#274/#276/#288, approved + mergeable) + JTTY #333 (approved by us) + #332 (merged) + Hany's #329 (waiting on Hany) + OpenVoiceCommand (no PR yet); later NavTex/DSC.
 3. **Next (VE7NHW):** test the six-app image (list in the *1.3.0* item) incl. WeFax Post Proc. timing; bench power test (steady vs PSK31/Olivia at ~0.3 W into the amp); then merge the five (+ #333 once Georgy/Kris are happy) in OpenX6100.
 4. **Waiting on others:** Kris: his own radio test of the six; Hany: #329 answers (kit, model licence/training charts, e-mail), NavTex/DSC; Georgy: #333 review; EiBi's B26 schedule.
@@ -32,8 +32,8 @@ by gdyuldin or myshak1, never merged by us alone.
   folded in). Layout agreed with Kris: APP 4 = SSTV, Channels, WSPR, PSK31; APP 5 = Olivia, JTTY. **#333 JTTY** approved
   by us 11-02 (notes: ESC/250 ms key-up, copyright-name edits outside the app, two level codes later); Georgy asked too.
   Kris asks **VE7NHW or Georgy to merge the five once tested**. **Six-app test image:** branch `kris-apps-jtty-test`
-  (OpenX6100, da16317 = main + the five + JTTY), run **41507827952**; flashing it was started at the 11-02 offload
-  (`echo y | x6100-flash-a 41507827952` from the scratchpad copy; check the newest sd-backups folder).
+  (OpenX6100, da16317 = main + the five + JTTY), run **41507827952**; not flashed yet (the card holds another
+  session's private test build). To flash when VE7NHW says: `echo y | ./x6100-flash-a 41507827952` (CLAUDE.local.md).
   **Test list:** RTTY TX (dummy load), PSK31, Olivia, WSPR (VE7NHW and VE7NHW/P: "plain call only"), FT2, JTTY, VOL
   with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), APP pages 4 and 5, Channels from APP 4 and a long
   press, WeFax Post Proc. time for a full fax (for #329). **Next:** results on the PRs; VE7NHW merges.
