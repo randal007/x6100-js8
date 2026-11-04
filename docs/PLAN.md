@@ -15,9 +15,9 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** a private test build from another session (flashed 2026-11-02 11:20 PDT, DATA backup **sd-backup-2026-11-02-112046**), in use for its own tests. The six-app image (run 41507827952) was **not flashed** at the 11-02 offload so as not to overwrite it: VE7NHW picks when.
+1. **Card:** the six-app image (run 41507827952, commit 46b1d0a), flashed 2026-11-03 at VE7NHW's request (replaced XARA build 21; DATA backup **sd-backup-2026-11-03-122341**). 11-03 on air: every app opened/closed, a couple of CQs on each mode, all fine; **no QSOs in the new modes yet**.
 2. **Releases:** **OpenX6100 v1.2.0 out 2026-11-01** (JS8, WeFax + Denoise, SSTV, Channel List). Ours: RC1.1 (`js8-rc1.1`); `merge-v1.2.0` built (run 41362032030, tests green), not in main (VE7NHW: maybe no more fork updates). **1.3.0:** Kris's five apps (#271/#272/#274/#276/#288, approved + mergeable) + JTTY #333 (approved by us) + #332 (merged) + Hany's #329 (waiting on Hany) + OpenVoiceCommand (no PR yet); later NavTex/DSC.
-3. **Next (VE7NHW):** test the six-app image (list in the *1.3.0* item) incl. WeFax Post Proc. timing; bench power test (steady vs PSK31/Olivia at ~0.3 W into the amp); then merge the five (+ #333 once Georgy/Kris are happy) in OpenX6100.
+3. **Next (VE7NHW):** QSOs with the six-app image (open/close + CQs done 11-03; rest of the list in the *1.3.0* item) incl. WeFax Post Proc. timing; bench power test (steady vs PSK31/Olivia at ~0.3 W into the amp); then merge the five (+ #333 once Georgy/Kris are happy) in OpenX6100. **Send Kris the review report** (see the review item); decide whether Claude makes the Olivia LOCK % button PR or leaves it to Kris.
 4. **Waiting on others:** Kris: his own radio test of the six; Hany: #329 answers (kit, model licence/training charts, e-mail), NavTex/DSC; Georgy: #333 review; EiBi's B26 schedule.
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`, `wspr-v13`/`psk31-v13`/`olivia-v13`/`rtty-v13`/`ft2-v13`/`app-pages-v13`/`kris-apps-v13` (merged into Kris's branches); ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md; ask Jake 2E0JFS for his repo link.
 
@@ -32,11 +32,19 @@ by gdyuldin or myshak1, never merged by us alone.
   folded in). Layout agreed with Kris: APP 4 = SSTV, Channels, WSPR, PSK31; APP 5 = Olivia, JTTY. **#333 JTTY** approved
   by us 11-02 (notes: ESC/250 ms key-up, copyright-name edits outside the app, two level codes later); Georgy asked too.
   Kris asks **VE7NHW or Georgy to merge the five once tested**. **Six-app test image:** branch `kris-apps-jtty-test`
-  (OpenX6100, da16317 = main + the five + JTTY), run **41507827952**; not flashed yet (the card holds another
-  session's private test build). To flash when VE7NHW says: `echo y | ./x6100-flash-a 41507827952` (CLAUDE.local.md).
+  (OpenX6100, da16317 = main + the five + JTTY), run **41507827952**; flashed 11-03. **11-03:** VE7NHW opened/closed
+  every app and sent a couple of CQs on each mode on air, all fine; no QSOs yet. Review report (functions vs desktop
+  apps, map mock-ups): claude.ai/artifact/4ectjLqnJbxj1uuUu7RkcL.
   **Test list:** RTTY TX (dummy load), PSK31, Olivia, WSPR (VE7NHW and VE7NHW/P: "plain call only"), FT2, JTTY, VOL
   with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), APP pages 4 and 5, Channels from APP 4 and a long
   press, WeFax Post Proc. time for a full fax (for #329). **Next:** results on the PRs; VE7NHW merges.
+- [ ] **Review of Kris's six apps vs the desktop programs (2026-11-03), for Kris.** Report written in VE7NHW's voice
+  (PDF + source kept locally, see CLAUDE.local.md). Ranked asks: 1 Log QSO in PSK31/Olivia/RTTY, 2 type while sending,
+  3 WSPRnet upload/save spots, 4 bench FT2 vs Decodium and WSJT-X Improved, 5 Olivia Status/LOCK % button back (dropped
+  10-16, still computed), 6 name/QTH macro fields, 7 RTTY serials, 8 WSPR type 2/3 (/P), 9 Olivia 8/500, 10 RTTY
+  AFC/unshift-on-space, 11 shared map. JTTY's 1200-1800 Hz marker limit is by design. **Map decided (VE7NHW 11-03):**
+  if done, it's the JS8 map made shared, for WSPR and FT8/FT4/FT2 only (not #287's map; not JTTY: no grids in its
+  exchanges). **Next:** VE7NHW sends it to Kris; the Olivia PR question is open.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
   kit (`tests/wefax/ml` in Hany's `1ko125`, LGPL, without the .exe), the model's licence and training charts, Hany's
   empty author e-mail ("Hany El Imam <>"), Post Proc. time on the radio. NOTICE lines removed (13271c3, worktree
