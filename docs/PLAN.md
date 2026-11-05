@@ -54,7 +54,7 @@ by gdyuldin or myshak1, never merged by us alone.
   in the background. **11-05:** worktree branch rebuilt: his 12 commits now "Hany El Imam <info@murus.it>" (same tree,
   same base; old head kept as local branch `backup-wefax-postproc-13271c3`), + kit and model README as his commit
   124d561 (from 1ko125 8341bed8), + our c011244 (bin/ made, .exe ignored). Force-pushed by VE7NHW 11-05 (c011244; GitHub now
-  links the commits to TheMurusTeam). **Next:** VE7NHW posts the reply and times Post Proc. on a full fax.
+  links the commits to TheMurusTeam). Reply posted 11-05. **Next:** VE7NHW times Post Proc. on a full fax and posts it.
 - [ ] **Hany's next apps:** NavTex (LGPL, own SITOR-B) and DSC (Nayuki QR, MIT) on APP 5 after JTTY (his PRs or ours?),
   mic MODE key, FT8 CB (VE7NHW undecided), SSTV RX/TX radio test.
 - [ ] **Jake 2E0JFS's UI work (VE7NHW, 2026-11-02):** VE7NHW heard he has a fork updated to v1.2.0. Not found on
