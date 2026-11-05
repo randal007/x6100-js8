@@ -16,8 +16,8 @@ by gdyuldin or myshak1, never merged by us alone.
 
 **In short** (updated at each offload; details in the items below):
 1. **Card:** the six-app image (run 41507827952, commit 46b1d0a), flashed 2026-11-03 at VE7NHW's request (replaced XARA build 21; DATA backup **sd-backup-2026-11-03-122341**). 11-03 on air: every app opened/closed, a couple of CQs on each mode, all fine; **no QSOs in the new modes yet**.
-2. **Releases:** **OpenX6100 v1.2.0 out 2026-11-01** (JS8, WeFax + Denoise, SSTV, Channel List). Ours: RC1.1 (`js8-rc1.1`); `merge-v1.2.0` built (run 41362032030, tests green), not in main (VE7NHW: maybe no more fork updates). **1.3.0:** Kris's five apps + JTTY **merged in OpenX6100 main 2026-11-05** (tag held until Kris's review features are in) + #332 (merged) + Hany's #329 (kit + his e-mail in, c011244; only VE7NHW's Post Proc. timing left) + OpenVoiceCommand (no PR yet); later NavTex/DSC.
-3. **Next (VE7NHW):** QSOs with the six-app image (open/close + CQs done 11-03; rest of the list in the *1.3.0* item) incl. WeFax Post Proc. timing; bench power test (steady vs PSK31/Olivia at ~0.3 W into the amp); the six are merged (11-05); QSOs on the new modes still worth doing. Review report sent to Kris 11-05 (Olivia LOCK % asked there); a follow-up asking "merge now, review extras later in their own PRs?" drafted 11-05 for VE7NHW to send.
+2. **Releases:** **OpenX6100 v1.2.0 out 2026-11-01** (JS8, WeFax + Denoise, SSTV, Channel List). Ours: RC1.1 (`js8-rc1.1`); `merge-v1.2.0` built (run 41362032030, tests green), not in main (VE7NHW: maybe no more fork updates). **1.3.0:** Kris's five apps + JTTY **merged in OpenX6100 main 2026-11-05** (tag held until Kris's review features are in) + #332 (merged) + Hany's #329 (kit + his e-mail in, c011244; Kris's questions all answered) + OpenVoiceCommand (no PR yet); later NavTex/DSC.
+3. **Next (VE7NHW):** QSOs with the six-app image (open/close + CQs done 11-03; rest of the list in the *1.3.0* item); bench power test (steady vs PSK31/Olivia at ~0.3 W into the amp); the six are merged (11-05); QSOs on the new modes still worth doing. Review report sent to Kris 11-05 (Olivia LOCK % asked there); a follow-up asking "merge now, review extras later in their own PRs?" drafted 11-05 for VE7NHW to send.
 4. **Waiting on others:** Kris: the review's features in their own PRs (answered 11-05: merge the six now, no v1.3.0 tag until complete), his own radio test of the six; Hany: NavTex/DSC (#329 answered 11-04); EiBi's B26 schedule.
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`, `wspr-v13`/`psk31-v13`/`olivia-v13`/`rtty-v13`/`ft2-v13`/`app-pages-v13`/`kris-apps-v13` (merged into Kris's branches); ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md; ask Jake 2E0JFS for his repo link.
 
@@ -37,7 +37,7 @@ by gdyuldin or myshak1, never merged by us alone.
   apps, map mock-ups): claude.ai/artifact/4ectjLqnJbxj1uuUu7RkcL.
   **Test list:** RTTY TX (dummy load), PSK31, Olivia, WSPR (VE7NHW and VE7NHW/P: "plain call only"), FT2, JTTY, VOL
   with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), APP pages 4 and 5, Channels from APP 4 and a long
-  press, WeFax Post Proc. time for a full fax (for #329).
+  press.
   **Kris (e-mail 2026-11-05): merge all six now, as they are; hold the v1.3.0 tag until the apps are complete** (he's
   working on the review's features, own PRs on main; logging / typing while sending / name+QTH as one PR for
   PSK31/Olivia/RTTY via digi_qso + digi_next). Checked 11-05: all six CLEAN; merged in a row onto main 0fc4305 with no
@@ -59,7 +59,7 @@ by gdyuldin or myshak1, never merged by us alone.
   in the background. **11-05:** worktree branch rebuilt: his 12 commits now "Hany El Imam <info@murus.it>" (same tree,
   same base; old head kept as local branch `backup-wefax-postproc-13271c3`), + kit and model README as his commit
   124d561 (from 1ko125 8341bed8), + our c011244 (bin/ made, .exe ignored). Force-pushed by VE7NHW 11-05 (c011244; GitHub now
-  links the commits to TheMurusTeam). Reply posted 11-05. **Next:** VE7NHW times Post Proc. on a full fax and posts it.
+  links the commits to TheMurusTeam). Reply posted 11-05. Our own timing dropped (VE7NHW 11-05): Hany's ~2.5 min on the radio answers Kris's question. **Next:** review/merge.
 - [ ] **Hany's next apps:** NavTex (LGPL, own SITOR-B) and DSC (Nayuki QR, MIT) on APP 5 after JTTY (his PRs or ours?),
   mic MODE key, FT8 CB (VE7NHW undecided), SSTV RX/TX radio test.
 - [ ] **Jake 2E0JFS's UI work (VE7NHW, 2026-11-02):** VE7NHW heard he has a fork updated to v1.2.0. Not found on
