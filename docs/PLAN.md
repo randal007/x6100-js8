@@ -59,7 +59,13 @@ by gdyuldin or myshak1, never merged by us alone.
   in the background. **11-05:** worktree branch rebuilt: his 12 commits now "Hany El Imam <info@murus.it>" (same tree,
   same base; old head kept as local branch `backup-wefax-postproc-13271c3`), + kit and model README as his commit
   124d561 (from 1ko125 8341bed8), + our c011244 (bin/ made, .exe ignored). Force-pushed by VE7NHW 11-05 (c011244; GitHub now
-  links the commits to TheMurusTeam). Reply posted 11-05. Our own timing dropped (VE7NHW 11-05): Hany's ~2.5 min on the radio answers Kris's question. **Next:** review/merge.
+  links the commits to TheMurusTeam). Reply posted 11-05. Our own timing dropped (VE7NHW 11-05): Hany's ~2.5 min on the radio answers Kris's question.
+  **Our review posted 11-05** (we opened the PR, so approval must come from Kris or Georgy): merges clean with the six
+  apps; PC run under ASan clean, same result 1 vs 3 threads (quality not judged: synthetic noise). Asks (code reading):
+  1 ESC/F5 in the full-screen view deletes the focused canvas in its own key handler (held key -> long press into the
+  browser; fix lv_indev_wait_release as textarea_window.c), 2 pp_write_png() straight to NAME_pp.png (no .tmp +
+  rename), 3 small (unused pp_result_name, -3 comment, Save Fax during cleaning). Offered to commit 1+2.
+  **Next:** Hany's answer; then Kris/Georgy approve, VE7NHW merges.
 - [ ] **Hany's next apps:** NavTex (LGPL, own SITOR-B) and DSC (Nayuki QR, MIT) on APP 5 after JTTY (his PRs or ours?),
   mic MODE key, FT8 CB (VE7NHW undecided), SSTV RX/TX radio test.
 - [ ] **Jake 2E0JFS's UI work (VE7NHW, 2026-11-02):** VE7NHW heard he has a fork updated to v1.2.0. Not found on
