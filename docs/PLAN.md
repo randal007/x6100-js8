@@ -18,7 +18,7 @@ by gdyuldin or myshak1, never merged by us alone.
 1. **Card:** the six-app image (run 41507827952, commit 46b1d0a), flashed 2026-11-03 at VE7NHW's request (replaced XARA build 21; DATA backup **sd-backup-2026-11-03-122341**). 11-03 on air: every app opened/closed, a couple of CQs on each mode, all fine; **no QSOs in the new modes yet**.
 2. **Releases:** **OpenX6100 v1.2.0 out 2026-11-01** (JS8, WeFax + Denoise, SSTV, Channel List). Ours: RC1.1 (`js8-rc1.1`); `merge-v1.2.0` built (run 41362032030, tests green), not in main (VE7NHW: maybe no more fork updates). **1.3.0:** Kris's five apps (#271/#272/#274/#276/#288, approved + mergeable) + JTTY #333 (approved by us and Georgy 11-03, Kris fixed our notes) + #332 (merged) + Hany's #329 (kit + his e-mail in, c011244; only VE7NHW's Post Proc. timing left) + OpenVoiceCommand (no PR yet); later NavTex/DSC.
 3. **Next (VE7NHW):** QSOs with the six-app image (open/close + CQs done 11-03; rest of the list in the *1.3.0* item) incl. WeFax Post Proc. timing; bench power test (steady vs PSK31/Olivia at ~0.3 W into the amp); then post results and merge the six (all approved by Georgy, mergeable; VE7NHW hasn't approved #272/#276 himself). Review report sent to Kris 11-05 (Olivia LOCK % asked there); a follow-up asking "merge now, review extras later in their own PRs?" drafted 11-05 for VE7NHW to send.
-4. **Waiting on others:** Kris: answer to the review e-mails (11-05: extras, Olivia LOCK %, merge now?), his own radio test of the six; Hany: NavTex/DSC (#329 answered 11-04); EiBi's B26 schedule.
+4. **Waiting on others:** Kris: the review's features in their own PRs (answered 11-05: merge the six now, no v1.3.0 tag until complete), his own radio test of the six; Hany: NavTex/DSC (#329 answered 11-04); EiBi's B26 schedule.
 5. **VE7NHW, any time:** delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`, `wspr-v13`/`psk31-v13`/`olivia-v13`/`rtty-v13`/`ft2-v13`/`app-pages-v13`/`kris-apps-v13` (merged into Kris's branches); ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md; ask Jake 2E0JFS for his repo link.
 
 - [ ] **Channel List still crashes on CLOSE with an empty list (VE7NHW, 2026-10-28, on c910ca5 which has #330).** Opening
@@ -37,7 +37,12 @@ by gdyuldin or myshak1, never merged by us alone.
   apps, map mock-ups): claude.ai/artifact/4ectjLqnJbxj1uuUu7RkcL.
   **Test list:** RTTY TX (dummy load), PSK31, Olivia, WSPR (VE7NHW and VE7NHW/P: "plain call only"), FT2, JTTY, VOL
   with Menu/Macros open in PSK31/Olivia/RTTY (only the list closes), APP pages 4 and 5, Channels from APP 4 and a long
-  press, WeFax Post Proc. time for a full fax (for #329). **Next:** results on the PRs; VE7NHW merges.
+  press, WeFax Post Proc. time for a full fax (for #329).
+  **Kris (e-mail 2026-11-05): merge all six now, as they are; hold the v1.3.0 tag until the apps are complete** (he's
+  working on the review's features, own PRs on main; logging / typing while sending / name+QTH as one PR for
+  PSK31/Olivia/RTTY via digi_qso + digi_next). Checked 11-05: all six CLEAN; merged in a row onto main 0fc4305 with no
+  conflict, every case has its break, nothing dropped from the build list; the result = the radio's test image + only
+  JTTY's ESC fix (dd9c698, read: fine; jtty_tx.c GCC 12 clean). **Next:** VE7NHW merges #271 #272 #274 #276 #288 #333.
 - [ ] **Review of Kris's six apps vs the desktop programs (2026-11-03), for Kris.** Report written in VE7NHW's voice
   (PDF + source kept locally, see CLAUDE.local.md). Ranked asks: 1 Log QSO in PSK31/Olivia/RTTY, 2 type while sending,
   3 WSPRnet upload/save spots, 4 bench FT2 vs Decodium and WSJT-X Improved, 5 Olivia Status/LOCK % button back (dropped
