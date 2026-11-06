@@ -22,18 +22,20 @@ by gdyuldin or myshak1, never merged by us alone.
 4. **Waiting on others:** Kris (e-mail 11-06): **WSPRnet is ours** (upload spots + fetch "heard you"), shared map + FT8/FT4/FT2 go-ahead; he's on review asks #1/#2/#6 for PSK31/Olivia/RTTY in one change (branch `digi-qso-log`: Log QSO as JTTY, typing joins the TX with idle fill, <NAME> <QTH> <MYNAME> <MYQTH> <MYLOC>, RX/TX text to a file per mode, RST received fixed 597→579), testing with QSOs before his PR, then the rest of the list; Hany: #329 review points, NavTex/DSC; EiBi's B26 schedule.
 5. **VE7NHW, any time:** QSOs on the new modes; bench power test (PSK31/Olivia vs steady modes at ~0.3 W into the amp); delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`, `wspr-v13`/`psk31-v13`/`olivia-v13`/`rtty-v13`/`ft2-v13`/`app-pages-v13`/`kris-apps-v13` (merged into Kris's branches); ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md; ask Jake 2E0JFS for his repo link.
 
-- [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): groundwork as two draft PRs.** VE7NHW: "bring this into
-  OpenX6100 now", experimental, the build that worked best (build 22, xara 919f5dd), in the next free APP place.
-  Decided: **built in, button shows** (Kris's "off by default" = the app does nothing until opened: no auto answer,
-  Record off), **draft PRs**. **OpenX6100/x6100_gui#345** (branch `xara-app`, d1ca8d4b: the app from x6100-xara's
-  build 22 without Full speed (registered), the CPU priority test and ptt.log key timing; APP 5 after JTTY, number
-  119; EA5HVK credit in Settings and the source) and **OpenX6100/AetherX6100Buildroot#10** (branch `xara`, a9b40c0:
-  package xara from randal007/xara 919f5dd, `--features pulse` only, + host-xara-rust = Rust 1.97.1, crates vendored
-  at download; on in X6100_defconfig). PC check: vendor + offline build of 919f5dd with 1.97.1 OK; ARM syntax check
-  of the app OK. Test image (both branches + current main): **run 42272617883**. Reviewers not added (refused to
-  Claude): VE7NHW adds gdyuldin + myshak1. **Next:** check the run; VE7NHW flashes it when he says and tests at free
-  speeds (the 60 kB / L17 results were with registered speeds); then the to-dos in the PR (ports locked to the phone,
-  low-power TX level, libxara 0.1.4, a manual section) before "Ready for review".
+- [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): groundwork as two draft PRs, a test build (not a release).**
+  VE7NHW: "bring this into OpenX6100 now", experimental, the build that worked best (build 22, xara 919f5dd), next free
+  APP place. Decided: **built in, button shows; draft PRs; every setting of the test builds kept, Full speed
+  included** ("it's just a test build"). **OpenX6100/x6100_gui#345** (branch `xara-app` d6fb6491, worktree
+  `~/Work/x6100/wt-xara-app`: build 22's dialog_xara.c + EA5HVK credit; APP 5 after JTTY, number 119) and
+  **OpenX6100/AetherX6100Buildroot#10** (branch `xara` 479755f, worktree `~/Work/x6100/wt-br-xara`: package xara from
+  randal007/xara 919f5dd + host-xara-rust = Rust 1.97.1, crates vendored at download; **`BR2_PACKAGE_XARA_REGISTERED`**
+  adds the paid speeds, **off in X6100_defconfig**: Kris's free-speeds condition, and public images would hand them to
+  everyone). Without it xara refuses Full speed. PC check: vendor + offline build OK; ARM syntax check OK.
+  **Test images:** VE7NHW's, with registered speeds: private **randal007/x6100-xara run 42273143987** (test-image.yml
+  got an `xara_registered` switch, 4a83d407; never share it; may take ~4 h without ccache); public free-speed one for
+  the PRs: **x6100-js8 run 42273148030**. Reviewers not added (refused to Claude): VE7NHW adds gdyuldin + myshak1.
+  **Next:** check both runs; VE7NHW flashes the private one when he says; then the PR to-dos (ports locked to the
+  phone, low-power TX level, libxara 0.1.4, manual, release decisions on Full speed/Record/test settings).
 - [ ] **Channel List still crashes on CLOSE with an empty list (VE7NHW, 2026-10-28, on c910ca5 which has #330).** Opening
   is fixed; closing the empty list restarts the GUI. Not found by reading close_common()/overlay_close()/dialog_destruct();
   the PC test (empty table deleted) doesn't crash. Not fixed yet (VE7NHW: later). **Next:** core dump on the radio as for

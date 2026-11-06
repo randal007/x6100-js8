@@ -31,8 +31,8 @@ repo randal007/x6100-xara keeps the test builds with VARA's registered speeds, n
 
 | PR | What | Branch |
 |---|---|---|
-| OpenX6100/x6100_gui#345 (draft) | XARA app, APP page 5 after JTTY, ACTION_APP_XARA = 119; Full speed and the CPU priority test left out, Record off by default, EA5HVK credit | xara-app (worktree `~/Work/x6100/wt-xara-app`) |
-| OpenX6100/AetherX6100Buildroot#10 (draft) | xara package (randal007/xara 919f5dd = build 22's, free speeds only) + host-xara-rust (Rust 1.97.1: Buildroot has 1.67) | xara (worktree `~/Work/x6100/wt-br-xara`) |
+| OpenX6100/x6100_gui#345 (draft) | XARA app, APP page 5 after JTTY, ACTION_APP_XARA = 119; all test-build settings incl. Full speed, EA5HVK credit | xara-app (worktree `~/Work/x6100/wt-xara-app`) |
+| OpenX6100/AetherX6100Buildroot#10 (draft) | xara package (randal007/xara 919f5dd = build 22's; BR2_PACKAGE_XARA_REGISTERED for paid speeds, off by default) + host-xara-rust (Rust 1.97.1: Buildroot has 1.67) | xara (worktree `~/Work/x6100/wt-br-xara`) |
 
 Texts: [upstream-prs/xara-gui-pr-body.md](upstream-prs/xara-gui-pr-body.md),
 [upstream-prs/xara-buildroot-pr-body.md](upstream-prs/xara-buildroot-pr-body.md).
