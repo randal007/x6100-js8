@@ -77,16 +77,17 @@ by gdyuldin or myshak1, never merged by us alone.
   tuning; ARM compile check OK; PC test of the renderer (`research/spectrum-3d/pctest`, real code cut from spectrum.c)
   matches mock-up 3, ~0.5 ms a frame on the PC. Test image **run 42169391112**. **Next:** VE7NHW flashes and tries it;
   measure CPU on the radio (x6100-cpulog, 2D vs 3D); then the PR.
-- [ ] **Kris's apps review + fixes (VE7NHW 11-06: "fix all issues and open a PR", all six apps).** Findings:
-  ~/Work/x6100/research/reviews/kris-apps-review.md (WSPR/JTTY/FT2 tables; PSK31, Olivia, RTTY findings are in the
-  session transcript 63d5ac07, task outputs a02ea47c (PSK31), Olivia inline, a0100e0e (RTTY): copy them into the file).
-  **Done:** FT2 #335 (branch ft2-fixes, wt-ft2-tx-slot), WSPR #336 (wspr-fixes, wt-wspr-fixes; uses WSJT-X's wsprd
-  unpack, VE7NHW OK'd GPL-3). **Next:** JTTY (worktree wt-jtty-fixes made, nothing edited: 10 findings, plan: TX "not
-  sent" only for ids not queued/in flight, rx_reset closes open slots, NULL player drops jobs, knob clamp no jump,
-  log save failure shown, TX_PWR min(pwr,5), F3 serial only when logged, waterfall line inline not malloc, demod
-  malloc checks); adif.c MODE_JTTY as its own shared PR; then PSK31, Olivia, RTTY (Kris's digi-qso-log rewrites
-  their shared QSO code: flag overlaps). Not fixing: licences, merged copyright edits, PR-description items.
-  shared-map must be rebased on #336 later (drop its own +1.5-tone and type-2 guards in wspr_net.c).
+- [ ] **Kris's apps review + fixes (VE7NHW 11-06: "fix all issues and open a PR", all six apps): PRs open, waiting on
+  Kris's review + radio test.** Findings + status: ~/Work/x6100/research/reviews/kris-apps-review.md. PRs (branches in
+  OpenX6100, worktrees wt-*): **#335 FT2** (silent TX 3 of 4 slots!, time sync, SNR +8/+5 dB FT2/FT4: bench vs WSJT-X,
+  UDP slot stamps), **#336 WSPR** (band change keyed, TX off, WSJT-X wsprd unpack GPL-3 type 2/3, decode cap 119.5 s),
+  **#337 JTTY**, **#338 ADIF JTTY mode** (shared), **#339 PSK31**, **#340 Olivia** (macro rows keyed the radio, deaf
+  RX at 32/1000 <610 Hz, TX end click, LOCK % back, Mode into Menu), **#341 RTTY** (FIGS after space, closed app TX,
+  squelch default 0), **#342 digi menus 20 rows + Auto DX only when empty** (shared), **#343 panel echo wrap**
+  (shared). All merge clean together: test branch `kris-fixes-test` (our repo), tests + image started 11-06.
+  Overlap with Kris's unpublished digi-qso-log (PSK/Olivia/RTTY dialogs, digi_qso.c) flagged in the PRs. Not done:
+  tx_player for PSK/Olivia/RTTY (#303), PSK FFT off the DSP lock, Olivia 8/500, RTTY AFC/USOS-RX, licences.
+  shared-map must be rebased on #336 (drop its +1.5-tone and type-2 guards in wspr_net.c; type 3 calls "<CALL>").
 - [ ] **Persistent waterfall (VE7NHW, 2026-11-06): idea, later.** Tuning with the knob leaves the newly uncovered
   edge black until it fills. Wanted: no black. Each waterfall row already keeps its base_freq/width (waterfall.c);
   at zoom 1 the screen shows the radio's whole 100 kHz, so the fill would come from remembering rows already seen
