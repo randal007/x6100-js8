@@ -1507,6 +1507,15 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   transmit, FT2 and JTTY (WSJT-X 3.2's new keyboard mode), on APP pages 4
   and 5, and Hany's WeFax Post Proc. (a neural network that
   cleans each saved fax, and a full-screen fax view), then NavTex and DSC.
+- [ ] **Fixes for the six new apps** from a code review of each: nine
+  pull requests ([#335](https://github.com/OpenX6100/x6100_gui/pull/335)
+  to [#343](https://github.com/OpenX6100/x6100_gui/pull/343)), among them
+  FT2 transmitting silence in 3 of 4 slots, WSPR retuning while keyed and
+  reading compound and hashed calls the way WSJT-X does, and RTTY's
+  "599 TOO". Waiting for Kris's review.
+- [ ] **One map for every app** (FT8/FT4/FT2 and WSPR, from the JS8 map)
+  and **WSPRnet** in the WSPR app (spots uploaded, who heard you on the
+  map): in a test build, PRs to follow.
 - [ ] **3D spectrum** for the main screen (the last few seconds stacked
   into the distance, a 2D/3D switch): sent to OpenX6100 as
   [#344](https://github.com/OpenX6100/x6100_gui/pull/344), waiting for review.
