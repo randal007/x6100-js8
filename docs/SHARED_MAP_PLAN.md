@@ -57,21 +57,23 @@ but draws through layer A.
 2. [ ] Layer B (scene) + PC test pictures.
 3. [ ] FT8/FT4/FT2: the map (layout chosen by VE7NHW, mock-ups below), MFK
    picks a station, press calls it; test image, radio test.
-4. [ ] WSPR: stations decoded here with their dB (Kris's app: he may hook it
-   in himself). "Heard you" lines need WSPRnet spots over WiFi: after the
-   WSPRnet upload work.
+4. [ ] WSPR: stations decoded here with their dB, now (Kris's app: he may hook
+   it in himself). "Heard you" lines from WSPRnet spots over WiFi when that
+   exists (ours or Kris's: asked).
 5. [ ] OpenX6100 PRs: the widget (with JS8 moved onto it) first, then one per
    app. A friendly note on #287 (Yuli Dai's FT8 world map, open since 10-11).
 
-## Decisions for VE7NHW
+## Decisions
 
-- **FT8 layout** (mock-ups `~/Pictures/x6100-shared-map-mockups/round2-2026-11-05/`,
-  drawn, not screenshots; the FT8 list from `dialog_ft8.c`'s layout):
-  1 full map with "Show: List/Map" (button 5, page 2), MFK picks a station,
-  press calls it; or 2 the map on top (170 px) over a 7-row decode list,
-  "Map: On/Off".
-- WSPR: full map, "Show: List/Map" on page 2 (button 5).
-- Where Auto/Close/World goes in FT8/WSPR (JS8 uses its Map: button).
+- **FT8: the full map (VE7NHW, 2026-11-05, mock-up 1)**: "Show: List/Map"
+  (button 5, page 2), MFK picks a station, press calls it. (Mock-ups in
+  `~/Pictures/x6100-shared-map-mockups/round2-2026-11-05/`.)
+- **WSPR: start now without WSPRnet (VE7NHW, 2026-11-05):** full map,
+  "Show: List/Map" on page 2 (button 5), stations decoded here with their dB;
+  the scene and legend leave room for "heard you" paths, filled once
+  WSPRnet spots come in over WiFi. Kris asked (e-mail) whether we should do
+  the WSPRnet part (upload + fetching who heard you) too.
+- Open: where Auto/Close/World goes in FT8/WSPR (JS8 uses its Map: button).
 
 ## Notes
 
