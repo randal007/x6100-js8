@@ -6,6 +6,24 @@ outside our own JS8 code can be lost or clash when either moves on. **When
 updating to a newer upstream, go through this list**, and send the fixes
 that help everyone upstream as PRs, so they stop being ours to carry.
 
+## Kris's apps: review fixes (2026-11-06)
+
+From code reviews of the six merged apps (findings: ~/Work/x6100/research/reviews/kris-apps-review.md). All
+open, waiting on Kris's review and a radio test; they merge together cleanly (test branch `kris-fixes-test`
+in our repo).
+
+| PR | What | Branch |
+|---|---|---|
+| OpenX6100/x6100_gui#335 | FT2: TX silent in 3 of 4 slots, time sync, SNR, UDP slot stamps | ft2-fixes |
+| #336 | WSPR: band change while keyed, TX off, WSJT-X wsprd unpack (type 2/3), decode cap | wspr-fixes |
+| #337 | JTTY: not-sent rows, closed messages, no-player spin, logging, serial, knob | jtty-fixes |
+| #338 | ADIF: JTTY mode both ways (shared) | adif-jtty-mode |
+| #339 | PSK31: own echo as RX, Stop mid-character, unkey on close | psk31-fixes |
+| #340 | Olivia: macro rows that keyed, deaf RX, TX end click, LOCK % back | olivia-fixes |
+| #341 | RTTY: FIGS after space, Stop click, closed app transmitting, squelch default | rtty-fixes |
+| #342 | Digi menus 20 rows, Auto DX only when empty (shared) | digi-menu-autodx |
+| #343 | Panel: TX echo wrap/colour, RX wrap, buffer bound (shared) | panel-tx-echo |
+
 ## PRs to send (the queue)
 
 Ready-to-send texts and patches (checked against gdyuldin's current code):
