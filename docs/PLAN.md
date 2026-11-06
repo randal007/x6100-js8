@@ -75,8 +75,10 @@ by gdyuldin or myshak1, never merged by us alone.
   our fork, d3b8ef1, worktree `~/Work/x6100/wt-spectrum-3d`): Settings > UI "Spectrum 3D" (off by default) + "3D size"
   30-70 % (default 50), 2D/3D label on the spectrum (tap switches), a trace every 100 ms, smooth drift, history follows
   tuning; ARM compile check OK; PC test of the renderer (`research/spectrum-3d/pctest`, real code cut from spectrum.c)
-  matches mock-up 3, ~0.5 ms a frame on the PC. Test image **run 42169391112**. **Next:** VE7NHW flashes and tries it;
-  measure CPU on the radio (x6100-cpulog, 2D vs 3D); then the PR.
+  matches mock-up 3, ~0.5 ms a frame on the PC. Test image **run 42169391112**. **VE7NHW loves it (11-06, image
+  42236779844 = bf28f79).** **Decided 11-06 (VE7NHW):** 3D size 35-55 % (7d8b20b; = 2D's 160-260 px, CW/RTTY panel
+  safe), keep both height sliders. **PR #344 opened 11-06** (reviewers gdyuldin + myshak1). **Next:** reviews;
+  CPU on the radio (x6100-cpulog, 2D vs 3D) if a reviewer asks; VE7NHW merges once approved.
 - [ ] **Kris's apps review + fixes (VE7NHW 11-06: "fix all issues and open a PR", all six apps): PRs open, waiting on
   Kris's review + radio test.** Findings + status: ~/Work/x6100/research/reviews/kris-apps-review.md. PRs (branches in
   OpenX6100, worktrees wt-*): **#335 FT2** (silent TX 3 of 4 slots!, time sync, SNR +8/+5 dB FT2/FT4: bench vs WSJT-X,
@@ -94,9 +96,8 @@ by gdyuldin or myshak1, never merged by us alone.
   (a wider band memory), at zoom > 1 maybe also from the unseen part of the received span: check what dsp hands over.
   3D spectrum (spectrum-3d): **VE7NHW loves it** (11-06, on the radio). Colour levels smoothed over 4 s (lightning
   crash recoloured the stack, a9b7321b). **Code review 11-06** (standard /code-review, not ultra: free ultra used up;
-  findings in research/reviews/): 3D 1-3,6,8,9 fixed (bf28f791); maps 1-9 + 2 extras fixed (6907627c). Open for
-  VE7NHW: 3D size range (70 % leaves the CW/RTTY panel 33 px, 30 % = 135 px mostly under the top block), two height
-  sliders; map_view.c/wspr_map.c shared scaffolding into map_scene (cleanup). Images: 3D 42236779844, maps 42236796961.
+  findings in research/reviews/): 3D 1-3,6,8,9 fixed (bf28f791); maps 1-9 + 2 extras fixed (6907627c). 3D size range
+  and sliders decided (see the 3D item, PR #344). Open: map_view.c/wspr_map.c shared scaffolding into map_scene (cleanup). Images: 3D 42236779844, maps 42236796961.
 - [ ] **Radio looks / themes, Thetis-style (VE7NHW, 2026-11-05): idea, after the 3D spectrum.** VE7NHW likes
   Thetis skins (many made by the community). Not started; shared GUI (`src/styles.c` skins), so OpenX6100.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
