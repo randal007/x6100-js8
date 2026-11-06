@@ -1507,6 +1507,9 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   transmit, FT2 and JTTY (WSJT-X 3.2's new keyboard mode), on APP pages 4
   and 5, and Hany's WeFax Post Proc. (a neural network that
   cleans each saved fax, and a full-screen fax view), then NavTex and DSC.
+- [ ] **3D spectrum** for the main screen (the last few seconds stacked
+  into the distance, a 2D/3D switch): sent to OpenX6100 as
+  [#344](https://github.com/OpenX6100/x6100_gui/pull/344), waiting for review.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests

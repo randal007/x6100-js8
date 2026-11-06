@@ -15,7 +15,8 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** unchanged, the six-app image (run 41507827952, commit 46b1d0a), flashed 2026-11-03 (DATA backup **sd-backup-2026-11-03-122341**). Opened/closed every app + CQs on each, fine; no QSOs in the new modes yet.
+1. **Card:** the 3D spectrum test image (run 42236779844, `spectrum-3d` bf28f79 = OpenX6100 main 2dd8d1e + 3D), flashed 2026-11-06 (DATA backup **sd-backup-2026-11-06-091854**). VE7NHW loves the 3D view.
+2a. **3D spectrum: PR #344 opened 11-06** (reviewers Georgy + Kris asked; 3D size now 35-55 %, both height sliders kept). **Next session (VE7NHW 11-06):** measure CPU on the radio, 2D vs 3D (x6100-cpulog).
 2. **OpenX6100:** **Kris's six apps (WSPR, PSK31, Olivia, RTTY, FT2, JTTY) merged by VE7NHW 2026-11-05** (main 2dd8d1e, tests green); **no v1.3.0 tag** until Kris's review features are in (his e-mail 11-05). #329 WeFax Post Proc.: Hany answered, kit + his e-mail in, our review posted (ESC/F5 in full screen, `_pp.png` without .tmp); waiting on Hany, then Kris/Georgy approve.
 3. **Shared map (new, 11-05):** branch `shared-map` (OpenX6100, 3 commits, no PR yet): JS8's map as a shared widget (pixel-identical), FT8/FT4/FT2 and WSPR Show Map with the farthest DX. Test image run 42150892758 **failed** (ftp.denx.de down, U-Boot download; CI fixed ff28635, fallback to OpenWrt's mirror); **rebuilt as run 42169441684**: check it, then VE7NHW flashes when he says and tests both maps. Plan: [SHARED_MAP_PLAN.md](SHARED_MAP_PLAN.md).
 4. **Waiting on others:** Kris (e-mail 11-06): **WSPRnet is ours** (upload spots + fetch "heard you"), shared map + FT8/FT4/FT2 go-ahead; he's on review asks #1/#2/#6 for PSK31/Olivia/RTTY in one change (branch `digi-qso-log`: Log QSO as JTTY, typing joins the TX with idle fill, <NAME> <QTH> <MYNAME> <MYQTH> <MYLOC>, RX/TX text to a file per mode, RST received fixed 597→579), testing with QSOs before his PR, then the rest of the list; Hany: #329 review points, NavTex/DSC; EiBi's B26 schedule.
@@ -77,8 +78,9 @@ by gdyuldin or myshak1, never merged by us alone.
   tuning; ARM compile check OK; PC test of the renderer (`research/spectrum-3d/pctest`, real code cut from spectrum.c)
   matches mock-up 3, ~0.5 ms a frame on the PC. Test image **run 42169391112**. **VE7NHW loves it (11-06, image
   42236779844 = bf28f79).** **Decided 11-06 (VE7NHW):** 3D size 35-55 % (7d8b20b; = 2D's 160-260 px, CW/RTTY panel
-  safe), keep both height sliders. **PR #344 opened 11-06** (reviewers gdyuldin + myshak1). **Next:** reviews;
-  CPU on the radio (x6100-cpulog, 2D vs 3D) if a reviewer asks; VE7NHW merges once approved.
+  safe), keep both height sliders. **PR #344 opened 11-06** (reviewers gdyuldin + myshak1). **Next session (VE7NHW 11-06,
+  he's curious too):** CPU load on the radio, 2D vs 3D: `~/Work/bin/x6100-cpulog` a few minutes each way, same band
+  and zoom, radio idle (no TX); result on #344. Then reviews; VE7NHW merges once approved.
 - [ ] **Kris's apps review + fixes (VE7NHW 11-06: "fix all issues and open a PR", all six apps): PRs open, waiting on
   Kris's review + radio test.** Findings + status: ~/Work/x6100/research/reviews/kris-apps-review.md. PRs (branches in
   OpenX6100, worktrees wt-*): **#335 FT2** (silent TX 3 of 4 slots!, time sync, SNR +8/+5 dB FT2/FT4: bench vs WSJT-X,
