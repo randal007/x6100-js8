@@ -77,7 +77,7 @@ by gdyuldin or myshak1, never merged by us alone.
   tuning; ARM compile check OK; PC test of the renderer (`research/spectrum-3d/pctest`, real code cut from spectrum.c)
   matches mock-up 3, ~0.5 ms a frame on the PC. Test image **run 42169391112**. **VE7NHW loves it (11-06, image
   42236779844 = bf28f79).** **Decided 11-06 (VE7NHW):** 3D size 35-55 % (7d8b20b; = 2D's 160-260 px, CW/RTTY panel
-  safe), keep both height sliders. **PR #344 opened 11-06** (reviewers gdyuldin + myshak1). **Next:** reviews;
+  safe), keep both height sliders. **PR #344 opened 11-06** (VE7NHW adds reviewers gdyuldin + myshak1). **Next:** reviews;
   CPU on the radio (x6100-cpulog, 2D vs 3D) if a reviewer asks; VE7NHW merges once approved.
 - [ ] **Kris's apps review + fixes (VE7NHW 11-06: "fix all issues and open a PR", all six apps): PRs open, waiting on
   Kris's review + radio test.** Findings + status: ~/Work/x6100/research/reviews/kris-apps-review.md. PRs (branches in
