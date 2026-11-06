@@ -77,6 +77,11 @@ by gdyuldin or myshak1, never merged by us alone.
   tuning; ARM compile check OK; PC test of the renderer (`research/spectrum-3d/pctest`, real code cut from spectrum.c)
   matches mock-up 3, ~0.5 ms a frame on the PC. Test image **run 42169391112**. **Next:** VE7NHW flashes and tries it;
   measure CPU on the radio (x6100-cpulog, 2D vs 3D); then the PR.
+- [ ] **Persistent waterfall (VE7NHW, 2026-11-06): idea, later.** Tuning with the knob leaves the newly uncovered
+  edge black until it fills. Wanted: no black. Each waterfall row already keeps its base_freq/width (waterfall.c);
+  at zoom 1 the screen shows the radio's whole 100 kHz, so the fill would come from remembering rows already seen
+  (a wider band memory), at zoom > 1 maybe also from the unseen part of the received span: check what dsp hands over.
+  3D spectrum (spectrum-3d): **VE7NHW loves it** (11-06, on the radio).
 - [ ] **Radio looks / themes, Thetis-style (VE7NHW, 2026-11-05): idea, after the 3D spectrum.** VE7NHW likes
   Thetis skins (many made by the community). Not started; shared GUI (`src/styles.c` skins), so OpenX6100.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
