@@ -74,11 +74,24 @@ but draws through layer A.
    local harness (`ft8map_demo.c`: feeds decodes, MFK, press, view, ESC,
    focus back; ASan clean); pictures framed with the radio's top bar and
    buttons in `~/Pictures/x6100-shared-map-mockups/ft8-test-2026-11-05/`
-   (`research/shared-map/compose_ft8.py`). **Test image:** run 42148181178
-   (test-image.yml, gui_ref=shared-map). **Next:** radio test.
-4. [ ] WSPR: stations decoded here with their dB, now (Kris's app: he may hook
-   it in himself). "Heard you" lines from WSPRnet spots over WiFi when that
-   exists (ours or Kris's: asked).
+   (`research/shared-map/compose_ft8.py`). Radio test with the step-4 image.
+4. [x] WSPR (58908ba, 2026-11-05): `src/wspr_map.c` (spots of the last hour,
+   green with their SNR tag, fading; page 2 button 5 "Show: Map / List", hold
+   = view; the MFK picks one; its power in the details). **Heard you ready:**
+   `wspr_map_heard_you(call, grid, snr)` gives a blue path, blue square where
+   only they heard you, "heard you (WSPRnet)" in the legend: the WSPRnet fetch
+   (ours or Kris's: asked) only has to call it. **Farthest DX (VE7NHW):** a
+   second status line, FT8 "DX <call> <km>", WSPR the farthest heard here and
+   "DX heard you: ..." under it (`map_scene_km()`). Same commit: the window
+   handling (show over the window, MFK to the map and back, ESC/VOL, 1 s
+   redraw, Auto/Close-in/World) moved into map_scene.c for every app; the
+   selected station's details on the bottom line (a long label beside it
+   covered its neighbours), only its call beside it. JS8 still
+   pixel-identical. PC tests `ONLY_FT8MAP=1`, `ONLY_WSPRMAP=1` (ASan clean);
+   pictures `~/Pictures/x6100-shared-map-mockups/maps-test-2026-11-05/`
+   (`research/shared-map/compose_maps.py`). **Test image: run 42150892758**
+   (FT8 + WSPR; the earlier 42148181178 cancelled). **Next:** VE7NHW's radio
+   test of both.
 5. [ ] OpenX6100 PRs: the widget (with JS8 moved onto it) first, then one per
    app. A friendly note on #287 (Yuli Dai's FT8 world map, open since 10-11).
 

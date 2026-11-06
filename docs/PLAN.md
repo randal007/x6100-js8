@@ -55,7 +55,9 @@ by gdyuldin or myshak1, never merged by us alone.
   `~/Work/x6100/wt-shared-map`). Mock-ups round 2 sent (FT8 full map / FT8 split / WSPR full map); note to Kris
   drafted (we take point 11; WSPR hook-in his if he wants). **Step 1 done 11-05** (b3e3d74: map_widget.c, JS8's
   map pixel-identical in the harness). **Steps 2-3 done 11-05** (0e1b292: map_scene.c,
-  FT8 Show Map; PC test pictures). Test image run 42148181178. **Next:** VE7NHW tries FT8's map on the radio; step 4 WSPR. **Decided (VE7NHW 11-05):** FT8 full map (mock-up 1); WSPR map
+  FT8 Show Map; PC test pictures). **Step 4 done 11-05** (58908ba: WSPR map, heard-you
+  ready for WSPRnet, farthest DX on both). Test image **run 42150892758**. **Next:** VE7NHW tries FT8's and WSPR's maps
+  on the radio; then the PRs (step 5). **Decided (VE7NHW 11-05):** FT8 full map (mock-up 1); WSPR map
   now without WSPRnet, room for "heard you" later; e-mail asks Kris whether we do the WSPRnet part too.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
   kit (`tests/wefax/ml` in Hany's `1ko125`, LGPL, without the .exe), the model's licence and training charts, Hany's
