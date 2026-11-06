@@ -35,7 +35,7 @@ by gdyuldin or myshak1, never merged by us alone.
    7.070), RTTY serials + AFC, Olivia 8/500, WSPR type 2/3 transmit.
 4. **Waiting on others:** Kris (e-mail 11-06): **WSPRnet is ours** (upload spots + fetch "heard you"), shared map + FT8/FT4/FT2 go-ahead; he's on review asks #1/#2/#6 for PSK31/Olivia/RTTY in one change (branch `digi-qso-log`: Log QSO as JTTY, typing joins the TX with idle fill, <NAME> <QTH> <MYNAME> <MYQTH> <MYLOC>, RX/TX text to a file per mode, RST received fixed 597→579), testing with QSOs before his PR, then the rest of the list; Hany: #329 review points, NavTex/DSC; EiBi's B26 schedule.
 5. **VE7NHW, any time:** QSOs on the new modes; bench power test (PSK31/Olivia vs steady modes at ~0.3 W into the amp); delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`, `wspr-v13`/`psk31-v13`/`olivia-v13`/`rtty-v13`/`ft2-v13`/`app-pages-v13`/`kris-apps-v13` (merged into Kris's branches); ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md; ask Jake 2E0JFS for his repo link.
-6. **XARA (11-06):** draft PRs **#345** (app, branch `xara-app`) + **AetherX6100Buildroot#10** (xara package, branch `xara`), every test setting kept. Images building: **VE7NHW's with full speed: private x6100-xara run 42273143987** (never share); free-speed one for the PRs: x6100-js8 run 42273148030. VE7NHW asked Kris/Georgy on #10 to turn full speed on by default. **Next:** check both runs; flash when VE7NHW says; reviewers to add (VE7NHW, `!`).
+6. **XARA (11-06):** draft PRs **#345** (app, branch `xara-app`) + **AetherX6100Buildroot#10** (xara package, branch `xara`), every test setting kept. Images building: **VE7NHW's with full speed: private x6100-xara run 42273143987** (never share); free-speed one for the PRs: x6100-js8 run 42273148030. VE7NHW asked Kris/Georgy on #10 to turn full speed on by default. **Next:** check both runs; flash when VE7NHW says. Reviewers gdyuldin + myshak1 added (VE7NHW, 11-06).
 
 - [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): groundwork as two draft PRs, a test build (not a release).**
   VE7NHW: "bring this into OpenX6100 now", experimental, the build that worked best (build 22, xara 919f5dd), next free
@@ -48,7 +48,7 @@ by gdyuldin or myshak1, never merged by us alone.
   everyone). Without it xara refuses Full speed. PC check: vendor + offline build OK; ARM syntax check OK.
   **Test images:** VE7NHW's, with registered speeds: private **randal007/x6100-xara run 42273143987** (test-image.yml
   got an `xara_registered` switch, 4a83d407; never share it; may take ~4 h without ccache); public free-speed one for
-  the PRs: **x6100-js8 run 42273148030**. Reviewers not added (refused to Claude): VE7NHW adds gdyuldin + myshak1.
+  the PRs: **x6100-js8 run 42273148030**. Reviewers gdyuldin + myshak1 added by VE7NHW (`!`).
   **Full speed by default:** VE7NHW wants it on in X6100_defconfig; asked Kris + Georgy on Buildroot #10 (his comment
   2026-11-06, issuecomment-6692795901). If both agree: add `BR2_PACKAGE_XARA_REGISTERED=y` there.
   **Next:** check both runs; VE7NHW flashes the private one when he says; then the PR to-dos (ports locked to the
