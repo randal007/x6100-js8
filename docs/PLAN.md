@@ -56,7 +56,7 @@ by gdyuldin or myshak1, never merged by us alone.
   **sent 11-05** (we take point 11; WSPR hook-in his if he wants; asked: WSPRnet ours or his?). **Step 1 done 11-05** (b3e3d74: map_widget.c, JS8's
   map pixel-identical in the harness). **Steps 2-3 done 11-05** (0e1b292: map_scene.c,
   FT8 Show Map; PC test pictures). **Step 4 done 11-05** (58908ba: WSPR map, heard-you
-  ready for WSPRnet, farthest DX on both). Test image run 42150892758 failed (U-Boot download), **rebuilt as run 42169441684**. **Kris 11-06: WSPRnet ours; his WSPR map asks (dB tag, heard here / heard you lines, empty map without errors) are already in 58908ba.** **Next:** WSPRnet upload + "heard you" fetch; VE7NHW tries FT8's and WSPR's maps
+  ready for WSPRnet, farthest DX on both). Test image run 42150892758 failed (U-Boot download), **rebuilt as run 42169441684**. **Kris 11-06: WSPRnet ours; his WSPR map asks (dB tag, heard here / heard you lines, empty map without errors) are already in 58908ba.** **WSPRnet done 11-06 (65058a7e):** spots to /mnt/wspr_spots.txt always; page 3 "WSPRnet" switch (saved, off by default) posts spots/wsprstat to wsprnet.org like WSJT-X and fetches "heard you" from wspr.live every 5 min (plain HTTP, own thread); PC-tested with a stand-in server + real wspr.live read. Test image run 42231258735. **Next:** VE7NHW tries FT8's and WSPR's maps + WSPRnet
   on the radio; then the PRs (step 5). **Decided (VE7NHW 11-05):** FT8 full map (mock-up 1); WSPR map
   now without WSPRnet, room for "heard you" later; e-mail asks Kris whether we do the WSPRnet part too.
 - [ ] **3D spectrum with a 2D/3D switch (VE7NHW, 2026-11-05), like AetherSDR's.** AetherSDR's "3D" is the spectrum
