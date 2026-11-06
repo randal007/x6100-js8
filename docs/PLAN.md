@@ -81,7 +81,11 @@ by gdyuldin or myshak1, never merged by us alone.
   edge black until it fills. Wanted: no black. Each waterfall row already keeps its base_freq/width (waterfall.c);
   at zoom 1 the screen shows the radio's whole 100 kHz, so the fill would come from remembering rows already seen
   (a wider band memory), at zoom > 1 maybe also from the unseen part of the received span: check what dsp hands over.
-  3D spectrum (spectrum-3d): **VE7NHW loves it** (11-06, on the radio).
+  3D spectrum (spectrum-3d): **VE7NHW loves it** (11-06, on the radio). Colour levels smoothed over 4 s (lightning
+  crash recoloured the stack, a9b7321b). **Code review 11-06** (standard /code-review, not ultra: free ultra used up;
+  findings in research/reviews/): 3D 1-3,6,8,9 fixed (bf28f791); maps 1-9 + 2 extras fixed (6907627c). Open for
+  VE7NHW: 3D size range (70 % leaves the CW/RTTY panel 33 px, 30 % = 135 px mostly under the top block), two height
+  sliders; map_view.c/wspr_map.c shared scaffolding into map_scene (cleanup). Images: 3D 42236779844, maps 42236796961.
 - [ ] **Radio looks / themes, Thetis-style (VE7NHW, 2026-11-05): idea, after the 3D spectrum.** VE7NHW likes
   Thetis skins (many made by the community). Not started; shared GUI (`src/styles.c` skins), so OpenX6100.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
