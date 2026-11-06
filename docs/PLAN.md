@@ -33,6 +33,10 @@ by gdyuldin or myshak1, never merged by us alone.
    (takes our PSK31 echo fix, FIGS fix into his streaming RTTY TX, Auto DX with his name/QTH pick-up). **1.3.0:** map +
    WSPRnet + 3D (#344) once both have tested; XARA (#345) after 1.3.0. His next: PSK31/Olivia dial by region (7.040 /
    7.070), RTTY serials + AFC, Olivia 8/500, WSPR type 2/3 transmit.
+3d. **Public test package BUILT 11-06: run 42276379917 green** (tests 42276383681 green), artifact
+   sdcard.test-upstream.img.zip, expires 2026-12-06; link https://github.com/randal007/x6100-js8/actions/runs/42276379917
+   (VE7NHW sends it). Private NR one (run 42277592227) still building. #343 approved by Kris 11-06, his note for later:
+   a multi-line macro's echo loses its colour after the line break (panel_tx_text_cb splits on spaces only).
 3c. **Signal reports (11-06):** #346 closed (PC test: wrong). Proper fix WIP, branch `ft-snr-baseline` (OpenX6100,
    worktree wt-ft-snr, not a PR): noise from the band's background; vs WSJT-X jt9: FT4/FT2 exact, FT8 exact at -18
    but 2-4 dB low when strong. **Next:** check the uint8 ceiling (dbg build in scratchpad snr/, needs `-I base/ft8`),
