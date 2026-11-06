@@ -53,8 +53,8 @@ by gdyuldin or myshak1, never merged by us alone.
 - [ ] **Shared map for every app (VE7NHW, 2026-11-05): FT8/FT4/FT2 and WSPR first.** Plan, design and steps:
   [SHARED_MAP_PLAN.md](SHARED_MAP_PLAN.md). Branch `shared-map` (from OpenX6100 main 2dd8d1e, worktree
   `~/Work/x6100/wt-shared-map`). Mock-ups round 2 sent (FT8 full map / FT8 split / WSPR full map); note to Kris
-  drafted (we take point 11; WSPR hook-in his if he wants). **Next:** step 1, the drawing toolkit out of
-  dialog_js8.c, JS8's map pixel-identical in the harness. **Decided (VE7NHW 11-05):** FT8 full map (mock-up 1); WSPR map
+  drafted (we take point 11; WSPR hook-in his if he wants). **Step 1 done 11-05** (b3e3d74: map_widget.c, JS8's
+  map pixel-identical in the harness). **Next:** step 2, the simple station-list scene, then FT8. **Decided (VE7NHW 11-05):** FT8 full map (mock-up 1); WSPR map
   now without WSPRnet, room for "heard you" later; e-mail asks Kris whether we do the WSPRnet part too.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
   kit (`tests/wefax/ml` in Hany's `1ko125`, LGPL, without the .exe), the model's licence and training charts, Hany's

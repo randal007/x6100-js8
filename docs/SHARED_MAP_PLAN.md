@@ -50,10 +50,16 @@ but draws through layer A.
 
 ## Steps
 
-1. [ ] Layer A out of `dialog_js8.c` into `src/map_widget.c/.h`; JS8 drawn
-   through it. **Check:** the JS8 UI harness (our repo,
-   `tools/js8_ui_harness`) on the branch, its map scenarios (MAP, MAPSTACK,
-   STQRZ, HISTORY's map) **pixel-identical** before and after.
+1. [x] Layer A out of `dialog_js8.c` into `src/map_widget.c/.h`; JS8 drawn
+   through it (**b3e3d74, 2026-11-05**, branch pushed to OpenX6100, no PR yet).
+   **Checked:** the JS8 UI harness on the branch (a local copy in
+   `wt-shared-map/tools/js8_ui_harness`, git-excluded; `compare-map.sh` runs
+   MAP, MAPSTACK, STQRZ with `build-new` against `base-*`): every map
+   screenshot pixel-identical apart from the clock and the rings' blink phase
+   (the list views differ by the test audio's random noise in the waterfall).
+   The harness runs can't go in parallel (one settings DB: "database is
+   locked"). **When the fork takes this:** add `${X}/src/map_widget.c` to
+   `tools/js8_ui_harness/CMakeLists.txt` (done in the local copy).
 2. [ ] Layer B (scene) + PC test pictures.
 3. [ ] FT8/FT4/FT2: the map (layout chosen by VE7NHW, mock-ups below), MFK
    picks a station, press calls it; test image, radio test.
