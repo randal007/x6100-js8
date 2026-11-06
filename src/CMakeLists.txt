@@ -32,7 +32,7 @@ target_sources(${PROJECT_NAME} PUBLIC
     dialog.c dialog_swrscan.c
     dxcc.c
     dialog_ft8.c dialog_freq.c dialog_gps.c dialog_msg_cw.c
-    ft8_ui/table_view.c
+    ft8_ui/table_view.c ft8_ui/map_view.c
     ft8_udp.c
     dialog_msg_voice.c dialog_recorder.c dialog_qth.c dialog_callsign.c digi_menu.c
     textarea_window.c cw_encoder.c buttons.cpp vol.cpp recorder.c
@@ -42,13 +42,14 @@ target_sources(${PROJECT_NAME} PUBLIC
     bt_audio.c
     knobs.cpp lock_manager.c indicators.cpp freq_info.cpp
     dialog_bt.c bt_ctl.c bt_dev.c bt_spp.c
+    map_widget.c map_scene.c
     # JTTY
     dialog_jtty.c jtty/jtty_proto.c jtty/jtty_fec.c jtty/jtty_source.c
     jtty/jtty_demod.c jtty/jtty_rx.c jtty/jtty_mod.c jtty/jtty_pack.c jtty_tx.c jtty_log.c
     # The apps on their way in: each one's sources below its name
     # WSPR
     dialog_wspr.c wspr_app.c wspr_worker.c wspr_demod.c wspr_fano.c
-    wspr_encode.c wspr_mod.c wspr_spec.c wsprd/wsprd_utils.c wsprd/nhash.c
+    wspr_encode.c wspr_mod.c wspr_spec.c wspr_map.c wspr_net.c wsprd/wsprd_utils.c wsprd/nhash.c
     # JS8
     dialog_js8.c js8_wf.c js8_clock.c
     # PSK31
