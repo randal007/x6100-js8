@@ -17,7 +17,7 @@ by gdyuldin or myshak1, never merged by us alone.
 **In short** (updated at each offload; details in the items below):
 1. **Card:** unchanged, the six-app image (run 41507827952, commit 46b1d0a), flashed 2026-11-03 (DATA backup **sd-backup-2026-11-03-122341**). Opened/closed every app + CQs on each, fine; no QSOs in the new modes yet.
 2. **OpenX6100:** **Kris's six apps (WSPR, PSK31, Olivia, RTTY, FT2, JTTY) merged by VE7NHW 2026-11-05** (main 2dd8d1e, tests green); **no v1.3.0 tag** until Kris's review features are in (his e-mail 11-05). #329 WeFax Post Proc.: Hany answered, kit + his e-mail in, our review posted (ESC/F5 in full screen, `_pp.png` without .tmp); waiting on Hany, then Kris/Georgy approve.
-3. **Shared map (new, 11-05):** branch `shared-map` (OpenX6100, 3 commits, no PR yet): JS8's map as a shared widget (pixel-identical), FT8/FT4/FT2 and WSPR Show Map with the farthest DX. **Test image run 42150892758 was still building at the offload**: check it (`gh run view 42150892758 -R randal007/x6100-js8`), then VE7NHW flashes when he says and tests both maps. Plan: [SHARED_MAP_PLAN.md](SHARED_MAP_PLAN.md).
+3. **Shared map (new, 11-05):** branch `shared-map` (OpenX6100, 3 commits, no PR yet): JS8's map as a shared widget (pixel-identical), FT8/FT4/FT2 and WSPR Show Map with the farthest DX. Test image run 42150892758 **failed** (ftp.denx.de down, U-Boot download; CI fixed ff28635, fallback to OpenWrt's mirror); **rebuilt as run 42169441684**: check it, then VE7NHW flashes when he says and tests both maps. Plan: [SHARED_MAP_PLAN.md](SHARED_MAP_PLAN.md).
 4. **Waiting on others:** Kris: review features in their own PRs, his answer on WSPRnet (ours or his) and the shared map (e-mail sent 11-05); Hany: #329 review points, NavTex/DSC; EiBi's B26 schedule.
 5. **VE7NHW, any time:** QSOs on the new modes; bench power test (PSK31/Olivia vs steady modes at ~0.3 W into the amp); delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`, `wspr-v13`/`psk31-v13`/`olivia-v13`/`rtty-v13`/`ft2-v13`/`app-pages-v13`/`kris-apps-v13` (merged into Kris's branches); ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md; ask Jake 2E0JFS for his repo link.
 
@@ -56,7 +56,7 @@ by gdyuldin or myshak1, never merged by us alone.
   **sent 11-05** (we take point 11; WSPR hook-in his if he wants; asked: WSPRnet ours or his?). **Step 1 done 11-05** (b3e3d74: map_widget.c, JS8's
   map pixel-identical in the harness). **Steps 2-3 done 11-05** (0e1b292: map_scene.c,
   FT8 Show Map; PC test pictures). **Step 4 done 11-05** (58908ba: WSPR map, heard-you
-  ready for WSPRnet, farthest DX on both). Test image **run 42150892758**. **Next:** VE7NHW tries FT8's and WSPR's maps
+  ready for WSPRnet, farthest DX on both). Test image run 42150892758 failed (U-Boot download), **rebuilt as run 42169441684**. **Next:** VE7NHW tries FT8's and WSPR's maps
   on the radio; then the PRs (step 5). **Decided (VE7NHW 11-05):** FT8 full map (mock-up 1); WSPR map
   now without WSPRnet, room for "heard you" later; e-mail asks Kris whether we do the WSPRnet part too.
 - [ ] **3D spectrum with a 2D/3D switch (VE7NHW, 2026-11-05), like AetherSDR's.** AetherSDR's "3D" is the spectrum
@@ -71,7 +71,12 @@ by gdyuldin or myshak1, never merged by us alone.
   spectrum (260). **Picked (VE7NHW 11-05): look 3** (coloured by strength), plus a **"3D size" %** setting (how much
   of the screen under the top bar is 3D vs waterfall; mock-ups 5 at 35/50/70 %; 35 % = today's 160 px). Proposed: its
   own setting used only in 3D (2D keeps Spectrum height), may go past today's 260 px limit; switch = a display
-  setting + tapping the 2D/3D label. **Next:** VE7NHW confirms the range and the switch; then build it.
+  setting + tapping the 2D/3D label. **Confirmed by VE7NHW 11-05. Built 11-05:** branch `spectrum-3d` (OpenX6100 and
+  our fork, d3b8ef1, worktree `~/Work/x6100/wt-spectrum-3d`): Settings > UI "Spectrum 3D" (off by default) + "3D size"
+  30-70 % (default 50), 2D/3D label on the spectrum (tap switches), a trace every 100 ms, smooth drift, history follows
+  tuning; ARM compile check OK; PC test of the renderer (`research/spectrum-3d/pctest`, real code cut from spectrum.c)
+  matches mock-up 3, ~0.5 ms a frame on the PC. Test image **run 42169391112**. **Next:** VE7NHW flashes and tries it;
+  measure CPU on the radio (x6100-cpulog, 2D vs 3D); then the PR.
 - [ ] **Radio looks / themes, Thetis-style (VE7NHW, 2026-11-05): idea, after the 3D spectrum.** VE7NHW likes
   Thetis skins (many made by the community). Not started; shared GUI (`src/styles.c` skins), so OpenX6100.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
