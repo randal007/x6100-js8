@@ -33,6 +33,15 @@ by gdyuldin or myshak1, never merged by us alone.
    (takes our PSK31 echo fix, FIGS fix into his streaming RTTY TX, Auto DX with his name/QTH pick-up). **1.3.0:** map +
    WSPRnet + 3D (#344) once both have tested; XARA (#345) after 1.3.0. His next: PSK31/Olivia dial by region (7.040 /
    7.070), RTTY serials + AFC, Olivia 8/500, WSPR type 2/3 transmit.
+3e. **11-06 evening (Kris merged #335-#343):** done after: #344 stock-base fix (history dropped with base_freq 0:
+   4b2c6259) + **band bar** (16255634: band plan by ITU region in a bar under the 3D view, Auto from QTH via #348's
+   itu_region.c, Settings > UI > Band plan; colours said once on the message line; corner labels gone in 3D; PC-rendered);
+   **#351** FT8/FT4/FT2 signal reports vs the band background (equal to jt9 for FT8, FT4/FT2 within 1 dB); XARA
+   **--local-only** (randal007/xara 2a33e96, Buildroot#10 35b594b, #345 5ea13d46); **#349** Hany's #329 points 1+2
+   (Hany OK'd); **#352** multi-line echo colour (Kris's #343 note); private release **nr2-test4** (image + r13nr2j).
+   Test package 2: public `test-package-2` run 42314478755, private `test-package-nr-2` run 42314517564. Hany's
+   NAVTEX **#350** (number 110) vs XARA (119): only both buttons after JTTY; merge main into xara-app after #350
+   (NavTex first). **Next:** review #350; links for VE7NHW when the runs are green.
 3d. **Public test package BUILT 11-06: run 42276379917 green** (tests 42276383681 green), artifact
    sdcard.test-upstream.img.zip, expires 2026-12-06; link https://github.com/randal007/x6100-js8/actions/runs/42276379917
    (VE7NHW sends it). Private NR one (run 42277592227) still building. #343 approved by Kris 11-06, his note for later:
