@@ -59,6 +59,18 @@ by gdyuldin or myshak1, never merged by us alone.
   ready for WSPRnet, farthest DX on both). Test image **run 42150892758**. **Next:** VE7NHW tries FT8's and WSPR's maps
   on the radio; then the PRs (step 5). **Decided (VE7NHW 11-05):** FT8 full map (mock-up 1); WSPR map
   now without WSPRnet, room for "heard you" later; e-mail asks Kris whether we do the WSPRnet part too.
+- [ ] **3D spectrum with a 2D/3D switch (VE7NHW, 2026-11-05), like AetherSDR's.** AetherSDR's "3D" is the spectrum
+  with its last few seconds stacked as lines going back into the distance (each newer line hides the ones behind),
+  waterfall unchanged underneath. Shared GUI (`src/spectrum.c`), so OpenX6100 branch `spectrum-3d` (not created yet),
+  test images from our *Build image*, a PR once VE7NHW likes it on the radio. **Drawn by the main processor** (as the
+  spectrum and waterfall now, straight into the screen buffer), not the Mali-400 graphics chip: its kernel driver
+  (lima) is on, but the image has no Mesa, nothing uses it, LVGL 8.3 can't draw with it, and it can't help with the
+  real load (DSP, decoders). Revisit only if the 3D view measures too heavy (x6100-cpulog). **Mock-ups 2026-11-05**
+  (`~/Pictures/x6100-spectrum-3d-mockups`, script `~/Work/x6100/research/spectrum-3d/mock.py`, simulated band, real
+  top bar and sizes): 1 today's 2D, 2 gold lines (24), 3 coloured by strength (40), 4 coloured at the tallest
+  spectrum (260). **Next:** VE7NHW picks a look and where the switch goes; then build it.
+- [ ] **Radio looks / themes, Thetis-style (VE7NHW, 2026-11-05): idea, after the 3D spectrum.** VE7NHW likes
+  Thetis skins (many made by the community). Not started; shared GUI (`src/styles.c` skins), so OpenX6100.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
   kit (`tests/wefax/ml` in Hany's `1ko125`, LGPL, without the .exe), the model's licence and training charts, Hany's
   empty author e-mail ("Hany El Imam <>"), Post Proc. time on the radio. NOTICE lines removed (13271c3, worktree
