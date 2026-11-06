@@ -8,14 +8,17 @@ that help everyone upstream as PRs, so they stop being ours to carry.
 
 ## Kris's apps: review fixes (2026-11-06)
 
-From code reviews of the six merged apps (findings: ~/Work/x6100/research/reviews/kris-apps-review.md). All
+From code reviews of the six merged apps (findings: ~/Work/x6100/research/reviews/kris-apps-review.md). Kris (e-mail 11-06): merges them in the order #338, #343, #342, #339, #340, #341, #337, #336,
+the FT2 slot fix (#335) at once, then rebases his digi-qso-log on main; map + WSPRnet + 3D (#344) for 1.3.0 after
+both test them; XARA (#345) after 1.3.0. All
 open, waiting on Kris's review and a radio test; they merge together cleanly (test branch `kris-fixes-test`
 in our repo).
 
 | PR | What | Branch |
 |---|---|---|
-| OpenX6100/x6100_gui#335 | FT2: TX silent in 3 of 4 slots, time sync, SNR, UDP slot stamps | ft2-fixes |
-| #336 | WSPR: band change while keyed, TX off, WSJT-X wsprd unpack (type 2/3), decode cap | wspr-fixes |
+| OpenX6100/x6100_gui#335 | FT2: TX silent in 3 of 4 slots, time sync, UDP slot stamps (SNR split out, Kris 11-06) | ft2-fixes |
+| #346 | FT4/FT2 signal reports on FT8's 2500 Hz scale: **wait for VE7NHW's bench check vs WSJT-X** | ft4-ft2-snr |
+| #336 | WSPR: band change while keyed, TX off, wsprd unpack from WSJT-X 2.7.0 (Kris asked for the original, d4c92969), decode cap | wspr-fixes |
 | #337 | JTTY: not-sent rows, closed messages, no-player spin, logging, serial, knob | jtty-fixes |
 | #338 | ADIF: JTTY mode both ways (shared) | adif-jtty-mode |
 | #339 | PSK31: own echo as RX, Stop mid-character, unkey on close | psk31-fixes |
