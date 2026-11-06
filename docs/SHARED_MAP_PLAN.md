@@ -3,8 +3,8 @@
 VE7NHW asked for a map in FT8/FT4/FT2 and WSPR, built so that every app
 uses the same map instead of each getting its own. Point 11 of the review
 report to Kris (11-03); decided then: the JS8 map made shared, for WSPR and
-FT8/FT4/FT2 (not #287's map, not JTTY: no grids in its exchanges). Kris told
-we take it (note drafted 11-05).
+FT8/FT4/FT2 (not #287's map, not JTTY: no grids in its exchanges). **E-mail to
+Kris sent by VE7NHW 2026-11-05:** we take point 11; asked whether we do WSPRnet too.
 
 Branch **`shared-map`** (from OpenX6100 main 2dd8d1e, worktree
 `~/Work/x6100/wt-shared-map`), going to OpenX6100 as its own PRs.

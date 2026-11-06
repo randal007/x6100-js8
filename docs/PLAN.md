@@ -52,8 +52,8 @@ by gdyuldin or myshak1, never merged by us alone.
   exchanges). **Sent to Kris by e-mail (PDF) 2026-11-05**, the Olivia LOCK % button asked there. **Next:** Kris's answer.
 - [ ] **Shared map for every app (VE7NHW, 2026-11-05): FT8/FT4/FT2 and WSPR first.** Plan, design and steps:
   [SHARED_MAP_PLAN.md](SHARED_MAP_PLAN.md). Branch `shared-map` (from OpenX6100 main 2dd8d1e, worktree
-  `~/Work/x6100/wt-shared-map`). Mock-ups round 2 sent (FT8 full map / FT8 split / WSPR full map); note to Kris
-  drafted (we take point 11; WSPR hook-in his if he wants). **Step 1 done 11-05** (b3e3d74: map_widget.c, JS8's
+  `~/Work/x6100/wt-shared-map`). Mock-ups round 2 sent (FT8 full map / FT8 split / WSPR full map); e-mail to Kris
+  **sent 11-05** (we take point 11; WSPR hook-in his if he wants; asked: WSPRnet ours or his?). **Step 1 done 11-05** (b3e3d74: map_widget.c, JS8's
   map pixel-identical in the harness). **Steps 2-3 done 11-05** (0e1b292: map_scene.c,
   FT8 Show Map; PC test pictures). **Step 4 done 11-05** (58908ba: WSPR map, heard-you
   ready for WSPRnet, farthest DX on both). Test image **run 42150892758**. **Next:** VE7NHW tries FT8's and WSPR's maps
