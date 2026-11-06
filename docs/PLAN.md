@@ -68,7 +68,10 @@ by gdyuldin or myshak1, never merged by us alone.
   real load (DSP, decoders). Revisit only if the 3D view measures too heavy (x6100-cpulog). **Mock-ups 2026-11-05**
   (`~/Pictures/x6100-spectrum-3d-mockups`, script `~/Work/x6100/research/spectrum-3d/mock.py`, simulated band, real
   top bar and sizes): 1 today's 2D, 2 gold lines (24), 3 coloured by strength (40), 4 coloured at the tallest
-  spectrum (260). **Next:** VE7NHW picks a look and where the switch goes; then build it.
+  spectrum (260). **Picked (VE7NHW 11-05): look 3** (coloured by strength), plus a **"3D size" %** setting (how much
+  of the screen under the top bar is 3D vs waterfall; mock-ups 5 at 35/50/70 %; 35 % = today's 160 px). Proposed: its
+  own setting used only in 3D (2D keeps Spectrum height), may go past today's 260 px limit; switch = a display
+  setting + tapping the 2D/3D label. **Next:** VE7NHW confirms the range and the switch; then build it.
 - [ ] **Radio looks / themes, Thetis-style (VE7NHW, 2026-11-05): idea, after the 3D spectrum.** VE7NHW likes
   Thetis skins (many made by the community). Not started; shared GUI (`src/styles.c` skins), so OpenX6100.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
