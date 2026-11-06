@@ -34,6 +34,8 @@ by gdyuldin or myshak1, never merged by us alone.
   **Test images:** VE7NHW's, with registered speeds: private **randal007/x6100-xara run 42273143987** (test-image.yml
   got an `xara_registered` switch, 4a83d407; never share it; may take ~4 h without ccache); public free-speed one for
   the PRs: **x6100-js8 run 42273148030**. Reviewers not added (refused to Claude): VE7NHW adds gdyuldin + myshak1.
+  **Full speed by default:** VE7NHW wants it on in X6100_defconfig; asked Kris + Georgy on Buildroot #10 (his comment
+  2026-11-06, issuecomment-6692795901). If both agree: add `BR2_PACKAGE_XARA_REGISTERED=y` there.
   **Next:** check both runs; VE7NHW flashes the private one when he says; then the PR to-dos (ports locked to the
   phone, low-power TX level, libxara 0.1.4, manual, release decisions on Full speed/Record/test settings).
 - [ ] **Channel List still crashes on CLOSE with an empty list (VE7NHW, 2026-10-28, on c910ca5 which has #330).** Opening
