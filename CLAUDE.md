@@ -168,7 +168,9 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
   escape `\,`.
 - **UI harness:** see [tools/js8_ui_harness/README.md](tools/js8_ui_harness/README.md).
   `ONLY_<NAME>=1` runs one scenario; audio is fed in real time, so a full
-  run takes ~45 min even split across 4 build dirs. Full CI run:
+  run takes ~45 min even split across 4 build dirs.
+  Runs from one build dir share its `params.db`: start them one after
+  another (side by side they fail with "database is locked"). Full CI run:
   `gh workflow run tests.yml -R randal007/x6100-js8 --ref <branch> -f harness=true`.
 - **Check the app cases after any merge** that adds an app:
   `awk '/dialog_construct\(/{c=NR} /case ACTION_APP_/{ if (c && NR-c<4) print "FALLTHROUGH near line " NR; c=0 } /break;/{c=0}' src/main_screen.c`
