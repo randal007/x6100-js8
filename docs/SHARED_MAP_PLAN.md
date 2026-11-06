@@ -60,9 +60,22 @@ but draws through layer A.
    The harness runs can't go in parallel (one settings DB: "database is
    locked"). **When the fork takes this:** add `${X}/src/map_widget.c` to
    `tools/js8_ui_harness/CMakeLists.txt` (done in the local copy).
-2. [ ] Layer B (scene) + PC test pictures.
-3. [ ] FT8/FT4/FT2: the map (layout chosen by VE7NHW, mock-ups below), MFK
-   picks a station, press calls it; test image, radio test.
+2. [x] Layer B: `src/map_scene.c/.h` (0e1b292, 2026-11-05): the app's station
+   list (colour, CQ tag, call label, small tag, path from you), lines between
+   stations, the selected one with its details, count tags, status line, hint
+   line, legend; `map_scene_step()` orders stations west to east for the MFK.
+3. [x] FT8/FT4/FT2 (0e1b292): `src/ft8_ui/map_view.c` (stations of the last
+   15 min, green CQ / yellow calling you / grey worked / dim other, red path
+   for your QSO from TX and "Start QSO" rows, grey lines for others' QSOs,
+   fading), page 2 button 5 "Show: Map / List", hold = Auto/Close-in/World;
+   MFK turns pick, press calls via FT8's on_table_press. dialog_ft8.c: every
+   list message also to the map (add_msg_cb), map_view_destroy in destruct,
+   map_view_clear on band/mode change. **PC test:** `ONLY_FT8MAP=1` in the
+   local harness (`ft8map_demo.c`: feeds decodes, MFK, press, view, ESC,
+   focus back; ASan clean); pictures framed with the radio's top bar and
+   buttons in `~/Pictures/x6100-shared-map-mockups/ft8-test-2026-11-05/`
+   (`research/shared-map/compose_ft8.py`). **Test image:** run 42148181178
+   (test-image.yml, gui_ref=shared-map). **Next:** radio test.
 4. [ ] WSPR: stations decoded here with their dB, now (Kris's app: he may hook
    it in himself). "Heard you" lines from WSPRnet spots over WiFi when that
    exists (ours or Kris's: asked).
