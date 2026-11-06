@@ -1519,6 +1519,12 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
 - [ ] **3D spectrum** for the main screen (the last few seconds stacked
   into the distance, a 2D/3D switch): sent to OpenX6100 as
   [#344](https://github.com/OpenX6100/x6100_gui/pull/344), waiting for review.
+- [ ] **XARA, a VARA HF compatible modem app** (experimental): Winlink
+  with WoAD and APRS with APRSdroid from a phone over WiFi, using x0rro's
+  xara modem. Draft pull requests in OpenX6100
+  ([#345](https://github.com/OpenX6100/x6100_gui/pull/345) and
+  [AetherX6100Buildroot#10](https://github.com/OpenX6100/AetherX6100Buildroot/pull/10)),
+  test builds only for now.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests
