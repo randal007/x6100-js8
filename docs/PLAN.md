@@ -76,8 +76,7 @@ by gdyuldin or myshak1, never merged by us alone.
   the map, FT8 Show: CQ map-only messages, FT8 keyboard focus, stale spots, status2 rows), 450db525 (no TX across a
   band change); **merged with #336 (c062cdc3)**: WSPRnet drops its +1.5-tone and type-2 guards, uploads type 3 calls
   without brackets, skips "<...>"; the map skips "<...>". PC checks 11-06 (harness): JS8 map same as before the
-  widget; FT8/WSPR map checks pass, type 2/3 placed. In the test package. **Next:** VE7NHW tries FT8's and WSPR's maps
-  + WSPRnet on the radio (test package); then the PRs (widget first, then per app; needs #336 for WSPR)
+  widget; FT8/WSPR map checks pass, type 2/3 placed. In the test package. **Radio test 11-07 (VE7NHW, test package 4): maps look good, WSPRnet works**; the blue "heard you" stations had no dB tag -> 861490b0 (their tag = how they heard you; compile-checked). **Next:** the PRs (widget first, then per app; needs #336 for WSPR)
   on the radio; then the PRs (step 5). **Decided (VE7NHW 11-05):** FT8 full map (mock-up 1); WSPR map
   now without WSPRnet, room for "heard you" later; e-mail asks Kris whether we do the WSPRnet part too.
 - [ ] **3D spectrum with a 2D/3D switch (VE7NHW, 2026-11-05), like AetherSDR's.** AetherSDR's "3D" is the spectrum
