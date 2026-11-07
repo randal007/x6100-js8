@@ -48,7 +48,7 @@ by gdyuldin or myshak1, never merged by us alone.
    read by hand, no findings. **XARA renumbered 120** (VE7NHW: DSC = 119, Hany's, apps in order); **#345 +
    Buildroot#10 out of draft** (VE7NHW 11-06). Test package 2 runs predate these fixes. Region borders for Kris
    (#348's itu_region.c): Iceland, Azores, Cape Verde come out Region 2. **Next:** review #350; links for VE7NHW when
-   the runs are green; a test package 3 with the fixes if VE7NHW wants.
+   the runs are green; a test package 3 with the fixes if VE7NHW wants. **DSC (119):** Hany is sending his PR; VE7NHW waits for more tokens before we start on it.
 3d. **Public test package BUILT 11-06: run 42276379917 green** (tests 42276383681 green), artifact
    sdcard.test-upstream.img.zip, expires 2026-12-06; link https://github.com/randal007/x6100-js8/actions/runs/42276379917
    (VE7NHW sends it). Private NR one (run 42277592227) still building. #343 approved by Kris 11-06, his note for later:
