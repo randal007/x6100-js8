@@ -15,55 +15,13 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** the 3D spectrum test image (run 42236779844, `spectrum-3d` bf28f79 = OpenX6100 main 2dd8d1e + 3D), flashed 2026-11-06 (DATA backup **sd-backup-2026-11-06-091854**). VE7NHW loves the 3D view.
-2a. **3D spectrum: PR #344 opened 11-06** (reviewers Georgy + Kris asked; 3D size now 35-55 %, both height sliders kept). **Next session (VE7NHW 11-06):** measure CPU on the radio, 2D vs 3D (x6100-cpulog).
-2. **OpenX6100:** **Kris's six apps (WSPR, PSK31, Olivia, RTTY, FT2, JTTY) merged by VE7NHW 2026-11-05** (main 2dd8d1e, tests green); **no v1.3.0 tag** until Kris's review features are in (his e-mail 11-05). #329 WeFax Post Proc.: Hany answered, kit + his e-mail in, our review posted (ESC/F5 in full screen, `_pp.png` without .tmp); waiting on Hany, then Kris/Georgy approve.
-3. **Test package (11-06, VE7NHW: "everything in one test build", link for Kris/Georgy in the e-mail he sent; the
-   link follows when built).** Public: branch `test-package` (randal007/x6100-js8) = OpenX6100 main + the nine fix PRs
-   #335-#343 + `shared-map` (maps + WSPRnet, merged with #336) + 3D (#344, 7d8b20bd) + XARA (#345), image **run
-   42276379917** with `buildroot_ref=xara` (Buildroot#10), tests run 42276383681. Private (Kris/Georgy/Hany only): branch
-   `test-package-nr` in randal007/x6100-nr2 = the same + the NR selector, image **run 42277592227** (2-core runners,
-   slow); then a private prerelease with the image + base r13nr2j (release notes must cite Warren's permission and
-   credit WDSP NR2) and a short follow-up e-mail with both links. **Next:** when each run is green, give VE7NHW the
-   link/e-mail; `gh run view <id> -R <repo>`. Maps checked on the PC 11-06: JS8 map old vs new same (only clock,
-   blink phase, live decode SNR differ), FT8/WSPR map checks all pass (harness in wt-shared-map/tools, git-excluded).
-3b. **Kris's answer (e-mail 11-06):** findings real; merges our fix PRs in the order #338, #343, #342, #339, #340,
-   #341, #337, #336, the FT2 slot fix at once; asked (done 11-06): #335 split (signal reports -> **#346**, waits for
-   VE7NHW's bench check FT2/FT4 vs WSJT-X) and #336's wsprd from WSJT-X 2.7.0 itself. Then he rebases digi-qso-log
-   (takes our PSK31 echo fix, FIGS fix into his streaming RTTY TX, Auto DX with his name/QTH pick-up). **1.3.0:** map +
-   WSPRnet + 3D (#344) once both have tested; XARA (#345) after 1.3.0. His next: PSK31/Olivia dial by region (7.040 /
-   7.070), RTTY serials + AFC, Olivia 8/500, WSPR type 2/3 transmit.
-3e. **11-06 evening (Kris merged #335-#343):** done after: #344 stock-base fix (history dropped with base_freq 0:
-   4b2c6259) + **band bar** (16255634: band plan by ITU region in a bar under the 3D view, Auto from QTH via #348's
-   itu_region.c, Settings > UI > Band plan; colours said once on the message line; corner labels gone in 3D; PC-rendered);
-   **#351** FT8/FT4/FT2 signal reports vs the band background (equal to jt9 for FT8, FT4/FT2 within 1 dB); XARA
-   **--local-only** (randal007/xara 2a33e96, Buildroot#10 35b594b, #345 5ea13d46); **#349** Hany's #329 points 1+2
-   (Hany OK'd); **#352** multi-line echo colour (Kris's #343 note); private release **nr2-test4** (image + r13nr2j).
-   Test package 2: public `test-package-2` run 42314478755, private `test-package-nr-2` run 42314517564. Hany's
-   NAVTEX **#350** (number 110) vs XARA: only both buttons after JTTY; merge main into xara-app after #350
-   (NavTex first). **Code reviews of the day (11-06 late), all fixed and pushed:** #344 d25cd02e, #349 dd7d740b,
-   #351 221e7a71, #352 969ef705, **#345 99e07c89** (band keys refused while keyed/linked, per-band mode + mem_load on
-   close as JS8, old peer cleared on exit, status race, BT KISS at BT_SECURITY_MEDIUM (needs an APRSdroid-over-BT
-   test), NR/NB re-check, SWR guard, recording stops at 100 MB free, mixer not reopened per key); xara --local-only
-   read by hand, no findings. **XARA renumbered 120** (VE7NHW: DSC = 119, Hany's, apps in order); **#345 +
-   Buildroot#10 out of draft** (VE7NHW 11-06). Test package 2 runs predate these fixes. Region borders for Kris
-   (#348's itu_region.c): Iceland, Azores, Cape Verde come out Region 2. **Next:** review #350; links for VE7NHW when
-   the runs are green; a test package 3 with the fixes if VE7NHW wants. **DSC = #353** (Hany, 119): reviewed, comment posted by VE7NHW (issuecomment-6702493233: UNKNOWN FORMAT on a late-phased call, wrong channel stamp, Tune ignores freq lock, details index). **XARA on its own APP page 6** (c9778d65, VE7NHW 11-06): NavTex + DSC fill page 5; NavTex+DSC+XARA test-merged, builds (the later one keeps both lines after JTTY). Card: test package 3 NR build b807534, backup sd-backup-2026-11-06-214744. **#347 reviewed** (Kris), comment posted by VE7NHW (issuecomment-6702647797: RST row logs the QSO, RTTY keyed after Stop while the next app opens, BT SPP dropped on close...). **Buildroot#10 reviewed**, fixes 051ab64 (Rust target/CPU from Buildroot, cross env, CARGO_TARGET_DIR, config merge, licence note, ~120 MB Rust download); check build run 42341267148; xara.hash still to add (from a build). **#344 4d3b9f1c** (VE7NHW): segment tag ("40m  CW", fades after 2 s) at the 3D view's top left, band_info banner off in 3D, 2D/3D label removed; compile-checked only. **#348 reviewed**, comment posted by VE7NHW (issuecomment-6700528697: region borders, own PR for itu_region.c; take his fixed file into #344). **#350 reviewed:** 10 findings (Delete hits the wrong bulletin, live text stops following, empty bulletin won't load...), comment for Hany not written yet; his .tmp saves (#350 16627169, #353 b40253a0) checked OK. **Test package 3 built (11-06):** public run 42319770123 green (tests 42319773048 green, artifact expires 12-07); the private one too. #350 review posted by VE7NHW (issuecomment-6702413160).
-3d. **Public test package BUILT 11-06: run 42276379917 green** (tests 42276383681 green), artifact
-   sdcard.test-upstream.img.zip, expires 2026-12-06; link https://github.com/randal007/x6100-js8/actions/runs/42276379917
-   (VE7NHW sends it). Private NR one (run 42277592227) still building. #343 approved by Kris 11-06, his note for later:
-   a multi-line macro's echo loses its colour after the line break (panel_tx_text_cb splits on spaces only).
-3c. **Signal reports (11-06):** #346 closed (PC test: wrong). Proper fix WIP, branch `ft-snr-baseline` (OpenX6100,
-   worktree wt-ft-snr, not a PR): noise from the band's background; vs WSJT-X jt9: FT4/FT2 exact, FT8 exact at -18
-   but 2-4 dB low when strong. **Next:** check the uint8 ceiling (dbg build in scratchpad snr/, needs `-I base/ft8`),
-   then the PR. Test setup: research/reviews/ft-snr-check.md. **XARA ports (VE7NHW 11-06: not phone-only, laptops
-   too):** proposed bind to the WiFi address (xara `--addr`, app passes 0.0.0.0 now) + local addresses only + show
-   who is connected; waiting for VE7NHW's OK. Follow-up e-mail to Kris drafted in the session (XARA for 1.3.0).
-4. **Waiting on others:** Kris (e-mail 11-06): **WSPRnet is ours** (upload spots + fetch "heard you"), shared map + FT8/FT4/FT2 go-ahead; he's on review asks #1/#2/#6 for PSK31/Olivia/RTTY in one change (branch `digi-qso-log`: Log QSO as JTTY, typing joins the TX with idle fill, <NAME> <QTH> <MYNAME> <MYQTH> <MYLOC>, RX/TX text to a file per mode, RST received fixed 597→579), testing with QSOs before his PR, then the rest of the list; Hany: #329 review points, NavTex/DSC; EiBi's B26 schedule.
+1. **Card:** test package 3 with NR (private run 42319775672, `test-package-nr-3` b8075349), flashed 2026-11-06 late, DATA backup **sd-backup-2026-11-06-214744**. Not on it yet: the 3D segment tag (4d3b9f1c) and XARA on APP page 6 (c9778d65).
+2. **Test package 4 building (VE7NHW 11-06: everything we did, for his e-mail):** public `test-package-4` (randal007/x6100-js8) image **run 42341668708** (tests 42341670582 green), with `buildroot_ref=xara` = Buildroot#10's review fixes 051ab64 (also checked by run 42341267148); the private one too (steps in CLAUDE.local.md). **Next:** `gh run view <id> -R randal007/x6100-js8`; when both are green, the private release, then tell VE7NHW to send his e-mail (draft: ~/Work/x6100/research/emails/email-test-package-4.txt). If an xara build fails, fix 051ab64 first. Then add xara.hash (the vendored tarball's sha256 from a build).
+3. **Our open PRs, all code-reviewed with the fixes pushed (11-06):** #344 3D + band bar + segment tag (4d3b9f1c: "40m  CW" fades after 2 s at the 3D view's top left, band_info banner off in 3D, 2D/3D label removed; compile-checked only), #345 XARA (ready for review, app 120, own APP page 6, Record off), #349, #351, #352, Buildroot#10 (ready, 051ab64). Waiting on Kris/Georgy. **Next session:** CPU 2D vs 3D on the radio (x6100-cpulog); look at the segment tag on the radio.
+4. **Others' PRs reviewed 11-06, VE7NHW posted the comments:** Kris **#347** (issuecomment-6702647797: RST row logs the QSO, RTTY keyed after Stop while the next app opens, BT SPP dropped on close, ...) and **#348** (issuecomment-6700528697: region borders wrong for Iceland/Azores/Cape Verde/Tahiti/Aleutians/W China/Sakhalin; own PR for itu_region.c; **when he fixes it, copy his itu_region.c into #344**). Hany **#350** NavTex (110, issuecomment-6702413160) and **#353** DSC (119, issuecomment-6702493233); his .tmp saves checked OK. Waiting on their fixes. **After NavTex/DSC merge:** merge main into `xara-app`: keep both lines after JTTY (NavTex, DSC, XARA), settings_types.h comment "119 DSC, 120 XARA are taken" (test-merged and compiled 11-06).
 5. **VE7NHW, any time:** QSOs on the new modes; bench power test (PSK31/Olivia vs steady modes at ~0.3 W into the amp); delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`, `wspr-v13`/`psk31-v13`/`olivia-v13`/`rtty-v13`/`ft2-v13`/`app-pages-v13`/`kris-apps-v13` (merged into Kris's branches); ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md; ask Jake 2E0JFS for his repo link.
-6. **XARA (11-06):** PRs **#345** (app, branch `xara-app`) + **AetherX6100Buildroot#10** (xara package, branch `xara`), every test setting kept; out of draft 11-06 late, app number 120. Images building: **VE7NHW's with full speed: private x6100-xara run 42273143987** (never share); free-speed one for the PRs: x6100-js8 run 42273148030. VE7NHW asked Kris/Georgy on #10 to turn full speed on by default. **Next:** check both runs; flash when VE7NHW says. Reviewers gdyuldin + myshak1 added (VE7NHW, 11-06).
 
-- [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): groundwork as two draft PRs, a test build (not a release).**
+- [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): two PRs, out of draft 11-06 late (experimental, for 1.3.5 and beta testers).**
   VE7NHW: "bring this into OpenX6100 now", experimental, the build that worked best (build 22, xara 919f5dd), next free
   APP place. Decided: **built in, button shows; draft PRs; every setting of the test builds kept, Full speed
   included** ("it's just a test build"). **OpenX6100/x6100_gui#345** (branch `xara-app` d6fb6491, worktree
@@ -180,7 +138,7 @@ by gdyuldin or myshak1, never merged by us alone.
   browser; fix lv_indev_wait_release as textarea_window.c), 2 pp_write_png() straight to NAME_pp.png (no .tmp +
   rename), 3 small (unused pp_result_name, -3 comment, Save Fax during cleaning). Offered to commit 1+2.
   **Next:** Hany's answer; then Kris/Georgy approve, VE7NHW merges.
-- [ ] **Hany's next apps:** NavTex (LGPL, own SITOR-B) and DSC (Nayuki QR, MIT) on APP 5 after JTTY (his PRs or ours?),
+- [ ] **Hany's next apps:** NavTex #350 and DSC #353 are his PRs (reviewed 11-06, see *In short* 4); still to come:
   mic MODE key, FT8 CB (VE7NHW undecided), SSTV RX/TX radio test.
 - [ ] **Jake 2E0JFS's UI work (VE7NHW, 2026-11-02):** VE7NHW heard he has a fork updated to v1.2.0. Not found on
   GitHub (no account with his call; no fork of OpenX6100 pushed since v1.2.0 but Kris's and Hany's; OpenX6X00's 15

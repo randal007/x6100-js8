@@ -1512,19 +1512,24 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   to [#343](https://github.com/OpenX6100/x6100_gui/pull/343)), among them
   FT2 transmitting silence in 3 of 4 slots, WSPR retuning while keyed and
   reading compound and hashed calls the way WSJT-X does, and RTTY's
-  "599 TOO". Waiting for Kris's review.
+  "599 TOO". **All merged by Kris on 6 November 2026.**
 - [ ] **One map for every app** (FT8/FT4/FT2 and WSPR, from the JS8 map)
   and **WSPRnet** in the WSPR app (spots uploaded, who heard you on the
   map): in a test build, PRs to follow.
 - [ ] **3D spectrum** for the main screen (the last few seconds stacked
-  into the distance, a 2D/3D switch): sent to OpenX6100 as
-  [#344](https://github.com/OpenX6100/x6100_gui/pull/344), waiting for review.
+  into the distance, a 2D/3D switch in Settings), with a **band plan bar**
+  under it for your ITU region (CW, digital and phone segments, the band
+  edges) and the segment's name for a moment as you tune into it: sent to
+  OpenX6100 as [#344](https://github.com/OpenX6100/x6100_gui/pull/344),
+  waiting for review.
+- [ ] **FT8/FT4/FT2 signal reports** the way WSJT-X makes them
+  ([#351](https://github.com/OpenX6100/x6100_gui/pull/351)), waiting for review.
 - [ ] **XARA, a VARA HF compatible modem app** (experimental): Winlink
   with WoAD and APRS with APRSdroid from a phone over WiFi, using x0rro's
-  xara modem. Draft pull requests in OpenX6100
+  xara modem, on its own APP page. Pull requests in OpenX6100
   ([#345](https://github.com/OpenX6100/x6100_gui/pull/345) and
   [AetherX6100Buildroot#10](https://github.com/OpenX6100/AetherX6100Buildroot/pull/10)),
-  test builds only for now.
+  waiting for review; planned as experimental for beta testers.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests
