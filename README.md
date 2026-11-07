@@ -1506,7 +1506,10 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
 - [ ] **More apps in OpenX6100 v1.3.0:** Kris's WSPR, PSK31, Olivia, RTTY
   transmit, FT2 and JTTY (WSJT-X 3.2's new keyboard mode), on APP pages 4
   and 5, and Hany's WeFax Post Proc. (a neural network that
-  cleans each saved fax, and a full-screen fax view), then NavTex and DSC.
+  cleans each saved fax, and a full-screen fax view), all merged; Hany's
+  NavTex and DSC are reviewed and waiting for Kris and Georgy. The plan is
+  to release 1.3 soon, with the 3D spectrum and XARA (experimental) if
+  they're happy with them.
 - [ ] **Fixes for the six new apps** from a code review of each: nine
   pull requests ([#335](https://github.com/OpenX6100/x6100_gui/pull/335)
   to [#343](https://github.com/OpenX6100/x6100_gui/pull/343)), among them
@@ -1515,7 +1518,12 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   "599 TOO". **All merged by Kris on 6 November 2026.**
 - [ ] **One map for every app** (FT8/FT4/FT2 and WSPR, from the JS8 map)
   and **WSPRnet** in the WSPR app (spots uploaded, who heard you on the
-  map): in a test build, PRs to follow.
+  map; on FT8's map a CQ station shows its signal in its CQ tag): tried
+  on the radio and sent to OpenX6100 as
+  [#354](https://github.com/OpenX6100/x6100_gui/pull/354) (the shared map),
+  [#355](https://github.com/OpenX6100/x6100_gui/pull/355) (FT8/FT4/FT2) and
+  [#356](https://github.com/OpenX6100/x6100_gui/pull/356) (WSPR), waiting
+  for review.
 - [ ] **3D spectrum** for the main screen (the last few seconds stacked
   into the distance, a 2D/3D switch in Settings), with a **band plan bar**
   under it for your ITU region (CW, digital and phone segments, the band
