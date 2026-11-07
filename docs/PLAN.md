@@ -40,8 +40,15 @@ by gdyuldin or myshak1, never merged by us alone.
    **--local-only** (randal007/xara 2a33e96, Buildroot#10 35b594b, #345 5ea13d46); **#349** Hany's #329 points 1+2
    (Hany OK'd); **#352** multi-line echo colour (Kris's #343 note); private release **nr2-test4** (image + r13nr2j).
    Test package 2: public `test-package-2` run 42314478755, private `test-package-nr-2` run 42314517564. Hany's
-   NAVTEX **#350** (number 110) vs XARA (119): only both buttons after JTTY; merge main into xara-app after #350
-   (NavTex first). **Next:** review #350; links for VE7NHW when the runs are green.
+   NAVTEX **#350** (number 110) vs XARA: only both buttons after JTTY; merge main into xara-app after #350
+   (NavTex first). **Code reviews of the day (11-06 late), all fixed and pushed:** #344 d25cd02e, #349 dd7d740b,
+   #351 221e7a71, #352 969ef705, **#345 99e07c89** (band keys refused while keyed/linked, per-band mode + mem_load on
+   close as JS8, old peer cleared on exit, status race, BT KISS at BT_SECURITY_MEDIUM (needs an APRSdroid-over-BT
+   test), NR/NB re-check, SWR guard, recording stops at 100 MB free, mixer not reopened per key); xara --local-only
+   read by hand, no findings. **XARA renumbered 120** (VE7NHW: DSC = 119, Hany's, apps in order); **#345 +
+   Buildroot#10 out of draft** (VE7NHW 11-06). Test package 2 runs predate these fixes. Region borders for Kris
+   (#348's itu_region.c): Iceland, Azores, Cape Verde come out Region 2. **Next:** review #350; links for VE7NHW when
+   the runs are green; a test package 3 with the fixes if VE7NHW wants.
 3d. **Public test package BUILT 11-06: run 42276379917 green** (tests 42276383681 green), artifact
    sdcard.test-upstream.img.zip, expires 2026-12-06; link https://github.com/randal007/x6100-js8/actions/runs/42276379917
    (VE7NHW sends it). Private NR one (run 42277592227) still building. #343 approved by Kris 11-06, his note for later:
@@ -54,13 +61,13 @@ by gdyuldin or myshak1, never merged by us alone.
    who is connected; waiting for VE7NHW's OK. Follow-up e-mail to Kris drafted in the session (XARA for 1.3.0).
 4. **Waiting on others:** Kris (e-mail 11-06): **WSPRnet is ours** (upload spots + fetch "heard you"), shared map + FT8/FT4/FT2 go-ahead; he's on review asks #1/#2/#6 for PSK31/Olivia/RTTY in one change (branch `digi-qso-log`: Log QSO as JTTY, typing joins the TX with idle fill, <NAME> <QTH> <MYNAME> <MYQTH> <MYLOC>, RX/TX text to a file per mode, RST received fixed 597→579), testing with QSOs before his PR, then the rest of the list; Hany: #329 review points, NavTex/DSC; EiBi's B26 schedule.
 5. **VE7NHW, any time:** QSOs on the new modes; bench power test (PSK31/Olivia vs steady modes at ~0.3 W into the amp); delete old branches (OpenX6100 `wefax-channels-merge`, `js8-groundwork`, `js8-engine`, `tx-level`, `js8-library`, `js8-app`, `murus-*`, `wspr-v13`/`psk31-v13`/`olivia-v13`/`rtty-v13`/`ft2-v13`/`app-pages-v13`/`kris-apps-v13` (merged into Kris's branches); ours `js8-library`, `js8-app`, `ox-murus-sstv-stacked`, `four-apps-test`, `claude/bold-albattani-x66yc5`, `claude/cool-goldberg-68nv8y`); pick where to back up CLAUDE.local.md; ask Jake 2E0JFS for his repo link.
-6. **XARA (11-06):** draft PRs **#345** (app, branch `xara-app`) + **AetherX6100Buildroot#10** (xara package, branch `xara`), every test setting kept. Images building: **VE7NHW's with full speed: private x6100-xara run 42273143987** (never share); free-speed one for the PRs: x6100-js8 run 42273148030. VE7NHW asked Kris/Georgy on #10 to turn full speed on by default. **Next:** check both runs; flash when VE7NHW says. Reviewers gdyuldin + myshak1 added (VE7NHW, 11-06).
+6. **XARA (11-06):** PRs **#345** (app, branch `xara-app`) + **AetherX6100Buildroot#10** (xara package, branch `xara`), every test setting kept; out of draft 11-06 late, app number 120. Images building: **VE7NHW's with full speed: private x6100-xara run 42273143987** (never share); free-speed one for the PRs: x6100-js8 run 42273148030. VE7NHW asked Kris/Georgy on #10 to turn full speed on by default. **Next:** check both runs; flash when VE7NHW says. Reviewers gdyuldin + myshak1 added (VE7NHW, 11-06).
 
 - [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): groundwork as two draft PRs, a test build (not a release).**
   VE7NHW: "bring this into OpenX6100 now", experimental, the build that worked best (build 22, xara 919f5dd), next free
   APP place. Decided: **built in, button shows; draft PRs; every setting of the test builds kept, Full speed
   included** ("it's just a test build"). **OpenX6100/x6100_gui#345** (branch `xara-app` d6fb6491, worktree
-  `~/Work/x6100/wt-xara-app`: build 22's dialog_xara.c + EA5HVK credit; APP 5 after JTTY, number 119) and
+  `~/Work/x6100/wt-xara-app`: build 22's dialog_xara.c + EA5HVK credit; APP 5 after JTTY, number 120 since 11-06: DSC is 119) and
   **OpenX6100/AetherX6100Buildroot#10** (branch `xara` 479755f, worktree `~/Work/x6100/wt-br-xara`: package xara from
   randal007/xara 919f5dd + host-xara-rust = Rust 1.97.1, crates vendored at download; **`BR2_PACKAGE_XARA_REGISTERED`**
   adds the paid speeds, **off in X6100_defconfig**: Kris's free-speeds condition, and public images would hand them to
