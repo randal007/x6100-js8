@@ -6,6 +6,17 @@ outside our own JS8 code can be lost or clash when either moves on. **When
 updating to a newer upstream, go through this list**, and send the fixes
 that help everyone upstream as PRs, so they stop being ours to carry.
 
+## Code reviews of others' PRs (2026-11-06, comments posted by VE7NHW)
+
+| PR | Author | Our comment |
+|---|---|---|
+| #347 PSK31/Olivia/RTTY: Log QSO, typing while sending, name/QTH | Kris | issuecomment-6702647797 (10 points: RST row logs the QSO, RTTY keyed after Stop while the next app opens, BT SPP dropped on close, ...) |
+| #348 PSK31/Olivia: calling frequencies by ITU region | Kris | issuecomment-6700528697 (region borders; itu_region.c in its own PR; #344 uses the same file) |
+| #350 NavTex (110) | Hany | issuecomment-6702413160 (10 points: Delete hits the wrong bulletin, live text stops following, ...) |
+| #353 DSC (119) | Hany | issuecomment-6702493233 (9 points: UNKNOWN FORMAT on a late-phased call, wrong channel stamp, ...) |
+
+Our own, after their reviews (11-06): #344 4d3b9f1c (segment tag, no 2D/3D label), #345 out of draft (99e07c89 review fixes, Record off, app 120 on its own APP page 6 c9778d65), AetherX6100Buildroot#10 out of draft (051ab64 review fixes).
+
 ## Kris's apps: review fixes (2026-11-06)
 
 From code reviews of the six merged apps (findings: ~/Work/x6100/research/reviews/kris-apps-review.md). Kris (e-mail 11-06): merges them in the order #338, #343, #342, #339, #340, #341, #337, #336,
