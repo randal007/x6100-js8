@@ -13,7 +13,7 @@ that help everyone upstream as PRs, so they stop being ours to carry.
 | #347 PSK31/Olivia/RTTY: Log QSO, typing while sending, name/QTH | Kris | issuecomment-6702647797 (10 points: RST row logs the QSO, RTTY keyed after Stop while the next app opens, BT SPP dropped on close, ...) |
 | #348 PSK31/Olivia: calling frequencies by ITU region | Kris | issuecomment-6700528697 (region borders; itu_region.c in its own PR; #344 uses the same file) |
 | #350 NavTex (110) | Hany | issuecomment-6702413160 (10 points: Delete hits the wrong bulletin, live text stops following, ...) |
-| #353 DSC (119) | Hany | issuecomment-6702493233 (9 points: UNKNOWN FORMAT on a late-phased call, wrong channel stamp, ...). 11-07: Hany fixed 1-6, 8, 9 (cf0762c4..c3bb3f1b, radio-tested), 7 as a later PR; our follow-up issuecomment-6710003416 (browser deletes a .tmp being saved; tune history fallback) |
+| #353 DSC (119) | Hany | issuecomment-6702493233 (9 points: UNKNOWN FORMAT on a late-phased call, wrong channel stamp, ...). 11-07: Hany fixed 1-6, 8, 9 (cf0762c4..c3bb3f1b, radio-tested), 7 as a later PR; our follow-up issuecomment-6710003416 (browser deletes a .tmp being saved; tune history fallback), both fixed by Hany (e65e69c6, 3e852f27) |
 
 Our own, after their reviews (11-06): #344 4d3b9f1c (segment tag, no 2D/3D label) + a3cd1bd6 (11-07, after the radio test: tag on the spectrum view, banner hidden in 3D), #345 out of draft (99e07c89 review fixes, Record off, app 120 on its own APP page 6 c9778d65), AetherX6100Buildroot#10 out of draft (051ab64 review fixes).
 
