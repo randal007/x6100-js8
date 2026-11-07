@@ -41,7 +41,7 @@ typedef struct {
     lv_opa_t opa;       /* 0: the map's usual see-through square */
     int      snr;
     bool     has_snr;
-    bool     cq;        /* the "CQ" tag */
+    bool     cq;        /* the "CQ" tag, with its dB when has_snr ("CQ -12") */
     bool     label;     /* its call beside it, in its colour */
     char     tag[8];    /* a small tag on its bottom right ("-12"), "" none */
     char     extra[24]; /* more for the selected one's details ("23 dBm"), "" none */

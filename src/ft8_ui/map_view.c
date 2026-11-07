@@ -179,7 +179,6 @@ static void build(int64_t now) {
         snprintf(d->grid, sizeof(d->grid), "%s", s->grid);
         d->snr       = s->snr;
         d->has_snr   = true;
-        snprintf(d->tag, sizeof(d->tag), "%+d", s->snr); /* the dB tag, as WSPR's map */
         bool calling = s->to_me_ms && now - s->to_me_ms < CALLING_MS;
         if (calling) {
             d->color = MAP_SCENE_YELLOW;
