@@ -106,7 +106,7 @@ static const map_legend_item_t legend_here[] = {
 };
 static const map_legend_item_t legend_both[] = {
     {MAP_SCENE_GREEN, MAP_LEGEND_SQUARE, "heard here (dB)"},
-    {MAP_SCENE_BLUE, MAP_LEGEND_LINE, "heard you (WSPRnet)"},
+    {MAP_SCENE_BLUE, MAP_LEGEND_LINE, "heard you (WSPRnet, dB)"},
     {MAP_WIDGET_HOME, MAP_LEGEND_SQUARE, "you"},
 };
 
@@ -133,7 +133,9 @@ static void build(int64_t now) {
             d->opa  = (lv_opa_t)(MAP_WIDGET_SQUARE_OPA * (100 - age * 70 / 8) / 100);
             nhere++;
         } else {
+            /* Only they heard you: the tag is how they heard you. */
             d->color = MAP_SCENE_BLUE;
+            snprintf(d->tag, sizeof(d->tag), "%+d", s->you_snr);
         }
         int len = here ? snprintf(d->extra, sizeof(d->extra), "%d dBm", s->power_dbm) : 0;
         if (you) {

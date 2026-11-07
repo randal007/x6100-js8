@@ -230,11 +230,17 @@ void map_scene_draw(const map_scene_t *sc, bool force) {
      * bottom right. */
     static bool      cq_tag[SCENE_MAX], low_tag[SCENE_MAX];
     static lv_area_t cq_box[SCENE_MAX], low_box[SCENE_MAX];
-    static char      low_text[SCENE_MAX][8];
+    static char      cq_text[SCENE_MAX][12], low_text[SCENE_MAX][8];
     for (unsigned i = 0; i < n; i++) {
-        bool sel  = (int)i == sc->sel;
+        bool sel = (int)i == sc->sel;
+        /* "CQ -12": its dB in the CQ tag, not a white tag of its own, which
+         * would read as a count (VE7NHW) */
+        if (sc->st[i].has_snr)
+            snprintf(cq_text[i], sizeof(cq_text[i]), "CQ %+d", sc->st[i].snr);
+        else
+            snprintf(cq_text[i], sizeof(cq_text[i]), "CQ");
         cq_tag[i] = scene_shown[i] && sc->st[i].cq &&
-                    map_widget_badge_box(scene_cx[i], scene_cy[i], sel ? 19 : side[i], "CQ", &cq_box[i]);
+                    map_widget_badge_box(scene_cx[i], scene_cy[i], sel ? 19 : side[i], cq_text[i], &cq_box[i]);
         low_tag[i] = false;
         if (!scene_shown[i]) continue;
         if (sc->st[i].tag[0]) {
@@ -275,7 +281,7 @@ void map_scene_draw(const map_scene_t *sc, bool force) {
             map_widget_label(scene_cx[i], scene_cy[i], sc->st[i].call, sc->st[i].color, 0x141416, 200, 13, false);
 
     for (unsigned i = 0; i < n; i++) {
-        if (cq_tag[i]) map_widget_badge(&cq_box[i], "CQ");
+        if (cq_tag[i]) map_widget_badge(&cq_box[i], cq_text[i]);
         if (low_tag[i]) map_widget_badge_ex(&low_box[i], low_text[i], 0xFFFFFF, 0x000000);
     }
     map_widget_end();

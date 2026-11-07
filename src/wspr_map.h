@@ -13,8 +13,9 @@
  *
  *  Stations that heard you (WSPRnet's spots of your signal, fetched from
  *  wspr.live by wspr_net.c) go in with wspr_map_heard_you(): a blue path from
- *  you, blue squares where only they heard you, "heard you" in the legend
- *  once there are any. Everything here runs on the LVGL thread.
+ *  you, blue squares where only they heard you (their tag: how they heard
+ *  you), "heard you" in the legend once there are any. Everything here
+ *  runs on the LVGL thread.
  */
 
 #pragma once
