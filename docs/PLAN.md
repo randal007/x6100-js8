@@ -47,16 +47,16 @@ by gdyuldin or myshak1, never merged by us alone.
   1b03d32a = waterfall + contest + passes, run 42444841698** (built OK, downloaded; 42442545706 cancelled). **Next:** radio test + the log
   times (if a slot's passes take > ~2 s, cut to 1 pass or speed up subtract.c); split into two PRs (contest, passes; FT2 gets
   only the contest part); fix 3 (deeper decoding: OSD / a-priori) after, once the radio timings are in. WSPR: no fix planned yet.
-- [ ] **FT8/WSPR: receive processing off on open (VE7NHW, 2026-11-08, proposed, not started).** Checked: both already set USB-D
-  (FT8 from digital_modes.csv, mode 3; WSPR dialog_wspr.c) but neither turns off NR/NB/DNF/auto-notch; JS8 does with
-  `radio_set_rx_dsp_off(true)`, restored on close: same two calls in each app. **AGC:** JS8 doesn't touch it. Open question; proposal: radio test
-  on one band, AGC Slow vs Off, count decodes, then decide.
-- [ ] **FT8: PSK Reporter "who hears me" on the map (VE7NHW, 2026-11-08, like GridTracker), proposed, not started.** Button on page 3,
-  off by default; decay default 15 min, set with the MFK (proposed: for a few seconds after the press, 5-60 min, since the knob is the TX
-  frequency otherwise); lines fade with age; colour to pick from a mock-up (proposed: WSPR map's heard-you blue). Query
-  `https://retrieve.pskreporter.info/query?senderCallsign=...`: tried 11-08, **plain HTTP gets a 301 to HTTPS**, and wspr_net.c is plain HTTP only,
-  libcurl in the image has no TLS (BR2_PACKAGE_LIBCURL_TLS_NONE); GnuTLS is in the defconfig (local Buildroot copy 483edf8), so an HTTPS fetch through it looks
-  possible; not tried on the radio. Poll no faster than PSK Reporter allows (5 min, from memory: check).
+- [ ] **FT8/FT4/FT2 and WSPR: NR/NB/notches off while open, as JS8 (VE7NHW 2026-11-08).** Done in OpenX6100 branch `ft-rx-dsp-off`
+  (worktree ~/Work/x6100/wt-ft-dsp-off), merged into test-package-4-wf; ARM compile check OK; **not in the image on the card**, comes with the next build.
+  Same as JS8: radio only, settings kept, off again if turned on meanwhile, back on close. JS8's RX/TX passband change not copied. Both apps already set USB-D.
+  **AGC:** JS8 doesn't touch it. Proposed: radio test on one band, AGC Slow vs Off, count decodes, then decide.
+- [ ] **FT8: PSK Reporter "who hears me" on the map (VE7NHW 2026-11-08: as GridTracker), not started.** GridTracker 2 (read 11-08, research copy was a
+  scratch clone of gitlab.com/gridtracker.org/gridtracker2, src/renderer/lib/services/mqttPsk.js + map/spots.js): plain **MQTT, mqtt.pskreporter.info:1883**, no HTTPS, live push; topic
+  `pskr/filter/v2/+/+/<call with . for />/#` (ours: band and mode in place of the +); JSON fields rc call, rl grid (skip < 4 chars), rp SNR, t time, b band, md mode, f Hz; one entry per
+  call+mode+band, newest wins; shown for viewHistoryTimeSec, **default 900 s = 15 min**, then gone; path colour default = band colour, brightness from SNR (alpha = (snr+25)*9, 0-255).
+  PC probe 11-08 with a raw client: connects, subscribes, 20m FT8 gives ~180 messages/s, so subscribe to our own call only. No MQTT library in the image: small client by hand on its own thread.
+  Proposed UI: FT8 page 3 button, off by default, press = on/off, MFK sets 5-60 min for a few seconds after the press; one colour (mock-up first, proposed WSPR's heard-you blue), brightness from SNR.
 - [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): two PRs, out of draft 11-06 late (experimental, for 1.3.5 and beta testers).**
   VE7NHW: "bring this into OpenX6100 now", experimental, the build that worked best (build 22, xara 919f5dd), next free
   APP place. Decided: **built in, button shows; draft PRs; every setting of the test builds kept, Full speed
