@@ -27,7 +27,7 @@ by gdyuldin or myshak1, never merged by us alone.
   lower DRM plane via js8_wf.c) + TX rows from the playback monitor with a red edge and "TX" tag. FT8 across its RX
   filter (TX shifted by tx_freq - 1325, FT8_TX_AUDIO_HZ), WSPR across 375 Hz (sliding FFT, 1.46 Hz bins). JS8 untouched.
   ARM compile checks OK; not yet run on the radio. **Test image:** branch `test-package-4-wf` (randal007/x6100-js8,
-  93585a2d = test package 4 + shared-waterfall), run 42439469764 (name waterfall); with the FT8 contest fix: 860b6b06, run **42442545706**. **Next:** flash on VE7NHW's word,
+  93585a2d = test package 4 + shared-waterfall), run 42439469764 (name waterfall); with the FT8 contest fix and extra passes: 1b03d32a, run **42444841698**. **Next:** flash on VE7NHW's word,
   compare FT8/WSPR waterfalls, watch TX rows (FT8 at the finder, WSPR at its marker); CPU check; then PR + tell Kris (WSPR).
 - [ ] **Decoders vs WSJT-X (VE7NHW 2026-11-08 asked), PC benches in ~/Work/x6100/research/ft8-decoder-vs-wsjtx and
   wspr-decoder-vs-wsjtx (NOTES.md each).** **FT8: about half of WSJT-X** (real samples: 10/21 and 8/21). Why:
@@ -39,7 +39,15 @@ by gdyuldin or myshak1, never merged by us alone.
   (worktree ~/Work/x6100/wt-ft8-contest): 0.1 DXpedition, 0.3/0.4 Field Day, 3 RTTY Roundup, 5 EU VHF, as WSJT-X's
   unpack77; calls via ft8_lib's decode_std + hash table. PC: contest recording 8 -> 14, every ft8sim type = jt9's text.
   **Test image with the waterfall + this:** test-package-4-wf 860b6b06, run **42442545706** (name waterfall-contest;
-  the waterfall-only run 42439469764 is superseded). **Next:** radio test, then PRs; FT8 fix 2 (subtract + second pass).
+  the waterfall-only run 42439469764 is superseded). superseded by run 42444841698 below.
+  **FT8 fix 2 done 11-08 (VE7NHW: "if that's how WSJT-X does it"; FT2 left single-pass, he asked):** `src/ft8/subtract.c`
+  (WSJT-X subtractft8 on a 64/symbol grid) + 2 more passes in worker.c, same branch 1ece99ee. They run **after the next
+  slot's TX decision** (audio_worker -> ftx_worker_decode_more after on_tick): TX timing unchanged; none after a TX;
+  stop 2.5 s into the new slot; decodes reported as the slot just ended. PC: busy band 10 -> 14, contest 14 -> 18 (jt9
+  21 each), FT4 mix 5 -> 6 (jt9 8); 110-135 ms a slot on the PC: **on the radio unknown**, logged each slot as
+  "FT8/FT4 extra passes: N more decoded (of M), X ms" in /tmp/x6100_log.txt. **Test image: test-package-4-wf
+  1b03d32a = waterfall + contest + passes, run 42444841698** (42442545706 cancelled). **Next:** radio test + the log
+  times; split into two PRs (contest, passes); fix 3 (deeper decoding) after.
 - [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): two PRs, out of draft 11-06 late (experimental, for 1.3.5 and beta testers).**
   VE7NHW: "bring this into OpenX6100 now", experimental, the build that worked best (build 22, xara 919f5dd), next free
   APP place. Decided: **built in, button shows; draft PRs; every setting of the test builds kept, Full speed
