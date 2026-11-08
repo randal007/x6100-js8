@@ -47,6 +47,16 @@ by gdyuldin or myshak1, never merged by us alone.
   1b03d32a = waterfall + contest + passes, run 42444841698** (built OK, downloaded; 42442545706 cancelled). **Next:** radio test + the log
   times (if a slot's passes take > ~2 s, cut to 1 pass or speed up subtract.c); split into two PRs (contest, passes; FT2 gets
   only the contest part); fix 3 (deeper decoding: OSD / a-priori) after, once the radio timings are in. WSPR: no fix planned yet.
+- [ ] **FT8/WSPR: receive processing off on open (VE7NHW, 2026-11-08, proposed, not started).** Checked: both already set USB-D
+  (FT8 from digital_modes.csv, mode 3; WSPR dialog_wspr.c) but neither turns off NR/NB/DNF/auto-notch; JS8 does with
+  `radio_set_rx_dsp_off(true)`, restored on close: same two calls in each app. **AGC:** JS8 doesn't touch it. Open question; proposal: radio test
+  on one band, AGC Slow vs Off, count decodes, then decide.
+- [ ] **FT8: PSK Reporter "who hears me" on the map (VE7NHW, 2026-11-08, like GridTracker), proposed, not started.** Button on page 3,
+  off by default; decay default 15 min, set with the MFK (proposed: for a few seconds after the press, 5-60 min, since the knob is the TX
+  frequency otherwise); lines fade with age; colour to pick from a mock-up (proposed: WSPR map's heard-you blue). Query
+  `https://retrieve.pskreporter.info/query?senderCallsign=...`: tried 11-08, **plain HTTP gets a 301 to HTTPS**, and wspr_net.c is plain HTTP only,
+  libcurl in the image has no TLS (BR2_PACKAGE_LIBCURL_TLS_NONE); GnuTLS is in the defconfig (local Buildroot copy 483edf8), so an HTTPS fetch through it looks
+  possible; not tried on the radio. Poll no faster than PSK Reporter allows (5 min, from memory: check).
 - [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): two PRs, out of draft 11-06 late (experimental, for 1.3.5 and beta testers).**
   VE7NHW: "bring this into OpenX6100 now", experimental, the build that worked best (build 22, xara 919f5dd), next free
   APP place. Decided: **built in, button shows; draft PRs; every setting of the test builds kept, Full speed
