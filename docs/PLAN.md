@@ -15,7 +15,7 @@ by gdyuldin or myshak1, never merged by us alone.
 ## Now
 
 **In short** (updated at each offload; details in the items below):
-1. **Card:** public test build **run 42404582223** (test-package-4 d4503d19 = test package 4 + the 3D tag/banner fix + the map tag changes 861490b0/4e83fd71; no NR selector: public build), flashed 2026-11-07 17:23 local, DATA backup **sd-backup-2026-11-07-172320**. (The flash script prints "build 8733747": the test-image workflow's own commit on main, not what it built.) Before that: test package 4 with NR (sd-backup-2026-11-07-093929), VE7NHW 11-07: maps good, WSPRnet works, 3D tag and banner look great. **Next:** VE7NHW checks "CQ -12" on FT8's map and the heard-you dB on WSPR's.
+1. **Card:** public test build **run 42404582223** (test-package-4 d4503d19 = test package 4 + the 3D tag/banner fix + the map tag changes 861490b0/4e83fd71; no NR selector: public build), flashed 2026-11-07 17:23 local, DATA backup **sd-backup-2026-11-07-172320**. (The flash script prints "build 8733747": the test-image workflow's own commit on main, not what it built.) Before that: test package 4 with NR (sd-backup-2026-11-07-093929), VE7NHW 11-07: maps good, WSPRnet works, 3D tag and banner look great. **Next:** VE7NHW checks "CQ -12" on FT8's map and the heard-you dB on WSPR's. **Ready to flash (on VE7NHW's word):** test image run **42444841698** (test-package-4-wf 1b03d32a: shared waterfall + FT8 contest messages + extra decoding passes; public build, no NR), downloaded to builds/ci-42444841698/sdcard.test-wf-ft8-passes.img.zip; flash with the scratch copy of x6100-flash + askpass (CLAUDE.local.md), then `tail /tmp/x6100_log.txt` for the "FT8/FT4 extra passes" lines.
 2. **Test package 4 out:** public run 42383345665 + private release (CLAUDE.local.md); e-mail **sent by VE7NHW 11-07**. **Next:** their feedback. Later: add xara.hash. **GitHub Actions: 90 % of the 2,000 private-repo minutes used (11-07, resets 12-01):** only private repos count (an NR/XARA image takes 160-220 min); until 12-01 build private images only when needed (or locally); VE7NHW checks github.com/settings/billing for a $0 budget.
 3. **Our open PRs, all code-reviewed, waiting on Kris/Georgy:** #344 3D + band bar + segment tag (a3cd1bd6 11-07: tag on the spectrum view, banner hidden in 3D), #345 XARA (app 120, APP page 6, Record off), #349, #351, #352, Buildroot#10 (051ab64). **Map PRs #354, #355, #356 approved by Georgy and merged by VE7NHW 2026-11-08 00:21Z** (main 82d27293). **#344:** Kris's change request (3D history empty on stock base boards, rev < 8) was already fixed in 4b2c6259; VE7NHW asked him to re-check 11-08 (issuecomment-6714981030; PC-tested only, his radio is rev 8+). **1.3 release (VE7NHW 11-07):** this weekend if reviews go through without big issues, else next; 3D and XARA (experimental) in; e-mail to Kris, Georgy, Hany (lists everything incl. the maps, who has what left): ~/Work/x6100/research/emails/email-1.3-release.txt (**sent by VE7NHW 11-07**; next: their answers). **Next session:** CPU 2D vs 3D on the radio (x6100-cpulog).
 4. **Others' PRs:** Hany's **#350** NavTex and **#353** DSC: every review point fixed 11-07, "ready from my side" posted; whichever merges second has a small conflict (keep both lines, NavTex then DSC); his mic-button PR (DSC 7) after 1.3. Kris **#347**, **#348**: waiting on his fixes (**when #348 is fixed, copy his itu_region.c into #344**). **AetherX6100Buildroot#11** (dl2zw, U-Boot 2026.10): our review posted 11-07; VE7NHW waits for Georgy. **After NavTex/DSC merge:** merge main into `xara-app` (keep the three lines after JTTY; settings_types.h "119 DSC, 120 XARA are taken").
@@ -27,7 +27,7 @@ by gdyuldin or myshak1, never merged by us alone.
   lower DRM plane via js8_wf.c) + TX rows from the playback monitor with a red edge and "TX" tag. FT8 across its RX
   filter (TX shifted by tx_freq - 1325, FT8_TX_AUDIO_HZ), WSPR across 375 Hz (sliding FFT, 1.46 Hz bins). JS8 untouched.
   ARM compile checks OK; not yet run on the radio. **Test image:** branch `test-package-4-wf` (randal007/x6100-js8,
-  93585a2d = test package 4 + shared-waterfall), run 42439469764 (name waterfall); with the FT8 contest fix and extra passes: 1b03d32a, run **42444841698**. **Next:** flash on VE7NHW's word,
+  93585a2d = test package 4 + shared-waterfall), run 42439469764 (name waterfall); with the FT8 contest fix and extra passes: 1b03d32a, run **42444841698** (built OK 11-08 04:45Z, downloaded to builds/ci-42444841698). **Next:** flash on VE7NHW's word,
   compare FT8/WSPR waterfalls, watch TX rows (FT8 at the finder, WSPR at its marker); CPU check; then PR + tell Kris (WSPR).
 - [ ] **Decoders vs WSJT-X (VE7NHW 2026-11-08 asked), PC benches in ~/Work/x6100/research/ft8-decoder-vs-wsjtx and
   wspr-decoder-vs-wsjtx (NOTES.md each).** **FT8: about half of WSJT-X** (real samples: 10/21 and 8/21). Why:
@@ -38,16 +38,15 @@ by gdyuldin or myshak1, never merged by us alone.
   **FT8 fix 1 done 11-08 (VE7NHW: yes):** `src/ft8/contest_msg.c`, OpenX6100 branch `ft8-contest-messages` dad090c8
   (worktree ~/Work/x6100/wt-ft8-contest): 0.1 DXpedition, 0.3/0.4 Field Day, 3 RTTY Roundup, 5 EU VHF, as WSJT-X's
   unpack77; calls via ft8_lib's decode_std + hash table. PC: contest recording 8 -> 14, every ft8sim type = jt9's text.
-  **Test image with the waterfall + this:** test-package-4-wf 860b6b06, run **42442545706** (name waterfall-contest;
-  the waterfall-only run 42439469764 is superseded). superseded by run 42444841698 below.
   **FT8 fix 2 done 11-08 (VE7NHW: "if that's how WSJT-X does it"; FT2 left single-pass, he asked):** `src/ft8/subtract.c`
   (WSJT-X subtractft8 on a 64/symbol grid) + 2 more passes in worker.c, same branch 1ece99ee. They run **after the next
   slot's TX decision** (audio_worker -> ftx_worker_decode_more after on_tick): TX timing unchanged; none after a TX;
   stop 2.5 s into the new slot; decodes reported as the slot just ended. PC: busy band 10 -> 14, contest 14 -> 18 (jt9
   21 each), FT4 mix 5 -> 6 (jt9 8); 110-135 ms a slot on the PC: **on the radio unknown**, logged each slot as
   "FT8/FT4 extra passes: N more decoded (of M), X ms" in /tmp/x6100_log.txt. **Test image: test-package-4-wf
-  1b03d32a = waterfall + contest + passes, run 42444841698** (42442545706 cancelled). **Next:** radio test + the log
-  times; split into two PRs (contest, passes); fix 3 (deeper decoding) after.
+  1b03d32a = waterfall + contest + passes, run 42444841698** (built OK, downloaded; 42442545706 cancelled). **Next:** radio test + the log
+  times (if a slot's passes take > ~2 s, cut to 1 pass or speed up subtract.c); split into two PRs (contest, passes; FT2 gets
+  only the contest part); fix 3 (deeper decoding: OSD / a-priori) after, once the radio timings are in. WSPR: no fix planned yet.
 - [ ] **XARA into OpenX6100 (VE7NHW, 2026-11-06): two PRs, out of draft 11-06 late (experimental, for 1.3.5 and beta testers).**
   VE7NHW: "bring this into OpenX6100 now", experimental, the build that worked best (build 22, xara 919f5dd), next free
   APP place. Decided: **built in, button shows; draft PRs; every setting of the test builds kept, Full speed
@@ -398,6 +397,7 @@ So they don't come back up (VE7NHW, 2026-10-11):
 - **Performance work** (a decoder thread per speed): measured, nothing
   worth it.
 - **Hiding the dim decode marks:** nobody asked.
-- **FT8's waterfall on the lower layer:** an idea for OpenX6100, not ours.
+- **FT8's waterfall on the lower layer:** an idea for OpenX6100, not ours. *(Reopened by VE7NHW 2026-11-08: the shared
+  waterfall item in Now.)*
 - **Map polish "from use":** too vague; new map wishes become their own
   items.

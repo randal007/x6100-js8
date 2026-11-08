@@ -1538,6 +1538,13 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   ([#345](https://github.com/OpenX6100/x6100_gui/pull/345) and
   [AetherX6100Buildroot#10](https://github.com/OpenX6100/AetherX6100Buildroot/pull/10)),
   waiting for review; planned as experimental for beta testers.
+- [ ] **A better waterfall for FT8/FT4/FT2 and WSPR** (the JS8 one: smooth,
+  steady colours, fine detail) that also shows your own transmission the
+  way XARA does, and **FT8/FT4 decoding closer to WSJT-X**: contest and
+  DXpedition messages shown (Field Day, RTTY Roundup, Fox/Hound, EU VHF),
+  and stations hidden under strong ones found by taking the strong ones
+  out and looking again. On a PC: 8 → 18 decodes on a contest recording
+  where WSJT-X gets 21. In a test image, not yet tried on the radio.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests
