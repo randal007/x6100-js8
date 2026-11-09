@@ -125,6 +125,14 @@ static void decode_cb(const char *text, int snr, float freq_hz, float time_sec, 
     }
 }
 
+static void extra_decode_cb(const char *text, int snr, float freq_hz, float time_sec, bool odd, int64_t start_ms,
+                            void *user) {
+    if (!start_ms) return;  /* the slot we joined part way */
+    slot_info_t  info = {.odd = odd, .start_ms = start_ms};
+    decode_ctx_t dc   = {.w = (audio_worker_t *)user, .info = &info};
+    decode_cb(text, snr, freq_hz, time_sec, &dc);
+}
+
 /* ---------- RX frame pump --------------------------------------------- */
 
 static void rx_consume_frames(audio_worker_t *w, const slot_info_t *info,
@@ -214,6 +222,8 @@ static void *worker_main(void *arg) {
         rx_consume_frames(w, &info, sec_since_slot_start);
 
         if (new_slot) {
+            ftx_worker_extra_slot(info.odd, info.start_ms);
+
             /* Slot boundary: flush a final decode, drain stale audio that
              * accumulated during TX, and fire the slot_end handler. */
             ftx_worker_decode(decode_cb, true, (void *)&dc);
@@ -230,6 +240,9 @@ static void *worker_main(void *arg) {
         if (w->cb.on_tick && !tick_done) {
             w->cb.on_tick(&info, new_slot, sec_since_slot_start, w->cb.ctx);
         }
+
+        /* What the extra passes have found (FT8/FT4, ft8/worker.c) */
+        ftx_worker_decode_more(extra_decode_cb, w);
 
         if (!new_slot && !atomic_load(&w->stop_req)) {
             msleep_interruptible(w, 100);
