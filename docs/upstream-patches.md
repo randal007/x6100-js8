@@ -63,6 +63,8 @@ Not yet a PR: `js8-tx-waterfall` (JS8 TX rows, waits for a radio test). `ft8-con
 
 ## XARA (2026-11-06): drafts, experimental
 
+**Frozen 2026-11-09 (VE7NHW):** x0rro discontinued xara on 11-08; #345 and Buildroot#10 stay out of OpenX6100 until we know why (docs/PLAN.md).
+
 VE7NHW decided to bring XARA into OpenX6100 as groundwork (it was private until now; the private
 repo randal007/x6100-xara keeps the test builds with VARA's registered speeds, never shared).
 

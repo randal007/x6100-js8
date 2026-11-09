@@ -1537,7 +1537,8 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   xara modem, on its own APP page. Pull requests in OpenX6100
   ([#345](https://github.com/OpenX6100/x6100_gui/pull/345) and
   [AetherX6100Buildroot#10](https://github.com/OpenX6100/AetherX6100Buildroot/pull/10)),
-  waiting for review; planned as experimental for beta testers.
+  on hold: xara's developer discontinued it on 2026-11-08, and it stays out
+  until we know why.
 - [ ] **A better waterfall for FT8/FT4/FT2 and WSPR** (the JS8 one: smooth,
   steady colours, fine detail) that also shows your own transmission the
   way XARA does: [#362](https://github.com/OpenX6100/x6100_gui/pull/362),
