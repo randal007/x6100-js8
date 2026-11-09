@@ -43,12 +43,12 @@ in our repo).
 
 ## FT8/FT4/FT2, WSPR and map work (2026-11-08)
 
-All open, waiting on review by gdyuldin or myshak1; compile-checked and code-reviewed, radio-test state in docs/PLAN.md. Merge #369, then #370, then #371; #363 before #364.
+**Merged by Kris 2026-11-09: #362-#366, #368-#370.** Open: #367 (changes requested, fix 3623c99c pushed, comment posted), #371 (Kris wants numbers and a radio run; slot fix f587e404 pushed). Our review of Kris's #372 posted 11-09 (9 points). New branches, no PR yet (radio test first): `ft8-late-start`, `ft8-psk-line-connected`, `js8-tx-waterfall`.
 
 | PR | What | Branch |
 |---|---|---|
 | #360 | Band bar: phone segments say "All modes" (**merged 11-08**) | band-bar-all-modes |
-| #362 | Shared waterfall for FT8/FT4/FT2 and WSPR, with TX rows | shared-waterfall |
+| #362 | Shared waterfall for FT8/FT4/FT2 and WSPR, with TX rows (**merged 11-09**) | shared-waterfall |
 | #363 | Shared map: path opacity + status3 | map-path-opacity |
 | #364 | FT8/FT4/FT2: PSK Reporter, who hears you on the map | ft8-psk-reporter |
 | #365 | FT8/FT4/FT2 and WSPR: NR/NB/notches off, RX filter | ft-rx-dsp-off |

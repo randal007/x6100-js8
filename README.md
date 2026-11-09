@@ -1542,16 +1542,16 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
 - [ ] **A better waterfall for FT8/FT4/FT2 and WSPR** (the JS8 one: smooth,
   steady colours, fine detail) that also shows your own transmission the
   way XARA does: [#362](https://github.com/OpenX6100/x6100_gui/pull/362),
-  waiting for review.
+  merged into OpenX6100 on 2026-11-09, for its next release.
 - [ ] **FT8/FT4 decoding closer to WSJT-X:** contest and DXpedition
   messages shown (Field Day, RTTY Roundup, Fox/Hound, EU VHF), stations
   hidden under strong ones found by taking the strong ones out and looking
   again, and weak ones by retrying the way JS8 does. On a PC, two
   recordings where WSJT-X gets 21 each: from 10 and 8 decodes to 17 and 19.
-  Also a fix for a decoder hang. Waiting for review:
+  Also a fix for a decoder hang. Merged:
   [#369](https://github.com/OpenX6100/x6100_gui/pull/369),
-  [#370](https://github.com/OpenX6100/x6100_gui/pull/370),
-  [#371](https://github.com/OpenX6100/x6100_gui/pull/371).
+  [#370](https://github.com/OpenX6100/x6100_gui/pull/370); waiting for a
+  test on the radio: [#371](https://github.com/OpenX6100/x6100_gui/pull/371).
 - [ ] **For FT8/FT4/FT2 and WSPR:** noise reduction, noise blanker and
   notches off and a sensible receive filter while the app is open, your
   settings back on close
@@ -1560,11 +1560,16 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   ([#363](https://github.com/OpenX6100/x6100_gui/pull/363),
   [#364](https://github.com/OpenX6100/x6100_gui/pull/364)) and a list that
   follows the newest messages
-  ([#368](https://github.com/OpenX6100/x6100_gui/pull/368)).
+  ([#368](https://github.com/OpenX6100/x6100_gui/pull/368)). All merged into
+  OpenX6100 on 2026-11-09, for its next release.
 - [ ] **The RFG knob press stops a transmission without closing the app**,
   in every app, as JS8 does
-  ([#366](https://github.com/OpenX6100/x6100_gui/pull/366),
-  [#367](https://github.com/OpenX6100/x6100_gui/pull/367)).
+  ([#366](https://github.com/OpenX6100/x6100_gui/pull/366) merged,
+  [#367](https://github.com/OpenX6100/x6100_gui/pull/367) for RTTY waiting
+  for review).
+- [ ] **FT8/FT4: answer a station you pick mid-cycle**, starting late as
+  WSJT-X does, and the map says when PSK Reporter isn't connected: built,
+  waiting for a test on the radio.
 - [ ] **Your own transmission on JS8's waterfall:** built, waiting for a
   test on the radio.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
