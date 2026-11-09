@@ -1522,14 +1522,14 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   on the radio and sent to OpenX6100 as
   [#354](https://github.com/OpenX6100/x6100_gui/pull/354) (the shared map),
   [#355](https://github.com/OpenX6100/x6100_gui/pull/355) (FT8/FT4/FT2) and
-  [#356](https://github.com/OpenX6100/x6100_gui/pull/356) (WSPR), waiting
-  for review.
+  [#356](https://github.com/OpenX6100/x6100_gui/pull/356) (WSPR), merged
+  into OpenX6100 on 2026-11-08, for its next release.
 - [ ] **3D spectrum** for the main screen (the last few seconds stacked
   into the distance, a 2D/3D switch in Settings), with a **band plan bar**
   under it for your ITU region (CW, digital and phone segments, the band
   edges) and the segment's name for a moment as you tune into it: sent to
   OpenX6100 as [#344](https://github.com/OpenX6100/x6100_gui/pull/344),
-  waiting for review.
+  merged on 2026-11-08, for its next release.
 - [ ] **FT8/FT4/FT2 signal reports** the way WSJT-X makes them
   ([#351](https://github.com/OpenX6100/x6100_gui/pull/351)), waiting for review.
 - [ ] **XARA, a VARA HF compatible modem app** (experimental): Winlink
@@ -1540,11 +1540,32 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   waiting for review; planned as experimental for beta testers.
 - [ ] **A better waterfall for FT8/FT4/FT2 and WSPR** (the JS8 one: smooth,
   steady colours, fine detail) that also shows your own transmission the
-  way XARA does, and **FT8/FT4 decoding closer to WSJT-X**: contest and
-  DXpedition messages shown (Field Day, RTTY Roundup, Fox/Hound, EU VHF),
-  and stations hidden under strong ones found by taking the strong ones
-  out and looking again. On a PC: 8 → 18 decodes on a contest recording
-  where WSJT-X gets 21. In a test image, not yet tried on the radio.
+  way XARA does: [#362](https://github.com/OpenX6100/x6100_gui/pull/362),
+  waiting for review.
+- [ ] **FT8/FT4 decoding closer to WSJT-X:** contest and DXpedition
+  messages shown (Field Day, RTTY Roundup, Fox/Hound, EU VHF), stations
+  hidden under strong ones found by taking the strong ones out and looking
+  again, and weak ones by retrying the way JS8 does. On a PC, two
+  recordings where WSJT-X gets 21 each: from 10 and 8 decodes to 17 and 19.
+  Also a fix for a decoder hang. Waiting for review:
+  [#369](https://github.com/OpenX6100/x6100_gui/pull/369),
+  [#370](https://github.com/OpenX6100/x6100_gui/pull/370),
+  [#371](https://github.com/OpenX6100/x6100_gui/pull/371).
+- [ ] **For FT8/FT4/FT2 and WSPR:** noise reduction, noise blanker and
+  notches off and a sensible receive filter while the app is open, your
+  settings back on close
+  ([#365](https://github.com/OpenX6100/x6100_gui/pull/365)); on FT8,
+  **who hears you** on the map from PSK Reporter
+  ([#363](https://github.com/OpenX6100/x6100_gui/pull/363),
+  [#364](https://github.com/OpenX6100/x6100_gui/pull/364)) and a list that
+  follows the newest messages
+  ([#368](https://github.com/OpenX6100/x6100_gui/pull/368)).
+- [ ] **The RFG knob press stops a transmission without closing the app**,
+  in every app, as JS8 does
+  ([#366](https://github.com/OpenX6100/x6100_gui/pull/366),
+  [#367](https://github.com/OpenX6100/x6100_gui/pull/367)).
+- [ ] **Your own transmission on JS8's waterfall:** built, waiting for a
+  test on the radio.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests

@@ -41,6 +41,26 @@ in our repo).
 | #342 | Digi menus 20 rows, Auto DX only when empty (shared) | digi-menu-autodx |
 | #343 | Panel: TX echo wrap/colour, RX wrap, buffer bound (shared) | panel-tx-echo |
 
+## FT8/FT4/FT2, WSPR and map work (2026-11-08)
+
+All open, waiting on review by gdyuldin or myshak1; compile-checked and code-reviewed, radio-test state in docs/PLAN.md. Merge #369, then #370, then #371; #363 before #364.
+
+| PR | What | Branch |
+|---|---|---|
+| #360 | Band bar: phone segments say "All modes" (**merged 11-08**) | band-bar-all-modes |
+| #362 | Shared waterfall for FT8/FT4/FT2 and WSPR, with TX rows | shared-waterfall |
+| #363 | Shared map: path opacity + status3 | map-path-opacity |
+| #364 | FT8/FT4/FT2: PSK Reporter, who hears you on the map | ft8-psk-reporter |
+| #365 | FT8/FT4/FT2 and WSPR: NR/NB/notches off, RX filter | ft-rx-dsp-off |
+| #366 | RFG press stops TX, doesn't close (apps) | rfg-stops-tx |
+| #367 | RTTY's RFG press (main_screen.c) | rtty-rfg-stops-tx |
+| #368 | FT8 list follows the newest | ft8-list-follow |
+| #369 | Callsign table that can't hang (ft8_lib's can, also in main) | ft8-call-table |
+| #370 | Contest and DXpedition messages | ft8-contest-text |
+| #371 | Extra decode passes on their own thread + JS8-style retries | ft8-extra-passes |
+
+Not yet a PR: `js8-tx-waterfall` (JS8 TX rows, waits for a radio test). `ft8-contest-messages` is the old source of #369-371: delete after they merge. Follow-ups pushed to open PRs on 11-08: #349 fsync (5a750b94), #351 comment and `__thread snr_noise` (7f7980d0, bd21e521).
+
 ## XARA (2026-11-06): drafts, experimental
 
 VE7NHW decided to bring XARA into OpenX6100 as groundwork (it was private until now; the private
