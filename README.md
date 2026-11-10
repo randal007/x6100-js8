@@ -1550,8 +1550,10 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   recordings where WSJT-X gets 21 each: from 10 and 8 decodes to 17 and 19.
   Also a fix for a decoder hang. Merged:
   [#369](https://github.com/OpenX6100/x6100_gui/pull/369),
-  [#370](https://github.com/OpenX6100/x6100_gui/pull/370); waiting for a
-  test on the radio: [#371](https://github.com/OpenX6100/x6100_gui/pull/371).
+  [#370](https://github.com/OpenX6100/x6100_gui/pull/370); the extra
+  passes ([#371](https://github.com/OpenX6100/x6100_gui/pull/371)) tried on
+  the radio on 2026-11-10: 28 % more decodes over 20 minutes on a busy 20 m
+  while calling CQ, waiting for review.
 - [ ] **For FT8/FT4/FT2 and WSPR:** noise reduction, noise blanker and
   notches off and a sensible receive filter while the app is open, your
   settings back on close
@@ -1568,10 +1570,15 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   [#367](https://github.com/OpenX6100/x6100_gui/pull/367) for RTTY waiting
   for review).
 - [ ] **FT8/FT4: answer a station you pick mid-cycle**, starting late as
-  WSJT-X does, and the map says when PSK Reporter isn't connected: built,
-  waiting for a test on the radio.
+  WSJT-X does (seen working on the radio), and the map says when PSK
+  Reporter isn't connected (not tried yet).
 - [ ] **Your own transmission on JS8's waterfall:** built, waiting for a
   test on the radio.
+- [ ] **A slimmer TX meter for every app:** PWR, SWR and ALC as three thin
+  LED rows inside the top bar, so it no longer hangs over an app's
+  waterfall or the top of the spectrum while you transmit; and a
+  **see-through FT8/FT4/FT2 list** that shows the waterfall behind it.
+  Built, waiting for a look on the radio.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests

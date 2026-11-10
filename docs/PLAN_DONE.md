@@ -6,6 +6,8 @@ list stays short. Newest at the top. Beta 5's list is
 
 ## Moved 2026-11-09
 
+- [x] **Test image 11-09 (built, flashed 11-10 13:54, radio-tested 11-10: FT8 20 min CQ): run 42687294904 (42685729338 cancelled: had the slot bug below), branch `test-package-5` c1a2f2e8, name ft8-late, worktree ~/Work/x6100/wt-test-5** = OpenX6100 main a5ced9c6 + #371 + #351 + #367 + ft8-psk-line-connected + ft8-late-start + js8-tx-waterfall + #349. Not in it, unlike the card: XARA (frozen). test-package-4-wf no longer merges with main. Merge checks OK; PC 10+7 and 14+5 decodes. **Next:** flash on VE7NHW's word.
+
 - [x] **Shared waterfall for FT8/FT4/FT2 and WSPR, with our TX shown as XARA's (VE7NHW, 2026-11-08: "the FT8 waterfall sucks").**
   New `src/app_wf.c` (shared GUI, OpenX6100 branch `shared-waterfall` 4af756f0, worktree ~/Work/x6100/wt-shared-waterfall):
   XARA's waterfall made general = JS8's (12 kHz own audio, 15 rows/s by the clock, noise-floor colours, "Light" calm,
