@@ -165,7 +165,7 @@ by gdyuldin or myshak1, never merged by us alone.
   **Next:** Hany's answer; then Kris/Georgy approve, VE7NHW merges.
 - [ ] **Hany's next apps:** NavTex #350 and DSC #353 are his PRs (reviewed 11-06, see *In short* 4); still to come:
   mic MODE key, FT8 CB (VE7NHW undecided), SSTV RX/TX radio test.
-- [ ] **Jake 2E0JFS's UI work (VE7NHW, 2026-11-02):** VE7NHW heard he has a fork updated to v1.2.0. Not found on
+- [ ] **Jake 2E0JFS's UI work (VE7NHW, 2026-11-02):** **11-10: Jake sent his build (SD image only, v1.2.0-2E0JFS beta 0.2-fix9b, for R13), kept in ~/Work/x6100/reference/jake-2E0JFS-2026-11-09; feature list + recommendation in ~/Work/x6100/research/jake-2E0JFS/features.md (16 features, all shared GUI: TX/Ext Pwr calibration, needle S-meter, custom colours, themes, VOL return, Wi-Fi messages, ...); reply to Jake drafted (reply-to-jake.txt): his own PRs per feature on current main, source on GitHub, calibration after Georgy.** Earlier: VE7NHW heard he has a fork updated to v1.2.0. Not found on
   GitHub (no account with his call; no fork of OpenX6100 pushed since v1.2.0 but Kris's and Hany's; OpenX6X00's 15
   forks; code/commit search). Known: he designed the Black Metal and Total Black themes credited in OpenX6X00
   (README, docs/MANUAL.md, src/theme.c), code by others. **Next:** VE7NHW asks him for the link.
