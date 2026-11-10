@@ -45,9 +45,8 @@ later, now caught in seconds:
 - `tools/checks/check_app_cases.py`: every `ACTION_APP_*` window case in
   `main_screen.c` ends in its `break;` (a lost one opened two apps at once).
 - `tools/checks/check_build_list.py`: every `.c`/`.cpp` in `src/` is in
-  `src/CMakeLists.txt`, and with `--base` nothing the target branch builds
-  was dropped (`tx_level.c`/`tx_player.c` were lost that way in #311/#312;
-  only the image build showed it).
+  `src/CMakeLists.txt` (`tx_level.c`/`tx_player.c` were dropped from it
+  in #311/#312, and only the image build showed it).
 - `.github/workflows/checks.yml` runs both on every PR and push to main.
   Checked: main is clean; a copy without JS8's `break` and the old tree
   without the two files are both caught. Three files in `src/` are
@@ -167,6 +166,45 @@ AetherSDR doesn't let a PR merge until its checks pass and someone has
 approved it. Should OpenX6100's main require **Merge checks** and **Unit
 tests** to pass, plus one approval? That's a repository setting, so it's
 Georgy's decision.
+
+## Code review (11-10)
+
+An AI code review (Claude Code's `/code-review`) of this PR found 10
+points. Each was checked against the code; the fixes are the last five
+commits:
+
+- **`x6100-console`:** it could type after the cable dropped and came
+  back, or after the daemon restarted, while the radio might be rebooting
+  or flashing. It now waits for a fresh prompt before typing.
+- **The checks:**
+  - a `/*` inside a string no longer hides code from them;
+  - an app case with no code of its own (it would open the next app's
+    window) now fails;
+  - a ratchet count that drops must also be lowered in `ratchets.json`;
+  - a test counts only if a step actually runs it;
+  - `check_build_list.py`'s `--base` option is gone, since the plain check
+    already finds a dropped file.
+- **`x6100-flash`:** it now finds built-in SD slots too, and a DATA check
+  that fails after writing ends in an error instead of "Done".
+- ***Build image*:** `buildroot_ref` reaches the shell through `env`, and a
+  `/` in a branch name becomes `-` instead of breaking the upload.
+- **Unit tests:** sha256 checks on the SQLite and liquid-dsp downloads (the
+  same sums as Buildroot's hash files).
+- **Docs:** the unstripped GUI is a Release build, so it gives function
+  names, not source lines.
+
+Both workflows pass on the newest commit (runs 42920659881 and
+42920660062). The flash tool was also run with a real card in a USB
+reader, up to its "Write?" question: it found the card by its labels and
+backed up DATA, and nothing was written.
+
+**One review idea left for you, @gdyuldin:** add
+`-Werror=implicit-fallthrough` to the GUI's build, next to the existing
+`-Werror=implicit-function-declaration`. The compiler would then catch a
+missing `break` in *every* switch, not only in the app cases. It changes
+the whole build, though: any fallthrough that's meant on purpose needs a
+mark first, and only an image build would show where those are. I'd do it
+as its own PR if you want it.
 
 ## What I'd like from you
 
