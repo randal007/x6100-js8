@@ -148,6 +148,12 @@ by gdyuldin or myshak1, never merged by us alone.
   and sliders decided (see the 3D item, PR #344). Open: map_view.c/wspr_map.c shared scaffolding into map_scene (cleanup). Images: 3D 42236779844, maps 42236796961.
 - [ ] **Radio looks / themes, Thetis-style (VE7NHW, 2026-11-05): idea, after the 3D spectrum.** VE7NHW likes
   Thetis skins (many made by the community). Not started; shared GUI (`src/styles.c` skins), so OpenX6100.
+  **11-10 (VE7NHW):** wants switching between themes and making new ones, done cleanly (no bugs, no bloat).
+  **No plan until Jake 2E0JFS's source arrives** (his themes, see the Jake item). Draft direction from that
+  session, to check against Jake's code: 1 colour roles (code never writes a hex; ours has 128 `lv_color_hex`,
+  72 in dialog_js8.c), 2 shape numbers (radius, border, fonts, palette) as data, 3 layout changes as widget
+  variants picked by name (smeter_bar.c / smeter_needle.c ...), not theme flags: OpenX6X00 (reference/openx6x00
+  src/theme.h) did flags and now checks `deck`/`vision`/`mono` 46/65/56 times across 25 files. Georgy to agree first.
 - [ ] **#329 WeFax Post Proc. (Hany's 1KO125 1.1-beta1, tag d65e605).** Kris's review (11-02) wants the model's training
   kit (`tests/wefax/ml` in Hany's `1ko125`, LGPL, without the .exe), the model's licence and training charts, Hany's
   empty author e-mail ("Hany El Imam <>"), Post Proc. time on the radio. NOTICE lines removed (13271c3, worktree
