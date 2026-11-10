@@ -1431,6 +1431,8 @@ static void on_tick_cb(const slot_info_t *info, bool new_slot,
 
     if ((sec_since_slot_start < ftx_max_tx_start()) && have_tx_msg) {
         if ((tx_time_slot == info->odd) && subject_i_get(tx_enabled)) {
+            /* When the FT8 thread woke for this slot; tx_worker logs the rest */
+            LV_LOG_USER("FT8/FT4 TX slot: thread woke %.3f s into it", sec_since_slot_start);
             state = TX_PROCESS;
             add_tx_text(tx_msg.msg);
             /* tx_worker sends at FT8_TX_AUDIO_HZ with the VFO moved to put it on tx_freq */

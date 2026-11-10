@@ -110,12 +110,15 @@ bool tx_worker_run(const char *tx_text, float base_gain_offset, tx_abort_fn_t ab
                    void *abort_check_ctx) {
     int16_t *samples   = NULL;
     uint32_t n_samples = 0;
+    /* Each step's time into the slot, for the log line below */
+    float    t_start   = sec_into_slot();
 
     if (!ftx_worker_generate_tx_samples(tx_text, SIGNAL_FREQ_HZ,
                                         sample_rate,
                                         &samples, &n_samples)) {
         return true; /* nothing to send; not an abort */
     }
+    float t_audio = sec_into_slot();
 
     if (param_f_get(cfg.pwr()) > MAX_PWR_W) {
         g_ports->radio->set_pwr(MAX_PWR_W);
@@ -124,10 +127,16 @@ bool tx_worker_run(const char *tx_text, float base_gain_offset, tx_abort_fn_t ab
     float gain_offset      = base_gain_offset + param_f_get(cfg.ft8.output_gain_offset());
     float play_gain_offset = g_ports->audio->set_play_vol(gain_offset + 6.0f);
     gain_offset           -= play_gain_offset;
+    float t_level          = sec_into_slot();
 
     uint64_t radio_freq = cparam_i_get(cfg.cur.fg_freq());
     g_ports->radio->set_freq((int32_t)radio_freq + (int32_t)param_i_get(cfg.ft8.tx_freq()) - SIGNAL_FREQ_HZ);
+    float t_freq = sec_into_slot();
     g_ports->radio->set_modem(true);
+    float t_key = sec_into_slot();
+
+    LV_LOG_USER("FT8/FT4 TX start, s into the slot: called %.3f, audio %.3f, power+volume %.3f, frequency %.3f, "
+                "keyed %.3f", t_start, t_audio, t_level, t_freq, t_key);
 
     float    prev_gain_offset = gain_offset;
     size_t   counter          = 0;
