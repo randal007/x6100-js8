@@ -99,6 +99,75 @@ but plain Markdown that any tool or person can follow:
   with other open PRs, unanswered questions, tested or not, scope.
 - **`/close-session`:** end a session with nothing left only in the chat.
 
+## Added the same day: more from AetherSDR
+
+### 6. Every unit test runs on every PR (dc5c0929, 187c8cc5, 63ebf760, 94cb6863)
+
+CI ran **3 of the 11** unit tests (JS8, its settings, the TX level). QTH,
+ITU region, ADIF records, the digital TX queue, FT8 QSO, CI-V, the
+settings store and the CW decoder were never run by CI.
+
+- A second job runs those eight on Ubuntu 22.04, the only one with the
+  libgpiod 1.6 that X6100Control's GPIO code uses. JS8 stays on 24.04,
+  for Boost.
+- The job builds ft8lib, SQLite 3.40.1 and liquid-dsp 1.4.0 at the
+  versions the image uses. Ubuntu's own copies are too old: no RIGHT JOIN
+  in SQLite, and no `LIQUID_OK` or `liquid_hann` in liquid-dsp.
+- `tools/checks/check_tests_in_ci.py` fails a test that is added to
+  `tests/CMakeLists.txt` but not run by CI.
+- **Found on the first run:** `test_cfg` still expected the FT8 protocol
+  setting to stop at FT4. FT2 (76d98ce2) widened it to FT8..FT2, so the
+  test was out of date, not the code; it's fixed in 94cb6863.
+- Now all 11 pass (run 42917671229).
+
+### 7. Ratchets (bb22b8b4)
+
+AetherSDR's main trick: count a risky pattern per file, keep the counts in
+the repo (`tools/checks/ratchets.json`), and let them only go down. Old code
+is left alone, but new code can't add more.
+
+- **i2c:** `/dev/rtc1` and i2c-0 only in the two places that write the
+  clock once today (`js8_clock.c`, `settings_page_general.cpp`).
+- **Colours:** there are 249 colours typed into 37 files outside
+  `styles.c`. Freezing the count keeps themes possible later.
+  **@gdyuldin, your call:** keep it, or drop it?
+
+Raising a number is the reviewers' decision. Checked: a new `rtc1` call or
+a new `lv_color_hex()` in an app fails the check.
+
+### 8. Voice mode (63d1fd10)
+
+With the radio's voice mode, each app says its window's name as it opens
+(`voice_say_text_fmt`), so a blind operator knows what opened. The app
+check now **warns** (never fails) when an app's case doesn't say its name,
+like AetherSDR's accessibility check. Today's one warning is Channels: its
+window opens without saying so. That's for its author to look at.
+
+### 9. Memory in the CPU logger (063a2296)
+
+`x6100-cpulog` now also records the GUI's own memory every second, and
+the report gives its trend in MB per hour. Left running for hours, it
+shows a slow leak. Checked on made-up data so far, not yet on a radio.
+
+### 10. Bug report form (ed47be07)
+
+The form now asks for:
+- the App and BASE versions (SETTINGS > Info)
+- which image
+- what's plugged in
+- how often it happens
+- the run's log file from DATA's `app_logs` folder, and a screenshot
+
+There's also a line for reports written with an AI: say what you saw,
+and keep guesses apart. The discussions link now points to OpenX6100.
+
+### A question, not code: required checks
+
+AetherSDR doesn't let a PR merge until its checks pass and someone has
+approved it. Should OpenX6100's main require **Merge checks** and **Unit
+tests** to pass, plus one approval? That's a repository setting, so it's
+Georgy's decision.
+
 ## What I'd like from you
 
 1. **Do the rules match how you want the project run?** In particular
@@ -116,8 +185,14 @@ but plain Markdown that any tool or person can follow:
 | One `AGENTS.md`, pointers for each tool | Same |
 | Written limits on what AI may change (looks, UX, defaults, architecture, scope) | Same, in plain words |
 | AI-assisted PRs held to the same standard | Same: you answer for your PR |
-| ~40 check scripts in CI | 2, the ones that bit us |
+| ~40 check scripts in CI | 4 (app cases, build list, tests in CI, ratchets), the ones that bit us |
 | Skills for repeat jobs (`/pr-review`, `/pr-land`, `/release-prep`...) | 3 small ones |
+| Ratchets (counts that may only go down) | i2c, typed-in colours |
+| Accessibility check (warnings only) | Voice-mode warning for apps |
+| Memory soak | GUI memory trend in `x6100-cpulog` |
+| Bug form asking for version, radio, log | Same |
 | Constitution, signed commits, three code-owner tiers, a triage bot, an assign-yourself rule, an MCP bridge to drive the running app | Left out: too heavy for a group our size |
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+https://claude.ai/code/session_011735W6NuFdQLZvSdEFoB4q
