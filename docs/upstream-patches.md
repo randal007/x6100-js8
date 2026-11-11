@@ -47,6 +47,8 @@ in our repo).
 
 **2026-11-10:** #372: Kris fixed all nine (4fb15026, fb737ea3); our re-read posted by VE7NHW (issuecomment-6777172684): all fixed, one new point (a single serial at the end of an over waits for the next word and lands in the next QSO). #353: Hany took dsc_ships.bin out (1beea569, YaDDNet data not GPL), asks for a squash merge; VE7NHW told him (by e-mail/chat) to build his own list if Kris and Georgy agree. #371: radio numbers in (36 slots under TX, +28 %, 5.5-7.6 s), reply posted by VE7NHW (issuecomment-6780366219). New branches, no PR yet (radio look first): `tx-meter-led` 6f8db4f7 (TX meter as three LED rows in the small top bar), `ft8-list-see-through` 287bc525.
 
+**2026-11-11:** Kris merged #367 (radio-tested: RFG in the 73 macro stops TX, not logged, Next repainted); #353 (DSC) and #349 also merged. Kris opened #374 (Olivia 8/500) and #376 (FT2 80 m 3578, 40 m 7052 kHz, migration 6): read through, both approved by VE7NHW 21:40Z (both merge clean; no other open PR adds a migration 6; test_olivia not in tests.yml until #373). #372 now conflicts with main in src/rtty_buttons.h (#367): Kris to merge main. New: x6100_webserver#7 (DS1UFX, JS8/GhostNet/FT2 lists), not reviewed yet.
+
 | PR | What | Branch |
 |---|---|---|
 | #360 | Band bar: phone segments say "All modes" (**merged 11-08**) | band-bar-all-modes |
