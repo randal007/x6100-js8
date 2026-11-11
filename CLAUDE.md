@@ -206,6 +206,16 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
   `addr2line` on the unstripped GUI, LVGL's with `nm -D` on the image's
   liblvgl.so. The `app_logs` files stop at ~18 KB: x6100_gui's stdout is
   block-buffered and the rest is lost at a crash.
+- **Branches made from OpenX6100's main** (test packages, OpenX6100
+  feature branches) carry upstream's main.yml, which has no U-Boot
+  fallback: when ftp.denx.de is down that build fails after ~45 min
+  (11-10). Build them with `test-image.yml` (`-f gui_repo=randal007/x6100-js8
+  -f gui_ref=<full SHA> -f merge_upstream=false -f name=<name>`).
+- **Timing on the radio:** DATA's `ptt.log` stamps every key command and
+  TX on/off to the millisecond and survives power-off (FT8 key times,
+  11-10). The app log does not: x6100_daemon moves /tmp/x6100_log.txt to
+  /mnt/app_logs only when the GUI exits, so copy it over the console
+  before Randal switches off.
 - **Getting a CI image:** `gh run download` hangs; use the artifact API
   (`gh api repos/randal007/x6100-js8/actions/runs/<id>/artifacts`, then
   `.../actions/artifacts/<artifact id>/zip`).
