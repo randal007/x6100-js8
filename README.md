@@ -1574,11 +1574,12 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   Reporter isn't connected (not tried yet).
 - [ ] **Your own transmission on JS8's waterfall:** built, waiting for a
   test on the radio.
-- [ ] **A slimmer TX meter for every app:** PWR, SWR and ALC as three thin
-  LED rows inside the top bar, so it no longer hangs over an app's
-  waterfall or the top of the spectrum while you transmit; and a
-  **see-through FT8/FT4/FT2 list** that shows the waterfall behind it.
-  Built, waiting for a look on the radio.
+- [ ] **A bigger TX meter for every app:** while you transmit, the
+  frequency dial steps aside and a wide meter takes the whole top bar: a
+  thick PWR bar with a peak mark and the watts in big numbers, SWR and ALC
+  below. It no longer hangs over an app's waterfall or the top of the
+  spectrum. And a **see-through FT8/FT4/FT2 list** that shows the
+  waterfall behind it. On the test card, waiting for a look on the radio.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests
