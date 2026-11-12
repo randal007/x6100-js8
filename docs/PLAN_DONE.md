@@ -4,6 +4,16 @@ Items ticked in [PLAN.md](PLAN.md), moved here at each offload so the work
 list stays short. Newest at the top. Beta 5's list is
 [BETA5_PLAN.md](BETA5_PLAN.md).
 
+## Moved 2026-11-12
+
+- [x] **Channel List still crashes on CLOSE with an empty list (VE7NHW, 2026-10-28, on c910ca5 which has #330).** Opening
+  is fixed; closing the empty list restarts the GUI. Not found by reading close_common()/overlay_close()/dialog_destruct();
+  the PC test (empty table deleted) doesn't crash. Not fixed yet (VE7NHW: later). **Next:** core dump on the radio as for
+  #330 (prlimit + core_pattern to /tmp/cores), and ask VE7NHW how it was closed (F1 Close, V/M, APP/GEN) and from where
+  (main screen or over an app).
+  Channel List *open* on an empty list is fixed (#330, in v1.2.0); this close crash shipped in v1.2.0 (VE7NHW 11-01: probably not an issue, test later).
+  **Tested by VE7NHW 2026-11-12: off the to-do list.**
+
 ## Moved 2026-11-09
 
 - [x] **Test image 11-09 (built, flashed 11-10 13:54, radio-tested 11-10: FT8 20 min CQ): run 42687294904 (42685729338 cancelled: had the slot bug below), branch `test-package-5` c1a2f2e8, name ft8-late, worktree ~/Work/x6100/wt-test-5** = OpenX6100 main a5ced9c6 + #371 + #351 + #367 + ft8-psk-line-connected + ft8-late-start + js8-tx-waterfall + #349. Not in it, unlike the card: XARA (frozen). test-package-4-wf no longer merges with main. Merge checks OK; PC 10+7 and 14+5 decodes. **Next:** flash on VE7NHW's word.
