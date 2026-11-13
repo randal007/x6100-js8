@@ -50,6 +50,9 @@ static lv_obj_t     *alc_label;
  * app's waterfall. Bar positions are in the box's content area (620 x 58). */
 #define ROWS        3       /* PWR, SWR, ALC */
 #define PEAK_HOLD_MS 1000
+#define PEAK_FALL    20      /* segments a second the peak falls after the hold */
+#define CW_HOLD_MS   1000    /* CW: TX and RX at every pause in the keying, so the
+                              * meter stays up this long after the last element */
 
 static const struct {
     lv_coord_t x, y, w, h;  /* the bar */
@@ -65,22 +68,55 @@ static const float max_alc = 10.0f;
 static lv_obj_t *bars[ROWS];
 static int16_t   lit[ROWS];     /* segments lit in each bar, as last drawn */
 static int16_t   peak;          /* PWR's peak segment, held PEAK_HOLD_MS */
+static int16_t   peak_held;     /* where it was when the hold started */
 static uint32_t  peak_time;
+static bool      swr_gray;      /* the SWR colour setting, read once a redraw */
+static lv_timer_t *cw_hold;
+
+static int16_t segments(int row) {
+    return bar_geo[row].w / (bar_geo[row].seg + bar_geo[row].gap);
+}
 
 static void on_cur_mode_change(Subject *subj, void *user_data);
 static void update_labels_visibility_cb(Subject *, void *);
 
+/* The S-meter and the dial follow these (meter.c, freq_info.cpp) */
+static void hide(void) {
+    lv_timer_pause(cw_hold);
+    if (!lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) {
+        lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+        lv_msg_send(MSG_TX_INFO_HIDE, NULL);
+    }
+}
+
+static void cw_hold_cb(lv_timer_t *t) {
+    hide();
+}
+
 static void tx_cb(void * s, lv_msg_t * msg) {
+    lv_timer_pause(cw_hold);
+    if (!lv_obj_has_flag(obj, LV_OBJ_FLAG_HIDDEN)) {
+        return;                 /* CW: the next element within the hold */
+    }
     pwr  = 0.0f;
     vswr = 0.0f;
     alc  = 0.0f;
     peak = 0;
+    memset(lit, 0, sizeof(lit));  /* not the last transmission's bars */
 
     lv_obj_clear_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    lv_msg_send(MSG_TX_INFO_SHOW, NULL);
 }
 
 static void rx_cb(void * s, lv_msg_t * msg) {
-    lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
+    x6100_mode_t mode = cparam_i_get(cfg.cur.mode());   /* cur_mode is set only on a change */
+
+    if (mode == x6100_mode_cw || mode == x6100_mode_cwr) {
+        lv_timer_reset(cw_hold);
+        lv_timer_resume(cw_hold);
+    } else {
+        hide();
+    }
 }
 
 static void update_tx_info(void *arg) {
@@ -93,26 +129,29 @@ static void update_tx_info(void *arg) {
         (vswr - min_swr) / (max_swr - min_swr),
         alc / max_alc,
     };
-    bool redraw = false;
-
     for (int row = 0; row < ROWS; row++) {
-        int16_t n   = bar_geo[row].w / (bar_geo[row].seg + bar_geo[row].gap);
-        int16_t now = (int16_t)(n * LV_CLAMP(0.0f, frac[row], 1.0f) + 0.5f);
+        int16_t now = (int16_t)(segments(row) * LV_CLAMP(0.0f, frac[row], 1.0f) + 0.5f);
 
         if (now != lit[row]) {
             lit[row] = now;
             lv_obj_invalidate(bars[row]);
         }
     }
+
+    /* The peak holds, then falls by time (not by packet, whose rate varies) */
+    int16_t new_peak = peak;
     if (lit[0] >= peak) {
-        redraw = lit[0] != peak;
-        peak = lit[0];
+        new_peak  = lit[0];
+        peak_held = lit[0];
         peak_time = lv_tick_get();
-    } else if (lv_tick_elaps(peak_time) > PEAK_HOLD_MS) {
-        peak--;                 /* falls one segment an update after the hold */
-        redraw = true;
+    } else {
+        uint32_t t = lv_tick_elaps(peak_time);
+        if (t > PEAK_HOLD_MS) {
+            new_peak = LV_MAX(lit[0], peak_held - (int16_t)((t - PEAK_HOLD_MS) * PEAK_FALL / 1000));
+        }
     }
-    if (redraw) {
+    if (new_peak != peak) {
+        peak = new_peak;
         lv_obj_invalidate(bars[0]);
     }
 
@@ -129,12 +168,10 @@ static void update_labels_cb(lv_timer_t *t) {
 
 static void on_dialog_start(void *s, lv_msg_t *msg) {
     dialog_run = true;
-    update_labels_visibility_cb(NULL, NULL);
 }
 
 static void on_dialog_stop(void *s, lv_msg_t *msg) {
     dialog_run = false;
-    update_labels_visibility_cb(NULL, NULL);
 }
 
 /* The stock meter's colours: PWR (and ALC, which had no bar) grey, SWR
@@ -143,7 +180,7 @@ static lv_color_t seg_color(int row, float f) {
     if (row != 1) return lv_color_hex(0xAAAAAA);
     if (f > 0.5f) return lv_color_hex(0xAA0000);                 /* SWR 3 */
     if (f > 0.25f) return lv_color_hex(0xAAAA00);                /* SWR 2 */
-    return param_i_get(cfg.ui.swr_color()) == SWR_GRAY ? lv_color_hex(0xAAAAAA) : lv_color_hex(0x00CC00);
+    return swr_gray ? lv_color_hex(0xAAAAAA) : lv_color_hex(0x00CC00);
 }
 
 static void bar_draw_cb(lv_event_t *e) {
@@ -153,8 +190,10 @@ static void bar_draw_cb(lv_event_t *e) {
     lv_draw_rect_dsc_t dsc;
     lv_coord_t         step = bar_geo[row].seg + bar_geo[row].gap;
 
+    int16_t            n    = segments(row);
+
     lv_obj_get_coords(bars[row], &coords);
-    int16_t n = (int16_t)(lv_area_get_width(&coords) / step);
+    swr_gray = param_i_get(cfg.ui.swr_color()) == SWR_GRAY;
 
     lv_draw_rect_dsc_init(&dsc);
     for (int16_t i = 0; i < n; i++) {
@@ -199,6 +238,9 @@ lv_obj_t *tx_info_init(lv_obj_t *parent) {
 
     lv_obj_add_flag(obj, LV_OBJ_FLAG_HIDDEN);
 
+    cw_hold = lv_timer_create(cw_hold_cb, CW_HOLD_MS, NULL);
+    lv_timer_pause(cw_hold);
+
     for (int row = 0; row < ROWS; row++) {
         bars[row] = lv_obj_create(obj);
         lv_obj_remove_style_all(bars[row]);
@@ -234,7 +276,6 @@ lv_obj_t *tx_info_init(lv_obj_t *parent) {
 
     subject_subscribe((Subject*)cfg.cur.mode(), on_cur_mode_change, NULL);
 
-    subject_subscribe_delayed((Subject*)cfg.ui.mag_alc(), update_labels_visibility_cb, NULL);
     subject_subscribe_delayed_and_notify((Subject*)cfg.ui.show_meter_value(), update_labels_visibility_cb, NULL);
 
     lv_timer_create(update_labels_cb, LV_DISP_DEF_REFR_PERIOD * 3, NULL);
