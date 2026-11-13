@@ -94,6 +94,10 @@ repo randal007/x6100-xara keeps the test builds with VARA's registered speeds, n
 Texts: [upstream-prs/xara-gui-pr-body.md](upstream-prs/xara-gui-pr-body.md),
 [upstream-prs/xara-buildroot-pr-body.md](upstream-prs/xara-buildroot-pr-body.md).
 
+## Bug hunt (2026-11-13)
+
+- **#389** Bug hunt: areas and instructions for AI agents with spare tokens (branch `bug-hunt`, de0d63af): docs/bug-hunt/HUNT.md + AREAS.md, tools/bug-hunt/areas.py, a Merge checks step. Opened 11-13; reviewers to add (VE7NHW).
+
 ## PRs to send (the queue)
 
 Ready-to-send texts and patches (checked against gdyuldin's current code):
