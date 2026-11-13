@@ -1566,20 +1566,25 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   OpenX6100 on 2026-11-09, for its next release.
 - [ ] **The RFG knob press stops a transmission without closing the app**,
   in every app, as JS8 does
-  ([#366](https://github.com/OpenX6100/x6100_gui/pull/366) merged,
-  [#367](https://github.com/OpenX6100/x6100_gui/pull/367) for RTTY waiting
-  for review).
+  ([#366](https://github.com/OpenX6100/x6100_gui/pull/366) and, for RTTY,
+  [#367](https://github.com/OpenX6100/x6100_gui/pull/367), both merged
+  into OpenX6100, for its next release).
 - [ ] **FT8/FT4: answer a station you pick mid-cycle**, starting late as
   WSJT-X does (seen working on the radio), and the map says when PSK
   Reporter isn't connected (not tried yet).
-- [ ] **Your own transmission on JS8's waterfall:** built, waiting for a
-  test on the radio.
+- [ ] **Your own transmission on JS8's waterfall** (with a red edge, as
+  XARA's): tried on the radio on 2026-11-13, works, and decoding is not
+  affected; a code review, then a pull request.
 - [ ] **A bigger TX meter for every app:** while you transmit, the
   frequency dial steps aside and a wide meter takes the whole top bar: a
   thick PWR bar with a peak mark and the watts in big numbers, SWR and ALC
-  below. It no longer hangs over an app's waterfall or the top of the
-  spectrum. And a **see-through FT8/FT4/FT2 list** that shows the
-  waterfall behind it. On the test card, waiting for a look on the radio.
+  below, in the stock meter's colours. It no longer hangs over an app's
+  waterfall or the top of the spectrum, and in CW it stays up a second
+  after you stop keying, so nothing blinks. Tried on the radio on
+  2026-11-13 and sent to OpenX6100 as
+  [#387](https://github.com/OpenX6100/x6100_gui/pull/387). And a
+  **see-through FT8/FT4/FT2 list**, as see-through as JS8's: on the next
+  test card.
 - [ ] **Ultra on a busy band** (needs a second Ultra station)
 
 ## Bug reports and feature requests
