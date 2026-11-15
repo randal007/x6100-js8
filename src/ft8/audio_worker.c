@@ -202,22 +202,6 @@ static void *worker_main(void *arg) {
             info.start_ms = start_ms;
         }
 
-        bool tick_done = false;
-
-        /* FT2: a transmission must start within 0.8 s of its slot and
-         * lasts 2.52 s, but the last decode of the slot just ended takes
-         * up to 0.5 s on the radio. So on_tick (which starts a pending
-         * TX) runs first, the last decode after it; its decodes almost
-         * always arrived during the slot already. */
-        if (new_slot && (int)w->proto == (int)FTX_PROTOCOL_FT2 && w->cb.on_tick) {
-            slot_info_t next = info;
-
-            next.odd      = new_odd;
-            next.start_ms = start_ms;
-            w->cb.on_tick(&next, true, sec_since_slot_start, w->cb.ctx);
-            tick_done = true;
-        }
-
         /* Before the frames: a full slot goes to the extra passes as it fills,
          * just ahead of the boundary. */
         ftx_worker_extra_slot(info.odd, info.start_ms);
@@ -237,7 +221,7 @@ static void *worker_main(void *arg) {
             info.start_ms = start_ms;
         }
 
-        if (w->cb.on_tick && !tick_done) {
+        if (w->cb.on_tick) {
             w->cb.on_tick(&info, new_slot, sec_since_slot_start, w->cb.ctx);
         }
 
