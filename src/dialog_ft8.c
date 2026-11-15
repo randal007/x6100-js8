@@ -60,6 +60,7 @@
 #include <time.h>
 #include <sys/time.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <errno.h>
 #include <ctype.h>
 
@@ -154,6 +155,9 @@ static pthread_mutex_t tx_mux = PTHREAD_MUTEX_INITIALIZER;
 static char            tx_on_air[sizeof(tx_msg.msg)];
 static int32_t         tx_on_air_freq;
 static char            tx_not_swapped[sizeof(tx_msg.msg)];
+/* Counts the stops (tx_stop_done); a transmission started before one ends */
+static atomic_uint     tx_stop_seq;
+static unsigned        tx_seq_at_start;
 
 /* The lv_table widget is owned by ft8_ui/table_view; expose its handle as
  * `table` so existing fade/group/anim call sites need no rename. */
@@ -431,6 +435,19 @@ static void save_qso(const char *remote_callsign, const char *remote_grid, const
     lv_finder_clear_cursor(finder);
 }
 
+/* Every way of stopping TX ends with this, after what it changes: a
+ * transmission the TX thread had just decided on stops too. */
+static void tx_stop_done(void) {
+    atomic_fetch_add(&tx_stop_seq, 1);
+}
+
+static bool tx_msg_pending(void) {
+    pthread_mutex_lock(&tx_mux);
+    bool pending = tx_msg.msg[0] != '\0';
+    pthread_mutex_unlock(&tx_mux);
+    return pending;
+}
+
 static void worker_init() {
     qso_processor = ftx_qso_processor_init(PARAM_T_GET(cfg.callsign()), PARAM_T_GET(cfg.qth()),
                                            save_qso,
@@ -458,6 +475,10 @@ static void worker_init() {
 
 static void worker_done() {
     state = RX_PROCESS;     /* a transmission stops (tx_should_abort_cb) */
+    pthread_mutex_lock(&tx_mux);
+    tx_msg.msg[0] = '\0';
+    pthread_mutex_unlock(&tx_mux);
+    tx_stop_done();
     tx_worker_stop();
 
     if (audio_worker) {
@@ -471,9 +492,6 @@ static void worker_done() {
         qso_processor = NULL;
     }
     lv_finder_clear_cursor(finder);
-    pthread_mutex_lock(&tx_mux);
-    tx_msg.msg[0] = '\0';
-    pthread_mutex_unlock(&tx_mux);
 }
 
 /* Table widget lifecycle, draw, scroll and message insertion all live
@@ -1080,10 +1098,10 @@ static void mode_ft4_ft8_cb(struct button_data_t *btn_data) {
     else {
         proto = FTX_PROTOCOL_FT8;
     }
+    worker_done();          /* the TX thread stops before the mode changes */
     param_i_set(cfg.ft8.protocol(), proto);
     subject_i_set(cq_enabled, false);
 
-    worker_done();
     worker_init();
     clean_screen();
     load_band(0);
@@ -1145,6 +1163,7 @@ static void tx_cq_en_dis_cb(struct button_data_t *btn_data) {
         pthread_mutex_lock(&tx_mux);
         tx_msg.msg[0] = '\0';
         pthread_mutex_unlock(&tx_mux);
+        tx_stop_done();
     }
 }
 
@@ -1168,6 +1187,7 @@ static void tx_call_en_dis_cb(struct button_data_t *btn_data) {
         }
         tx_picked = false;
         subject_i_set(tx_enabled, false);
+        tx_stop_done();
     }
 }
 
@@ -1175,6 +1195,7 @@ static void tx_call_off() {
     state     = RX_PROCESS;
     tx_picked = false;
     subject_i_set(tx_enabled, false);
+    tx_stop_done();
 }
 
 static void cq_modifier_cb(struct button_data_t *btn_data) {
@@ -1260,12 +1281,13 @@ static void on_table_press(const cell_data_t *cell_data) {
 /* The RFG knob's press (ESC), as JS8: the first stops TX, sending or waiting
  * for its slot; the next closes the app. */
 static void on_table_close(void) {
-    if (state == TX_PROCESS || subject_i_get(cq_enabled) || (tx_msg.msg[0] && subject_i_get(tx_enabled))) {
+    if (state == TX_PROCESS || subject_i_get(cq_enabled) || (tx_msg_pending() && subject_i_get(tx_enabled))) {
         tx_call_off();
         subject_i_set(cq_enabled, false);
         pthread_mutex_lock(&tx_mux);
         tx_msg.msg[0] = '\0';
         pthread_mutex_unlock(&tx_mux);
+        tx_stop_done();
         msg_update_text_fmt("TX stopped");
         return;
     }
@@ -1348,7 +1370,7 @@ static bool tx_should_abort_cb(void *ctx) {
     float           sec;
     char            next_tx[sizeof(tx_msg.msg)];
 
-    if (state != TX_PROCESS) {
+    if (state != TX_PROCESS || atomic_load(&tx_stop_seq) != tx_seq_at_start) {
         return true;
     }
     clock_gettime(CLOCK_REALTIME, &now);
@@ -1357,11 +1379,17 @@ static bool tx_should_abort_cb(void *ctx) {
         return false;
     }
 
-    pthread_mutex_lock(&tx_mux);
+    /* Never waits while sending: the decoder holds the lock through a QSO
+     * save (the SD card); the next part looks again */
+    if (pthread_mutex_trylock(&tx_mux) != 0) {
+        return false;
+    }
     strcpy(next_tx, tx_msg.msg);
     bool moved_on   = next_tx[0] && tx_time_slot == odd && strcmp(next_tx, tx_on_air) != 0 &&
                       strcmp(next_tx, tx_not_swapped) != 0;
-    bool other_freq = param_i_get(cfg.ft8.tx_freq()) != tx_on_air_freq;
+    /* Each decode's frequency differs by a few Hz: only a move off the
+     * signal's own width is another frequency */
+    bool other_freq = abs((int)param_i_get(cfg.ft8.tx_freq()) - (int)tx_on_air_freq) > ftx_width_hz();
     pthread_mutex_unlock(&tx_mux);
 
     if (!moved_on) {
@@ -1527,6 +1555,7 @@ static void on_slot_end_cb(const slot_info_t *info, void *ctx) {
  * the slot just ended; tx_should_abort_cb takes what it finds late). */
 static void tx_tick_cb(bool odd, float sec_since_slot_start, void *ctx) {
     (void)ctx;
+    unsigned seq = atomic_load(&tx_stop_seq);     /* before anything is looked at */
 
     if (!subject_i_get(tx_enabled)) {
         return;
@@ -1537,6 +1566,7 @@ static void tx_tick_cb(bool odd, float sec_since_slot_start, void *ctx) {
         strcpy(tx_on_air, tx_msg.msg);
         tx_on_air_freq    = (int32_t)param_i_get(cfg.ft8.tx_freq());
         tx_not_swapped[0] = '\0';
+        tx_seq_at_start   = seq;
     }
     pthread_mutex_unlock(&tx_mux);
     if (!go) {
@@ -1575,7 +1605,7 @@ static void on_tick_cb(const slot_info_t *info, bool new_slot,
     (void)sec_since_slot_start;
     (void)ctx;
 
-    bool have_tx_msg = tx_msg.msg[0] != '\0';
+    bool have_tx_msg = tx_msg_pending();
 
     /* No state change here: the TX thread may have keyed already */
     if (new_slot) {
