@@ -229,11 +229,14 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
   never sends LONG_PRESSED to an editable object (use
   LONG_PRESSED_REPEAT); `lv_img` never covers and invalidate adds 5 px
   (whole-dialog redraws: use an opaque box and exact invalidate).
-- Two screens on two DRM planes: the spectrum and waterfall are on
-  `overlay_scr`, drawn **above** the main screen (`obj`), and the top block
-  covers the spectrum's top. Anything shown over the spectrum must be its
-  child (as `freq_bounds`); on `obj` it is hidden (#344's segment tag,
-  2026-11-07). A widget that fades in/out starts shown: to keep it off,
+- Two display layers: the spectrum and waterfall write their pixels
+  straight to the lower DRM plane (`primary_scr`'s, `drm_primary_begin_direct`);
+  every LVGL widget, the spectrum and waterfall objects included, is on the
+  upper one, `overlay_scr`, which main_screen.c calls `obj` (the same
+  object, not a separate screen: corrected 11-19 by #373's code review).
+  The top block covers the spectrum's top. A widget over the spectrum is
+  its child (as `freq_bounds`) or created after it: an earlier sibling on
+  `obj` is drawn under it (#344's segment tag, 2026-11-07). A widget that fades in/out starts shown: to keep it off,
   set it transparent, don't just skip its updates (band_info in 3D).
 - Waterfall rows are paced by CLOCK_MONOTONIC µs, never an lv_timer
   period. Randal is sensitive to any flicker or stutter.
