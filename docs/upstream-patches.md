@@ -102,7 +102,7 @@ Texts: [upstream-prs/xara-gui-pr-body.md](upstream-prs/xara-gui-pr-body.md),
 
 ## Bug hunt (2026-11-13)
 
-- **#389** Bug hunt: areas and instructions for AI agents with spare tokens (branch `bug-hunt`, de0d63af): docs/bug-hunt/HUNT.md + AREAS.md, tools/bug-hunt/areas.py, a Merge checks step. Opened 11-13; Kris's rule 8 added 11-19 (2cab825c); **merged by VE7NHW 2026-11-20** (418f540c). Follow-up #395 (rtty_afc.c into A19: main's Merge checks). Issues not created yet (`make-issues`, VE7NHW's go).
+- **#389** Bug hunt: areas and instructions for AI agents with spare tokens (branch `bug-hunt`, de0d63af): docs/bug-hunt/HUNT.md + AREAS.md, tools/bug-hunt/areas.py, a Merge checks step. Opened 11-13; Kris's rule 8 added 11-19 (2cab825c); **merged by VE7NHW 2026-11-20** (418f540c). Follow-up #395 (rtty_afc.c into A19: main's Merge checks). Issues created by VE7NHW 2026-11-19: #396-#425 (one area held back for now), overview #426.
 
 ## PRs to send (the queue)
 
