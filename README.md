@@ -1506,10 +1506,10 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
 - [ ] **More apps in OpenX6100 v1.3.0:** Kris's WSPR, PSK31, Olivia, RTTY
   transmit, FT2 and JTTY (WSJT-X 3.2's new keyboard mode), on APP pages 4
   and 5, and Hany's WeFax Post Proc. (a neural network that
-  cleans each saved fax, and a full-screen fax view), all merged; Hany's
-  NavTex and DSC are reviewed and waiting for Kris and Georgy. The plan is
-  to release 1.3 soon, with the 3D spectrum and XARA (experimental) if
-  they're happy with them.
+  cleans each saved fax, and a full-screen fax view), all merged, and since
+  then Hany's NavTex and DSC, the 3D spectrum, the shared map with PSK
+  Reporter and the new TX meter. What's left before the release is being
+  agreed with Kris, Georgy and Hany (November 2026). XARA stays on hold.
 - [ ] **Fixes for the six new apps** from a code review of each: nine
   pull requests ([#335](https://github.com/OpenX6100/x6100_gui/pull/335)
   to [#343](https://github.com/OpenX6100/x6100_gui/pull/343)), among them
