@@ -1508,8 +1508,15 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   and 5, and Hany's WeFax Post Proc. (a neural network that
   cleans each saved fax, and a full-screen fax view), all merged, and since
   then Hany's NavTex and DSC, the 3D spectrum, the shared map with PSK
-  Reporter and the new TX meter. What's left before the release is being
-  agreed with Kris, Georgy and Hany (November 2026). XARA stays on hold.
+  Reporter and the new TX meter. Agreed with Kris (22 November 2026): his
+  Freq list for FT8/FT4 and the v1.3.0 version go in now, then a release
+  candidate that each of us tries on the radio, then the tag (Kris does the
+  release). Also in 1.3: a fix for the **network CAT** (wfview):
+  a wrong login is refused and only the computer that logged in controls
+  the radio ([#455](https://github.com/OpenX6100/x6100_gui/pull/455)).
+  If they pass the radio test first: answering a station you pick late in
+  the slot ([#393](https://github.com/OpenX6100/x6100_gui/pull/393)) and
+  FT8/FT4 transmitting on time. XARA stays on hold.
 - [ ] **Fixes for the six new apps** from a code review of each: nine
   pull requests ([#335](https://github.com/OpenX6100/x6100_gui/pull/335)
   to [#343](https://github.com/OpenX6100/x6100_gui/pull/343)), among them
@@ -1531,7 +1538,8 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   OpenX6100 as [#344](https://github.com/OpenX6100/x6100_gui/pull/344),
   merged on 2026-11-08, for its next release.
 - [ ] **FT8/FT4/FT2 signal reports** the way WSJT-X makes them
-  ([#351](https://github.com/OpenX6100/x6100_gui/pull/351)), waiting for review.
+  ([#351](https://github.com/OpenX6100/x6100_gui/pull/351)), approved by
+  Kris, going in after 1.3.
 - [ ] **XARA, a VARA HF compatible modem app** (experimental): Winlink
   with WoAD and APRS with APRSdroid from a phone over WiFi, using x0rro's
   xara modem, on its own APP page. Pull requests in OpenX6100
