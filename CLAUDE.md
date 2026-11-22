@@ -190,6 +190,11 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
   included: our 10-18 app-places merges into his WSPR/PSK31/Olivia
   branches dropped tx_level.c/tx_player.c, which only a combined test
   image (run 40221803013's branch) showed a week later (myshak1#13-15).
+- **A new unit test needs its packages in CI too:** this PC has headers
+  the CI jobs don't (bluez, ...), so a test that builds here can show
+  "Not Run" in CI. Check what its libraries include against the
+  `apt-get install` lines in tests.yml (#455's test_cat_lan links cat.cpp,
+  which needs libbluetooth-dev, 2026-11-22).
 - **Reading a GUI crash:** *Build image* also uploads
   `x6100_gui-unstripped.<ref>` (the GUI before it is stripped; the
   image's copy has no symbols). With a core dump from the radio:
