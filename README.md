@@ -1515,9 +1515,12 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   a wrong login is refused and only the computer that logged in controls
   the radio ([#455](https://github.com/OpenX6100/x6100_gui/pull/455), merged
   23 November).
-  If they pass the radio test first: answering a station you pick late in
-  the slot ([#393](https://github.com/OpenX6100/x6100_gui/pull/393)) and
-  FT8/FT4 transmitting on time. XARA stays on hold.
+  Both passed the radio test on 23 November and go in if they are
+  reviewed before the release candidate: answering a station you pick late
+  in the slot ([#393](https://github.com/OpenX6100/x6100_gui/pull/393)) and
+  FT8/FT4/FT2 transmitting on time, on a TX thread of their own
+  ([#456](https://github.com/OpenX6100/x6100_gui/pull/456)). XARA stays on
+  hold.
 - [ ] **Fixes for the six new apps** from a code review of each: nine
   pull requests ([#335](https://github.com/OpenX6100/x6100_gui/pull/335)
   to [#343](https://github.com/OpenX6100/x6100_gui/pull/343)), among them
