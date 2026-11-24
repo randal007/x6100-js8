@@ -1513,7 +1513,8 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   candidate that each of us tries on the radio, then the tag (Kris does the
   release). Also in 1.3: a fix for the **network CAT** (wfview):
   a wrong login is refused and only the computer that logged in controls
-  the radio ([#455](https://github.com/OpenX6100/x6100_gui/pull/455)).
+  the radio ([#455](https://github.com/OpenX6100/x6100_gui/pull/455), merged
+  23 November).
   If they pass the radio test first: answering a station you pick late in
   the slot ([#393](https://github.com/OpenX6100/x6100_gui/pull/393)) and
   FT8/FT4 transmitting on time. XARA stays on hold.
