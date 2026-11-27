@@ -71,8 +71,8 @@ prerelease betas (`js8-beta5`, ...) with an SD card image on GitHub.
   apps need (e.g. turning APP page 4 on, `app-page4-on`) is one shared
   commit merged into each of their branches: git sees the same change on
   both sides. Check pairs with `git merge-tree --write-tree --name-only A B`.
-  OpenX6100/x6100_webserver: no push access, PRs from the fork
-  randal007/x6100_webserver. After merging upstream into ours,
+  OpenX6100/x6100_webserver: push access since 11-27 (maintain;
+  #6 came from the fork randal007/x6100_webserver). Tags there are VE7NHW's. After merging upstream into ours,
   check every `case ACTION_APP_*` block in `src/main_screen.c` (a lost
   `break` once opened two apps at once; a plain "keep both sides" merge
   of two new apps drops it every time) and stored numbers
