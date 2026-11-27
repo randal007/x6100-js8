@@ -1510,8 +1510,8 @@ The work list is [docs/PLAN.md](docs/PLAN.md).
   then Hany's NavTex and DSC, the 3D spectrum, the shared map with PSK
   Reporter and the new TX meter. Agreed with Kris (22 November 2026): his
   Freq list for FT8/FT4 and the v1.3.0 version go in now, then a release
-  candidate that each of us tries on the radio, then the tag (Kris does the
-  release). Also in 1.3: a fix for the **network CAT** (wfview):
+  candidate tried on the radio, then the tag. Kris is away for a few days,
+  so Randal does the release once Georgy gives the go-ahead (27 November). Also in 1.3: a fix for the **network CAT** (wfview):
   a wrong login is refused and only the computer that logged in controls
   the radio ([#455](https://github.com/OpenX6100/x6100_gui/pull/455), merged
   23 November).

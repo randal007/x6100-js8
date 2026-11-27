@@ -221,6 +221,12 @@ decoder's FFTW wisdom, `src/js8/wisdom.cpp`) (written via `.tmp` + rename).
   11-10). The app log does not: x6100_daemon moves /tmp/x6100_log.txt to
   /mnt/app_logs only when the GUI exits, so copy it over the console
   before Randal switches off.
+- **GitHub switches Actions off by itself** on forked repositories "to reduce
+  wasted compute" (OpenX6100/x6100_gui, 11-22..24: "Actions has been
+  disabled for this repository", no PR checks). Only Georgy (admin) can
+  turn it back on; PRs pushed meanwhile get no checks: start them by hand
+  (`gh workflow run checks.yml` / `tests.yml -R OpenX6100/x6100_gui --ref
+  <branch>`, they land on the head commit).
 - **Getting a CI image:** `gh run download` hangs; use the artifact API
   (`gh api repos/randal007/x6100-js8/actions/runs/<id>/artifacts`, then
   `.../actions/artifacts/<artifact id>/zip`).
